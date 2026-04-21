@@ -1,14 +1,24 @@
+import { h } from 'vue'
 import DefaultTheme from 'vitepress/theme'
 import TwoslashFloatingVue from '@shikijs/vitepress-twoslash/client'
 import '@shikijs/vitepress-twoslash/style.css'
 import { enhanceAppWithTabs } from 'vitepress-plugin-tabs/client'
-import type { EnhanceAppContext } from 'vitepress'
+import { useRoute, type EnhanceAppContext } from 'vitepress'
+import LessonComplete from './components/LessonComplete.vue'
+import LessonProgress from './components/LessonProgress.vue'
 import './custom.css'
 
 export default {
   extends: DefaultTheme,
+  Layout() {
+    const route = useRoute()
+    return h(DefaultTheme.Layout, null, {
+      'doc-after': () => h(LessonComplete, { key: route.path }),
+    })
+  },
   enhanceApp({ app }: EnhanceAppContext) {
     app.use(TwoslashFloatingVue)
     enhanceAppWithTabs(app)
+    app.component('LessonProgress', LessonProgress)
   },
 }
