@@ -12,6 +12,10 @@
     "node": ">=24"
   },
   "devDependencies": {
-    "vitepress": "^1.5.0"
+    "@shikijs/vitepress-twoslash": "^4.0.2",
+    "mermaid": "^11.14.0",
+    "vitepress": "^1.5.0",
+    "vitepress-plugin-mermaid": "^2.0.17",
+    "vitepress-plugin-tabs": "^0.9.0"
   }
 }
