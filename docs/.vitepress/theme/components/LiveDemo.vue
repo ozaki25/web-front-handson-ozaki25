@@ -135,7 +135,6 @@ async function ensureHighlighted() {
     })
     const opts = {
       themes: { light: 'github-light', dark: 'github-dark' },
-      defaultColor: false,
     } as const
     if (props.html) {
       highlightedHtml.value = highlighter.codeToHtml(props.html, { lang: 'html', ...opts })
@@ -253,9 +252,9 @@ async function ensureHighlighted() {
   white-space: pre;
 }
 
-/* Shiki が生成する <pre class="shiki"> に同じ余白・背景を当てる。
-   Shiki の dual theme モードは各トークンに --shiki-light / --shiki-dark の
-   CSS 変数を仕込み、html.dark で切り替える。 */
+/* Shiki は dual theme のとき、ライト色を inline style として埋め込み、
+   ダーク色は --shiki-dark / --shiki-dark-bg CSS 変数として載せる。
+   だからレイアウト（余白・角丸など）だけこちらで当てて、色は shiki に任せる。 */
 .live-demo-highlight :deep(pre.shiki) {
   margin: 0;
   padding: 0.75rem 1rem;
@@ -263,8 +262,6 @@ async function ensureHighlighted() {
   overflow-x: auto;
   font-size: 0.85rem;
   line-height: 1.5;
-  background-color: var(--shiki-light-bg, #ffffff);
-  color: var(--shiki-light, inherit);
 }
 
 .live-demo-highlight :deep(pre.shiki code) {
@@ -272,16 +269,11 @@ async function ensureHighlighted() {
   white-space: pre;
 }
 
-.live-demo-highlight :deep(pre.shiki span) {
-  color: var(--shiki-light);
-}
-
-html.dark .live-demo-highlight :deep(pre.shiki) {
-  background-color: var(--shiki-dark-bg, #0b1220);
-  color: var(--shiki-dark, inherit);
-}
-
+/* ダークモードは CSS 変数でライトの inline style を上書きする。
+   shiki のインラインスタイルに勝つため !important を付ける必要がある。 */
+html.dark .live-demo-highlight :deep(pre.shiki),
 html.dark .live-demo-highlight :deep(pre.shiki span) {
-  color: var(--shiki-dark);
+  color: var(--shiki-dark) !important;
+  background-color: var(--shiki-dark-bg) !important;
 }
 </style>
