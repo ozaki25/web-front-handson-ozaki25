@@ -39,6 +39,34 @@ btn.addEventListener("click", () => {
 });
 ```
 
+下のデモはクリックで `count` を増やし、ラベルを書き換える最小の形です。ボタンを押すと数字が増えるのが確認できます。
+
+<LiveDemo
+  height="160px"
+  :html="`
+<button id='btn'>+1</button>
+<span id='label'>カウント: 0</span>
+  `"
+  :css="`
+body { padding: 16px; font-size: 18px; }
+button {
+  padding: 8px 16px;
+  margin-right: 12px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+  `"
+  :js="`
+let count = 0;
+const btn = document.getElementById('btn');
+const label = document.getElementById('label');
+btn.addEventListener('click', () => {
+  count = count + 1;
+  label.textContent = 'カウント: ' + count;
+});
+  `"
+/>
+
 ### `submit` イベントと `preventDefault`
 
 `<form>` を送信したときに発生するのが `submit` イベントです。

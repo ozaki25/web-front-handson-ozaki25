@@ -102,6 +102,34 @@ lesson11 で Flexbox を使って要素を横並びにしました。Flexbox は
 
 これで画面が広ければ多くの列、狭ければ少ない列に自動で切り替わります。**`@media` を書かなくてもレスポンシブになる** のが強みです。
 
+下のデモは `repeat(auto-fit, minmax(120px, 1fr))` の典型です。プレビューの幅を広げ狭めする（右上の Open in New Tab で試すと変化が分かりやすい）と、列数が自動で変わります。
+
+<LiveDemo
+  height="220px"
+  :html="`
+<div class='grid'>
+  <div>1</div><div>2</div><div>3</div>
+  <div>4</div><div>5</div><div>6</div>
+</div>
+  `"
+  :css="`
+body { padding: 16px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
+}
+.grid > div {
+  background: #1f4e79;
+  color: white;
+  padding: 24px 0;
+  text-align: center;
+  border-radius: 4px;
+}
+  `"
+  :js="``"
+/>
+
 ### `grid-template-rows` と行の指定
 
 行を明示したい場合は `grid-template-rows` を使います。

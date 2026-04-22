@@ -78,6 +78,37 @@
 
 `transform` の利点は、**レイアウトを壊さない** ことです。`margin-top: -4px` でも似た動きに見えますが、こちらは周囲の要素の位置計算に影響を与えます。`transform` は描画だけをズラすのでパフォーマンスもよく、アニメーションに向いています。
 
+下のデモで、カードにマウスを乗せると `transform` と `box-shadow` が `transition` でなめらかに変化します。ホバーを外すと元の状態に戻るところまで、目で追えます。
+
+<LiveDemo
+  height="220px"
+  :html="`
+<div class='card'>
+  <h3>ホバーしてみて</h3>
+  <p>transform と box-shadow が 250ms でなめらかに動きます。</p>
+</div>
+  `"
+  :css="`
+body { padding: 24px; background: #f5f7fa; }
+.card {
+  max-width: 320px;
+  padding: 24px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: transform 250ms ease, box-shadow 250ms ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+.card h3 { margin: 0 0 8px; }
+.card p { margin: 0; color: #555; }
+  `"
+  :js="``"
+/>
+
 ### `prefers-reduced-motion` で動きを抑える
 
 動きのあるアニメーションは楽しい一方で、**乗り物酔い** のように画面の動きで気分が悪くなる人がいます。OS 側に「動きを減らす」設定があり（macOS の「視差効果を減らす」、Windows の「アニメーションを表示」OFF など）、この設定は CSS から **`@media (prefers-reduced-motion: reduce)`** で検出できます。

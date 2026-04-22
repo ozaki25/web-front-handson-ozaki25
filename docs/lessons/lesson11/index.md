@@ -49,6 +49,32 @@ Flexbox の使い方は、**並べたい要素たちを包む親要素に `displ
 
 これで `.card` 同士の間に 16px の空間が入る。`margin` でも同じことはできるが、端に余分な余白ができないので Flexbox では `gap` が基本。
 
+下のデモで、親の `display: flex` と `gap` の効果を確認できる。`display: flex` を外すと子要素が縦積みに戻り、`gap` を増減すると隙間が変わる。
+
+<LiveDemo
+  height="180px"
+  :html="`
+<div class='row'>
+  <div class='item'>A</div>
+  <div class='item'>B</div>
+  <div class='item'>C</div>
+</div>
+  `"
+  :css="`
+body { padding: 16px; }
+.row { display: flex; gap: 16px; }
+.item {
+  flex: 1;
+  padding: 24px;
+  background: #1f4e79;
+  color: white;
+  text-align: center;
+  border-radius: 4px;
+}
+  `"
+  :js="``"
+/>
+
 ### 主軸の揃え方: `justify-content`
 
 ```css
