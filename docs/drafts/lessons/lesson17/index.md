@@ -1,0 +1,167 @@
+# lesson17: 関数
+
+## ゴール
+
+- `function` 宣言で関数を定義できる
+- アロー関数でも関数を定義できる
+- 引数と戻り値（`return`）を使える
+
+## 解説
+
+### 関数とは
+
+「決まった処理をまとめて名前をつけたもの」が関数です。同じ処理を何度も書く代わりに、関数を 1 つ作っておけば、名前を呼ぶだけで再利用できます。
+
+### `function` 宣言
+
+一番シンプルな書き方です。
+
+```js
+function greet(name) {
+  console.log(`こんにちは、${name} さん`);
+}
+
+greet("Alice");
+greet("Bob");
+```
+
+- `function 関数名(引数) { ... }` で定義
+- `関数名(値)` で呼び出す
+- 引数は「関数に渡す値」、関数の中では受け取った名前（`name`）で使う
+
+### `return` で値を返す
+
+関数は「処理をする」だけでなく「結果を返す」こともできます。
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+const result = add(1, 2);
+console.log(result); // 3
+```
+
+- `return 値` で呼び出し元に結果を返す
+- `const result = add(1, 2)` のように、戻り値を変数に受け取れる
+
+`return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
+
+### アロー関数
+
+もう 1 つの書き方がアロー関数です。lesson16 の `forEach` で一度出てきました。
+
+```js
+const add = (a, b) => {
+  return a + b;
+};
+
+console.log(add(1, 2)); // 3
+```
+
+- `(引数) => { ... }` の形
+- 変数に入れて使う（`const 関数名 = (引数) => { ... }`）
+
+波かっこの中で「計算 → 即 return」だけしたいときは、波かっこと `return` を省略できます。
+
+```js
+const add = (a, b) => a + b;
+console.log(add(1, 2)); // 3
+```
+
+本コースでは、まず **両方の書き方を読める** ことを目指します。書き分けは後から慣れで身につきます。
+
+### どちらを使う？
+
+どちらでも動きます。近年のコードはアロー関数が多いですが、`function` 宣言も十分使われます。本コースでは混ぜて使うので、どちらも読めるようにしておきます。
+
+## 演習
+
+### ゴール
+
+- 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く
+- 関数に挨拶文を作ってもらう
+
+### 手順
+
+1. `index.html` のタイトルを `lesson17` に変える
+2. `script.js` を以下に書き換える
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson17</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson17: 関数</h1>
+  </body>
+</html>
+```
+
+### `script.js`
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+const addArrow = (a, b) => {
+  return a + b;
+};
+
+const addShort = (a, b) => a + b;
+
+console.log(add(1, 2));
+console.log(addArrow(10, 20));
+console.log(addShort(100, 200));
+
+function greet(name) {
+  return `こんにちは、${name} さん`;
+}
+
+const message = greet("Alice");
+console.log(message);
+console.log(greet("Bob"));
+
+function introduce(name, age) {
+  return `${name}（${age} 歳）です`;
+}
+
+console.log(introduce("Carol", 30));
+```
+
+### 期待出力
+
+```
+3
+30
+300
+こんにちは、Alice さん
+こんにちは、Bob さん
+Carol（30 歳）です
+```
+
+### 変える
+
+- `add` の中身を `a - b` に変える → Console の 1 行目が `-1` になる
+- `greet` に挨拶の文言 2 種類（朝と夜）を引数で受け取るように変える（`function greet(name, word) { return `${word}、${name} さん`; }`）
+- `introduce` で `return` を書き忘れるとどうなるか確認する（`console.log` で `undefined` が表示される）
+
+### 自分で書く
+
+- 3 つの数を合計する関数 `sum3(a, b, c)` を書く
+- 1 つの数を受け取って「偶数」または「奇数」を返す関数 `evenOrOdd(n)` を書く（ヒント: `n % 2 === 0` で偶数判定）
+- 名前と点数を受け取り、点数が 60 以上なら「○○ さんは合格」、そうでなければ「○○ さんは不合格」を返す関数 `judge(name, score)` を書く
+
+## まとめ
+
+- 関数は「処理に名前をつけて再利用するしくみ」
+- 書き方は 2 種類: `function 関数名(...) { ... }` とアロー関数 `(...) => { ... }`
+- `return` で値を返し、呼び出し元で `const 変数 = 関数(...)` で受け取れる
+- 引数は複数渡せる
