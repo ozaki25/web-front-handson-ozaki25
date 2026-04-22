@@ -354,7 +354,7 @@ render();
 - 削除 → リロード → 削除後の状態が残る
 - 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
 - DevTools の Application（または Storage）タブ → Local Storage の項目で `lesson25-todos` に JSON 文字列が入っているのが確認できる
-- Console で `localStorage.setItem("lesson25-todos", "{{ 壊れた JSON")` のように壊れたデータをわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
+- Console で `localStorage.setItem("lesson25-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
 
 ### 変える
 
