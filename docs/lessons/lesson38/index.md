@@ -1,296 +1,334 @@
-# lesson38: フォームと制御コンポーネント
+# lesson38: 判別共用体（discriminated union）
 
 ## ゴール
 
-- `value` と `onChange` を使って、入力値を state と同期できる（制御コンポーネント）
-- lesson06 の HTML フォーム（`name` 属性で値を集める形）と、React の書き方との違いを説明できる
-- `<form action={fn}>` にも触れ、章 5 lesson50 で本格的に使うことを予告として受け取る
+- オブジェクトのユニオン型に「種類を表す文字列リテラルのプロパティ」を付ける形（**判別共用体**）を書ける。
+- `switch (state.kind)` で各ケースに分岐すると、TS が自動的に型を絞り込んでくれることを体験する。
+- 画面の状態（ローディング / 成功 / エラー）を判別共用体で表現し、1 つの型でまるごと扱えるようになる。
+- この形が章 4 lesson47 `useReducer` の `Action` 型で再登場する流れを理解する。
 
 ## 解説
 
-### lesson06 の HTML フォームとの対比
+### 判別共用体とは
 
-章 1 lesson06 の自己紹介フォームを思い出してください。次のような形でした。
+lesson35 でユニオン型 `A | B` を、lesson37 で `in` 演算子による絞り込みを学びました。これをさらに読み書きしやすくしたのが **判別共用体**（discriminated union、タグ付きユニオンとも呼ばれます）です。
 
-```html
-<form action="/contact" method="POST">
-  <label for="email">メール</label>
-  <input id="email" name="email" type="email" required />
-  <button type="submit">送信</button>
-</form>
+ポイントは **全ケースで共通の名前のプロパティ** を持ち、その値は **それぞれ別のリテラル型** にすることです。
+
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number }
+  | { kind: "rectangle"; width: number; height: number };
 ```
 
-- `name="email"` が「この入力欄はメールです」という目印
-- 送信ボタンを押すと、ブラウザが `name` 属性をキーにして値を集め、`action` に指定された URL に送る
-- 値の持ち主は **ブラウザ**
+- 共通プロパティ `kind` は全ケースで存在する。
+- `kind` の値は `"circle"` / `"square"` / `"rectangle"` とケースごとに違うリテラル。
+- それ以外のプロパティ（`radius`、`side`、`width` / `height`）はケース固有。
 
-React の**制御コンポーネント**はこの形と少し違います。
+この「`kind` という共通プロパティの値で種類を見分ける」形を判別共用体と呼びます。共通プロパティの名前は `kind` でも `type` でも `tag` でも構いませんが、本コースでは **`kind`** に統一します（`type` は予約語ではないものの、型注釈の文脈で紛らわしいため）。
 
-- 値の持ち主は **React の state**
-- `<input>` には「今の state の値」を `value` として渡す
-- 入力するたびに `onChange` で state を更新する
-- `<input>` は常に state と同期している
+### `switch` で自動絞り込み
 
-どちらも「フォームを作る」ことには違いありません。使い分けの現場感としては、HTML ネイティブで十分なら前者、入力値を**その場で JS から使いたい**（リアルタイムプレビュー、バリデーション、条件付き無効化など）なら後者です。React では制御コンポーネントが基本です。
+判別共用体の最大の嬉しさは、`switch` で **何も書かずに型が絞り込まれる** 点です。
 
-### 制御コンポーネントの最小形
-
-```tsx
-import { useState } from "react";
-
-function NameInput() {
-  const [name, setName] = useState("");
-
-  return (
-    <div>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="名前"
-      />
-      <p>こんにちは、{name} さん</p>
-    </div>
-  );
+```ts
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
+  }
 }
 ```
 
-- `value={name}` で「いま表示する値」を指定
-- `onChange={(e) => setName(e.target.value)}` で「入力されたら state を更新」
-- これで `<input>` と `name` state がつねに一致する
+- `case "circle":` のブロックでは `shape` の型が `{ kind: "circle"; radius: number }` に絞られている。`shape.radius` が使える。
+- `case "square":` の中では `shape.side`、`case "rectangle":` の中では `shape.width` / `shape.height` が使える。
+- `in` 演算子も `typeof` もカスタム型ガードも書いていないのに、TS が `kind` の値から自動で絞り込む。
 
-ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。つまり、**見た目の真実は state 側にある**。
+`switch` の条件に「**判別用プロパティ**」を指定するだけで、各 `case` が局所的な型付けになる。これが判別共用体を使う一番大きな動機です。
 
-### `e.target.value`
+### 網羅性チェックとの組み合わせ
 
-`onChange` が受け取る `e`（イベント）の中に、変化があった要素（`target`）が入っています。`<input>` の value は常に文字列型です。
+lesson36 で学んだ `never` による網羅性チェックを組み合わせると、ケース追加時に漏れを検出できます。
 
-```tsx
-<input
-  type="number"
-  value={age}
-  onChange={(e) => setAge(Number(e.target.value))}
-/>
+```ts
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
+    default: {
+      const _exhaustive: never = shape;
+      return _exhaustive;
+    }
+  }
+}
 ```
 
-数値で扱いたいときは、`Number()` で変換する必要があります。HTML 的には `type="number"` でも、JS から見えるのは文字列です。
+`Shape` に新しいケースを足すと、`default` 節の `_exhaustive` に赤線が出て、`area` を直し忘れていることを教えてくれます。
 
-### textarea と select も同じ形
+### 画面の状態を判別共用体で表す
 
-HTML では `<textarea>入る文字</textarea>` のように子要素として書いていましたが、React では `<input>` と同じく `value` と `onChange` を使います。
+実用面でよく登場するのが **画面の状態** です。データを取ってきて表示する画面は、ざっくり 3 つの状態を取ります。
 
-```tsx
-<textarea value={memo} onChange={(e) => setMemo(e.target.value)} />
-<select value={category} onChange={(e) => setCategory(e.target.value)}>
-  <option value="home">家事</option>
-  <option value="work">仕事</option>
-</select>
+- まだ読み込み中（ローディング）
+- 成功してデータがある
+- 失敗してエラーメッセージがある
+
+これを判別共用体で 1 つの型にまとめます。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoState =
+  | { kind: "loading" }
+  | { kind: "success"; todos: Todo[] }
+  | { kind: "error"; message: string };
 ```
 
-### `<form>` の送信
+- `"loading"` のときは他に何もいらない。
+- `"success"` のときだけ `todos` がある。
+- `"error"` のときだけ `message` がある。
 
-送信ボタンを押したときの動作は 2 通り書き方があります。
+これを使う関数は、`switch` で自然に分岐できる。
 
-#### (a) `onSubmit` で書く（本コースの章 4 はこれ）
-
-```tsx
-<form
-  onSubmit={(e) => {
-    e.preventDefault();
-    // state をもとに処理する
-  }}
->
-  {/* ... */}
-</form>
+```ts
+function describe(state: TodoState): string {
+  switch (state.kind) {
+    case "loading":
+      return "読み込み中...";
+    case "success":
+      return `${state.todos.length} 件の TODO があります`;
+    case "error":
+      return `エラー: ${state.message}`;
+  }
+}
 ```
 
-- `e.preventDefault()` で、ブラウザ既定の送信（ページ遷移）を止める
-- その後は自分で `fetch` なり state 更新なりをする
-- lesson40、lesson42 で使う形
+- `case "loading":` のブロックでは `state` に `todos` も `message` もない。
+- `case "success":` のブロックでは `state.todos` だけある。`state.message` と書くと赤線が出る。
+- `case "error":` のブロックでは `state.message` だけある。
 
-#### (b) `<form action={fn}>`（紹介のみ、章 5 で本格使用）
+**存在しないプロパティにアクセスしようとすると TS が止めてくれる**。これが判別共用体の安全性です。
 
-React 19 では、`<form>` の `action` 属性に **関数** も渡せるようになりました。
+### 章 2 の JS との違い（オブジェクトリテラル辞書ではなく型で）
 
-```tsx
-<form action={submitTodo}>
-  <input name="text" />
-  <button type="submit">送信</button>
-</form>
+章 2 までは、似たようなことを「オブジェクトリテラル辞書」や「`if` チェーン」で書いていました。判別共用体を使うと、**型定義を見るだけでどんな状態があるかが一目で分かる**、**各状態で使えるプロパティが TS に守られる** という 2 つの利点が一気に手に入ります。
+
+### `kind` 以外の名前を使うとき
+
+既存のライブラリやサンプルでは、共通プロパティ名に `type`（HTTP のアクション種別など）を使っているものをよく見ます。
+
+```ts
+type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
 ```
 
-- `action` が関数なら、React が送信時に `FormData` を渡してその関数を呼ぶ
-- React が**自動で `preventDefault` を呼んでくれる**（書く必要がない）
-- 従来どおり `action="/contact"` のように **URL 文字列** を渡すこともできる（普通の HTML 送信）
-
-本コースでは章 4 の段階では **紹介のみ**です。章 5 lesson50 の Server Actions でこの形を使うときに「関数を渡すパターン」を詳しく学びます。「章 4 は `onSubmit` 形、章 5 で `action={fn}` 形に乗り換える」という流れを予告として覚えておいてください。
+これも立派な判別共用体です。名前の選び方は、**そのデータが自然に呼ばれる語に合わせる** くらいで十分。本コースでは画面の状態には `kind`、Redux 風の動作には `type` を使い分けます（どちらも中身の仕組みは同じ）。
 
 ## 演習
 
-### ゴール
+### 手順 1: `Shape` の判別共用体
 
-- 名前とメモの入力欄を作り、入力内容がリアルタイムに下に表示されるプレビュー画面を作る
-- 送信ボタンを押したら（`onSubmit` で）入力内容をまとめて表示する
+`src/main.ts` の中身を以下に置き換える。
 
-### 手順
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number }
+  | { kind: "rectangle"; width: number; height: number };
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` を書き換える
-3. `src/App.css` を書き換える
-
-### `src/App.tsx`
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-import "./App.css";
-
-function App() {
-  const [name, setName] = useState("");
-  const [memo, setMemo] = useState("");
-  const [submitted, setSubmitted] = useState<{ name: string; memo: string } | null>(
-    null
-  );
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitted({ name, memo });
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
+    default: {
+      const _exhaustive: never = shape;
+      return _exhaustive;
+    }
   }
-
-  return (
-    <>
-      <h1>入力プレビュー</h1>
-
-      <form onSubmit={handleSubmit} className="box">
-        <div className="row">
-          <label htmlFor="name">名前</label>
-          <input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-
-        <div className="row">
-          <label htmlFor="memo">メモ</label>
-          <textarea
-            id="memo"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          />
-        </div>
-
-        <button type="submit">送信</button>
-      </form>
-
-      <section className="box">
-        <h2>リアルタイムプレビュー</h2>
-        <p>名前: {name}</p>
-        <p>メモ: {memo}</p>
-      </section>
-
-      {submitted !== null && (
-        <section className="box">
-          <h2>送信結果</h2>
-          <p>名前: {submitted.name}</p>
-          <p>メモ: {submitted.memo}</p>
-        </section>
-      )}
-    </>
-  );
 }
 
-export default App;
+console.log(area({ kind: "circle", radius: 2 }));
+console.log(area({ kind: "square", side: 3 }));
+console.log(area({ kind: "rectangle", width: 4, height: 5 }));
 ```
 
-### `src/App.css`
+#### 期待出力
 
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
-
-.row {
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-}
-
-.row label {
-  margin-bottom: 4px;
-  font-weight: bold;
-}
-
-.row input,
-.row textarea {
-  padding: 6px;
-  border: 1px solid #999;
-  border-radius: 4px;
-}
-
-button {
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
-  .row input,
-  .row textarea {
-    color: #eee;
-    background-color: #2a2a2a;
-    border-color: #666;
-  }
-}
+```
+12.566370614359172
+9
+20
 ```
 
-### 期待出力
+エディタで `case "circle":` の中の `shape` にマウスを乗せると `{ kind: "circle"; radius: number }` と出る。`kind` の値で型が絞られていることが確認できる。
 
-- 画面に「名前」入力欄と「メモ」テキストエリア、「送信」ボタン
-- 「リアルタイムプレビュー」セクションに、入力内容が**打つたびに**反映される
-- 「送信」を押すと、「送信結果」セクションが現れて、押した時点の入力内容が固定表示される
-- その後もリアルタイムプレビューは入力に追従するが、「送信結果」は次に押すまで変わらない
+### 手順 2: わざと他ケースのプロパティを触る
 
-### 変える
+`case "circle":` の中で `shape.side` を参照してみる。
 
-- `onChange` を消して `value={name}` だけ残すと、**入力できなくなる**（読み取り専用扱い）。確認したら戻す
-- `<input>` のラベル `<label htmlFor="name">` の `htmlFor` を `for` に書き換えると、ブラウザのコンソールに警告が出る（JSX では `htmlFor`）
-- `handleSubmit` から `e.preventDefault()` を消すと、送信時にページがリロードされてプレビューが消える。**なぜリロードされるのか** を自分の言葉で説明してみる
+```ts
+case "circle":
+  return Math.PI * shape.side ** 2;
+```
+
+期待されるメッセージ:
+
+```
+Property 'side' does not exist on type '{ kind: "circle"; radius: number; }'.
+```
+
+`"circle"` のケースでは `side` は存在しないので、触らせてもらえない。確認できたら `shape.radius` に戻す。
+
+### 手順 3: `TodoState` を書く
+
+lesson35 で作った `src/types.ts` の `Todo` をそのまま使う。`src/main.ts` を次の内容に置き換える。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoState =
+  | { kind: "loading" }
+  | { kind: "success"; todos: Todo[] }
+  | { kind: "error"; message: string };
+
+function describe(state: TodoState): string {
+  switch (state.kind) {
+    case "loading":
+      return "読み込み中...";
+    case "success":
+      return `${state.todos.length} 件の TODO があります`;
+    case "error":
+      return `エラー: ${state.message}`;
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+}
+
+const s1: TodoState = { kind: "loading" };
+const s2: TodoState = {
+  kind: "success",
+  todos: [
+    { id: "a1", text: "牛乳を買う", status: "open" },
+    { id: "a2", text: "本を返す", status: "done" },
+  ],
+};
+const s3: TodoState = { kind: "error", message: "ネットワーク切断" };
+
+console.log(describe(s1));
+console.log(describe(s2));
+console.log(describe(s3));
+```
+
+#### 期待出力
+
+```
+読み込み中...
+2 件の TODO があります
+エラー: ネットワーク切断
+```
+
+### 手順 4: ケース追加で網羅性が崩れる様子
+
+`TodoState` に `"empty"` を追加してみる。
+
+```ts
+type TodoState =
+  | { kind: "loading" }
+  | { kind: "success"; todos: Todo[] }
+  | { kind: "error"; message: string }
+  | { kind: "empty" };
+```
+
+`describe` の本体は触らない。すると `default:` の `const _exhaustive: never = state;` に赤線が出る。
+
+期待されるメッセージ:
+
+```
+Type '{ kind: "empty"; }' is not assignable to type 'never'.
+```
+
+「`"empty"` のケースが処理されていない」と TS が教えてくれる。`case "empty":` を足して処理を書くと赤線が消える。
+
+```ts
+case "empty":
+  return "TODO はまだありません";
+```
+
+実行して `describe({ kind: "empty" })` が `TODO はまだありません` を返すことを確認する。
+
+### 手順 5: わざと存在しないプロパティを触る
+
+`case "error":` のブロックで、`state.todos` を触ろうとしてみる。
+
+```ts
+case "error":
+  return `エラー: ${state.message} (${state.todos.length} 件)`;
+```
+
+期待されるメッセージ:
+
+```
+Property 'todos' does not exist on type '{ kind: "error"; message: string; }'.
+```
+
+`"error"` のケースに `todos` は存在しない。判別共用体は **そのケースで本当にあるプロパティだけにアクセスを許可する**。確認できたら `state.todos` の部分は消す。
+
+### 変えてみる
+
+共通プロパティの名前を `kind` から `type` に変えてみる。
+
+```ts
+type TodoState =
+  | { type: "loading" }
+  | { type: "success"; todos: Todo[] }
+  | { type: "error"; message: string };
+```
+
+`switch (state.type)` に変えれば、`kind` のときと完全に同じように動く。呼び出し側のオブジェクトリテラルも `{ type: "loading" }` のように変える。**名前が変わっても挙動は同じ** ことを確認する。
+
+確認できたら `kind` に戻す（本コースでは状態には `kind` を使う）。
 
 ### 自分で書く
 
-- カテゴリ選択用の `<select>` を追加し、`state.category` と同期させる
-- 選択肢: `"家事"` / `"仕事"` / `"趣味"`
-- プレビューと送信結果にカテゴリも表示する
+次の判別共用体と関数を自分で書く。
 
-ヒント:
-
-```tsx
-const [category, setCategory] = useState("家事");
-// ...
-<select value={category} onChange={(e) => setCategory(e.target.value)}>
-  <option value="家事">家事</option>
-  <option value="仕事">仕事</option>
-  <option value="趣味">趣味</option>
-</select>;
+```ts
+type FetchResult<T> =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success"; data: T }
+  | { kind: "error"; message: string };
 ```
 
-### 末尾予告
+- この `FetchResult` は lesson39 で学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
+- `function render(r: FetchResult<string>): string` を書き、`"idle"` は `"待機中"`、`"loading"` は `"読み込み中"`、`"success"` は `data` をそのまま、`"error"` は `message` を返すようにする。
+- `default:` で `const _: never = r;` の網羅性チェックを付ける。
 
-- 章 4 内では `<form onSubmit={(e) => { e.preventDefault(); ... }}>` の形を lesson40 / lesson42 で使い続ける
-- `<form action={fn}>` 形は章 5 lesson50 の Server Actions で登場する。そこで `preventDefault` が不要になる理由とあわせて扱う
+書けたら 4 パターンの `FetchResult<string>` を作って呼び出し、期待通りの文字列が返ることを確認する。
 
 ## まとめ
 
-- 制御コンポーネントは `value={state}` + `onChange` の組み合わせ。値の持ち主は state
-- `e.target.value` は常に文字列。数値で扱いたいなら `Number()` で変換
-- `<label>` の `for` は JSX では **`htmlFor`**
-- フォーム送信は当面 `onSubmit` + `e.preventDefault()`。`<form action={fn}>` は章 5 でフル活用
+- **判別共用体** は「全ケースで共通の名前のプロパティを持ち、値が別々のリテラル」のユニオン型。
+- `switch (x.kind)` で分岐するだけで、各 `case` の中の型が自動で絞り込まれる。
+- 存在しないプロパティを触ろうとすると TS が止めてくれる。
+- `never` による網羅性チェックと組み合わせると、ケース追加時に処理漏れを検出できる。
+- 共通プロパティの名前は `kind` / `type` / `tag` のどれでもよい。本コースでは状態表現に `kind`、動作表現に `type` を使う。
+- **この判別共用体パターンは章 4 lesson47 の `useReducer` の `Action` 型で再登場します**。`{ type: "add"; text: string } | { type: "delete"; id: string } | { type: "toggle"; id: string }` の形で、ここで学んだ `switch` 分岐と網羅性チェックがそのまま効きます。
+- 次のレッスン（lesson39）では、`FetchResult<T>` のように「型を引数として受け取る」ジェネリクスを学ぶ。判別共用体とジェネリクスを組み合わせると、実用的なデータ構造が一気に書けるようになる。

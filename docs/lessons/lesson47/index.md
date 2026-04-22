@@ -1,168 +1,388 @@
-# lesson47: Server Component でデータを取得する
+# lesson47: useReducer で複雑な state
 
 ## ゴール
 
-- `async` な Server Component を書けるようになります。
-- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
-- `loading.tsx` でローディング UI を挟めるようになります。
-- Next.js 15 で fetch のキャッシュ既定が「キャッシュしない」に変わったことを知り、3 パターン（`force-cache` / `revalidate` / `tags`）を見分けられます。
+- `useReducer` で複数の操作をまとめた state 管理が書ける
+- reducer 関数の形 `(state, action) => newState` を理解する
+- action の型を判別共用体で書ける
+- reducer は純粋関数でなければならないことを理解する
 
 ## 解説
 
-### Server Component は `async` にできる
+### 最初に: 再接続
 
-章 4 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
+この `Action` 型は章 3 lesson38 で学んだ **判別共用体** そのものです。`type` プロパティで種類を見分ける形、`switch` での分岐、網羅性チェック、すべてそのまま使います。lesson38 で書いた `TodoState` の代わりに、今回は「どういう更新をしたいか」を表すオブジェクトを同じ仕組みで表現します。
+
+### なぜ useState だけだと辛くなるか
+
+lesson46 の TODO は、`setTodos` を呼ぶパターンが 3 種類ありました。
 
 ```tsx
-export default async function Page() {
-  const data = await fetch("https://...").then((r) => r.json());
-  return <div>{data.title}</div>;
+// 追加
+setTodos((prev) => [...prev, newTodo]);
+
+// 削除
+setTodos((prev) => prev.filter((t) => t.id !== id));
+
+// 完了切替（今回追加したい）
+setTodos((prev) =>
+  prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+);
+```
+
+今はまだ読めますが、操作が増えるにつれて「`setTodos` の書き方が画面のあちこちに散る」「同じ処理を別の場所でも書きたくなる」という問題が出てきます。
+
+`useReducer` は、**state の更新ロジックを 1 箇所に集める** 仕組みです。画面側は「こういう操作をしたい」という **action** を投げるだけになります。
+
+### useReducer の形
+
+```tsx
+import { useReducer } from "react";
+
+const [state, dispatch] = useReducer(reducer, initialState);
+```
+
+- 第 1 引数: **reducer 関数** `(state, action) => newState`
+- 第 2 引数: **初期 state**
+- 戻り値: `[今の state, dispatch 関数]`
+
+`dispatch(action)` を呼ぶと、React が内部で `reducer(現在の state, action)` を実行し、その戻り値を新しい state として保持します。
+
+### reducer 関数の中身
+
+reducer は「今の state」と「action」を受け取って「次の state」を返すだけの関数です。
+
+```tsx
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "increment":
+      return { count: state.count + 1 };
+    case "decrement":
+      return { count: state.count - 1 };
+    case "reset":
+      return { count: 0 };
+  }
 }
 ```
 
-- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
-- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
+ポイントは 3 つです。
 
-ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（章 4 lesson41 末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
+1. **新しいオブジェクト / 配列を返す**（イミュータブル更新、lesson46 と同じ原則）
+2. **副作用を起こさない**（ログ出力、`localStorage`、`fetch` などは書かない）
+3. **同じ入力には同じ出力**（乱数や `Date.now()` も使わない）
 
-### `loading.tsx` でローディング UI
+これを **純粋関数** と呼びます。reducer は純粋関数でなければなりません。
 
-`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
+### 純粋関数の原則と Strict Mode
 
+React の Strict Mode は、開発時に reducer を **意図的に 2 回呼びます**。副作用を書いてしまうと 2 回走って気づけるようにする仕組みです。「reducer 内で `console.log` したら 2 回出た」ときは、Strict Mode が純粋関数違反を検出している合図です。
+
+### action の型は判別共用体で
+
+action は「操作の種類」を表すオブジェクトです。`type` というプロパティで種類を見分けます。lesson38 で学んだ判別共用体が、そのまま action の型になります。
+
+```ts
+type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
 ```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
 
-`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
+`switch (action.type)` で分岐すると、TypeScript は各ブランチで「この action にはどのプロパティがあるか」を正確に絞り込んでくれます。`case "add"` の中では `action.text` が見え、`case "delete"` の中では `action.id` が見える、という形です。
 
-### Next.js 15 の fetch キャッシュ既定
+### dispatch を呼ぶ側
 
-Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました（何度呼んでも同じ値を返します）。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったです。
-
-**Next.js 15 からは fetch のデフォルトはキャッシュしません**。毎リクエストで取り直す動きになりました。キャッシュしたい場合は明示的に指定します。
-
-第 2 引数のオプションで挙動を切り替えます。
+画面側（コンポーネントの JSX）からは `dispatch(action)` を呼ぶだけです。
 
 ```tsx
-// (1) 強くキャッシュ: 一度取ったらずっと使い回す
-await fetch(url, { cache: "force-cache" });
-
-// (2) 一定時間ごとに再取得: 60 秒間はキャッシュ、60 秒経ったら次のアクセスで新しく取る
-await fetch(url, { next: { revalidate: 60 } });
-
-// (3) タグ単位で無効化: Server Actions から revalidateTag('posts') を呼ぶとこのキャッシュが切れる
-await fetch(url, { next: { tags: ["posts"] } });
+dispatch({ type: "add", text: "牛乳を買う" });
+dispatch({ type: "delete", id: "abc" });
+dispatch({ type: "toggle", id: "abc" });
 ```
 
-本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。3 パターンの存在は知っておくだけで良いです。
+「追加ロジック」「削除ロジック」は reducer 側に集まっているので、画面側は「何をしたいか」だけを伝えれば済みます。
 
-ここで話しているキャッシュは **fetch（Data Cache）限定** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
+### useState と useReducer の使い分け
+
+| 状況 | おすすめ |
+| --- | --- |
+| 値が 1 つの単純な state | `useState` |
+| 複数の関連する更新パターン | `useReducer` |
+| 次の state が前の state に強く依存する | `useReducer` |
+
+画面の中で「いくつも `setX` を並べる」のがしんどくなったら `useReducer` の出番です。
 
 ## 演習
 
-### 前回のプロジェクトを開く
+### ゴール
 
-lesson46 で作ったプロジェクトを開き直しましょう。
+- lesson46 の TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する
+- 3 種類の action `add` / `delete` / `toggle` を実装する
+- 完了済みの TODO は見た目（取り消し線）で区別する
 
-### 手順 1: `/posts` ページを作る
+### 手順
 
-`app/posts/page.tsx` を新規作成します。
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/types.ts` を作成
+3. `src/todosReducer.ts` を作成
+4. `src/App.tsx` を書き換える
+5. `src/App.css` を書き換える
 
-```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  done: boolean;
 };
 
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+export type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
+```
+
+`Todo` の `done` プロパティで「完了済みかどうか」を表します。`Action` は 3 種類の操作を判別共用体で列挙しています。
+
+### `src/todosReducer.ts`
+
+```ts
+import type { Todo, Action } from "./types";
+
+export function todosReducer(state: Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add": {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        done: false,
+      };
+      return [...state, newTodo];
+    }
+    case "delete": {
+      return state.filter((todo) => todo.id !== action.id);
+    }
+    case "toggle": {
+      return state.map((todo) =>
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
+      );
+    }
+  }
+}
+```
+
+- `case` ごとに新しい配列を返しています（イミュータブル更新）
+- `toggle` は該当 `id` の行だけ新しいオブジェクトで差し替え、それ以外はそのまま
+- ブロック `{ ... }` で囲っているのは、`case` の中で `const` を宣言するためです（変数のスコープを閉じる慣習）
+
+### `src/App.tsx`
+
+```tsx
+import { useReducer, useState } from "react";
+import type { FormEvent } from "react";
+import { todosReducer } from "./todosReducer";
+import type { Todo } from "./types";
+import "./App.css";
+
+function App() {
+  const [todos, dispatch] = useReducer(todosReducer, [] as Todo[]);
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    dispatch({ type: "add", text: trimmed });
+    setText("");
+  }
 
   return (
     <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
+      <h1>useReducer 版 TODO</h1>
+
+      <form onSubmit={handleSubmit} className="box">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="やることを入力"
+        />
+        <button type="submit">追加</button>
+      </form>
+
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li key={todo.id} className={todo.done ? "done" : ""}>
+            <label>
+              <input
+                type="checkbox"
+                checked={todo.done}
+                onChange={() => dispatch({ type: "toggle", id: todo.id })}
+              />
+              {todo.text}
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "delete", id: todo.id })}
+            >
+              削除
+            </button>
           </li>
         ))}
       </ul>
     </>
   );
 }
+
+export default App;
 ```
 
-- `async function` で書いています（Server Component だから許されます）。
-- `fetch` も `response.json()` も `await` が必要です（章 2 lesson22 と同じ）。
-- `Post` 型を自前で `type` で定義しています。章 3 で学んだ `type` エイリアスそのままです。
-- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
+- `useReducer(todosReducer, [] as Todo[])` で、初期値は空配列
+- `dispatch({ type: "add", text })` で追加
+- `dispatch({ type: "toggle", id })` でチェックの切替
+- `dispatch({ type: "delete", id })` で削除
+- 画面側には更新ロジックが一切なく、「どういう操作をしたいか」だけを書いています
 
-### 手順 2: `loading.tsx` を置く
+### `src/App.css`
 
-`app/posts/loading.tsx` を新規作成します。
-
-```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
 }
-```
 
-- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
-- ファイル名は `loading.tsx` 固定です。
+.box input {
+  padding: 6px;
+  margin-right: 8px;
+}
 
-### 手順 3: ヘッダーにリンクを追加
+.box button {
+  padding: 4px 10px;
+  cursor: pointer;
+}
 
-`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
+.todo-list {
+  list-style: none;
+  padding-left: 0;
+  color: #222;
+}
 
-```tsx
-<li>
-  <Link href="/posts">Posts</Link>
-</li>
+.todo-list li {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-list li.done label {
+  text-decoration: line-through;
+  color: #888;
+}
+
+.todo-list li button {
+  margin-left: auto;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+  .todo-list {
+    color: #eee;
+  }
+  .todo-list li.done label {
+    color: #888;
+  }
+}
 ```
 
 ### 期待出力
 
-1. ブラウザで `/posts` を開きます。
-2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
-3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
-4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
+- 画面に入力欄と「追加」ボタン、その下に TODO 一覧
+- 入力して「追加」を押すと、一覧末尾に行が追加される（`done: false` の状態）
+- 各行のチェックボックスを押すと取り消し線が付き、もう一度押すと戻る
+- 「削除」ボタンでその行だけが消える
+- 空文字のまま「追加」を押しても何も起きない
 
-### 変えてみる
+### 変える
 
-1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
-2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
-3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
-
-### キャッシュ指定を試す（任意）
-
-`fetch` の第 2 引数に以下を指定して挙動の違いを見てみましょう。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良いです。
-
-```tsx
-const res = await fetch(
-  "https://jsonplaceholder.typicode.com/posts",
-  { next: { revalidate: 60 } },
-);
-```
+- `todosReducer` の `case "toggle"` を、意図的に壊してみます。次のように書き換えると、`toggle` を押しても画面が更新されません。
+  ```ts
+  case "toggle": {
+    const todo = state.find((t) => t.id === action.id);
+    if (todo) todo.done = !todo.done; // NG: 元のオブジェクトを書き換えている
+    return state; // 同じ配列参照を返している
+  }
+  ```
+  確認したら元に戻します。reducer も **新しい配列・新しいオブジェクトを返す** 原則は守ります。
+- `case "add"` の中に `console.log("added")` を入れて、Strict Mode が有効なとき（`main.tsx` で `<StrictMode>` に包まれているとき）に 2 回出力されることを確認します。reducer は純粋関数として扱われるため、開発時に 2 回呼ばれても副作用は出ないはず、という検査です。
 
 ### 自分で書く
 
-`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
+- 「全部完了にする」「全部未完了に戻す」を action として追加します。
+  - `type: "completeAll"` と `type: "uncompleteAll"` を `Action` 型に足す
+  - reducer にそれぞれの `case` を書く（`state.map((t) => ({ ...t, done: true }))` など）
+  - 画面にボタンを 2 つ追加して `dispatch` する
+- 「完了済みだけ一括削除」も追加してみてください（`type: "deleteCompleted"`）。
+
+### 発展: 網羅性チェック（折りたたみ）
+
+::: details never を使った網羅性チェック
+
+章 3 lesson36 で登場した `never` 型を使うと、**action の case を書き忘れたときにコンパイルエラーにできます**。
+
+`todosReducer.ts` の `switch` に `default` を足します。
+
+```ts
+import type { Todo, Action } from "./types";
+
+export function todosReducer(state: Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add": {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        done: false,
+      };
+      return [...state, newTodo];
+    }
+    case "delete": {
+      return state.filter((todo) => todo.id !== action.id);
+    }
+    case "toggle": {
+      return state.map((todo) =>
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
+      );
+    }
+    default: {
+      // すべての case を処理していれば、ここに来る action は never 型になる
+      const _exhaustive: never = action;
+      return _exhaustive;
+    }
+  }
+}
+```
+
+試しに `Action` 型に新しいケース（例: `{ type: "clear" }`）を足してみてください。`default` の `_exhaustive: never = action` の行で「`action` が `{ type: "clear" }` 型で never に代入できない」というエラーが出ます。これを **網羅性チェック** と呼びます。
+
+action の種類が増えたとき、対応を忘れた場所を TypeScript に教えてもらえるようになります。実務では必ず付けると言ってよい定型です。
+
+:::
 
 ## まとめ
 
-- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
-- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
-- Next.js 15 では **fetch の既定はキャッシュしません**。必要に応じて `force-cache` / `revalidate` / `tags` を指定します。
-- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
-- 次の lesson48 では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。章 2 で学んだ `find` が再登場します。
-
-### コラム: `loading.tsx` の裏で動く Suspense
-
-`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
-
-本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。
+- `useReducer(reducer, initialState)` で state の更新ロジックを 1 箇所にまとめられる
+- reducer は `(state, action) => newState` の形、**純粋関数**（副作用禁止、イミュータブル更新）
+- action は判別共用体で型付け（`type` プロパティで見分ける、lesson38 の形）
+- 画面からは `dispatch(action)` を呼ぶだけ
+- 複数の関連更新があるとき、`useState` より見通しが良くなる
+- Strict Mode では reducer が 2 回呼ばれる。純粋関数なら結果は同じになる
+- 次は lesson48 のフォームに進み、その後 lesson50 で親子連携、lesson51 で Context を学ぶ

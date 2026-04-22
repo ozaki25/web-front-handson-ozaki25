@@ -1,258 +1,222 @@
-# lesson39: 条件で出し分ける
+# lesson39: ジェネリクス入門
 
 ## ゴール
 
-- `&&` / 三項演算子 / 早期 return の 3 パターンを使い分けて、状態に応じた表示切り替えができる
-- それぞれの使いどころを説明できる
+- 「どんな型にも使える関数」を書くための仕組みである **ジェネリクス**（型パラメータ `<T>`）を理解する。
+- `first<T>(arr: T[]): T | undefined` を自分で書けて、数値配列でも文字列配列でも `Todo` 配列でも動かせる。
+- 呼び出し側で型パラメータを明示的に書かなくても、**型推論** が働いて正しい型になることを確認できる。
 
 ## 解説
 
-### JSX は式だから、分岐も式で書く
+### 「どんな型でも受け入れる関数」を書きたい
 
-lesson33 で触れたとおり、JSX の `{ ... }` に書けるのは **式** だけです。`if` 文は書けません。なので、条件で出し分けるときも**式の形**を使います。
+配列の先頭の要素を返す関数を書いてみます。数値配列なら次のように書けます。
 
-よく使うのは次の 3 つです。
-
-1. `条件 && <JSX />`
-2. `条件 ? <A /> : <B />`
-3. 関数の先頭で `if` を使って早期 return
-
-### (1) `&&` で「あるときだけ出す」
-
-「条件が真のときだけ表示する / 偽なら何も出さない」は `&&` が定番です。
-
-```tsx
-{
-  isLoggedIn && <p>ログイン中</p>;
+```ts
+function firstNumber(arr: number[]): number | undefined {
+  return arr[0];
 }
 ```
 
-- `isLoggedIn` が `true` なら `<p>ログイン中</p>` が評価されて表示される
-- `isLoggedIn` が `false` なら `false` が評価結果になり、JSX としては何も描画されない
+- 配列が空なら `arr[0]` は `undefined` なので、戻り値の型は `number | undefined`。
+- 文字列配列でも同じことをしたい場合、`firstString(arr: string[]): string | undefined` をもう 1 つ書く必要がある。
+- `Todo` 配列でも同じことをしたくなったら、さらにもう 1 つ。
 
-#### `&&` の落とし穴（数値 0）
+明らかに繰り返しです。中身の処理はどれも `return arr[0];` で同じ。違うのは **配列の要素の型と戻り値の型だけ**。
 
-`&&` の左側には **本当に真偽値** を置くようにしてください。数値の `0` を書くと、そのまま `0` が画面に表示されてしまいます。
+### ジェネリクス: 型を引数として受け取る
 
-```tsx
-{
-  count && <p>{count} 件あります</p>;
-}
-// count が 0 だと、画面に「0」という数字が出てしまう
-```
+関数が **値** を引数で受け取るのと同じように、TS は **型** を引数で受け取れます。これを **ジェネリクス**（総称型）と呼びます。
 
-件数のような**数値**で判定したいときは、明示的に真偽値に変換します。
-
-```tsx
-{
-  count > 0 && <p>{count} 件あります</p>;
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
 }
 ```
 
-`string` や `Todo[]` は `length === 0` を意識しつつ、迷ったら三項演算子を使うとより安全です。
+- `<T>`: 関数名の直後に書く **型パラメータ**。`T` は「まだ決まっていない型」の仮の名前。
+- 慣習的に `T`（Type の頭文字）を使う。複数あれば `T, U, V` や `TKey, TValue` のように付ける。
+- 引数 `arr: T[]`: 「`T` の配列」。
+- 戻り値 `T | undefined`: 「`T`、または空配列のときは `undefined`」。
 
-### (2) 三項演算子で「A か B か」
+この関数を呼び出すとき、`T` には **呼び出したときの値の型が自動で入ります**。
 
-「ログイン中なら A、ログアウト中なら B を表示」のように **2 択** で切り替えたいときは三項演算子が素直です。
+```ts
+const n = first([1, 2, 3]);         // T = number、n は number | undefined
+const s = first(["a", "b", "c"]);   // T = string、s は string | undefined
+```
 
-```tsx
-{
-  isLoggedIn ? <p>ログイン中</p> : <a href="/login">ログインへ</a>;
+これが **型推論** です。呼び出し側が `<number>` のように書かなくても、渡した値の型から TS が決めてくれます。
+
+### 明示的に書くこともできる
+
+型推論に任せず、呼び出し側で `<型>` を明示することもできます。
+
+```ts
+const n = first<number>([1, 2, 3]);
+```
+
+普段は型推論に任せるほうが読みやすいですが、推論の結果が期待と違うときや、配列が空で推論のヒントがないときには明示します。
+
+```ts
+const empty = first([]); // T = never と推論されてしまう
+const empty2 = first<number>([]); // T = number と明示
+```
+
+### 型パラメータは「使う側が決める」
+
+ジェネリクスは「関数を書く側」ではなく「関数を使う側」が型を決める仕組みです。`first` の実装は `T` が何であるかを知りません。だから `T` の中身（`.toUpperCase()` や `.toFixed()` など）を呼ぶことはできません。
+
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0].toUpperCase(); // エラー
 }
 ```
 
-- `isLoggedIn` が `true` なら左側、`false` なら右側が表示される
-
-3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次の 3 番目の方が読みやすいです。
-
-### (3) 早期 return
-
-関数の**一番上**で条件判定して、不要な場合は `return` してしまう書き方です。
-
-```tsx
-type MessageProps = {
-  text: string;
-};
-
-function Message({ text }: MessageProps) {
-  if (text.length === 0) {
-    return null; // null を返すと「何も描画しない」
-  }
-  return <p>{text}</p>;
-}
+```
+Property 'toUpperCase' does not exist on type 'T'.
 ```
 
-- `null` を `return` すると、そのコンポーネントは **何も描画しない**
-- 条件が多い場合は、三項や `&&` を重ねるより圧倒的に読みやすい
+「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。この「中身に触らず通すだけの関数」が、ジェネリクスが最も活きる形です。
 
-ローディング中専用のスピナー、エラー時専用のメッセージ、3 択以上の状態分岐など、分岐ごとに違う大きな JSX を返したい場合に使うとスッキリします。
+### `Array.prototype.map` もジェネリクス
 
-### 小さなコンポーネントに分ける発想
-
-条件が重なってきたら、「サブコンポーネントに切り出す」ことも考えます。
-
-```tsx
-function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
-  if (isLoggedIn) {
-    return <p>ようこそ！</p>;
-  }
-  return <a href="/login">ログイン</a>;
-}
-
-// 呼び出し側
-<UserStatus isLoggedIn={isLoggedIn} />;
-```
-
-1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは lesson40 以降で使っていきます。
+実は章 2 で使った `map` / `filter` も TS の世界ではジェネリクス関数です。`map` は「`T[]` を受け取って、`(t: T) => U` の関数で変換して `U[]` を返す」という形で定義されています。ライブラリの内部ではこの形の型定義が大量に書かれていて、私たちは呼び出すだけで恩恵を受けています。
 
 ## 演習
 
-### ゴール
+### 手順 1: `first` を書く
 
-- ログイン / ログアウトの状態で表示を切り替える画面を作る
-- `&&` / 三項 / 早期 return の 3 パターンそれぞれを、別の箇所で 1 回ずつ書く
+`src/main.ts` の中身を以下に置き換える。
 
-### 手順
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
+}
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` と `src/Message.tsx` を書く
+const n = first([1, 2, 3]);
+const s = first(["a", "b", "c"]);
+const empty = first<number>([]);
 
-### `src/Message.tsx`
+console.log(n);
+console.log(s);
+console.log(empty);
+```
 
-```tsx
-type MessageProps = {
-  text: string;
-};
+#### 期待出力
 
-export function Message({ text }: MessageProps) {
-  // 早期 return: 空文字なら何も描画しない
-  if (text.length === 0) {
-    return null;
-  }
-  return <p className="message">{text}</p>;
+```
+1
+a
+undefined
+```
+
+- `n` は `1`（数値）。
+- `s` は `"a"`（文字列）。
+- `empty` は `undefined`（空配列なので 0 番目がない）。
+
+エディタで `n` にマウスを乗せると `const n: number | undefined` と表示される。`s` は `const s: string | undefined`。型が正しく推論されていることを確認する。
+
+### 手順 2: `Todo` 配列でも動くことを確認する
+
+`src/main.ts` を次の形に書き換える（`types.ts` は lesson35 で作ったものをそのまま使う）。
+
+```ts
+import type { Todo } from "./types";
+
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
+}
+
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
+];
+
+const topTodo = first(todos);
+
+if (topTodo) {
+  console.log(`先頭の TODO: ${topTodo.text} (status: ${topTodo.status})`);
+} else {
+  console.log("TODO はありません");
 }
 ```
 
-### `src/App.tsx`
+#### 期待出力
 
-```tsx
-import { useState } from "react";
-import { Message } from "./Message";
-import "./App.css";
-
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [unread, setUnread] = useState(0);
-  const [memo, setMemo] = useState("");
-
-  return (
-    <>
-      <h1>条件表示のデモ</h1>
-
-      <section className="box">
-        <h2>(A) 三項演算子: ログイン状態で切り替え</h2>
-        {isLoggedIn ? (
-          <p>ようこそ、Alice さん</p>
-        ) : (
-          <p>ゲストさん、こんにちは</p>
-        )}
-        <button onClick={() => setIsLoggedIn((v) => !v)}>
-          {isLoggedIn ? "ログアウト" : "ログイン"}
-        </button>
-      </section>
-
-      <section className="box">
-        <h2>(B) && で「あるときだけ出す」</h2>
-        <p>未読: {unread}</p>
-        {unread > 0 && <p className="alert">{unread} 件の未読があります</p>}
-        <button onClick={() => setUnread((c) => c + 1)}>+1</button>
-        <button onClick={() => setUnread(0)}>既読にする</button>
-      </section>
-
-      <section className="box">
-        <h2>(C) 早期 return: Message コンポーネント</h2>
-        <input
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          placeholder="空のままだと表示されない"
-        />
-        <Message text={memo} />
-      </section>
-    </>
-  );
-}
-
-export default App;
+```
+先頭の TODO: 牛乳を買う (status: open)
 ```
 
-### `src/App.css`
+`topTodo` の型は `Todo | undefined` になっている（`if` で絞り込むと、中では `Todo` として `.text` や `.status` にアクセスできる）。
 
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
+### 手順 3: わざと型を間違えてエラーを見る
 
-.box button {
-  margin-right: 8px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
+`first` の中で `T` の中身を使おうとしてみる。
 
-.alert {
-  color: #b3261e;
-  font-weight: bold;
-}
-
-.message {
-  background-color: #eaf6ff;
-  padding: 6px 10px;
-  border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
-  .alert {
-    color: #ff7a6d;
-  }
-  .message {
-    background-color: #13344d;
-    color: #eee;
-  }
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0].toUpperCase();
 }
 ```
 
-### 期待出力
+期待されるメッセージ:
 
-- (A) ボタン「ログイン」を押すと、見出し下のメッセージが `ゲストさん、こんにちは` → `ようこそ、Alice さん` に変わる。ボタンの文言も `ログアウト` に変わる
-- (B) `+1` ボタンを押すと「未読」の数字が増え、**1 以上になると初めて** 「N 件の未読があります」が赤文字で現れる。`既読にする` を押すと数字が 0 になり、警告文も消える
-- (C) 入力欄に文字を入れると、下に水色背景の `<p>` が現れる。空にすると `<p>` ごと消える（`null` を返している）
+```
+Property 'toUpperCase' does not exist on type 'T'.
+```
 
-### 変える
+続けて、呼び出し側で配列ではないものを渡してみる。
 
-- (B) の条件を `unread > 0 &&` から `unread &&` に書き換えて、未読 0 のときに **画面に `0` が表示される** 現象を再現する。確認したら戻す
-- (A) の三項を `&&` と `||` の組み合わせに書き換えてみる（余裕があれば）
-- (C) の `if (text.length === 0)` を `if (text === "")` に変えても同じ動きになることを確認
+```ts
+const n = first(123);
+```
+
+期待されるメッセージ:
+
+```
+Argument of type 'number' is not assignable to parameter of type 'unknown[]'.
+```
+
+「配列を渡してくれないと `T[]` にならない」と TS が止めてくれている。確認したら `first([1, 2, 3])` に戻す。
+
+### 変えてみる
+
+配列の最後の要素を返す `last` を書いてみる。
+
+```ts
+function last<T>(arr: T[]): T | undefined {
+  return arr[arr.length - 1];
+}
+
+console.log(last([1, 2, 3]));
+console.log(last(["a", "b", "c"]));
+console.log(last<number>([]));
+```
+
+期待出力:
+
+```
+3
+c
+undefined
+```
 
 ### 自分で書く
 
-- 「ステータス」の state を `"offline" | "loading" | "online"` のユニオン型で作る
-- 値に応じて、`offline → 灰色の丸`、`loading → 黄色の丸 + "接続中..."`、`online → 緑の丸 + "接続済み"` を表示する
-- 3 択なので、早期 return か、または `switch` で `if ... return` を 3 本重ねる形がおすすめ
-- ヒント: `const [status, setStatus] = useState<"offline" | "loading" | "online">("offline");`
+次の 2 つの関数をジェネリクスで書く。
+
+1. `second<T>(arr: T[]): T | undefined` — 配列の 2 番目の要素を返す（なければ `undefined`）。
+2. `wrapInArray<T>(value: T): T[]` — 値を 1 つ受け取り、それだけを入れた配列を返す。
+
+書けたら、数値・文字列・`Todo` の 3 パターンで呼び出し、期待通りの型が推論されていること（エディタでマウスオーバーして確認）と、期待通りの出力が出ることを確認する。
+
+`wrapInArray` のヒント: `function wrapInArray<T>(value: T): T[] { return [value]; }` で書ける。
 
 ## まとめ
 
-- JSX の中に書けるのは式だけ。条件分岐も **式の形** で書く
-- `&&`: あるときだけ出す（ただし数値 0 に注意）
-- 三項演算子: 2 択の切り替え
-- 早期 return（`return null` を含む）: 3 択以上 / それぞれが大きいとき
-- 条件が増えてきたら **コンポーネント分割** も選択肢
+- ジェネリクスは「関数が型を引数として受け取る仕組み」。`<T>` で仮の型名を宣言する。
+- `first<T>(arr: T[]): T | undefined` のように書くと、数値配列でも文字列配列でも `Todo` 配列でも、**同じ実装** で型安全に動く。
+- 呼び出し側では通常 `<型>` を書かず、型推論に任せる。空配列などで推論のヒントがないときだけ明示する。
+- 実装の中では `T` の中身に触れない（`T` が何かを知らないから）。「中身に触らず通すだけ」の関数がジェネリクスの得意分野。
+- 次のレッスンでは、既にある型から新しい型を派生させる **Utility Types**（`Pick` / `Partial`）を学ぶ。`Todo` 型をさらに「一覧用」「下書き用」に派生させる。

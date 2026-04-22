@@ -1,91 +1,88 @@
-# lesson17: 関数
+# lesson17: 条件で分岐する
 
 ## ゴール
 
-- `function` 宣言で関数を定義できる
-- アロー関数でも関数を定義できる
-- 引数と戻り値（`return`）を使える
+- `if` / `else if` / `else` で処理を分けられる
+- `===` / `!==` で等しい / 等しくないを判定できる
+- `&&` / `||` / `!` を組み合わせて条件を書ける
 
 ## 解説
 
-### 関数とは
-
-「決まった処理をまとめて名前をつけたもの」が関数です。同じ処理を何度も書く代わりに、関数を 1 つ作っておけば、名前を呼ぶだけで再利用できます。
-
-### `function` 宣言
-
-一番シンプルな書き方です。
+### `if` の基本形
 
 ```js
-function greet(name) {
-  console.log(`こんにちは、${name} さん`);
+if (条件) {
+  // 条件が true のときに実行される
+}
+```
+
+条件が「真（`true`）」のときだけ、波かっこの中が実行されます。「偽（`false`）」なら飛ばされます。
+
+### `else` と `else if`
+
+「そうでないとき」は `else`、「別の条件も試したい」は `else if` を使います。
+
+```js
+if (age >= 20) {
+  console.log("成人");
+} else if (age >= 13) {
+  console.log("中高生");
+} else {
+  console.log("それ以外");
+}
+```
+
+上から順に条件を見て、最初に `true` になったブロックだけが実行されます。どれも当てはまらなければ `else` が実行されます。
+
+### 比較演算子
+
+| 演算子 | 意味 |
+| --- | --- |
+| `===` | 等しい |
+| `!==` | 等しくない |
+| `>` | 左が右より大きい |
+| `>=` | 左が右以上 |
+| `<` | 左が右より小さい |
+| `<=` | 左が右以下 |
+
+等しいかどうかは **必ず `===` と `!==`** を使います。`==` と `!=` は値の種類が違っても自動で変換して比較する古い演算子で、混乱の原因になるため本コースでは使いません。
+
+### 論理演算子
+
+複数の条件をつなぎたいときに使います。
+
+| 演算子 | 意味 |
+| --- | --- |
+| `&&` | 両方とも `true` のとき `true` |
+| `\|\|` | どちらかが `true` なら `true` |
+| `!` | `true` と `false` を反転 |
+
+```js
+if (age >= 13 && age <= 19) {
+  console.log("10 代");
 }
 
-greet("Alice");
-greet("Bob");
-```
-
-- `function 関数名(引数) { ... }` で定義
-- `関数名(値)` で呼び出す
-- 引数は「関数に渡す値」、関数の中では受け取った名前（`name`）で使う
-
-### `return` で値を返す
-
-関数は「処理をする」だけでなく「結果を返す」こともできます。
-
-```js
-function add(a, b) {
-  return a + b;
+if (name === "" || name === null) {
+  console.log("名前が未入力");
 }
 
-const result = add(1, 2);
-console.log(result); // 3
+if (!isStudent) {
+  console.log("学生ではない");
+}
 ```
-
-- `return 値` で呼び出し元に結果を返す
-- `const result = add(1, 2)` のように、戻り値を変数に受け取れる
-
-`return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
-
-### アロー関数
-
-もう 1 つの書き方がアロー関数です。lesson16 の `forEach` で一度出てきました。
-
-```js
-const add = (a, b) => {
-  return a + b;
-};
-
-console.log(add(1, 2)); // 3
-```
-
-- `(引数) => { ... }` の形
-- 変数に入れて使う（`const 関数名 = (引数) => { ... }`）
-
-波かっこの中で「計算 → 即 return」だけしたいときは、波かっこと `return` を省略できます。
-
-```js
-const add = (a, b) => a + b;
-console.log(add(1, 2)); // 3
-```
-
-本コースでは、まず **両方の書き方を読める** ことを目指します。書き分けは後から慣れで身につきます。
-
-### どちらを使う？
-
-どちらでも動きます。近年のコードはアロー関数が多いですが、`function` 宣言も十分使われます。本コースでは混ぜて使うので、どちらも読めるようにしておきます。
 
 ## 演習
 
 ### ゴール
 
-- 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く
-- 関数に挨拶文を作ってもらう
+- 年齢を表す変数 `age` の値によって「成人 / 未成年」を分岐表示する
+- 年齢を変えて結果が切り替わることを確認する
 
 ### 手順
 
 1. `index.html` のタイトルを `lesson17` に変える
 2. `script.js` を以下に書き換える
+3. Console で結果を確認する
 
 ### `index.html`
 
@@ -99,7 +96,7 @@ console.log(add(1, 2)); // 3
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson17: 関数</h1>
+    <h1>lesson17: 条件で分岐する</h1>
   </body>
 </html>
 ```
@@ -107,61 +104,60 @@ console.log(add(1, 2)); // 3
 ### `script.js`
 
 ```js
-function add(a, b) {
-  return a + b;
+const age = 20;
+const userName = "Alice";
+const isStudent = true;
+
+if (age >= 20) {
+  console.log(`${userName} さんは成人です`);
+} else {
+  console.log(`${userName} さんは未成年です`);
 }
 
-const addArrow = (a, b) => {
-  return a + b;
-};
-
-const addShort = (a, b) => a + b;
-
-console.log(add(1, 2));
-console.log(addArrow(10, 20));
-console.log(addShort(100, 200));
-
-function greet(name) {
-  return `こんにちは、${name} さん`;
+if (age >= 13 && age <= 19) {
+  console.log("10 代です");
+} else if (age >= 20 && age < 60) {
+  console.log("大人です");
+} else {
+  console.log("それ以外の年代です");
 }
 
-const message = greet("Alice");
-console.log(message);
-console.log(greet("Bob"));
-
-function introduce(name, age) {
-  return `${name}（${age} 歳）です`;
+if (isStudent && age >= 20) {
+  console.log("成人の学生です");
 }
 
-console.log(introduce("Carol", 30));
+if (!isStudent) {
+  console.log("学生ではありません");
+} else {
+  console.log("学生です");
+}
 ```
 
 ### 期待出力
 
+`age = 20` の場合、Console には次のように表示されます。
+
 ```
-3
-30
-300
-こんにちは、Alice さん
-こんにちは、Bob さん
-Carol（30 歳）です
+Alice さんは成人です
+大人です
+成人の学生です
+学生です
 ```
 
 ### 変える
 
-- `add` の中身を `a - b` に変える → Console の 1 行目が `-1` になる
-- `greet` に挨拶の文言 2 種類（朝と夜）を引数で受け取るように変える（`function greet(name, word) { return `${word}、${name} さん`; }`）
-- `introduce` で `return` を書き忘れるとどうなるか確認する（`console.log` で `undefined` が表示される）
+- `age` を `18` に変える → 「未成年です」「10 代です」「学生です」に変わる（「成人の学生です」の行は出なくなる）
+- `age` を `65` に変える → 「成人です」「それ以外の年代です」「学生です」になる（`isStudent` が `true` のまま）
+- `isStudent` を `false` に変える → 「学生ではありません」に切り替わる
+- `===` と `==`、`!==` と `!=` は本コースでは前者だけを使う。試しに `age == "20"` と書いてみると `true` になる（型が違うのに等しいと判定される）ので、その気持ち悪さだけ体験しておく
 
 ### 自分で書く
 
-- 3 つの数を合計する関数 `sum3(a, b, c)` を書く
-- 1 つの数を受け取って「偶数」または「奇数」を返す関数 `evenOrOdd(n)` を書く（ヒント: `n % 2 === 0` で偶数判定）
-- 名前と点数を受け取り、点数が 60 以上なら「○○ さんは合格」、そうでなければ「○○ さんは不合格」を返す関数 `judge(name, score)` を書く
+- 変数 `score`（テストの点数）を作り、90 以上なら「A」、70 以上なら「B」、50 以上なら「C」、それ未満なら「D」と出すコードを書く
+- 変数 `hour`（0〜23）を作り、`6 <= hour && hour < 12` なら「おはよう」、`12 <= hour && hour < 18` なら「こんにちは」、そうでなければ「こんばんは」と出すコードを書く
 
 ## まとめ
 
-- 関数は「処理に名前をつけて再利用するしくみ」
-- 書き方は 2 種類: `function 関数名(...) { ... }` とアロー関数 `(...) => { ... }`
-- `return` で値を返し、呼び出し元で `const 変数 = 関数(...)` で受け取れる
-- 引数は複数渡せる
+- `if` / `else if` / `else` で分岐を書く
+- 等しいかの判定は `===` / `!==`（`==` / `!=` は使わない）
+- 複数条件は `&&`（かつ）/ `||`（または）/ `!`（否定）を使い分ける

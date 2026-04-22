@@ -1,280 +1,187 @@
-# lesson27: 関数の型
+# lesson27: fetch で API から取得する
 
 ## ゴール
 
-- 関数の **引数** と **戻り値** に型を付けられる。
-- 戻り値を返さない関数の型 `void` を理解し、使い分けられる。
-- 「関数そのものの型」（関数型）を書き、変数に代入できる。
+- `fetch` で外部 API からデータを取得できる
+- `response.json()` でレスポンスを JS のデータに変換できる
+- `try` / `catch` でエラーを捕まえられる
+- 「`fetch` も `response.json()` も Promise を返すので **両方 `await` が必要**」を覚える
 
 ## 解説
 
-### 章 2 の関数を TS 化する
+### fetch で取得する流れ
 
-章 2 の lesson17 では、数値を合計する関数を書きました。
+ネット越しにデータを取得する標準の関数が `fetch` です。URL を渡すと、レスポンス（応答）を Promise で返します。
 
 ```js
-function add(a, b) {
-  return a + b;
+async function main() {
+  const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const data = await response.json();
+  console.log(data);
+}
+
+main();
+```
+
+手順を分解すると:
+
+1. `fetch(url)` を呼ぶ → **Promise** が返る
+2. `await` して完了を待つ → `response` オブジェクトが得られる
+3. `response.json()` を呼ぶ → これも **Promise** が返る（ここで `await` を忘れやすい）
+4. `await` して完了を待つ → 実際のデータ（配列やオブジェクト）が得られる
+
+### `await` を 2 回書く理由
+
+冒頭で強調したとおり、**戻り値が Promise の関数・メソッドには `await` が必要** です。`fetch` と `response.json()` はどちらも Promise を返すため、両方に `await` を付けます。
+
+`response.json()` の `await` を書き忘れると、Promise オブジェクトがそのまま変数に入ってしまい、データのつもりで使うとおかしな挙動になります（演習で体験します）。
+
+### JSON とは
+
+API が返すデータは、ほとんどの場合 **JSON** というテキスト形式で送られてきます。JS のオブジェクト / 配列と見た目がそっくりなので、`response.json()` を通すと JS のオブジェクトや配列として扱えるようになります。
+
+### エラーを捕まえる: `try` / `catch`
+
+ネットワークの処理は「URL が間違っている」「接続できない」など失敗する可能性があります。失敗に備えて `try` / `catch` で囲みます。
+
+```js
+async function main() {
+  try {
+    const response = await fetch("https://example.com/this-will-fail");
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.log("失敗しました");
+    console.log(error);
+  }
+}
+
+main();
+```
+
+- `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
+- `error` にはエラー情報が入る
+
+`try` / `catch` は lesson30 の `JSON.parse` でも再利用します。
+
+### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
+
+`fetch` で最初につまずきやすい点があります。**サーバーから 404 や 500 などのエラーステータスが返ってきても、`fetch` は失敗とみなさず `try` / `catch` の `catch` には飛びません**。`catch` に飛ぶのは、
+
+- URL の形式がおかしい
+- ネットワーク接続に失敗した（オフラインなど）
+- DNS で名前解決に失敗した
+
+といった **通信そのものが成立しなかった** ときだけです。HTTP の 404 / 500 は「通信は成功、ただしサーバーが『エラーです』と返してきた」状態なので、`fetch` にとっては成功扱いになります。
+
+HTTP エラーを自分で拾いたいときは、`response.ok` という真偽値（200〜299 のときに `true`）を見て分岐します。本コースの演習では深追いしませんが、次の 1 行を覚えておくと実務で役立ちます。
+
+```js
+if (!response.ok) {
+  throw new Error(`HTTP ${response.status}`);
 }
 ```
 
-この関数は `add(1, 2)` なら `3` を返しますが、`add("1", "2")` と呼ぶと `"12"` を返します（文字列結合になる）。引数に何を渡してよいかは、呼ぶ側の「気持ち」だけが頼りです。
+これを書いておくと、4xx / 5xx のときに `throw` して `catch` に飛ばせます。
 
-TS では、引数と戻り値に型を付けてこの「気持ち」を明文化できます。
+### ブラウザ側 fetch の注意（予告）
 
-### 引数と戻り値の型注釈
-
-関数宣言で、各引数の名前のあとに `: 型名`、引数リストの閉じ括弧の後ろに `: 戻り値の型` を書きます。
-
-```ts
-function add(a: number, b: number): number {
-  return a + b;
-}
-```
-
-- `a: number` / `b: number`: 引数はどちらも数値。
-- `: number`: 戻り値は数値。
-- 体の中で `return` する値がこの型と合っていないとエラーになる。
-
-アロー関数でも同じ場所に書きます。
-
-```ts
-const add = (a: number, b: number): number => {
-  return a + b;
-};
-```
-
-### 戻り値の型は推論に任せてもよい
-
-戻り値の型は、`return` している値から TS が自動で決めてくれます（型推論）。普段は省略することが多いです。
-
-```ts
-function add(a: number, b: number) {
-  return a + b; // 戻り値は number と推論される
-}
-```
-
-このレッスンでは学習目的で、あえて戻り値の型も書きます。関数がどんな型を返すのかを **意図として** 書き残すと、実装が意図とずれたときに TS が止めてくれるからです。
-
-### 戻り値がない関数は `void`
-
-`console.log` のように、何かを実行するだけで **値を返さない** 関数があります。この「値を返さない」を表す型が `void` です。
-
-```ts
-function greet(name: string): void {
-  console.log(`Hello, ${name}`);
-}
-
-greet("Alice"); // 呼び出すだけ。戻り値は使わない
-```
-
-- `void` 型の関数を `return` 付きで書くと、`return;`（値なし）か、そもそも `return` を書かないかのどちらか。
-- `void` と書いた関数の戻り値を使おうとすると、TS は警告する。
-
-### 関数そのものの型（関数型）
-
-「この変数には、数値 2 つを受け取って数値を返す関数が入る」と書きたい場面があります。関数の型は次のように書きます。
-
-```ts
-const add: (a: number, b: number) => number = (a, b) => a + b;
-```
-
-左辺の `: (a: number, b: number) => number` が **関数型** です。
-
-- `(a: number, b: number)`: 引数の型。名前は何でもよいが、書く必要がある。
-- `=>`: この矢印は「関数の型を表す矢印」。アロー関数の `=>` と見た目は同じだが、文法上の位置が違う。
-- `number`: 戻り値の型。
-
-左辺で型を決めてしまっているので、右辺のアロー関数では引数の型注釈を省略できます（型推論が働く）。
-
-関数を **引数として受け取る関数** でも同じ書き方が使えます。
-
-```ts
-function twice(fn: (n: number) => number, value: number): number {
-  return fn(fn(value));
-}
-
-twice((n) => n + 1, 10); // 12
-```
-
-関数型を使うと「関数を受け渡すときの契約」を型で書けるようになります。章 2 lesson20 の `map` / `filter` に渡す関数も、実は TS のライブラリ側で関数型が定義されています。
-
-### 引数の数が合わないのもエラー
-
-TS は「宣言した数と違う数の引数で呼び出す」こともエラーにします。
-
-```ts
-function add(a: number, b: number): number {
-  return a + b;
-}
-
-add(1);       // エラー: 引数が足りない
-add(1, 2, 3); // エラー: 引数が多い
-```
-
-典型的なメッセージはこうなります。
-
-```
-Expected 2 arguments, but got 1.
-Expected 2 arguments, but got 3.
-```
-
-省略できる引数を作る方法は lesson29 でオプショナルプロパティと合わせて扱います。
+ブラウザ側で `fetch` を使うと、ローディング状態の管理や競合（複数の fetch が同時に走って結果がずれる）など、考えることが多くなります。本コースでは、こうしたブラウザ側の fetch の難しさを扱わず、**章 5 の Server Component でサーバー側 fetch に任せる** 方針を取ります。本レッスンでは「Console に出す」までに絞ります。
 
 ## 演習
 
-### 手順 1: `add` を TS 化する
+### ゴール
 
-`src/main.ts` の中身を以下に置き換える。
+- JSONPlaceholder（無料の練習用 API）から記事一覧を取得して Console に出す
+- URL をわざと壊して `catch` の中が実行されることを確認する
+- `response.json()` の `await` を外して挙動を観察する
 
-```ts
-function add(a: number, b: number): number {
-  return a + b;
+### 手順
+
+1. `index.html` のタイトルを `lesson27` に変える
+2. `script.js` を以下に書き換える
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson27</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson27: fetch で API から取得する</h1>
+    <p>DevTools の Console を確認してください。</p>
+  </body>
+</html>
+```
+
+### `script.js`
+
+```js
+async function main() {
+  try {
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+    const posts = await response.json();
+    console.log("取得件数:", posts.length);
+    console.log("先頭:", posts[0]);
+
+    for (const post of posts.slice(0, 3)) {
+      console.log(`#${post.id} ${post.title}`);
+    }
+  } catch (error) {
+    console.log("エラーが発生しました");
+    console.log(error);
+  }
 }
 
-console.log(add(1, 2));
-console.log(add(10, 20));
+main();
 ```
 
-#### 期待出力
+### 期待出力
 
-Console に次のように出る。
-
-```
-3
-30
-```
-
-### 手順 2: わざと間違えてエラーを見る
-
-次のように呼び出しを変えて、それぞれのエラーを確認する。確認したら元に戻すこと。
-
-```ts
-console.log(add("1", "2"));
-```
-
-期待されるメッセージ:
+Console に次のような内容が出ます（API 側の内容によって文字列は変わる場合があります）。
 
 ```
-Argument of type 'string' is not assignable to parameter of type 'number'.
+取得件数: 100
+先頭: {userId: 1, id: 1, title: "sunt aut facere ...", body: "..."}
+#1 sunt aut facere repellat provident occaecati excepturi optio reprehenderit
+#2 qui est esse
+#3 ea molestias quasi exercitationem repellat qui ipsa sit aut
 ```
 
-```ts
-console.log(add(1));
+### 変える
+
+#### URL を壊して `catch` を動かす
+
+`fetch` の URL の途中を適当に壊して（例: `https://jsonplaceholder.typicode.com/no-such-path-xxxxx`）、Console で「エラーが発生しました」が出ることを確認します。
+
+> 注意: JSONPlaceholder はどのパスでも空配列や JSON を返す傾向があるので、ドメインごと壊す（`https://this-domain-does-not-exist-xxxxx.test/posts`）方が確実にエラーになります。
+
+#### `await` を外すとどうなるか
+
+以下のように `response.json()` の `await` を外してみます。
+
+```js
+const posts = response.json(); // await を外す
+console.log(posts);
+console.log(posts.length);
 ```
 
-期待されるメッセージ:
-
-```
-Expected 2 arguments, but got 1.
-```
-
-```ts
-function add(a: number, b: number): number {
-  return `${a}${b}`; // 文字列を返してしまう
-}
-```
-
-期待されるメッセージ:
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-最後のパターンは「戻り値の型注釈が、実装のミスを捕まえてくれる」例です。
-
-### 手順 3: `void` 型の関数
-
-次のコードを追記して動かす。
-
-```ts
-function greet(name: string): void {
-  console.log(`Hello, ${name}`);
-}
-
-greet("Alice");
-greet("Bob");
-```
-
-#### 期待出力
-
-```
-Hello, Alice
-Hello, Bob
-```
-
-次に、戻り値を使おうとしてみる。
-
-```ts
-const result = greet("Alice");
-console.log(result.toUpperCase());
-```
-
-`result` は `void` 型なので、`.toUpperCase()` を呼ぶと次のようなメッセージが出る。
-
-```
-Property 'toUpperCase' does not exist on type 'void'.
-```
-
-「`void` 型に `toUpperCase` というプロパティは存在しない」という意味。`void` は「値が無いことを表す型」なので、そもそも値として使ってはいけない、と TS が教えてくれている。
-
-### 手順 4: 関数型を書いてみる
-
-次のコードを書く。
-
-```ts
-const multiply: (a: number, b: number) => number = (a, b) => a * b;
-
-function twice(fn: (n: number) => number, value: number): number {
-  return fn(fn(value));
-}
-
-console.log(multiply(3, 4));
-console.log(twice((n) => n + 1, 10));
-console.log(twice((n) => n * 2, 5));
-```
-
-#### 期待出力
-
-```
-12
-12
-20
-```
-
-- `multiply(3, 4)` は `12`。
-- `twice((n) => n + 1, 10)` は「10 に 1 を足す」を 2 回で `12`。
-- `twice((n) => n * 2, 5)` は「5 を 2 倍」を 2 回で `20`。
-
-### 変えてみる
-
-`twice` に、数値ではなく文字列を返す関数を渡してみる。
-
-```ts
-twice((n) => `number: ${n}`, 10);
-```
-
-期待されるメッセージ:
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-`twice` の引数 `fn` は `(n: number) => number` 型なので、文字列を返す関数は渡せない、と教えてくれる。
+Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これが「Promise をそのまま使ってしまった状態」です。`await` を忘れると値がおかしい、という失敗の形を体験しておきます。
 
 ### 自分で書く
 
-次の条件を満たす関数を何も見ずに書く。
-
-1. `subtract(a: number, b: number): number` — 引き算して返す関数。
-2. `printUser(name: string, age: number): void` — `"Alice (20)"` のように Console に出すだけの関数。
-3. 関数型 `(s: string) => string` を持つ変数 `shout` に、「文字列を受け取って大文字にして `!` を足して返す関数」を代入する。
-
-書けたら、それぞれを 1 回ずつ呼び出して期待通りに動くことを確認する。
+- URL を `https://jsonplaceholder.typicode.com/users` に変えて、ユーザー一覧を取得し、各ユーザーの `name` と `email` を Console に出す
+- 取得した `posts` の中から「`id` が 10 以下」のものだけを `filter` で抜き出して出す
+- `try` / `catch` の `catch` の中で、エラーが起きたときに `console.log("読み込みに失敗しました")` と日本語メッセージも表示する
 
 ## まとめ
 
-- 関数の引数と戻り値に型を付けると、呼び出し側と実装の両方のミスを TS が事前に止めてくれる。
-- 値を返さない関数は `void` を戻り値の型として使う。`void` の戻り値は値として使えない。
-- 関数そのものの型は `(引数名: 型) => 戻り値の型` で書ける。関数を受け渡すときの「契約」になる。
-- 次のレッスンでは、複数のプロパティをまとめた **オブジェクト型** と、型に名前を付ける `type` エイリアスを学ぶ。章 2 の TODO の 1 件を表す `Todo` 型を作っていく。
+- `fetch(url)` と `response.json()` は **どちらも Promise を返す**。両方 `await` が必要
+- `try` / `catch` で失敗に備える
+- `await` を忘れると Promise オブジェクトがそのまま出てきて、後続の処理が壊れる
+- ブラウザ側 fetch の state との組み合わせは罠が多いので、本コースでは章 5 の Server Component で扱う

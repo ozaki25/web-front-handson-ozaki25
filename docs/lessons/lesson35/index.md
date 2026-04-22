@@ -1,238 +1,359 @@
-# lesson35: 配列を描画する
+# lesson35: 配列・ユニオン・リテラル型・オプショナル
 
 ## ゴール
 
-- 配列を `.map` で JSX の配列に変換し、`<ul>` の中に並べられる
-- `key` prop に何を渡すべきかを説明できる
-- 素の JS での描画（lesson16 / lesson25）との違いが書き出せる
+- 配列の型を `T[]` / `Array<T>` の 2 通りで書ける。
+- 「この型 **または** あの型」を表す **ユニオン型**（`|`）を書ける。
+- 「特定の値のみ許す」 **リテラル型** を書ける。
+- 省略可能なプロパティ `?:` を書ける。
+- lesson33 の `Todo` 型に `status: "open" | "done"` と `memo?: string` を足して、育てた `Todo` 型で配列を扱える。
 
 ## 解説
 
-### lesson16 の `for...of` / lesson25 の DOM 追加との対比
+### 配列の型
 
-章 2 で、TODO アプリの一覧を描画したときは次のように書きました。
-
-```js
-// 素の JS での描画イメージ（lesson16 + lesson25）
-const ul = document.querySelector("#list");
-for (const todo of todos) {
-  const li = document.createElement("li");
-  li.textContent = todo.text;
-  ul.appendChild(li);
-}
-```
-
-「1 件ずつ DOM を作って `appendChild`」。数が増えても手順は同じです。
-
-React では、**配列を JSX の配列に変換するだけ**です。`return` に書いた JSX を見て、React が前回のツリーとの差分を計算し、必要な DOM だけを更新してくれます。
-
-```tsx
-<ul>
-  {todos.map((todo) => (
-    <li key={todo.id}>{todo.text}</li>
-  ))}
-</ul>
-```
-
-`for` ループで `appendChild` を呼ぶ必要はありません。配列（`todos`）から配列（JSX の `<li>` の並び）への**変換**だけを書きます。
-
-### `map` は lesson20 の続き
-
-lesson20 で `map` / `filter` を学びました。`map` は配列の各要素を別の値に変換して、新しい配列を返すメソッドです。
+章 2 で書いた配列に型を付けていきます。配列の型は 2 通りの書き方があります。どちらも意味は同じです。
 
 ```ts
-const numbers = [1, 2, 3];
-const doubled = numbers.map((n) => n * 2); // [2, 4, 6]
+const numbers: number[] = [1, 2, 3];
+const names: Array<string> = ["Alice", "Bob"];
 ```
 
-React の配列描画は、この `map` で **JSX の要素に変換する** ことに他なりません。
+- `number[]`: 「数値の配列」。短くて読みやすいので普段はこちら。
+- `Array<number>`: 「`Array` という型に `number` を流し込んだもの」。ジェネリクス（lesson39 で扱う）の書き方。
 
-```tsx
-const items = ["りんご", "みかん", "ぶどう"];
-const listItems = items.map((item) => <li>{item}</li>);
-// listItems は [<li>りんご</li>, <li>みかん</li>, <li>ぶどう</li>]
+どちらも、中身の型が合わないとエラーになる。
 
-<ul>{listItems}</ul>;
+```ts
+const numbers: number[] = [1, 2, "3"];
 ```
 
-実際は変数に入れずに、JSX の中で直接書きます。
-
-```tsx
-<ul>
-  {items.map((item) => (
-    <li>{item}</li>
-  ))}
-</ul>
+```
+Type 'string' is not assignable to type 'number'.
 ```
 
-### `key` prop は「誰がどれか」を React に伝える
+### ユニオン型 `|`
 
-上のコードを実際に書くと、ブラウザのコンソールに**警告**が出ます。
+「文字列 **または** 数値」のように、複数の型のどれかを受け入れる型を **ユニオン型** と呼びます。
 
-```
-Warning: Each child in a list should have a unique "key" prop.
-```
-
-「リストの各要素に `key` prop を付けてね」という警告です。
-
-React は状態が変わるたびに、前回のツリーと新しいツリーを比べて差分を反映します。このとき、配列で並んでいる要素のうち「どれが前回と同じ要素なのか」を判断する材料が必要です。その材料が `key` です。
-
-```tsx
-<ul>
-  {todos.map((todo) => (
-    <li key={todo.id}>{todo.text}</li>
-  ))}
-</ul>
+```ts
+let id: string | number;
+id = "abc123"; // OK
+id = 42;        // OK
+id = true;      // エラー
 ```
 
-- `key` には **配列内でユニークな値** を渡す
-- TODO のように `id` を持つデータなら、`id` をそのまま使う
-- 「配列のインデックス（`map((todo, i) => ...)` の `i`）を渡す」のは**避ける**。並び替えや途中削除で挙動が怪しくなるため
+```
+Type 'boolean' is not assignable to type 'string | number'.
+```
 
-`key` は props 扱いですが、コンポーネント側で受け取れる値ではなく、**React 内部だけが使う特別な prop** です。
+ユニオン型の値を使うときは、どちらの型の操作でも共通して使える部分しか呼べません。例えば `string | number` に対しては文字列だけが持つ `.toUpperCase()` は呼べません。使い分けたいときは `typeof` で絞り込みます（このコースでは深追いしない）。
 
-### 空の配列でも動く
+### リテラル型
 
-`todos` が空配列 `[]` の場合、`map` の結果も空配列になるので、`<ul>` の中身は空になります。エラーにはなりません。
+TS では **値そのもの** を型として使えます。これを **リテラル型** と呼びます。
 
-「0 件のとき専用のメッセージを出したい」場合は、条件表示と組み合わせます（lesson39 で扱います）。
+```ts
+let answer: "yes";
+answer = "yes"; // OK
+answer = "no";  // エラー
+```
 
-### 要素の中で `{式}` は 1 つだけ書けばよい
+```
+Type '"no"' is not assignable to type '"yes"'.
+```
 
-JSX の中の `{ ... }` には、式を 1 つだけ書きます。`for` 文や `if` 文は書けません。配列の `map` の戻り値はれっきとした「式」（値を返す）なので、そのまま書けます。
+これだけだと使い道がありませんが、ユニオン型と組み合わせると強力です。
 
-```tsx
-{
-  /* OK: map は式 */
-  todos.map((t) => <li key={t.id}>{t.text}</li>);
-}
-{
-  /* NG: for 文は式ではない */
-  for (const t of todos) {
-    /* ... */
+```ts
+let status: "open" | "done" | "archived";
+status = "open";     // OK
+status = "done";     // OK
+status = "archived"; // OK
+status = "todo";     // エラー
+```
+
+```
+Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
+```
+
+「この変数には `"open"` か `"done"` か `"archived"` のどれかしか入らない」ということが型で書けます。章 2 で文字列リテラルを比較していた部分（`if (status === "done")` など）が、typo まで含めて TS が守ってくれるようになります。
+
+### オプショナルプロパティ `?:`
+
+オブジェクトのプロパティのうち「あってもなくてもよい」ものは、名前の後ろに `?` を付けます。
+
+```ts
+type User = {
+  name: string;
+  email?: string;
+};
+
+const alice: User = { name: "Alice" };                          // OK
+const bob: User = { name: "Bob", email: "bob@example.com" };    // OK
+```
+
+- `email?: string` は「`email` は省略してもよい。書くなら `string`」という意味。
+- 省略した場合、`user.email` の型は `string | undefined` になる（`undefined` も入りうる、ということ）。
+
+`undefined` が入りうるので、使う側では存在チェックが必要になります。
+
+```ts
+function printEmail(user: User): void {
+  if (user.email) {
+    console.log(user.email.toUpperCase());
+  } else {
+    console.log("メールなし");
   }
 }
 ```
 
-## 演習
+`if (user.email)` を付けずに `user.email.toUpperCase()` とだけ書くと、TS が次のように止めます。
 
-### ゴール
+```
+'user.email' is possibly 'undefined'.
+```
 
-- ハードコードした `todos` 配列を `<ul>` で描画する
-- `Todo` 型を章 3 の `types.ts` から `import type` して再利用する
-- 各 `<li>` に `key={todo.id}` を付ける
+### `Todo` 型を育てる
 
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/types.ts` を作成（章 3 の lesson28 / lesson29 で作ったものを持ってくる想定）
-3. `src/TodoList.tsx` を作成
-4. `src/App.tsx` を書き換える
-
-### `src/types.ts`
+lesson33 の `Todo` 型を次の形に育てます。
 
 ```ts
 export type Todo = {
   id: string;
   text: string;
+  status: "open" | "done";
+  memo?: string;
 };
 ```
 
-章 3 で `status` や `memo` を足した版を書いた場合はそちらを使っても OK です。このレッスンは `id` と `text` しか使いません。
+- `status`: `"open"` か `"done"` のどちらか。必須。
+- `memo?`: 省略可能な自由記述のメモ。書くなら文字列。
 
-### `src/TodoList.tsx`
+これで「未完了 / 完了」を型レベルで表せるようになり、`Todo[]` は「育った `Todo` の配列」になります。
 
-```tsx
-import type { Todo } from "./types";
+## 演習
 
-type TodoListProps = {
-  todos: Todo[];
-};
+### 手順 1: 配列の型に慣れる
 
-export function TodoList({ todos }: TodoListProps) {
-  return (
-    <ul className="todo-list">
-      {todos.map((todo) => (
-        <li key={todo.id}>{todo.text}</li>
-      ))}
-    </ul>
-  );
+`src/main.ts` の中身を以下に置き換える。
+
+```ts
+const numbers: number[] = [1, 2, 3];
+const names: Array<string> = ["Alice", "Bob", "Charlie"];
+
+for (const n of numbers) {
+  console.log(n);
+}
+
+for (const name of names) {
+  console.log(name);
 }
 ```
 
-### `src/App.tsx`
+#### 期待出力
 
-```tsx
-import { TodoList } from "./TodoList";
+```
+1
+2
+3
+Alice
+Bob
+Charlie
+```
+
+わざと要素の型を間違えてみる。
+
+```ts
+const numbers: number[] = [1, 2, "3"];
+```
+
+期待されるメッセージ:
+
+```
+Type 'string' is not assignable to type 'number'.
+```
+
+確認したら `[1, 2, 3]` に戻す。
+
+### 手順 2: ユニオン型とリテラル型
+
+```ts
+let id: string | number;
+
+id = "abc123";
+console.log(id);
+
+id = 42;
+console.log(id);
+```
+
+#### 期待出力
+
+```
+abc123
+42
+```
+
+次に `true` を代入してみる。
+
+```ts
+id = true;
+```
+
+期待されるメッセージ:
+
+```
+Type 'boolean' is not assignable to type 'string | number'.
+```
+
+続けて、リテラル型のユニオンを試す。
+
+```ts
+let status: "open" | "done" | "archived";
+status = "open";
+console.log(status);
+status = "done";
+console.log(status);
+status = "todo"; // typo わざと
+```
+
+期待されるメッセージ:
+
+```
+Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
+```
+
+確認したら `status = "todo";` の行を消すか、正しい値（`"archived"` など）に直す。
+
+### 手順 3: `Todo` 型を育てる
+
+`src/types.ts` を次の形に書き換える。
+
+```ts
+// src/types.ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+`src/main.ts` を次の形に書き換える。
+
+```ts
 import type { Todo } from "./types";
-import "./App.css";
 
-const sampleTodos: Todo[] = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "原稿を書く" },
-  { id: "a3", text: "散歩する" },
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
+  { id: "a3", text: "ゴミを出す", status: "open" },
 ];
 
-function App() {
-  return (
-    <>
-      <h1>今日のタスク</h1>
-      <TodoList todos={sampleTodos} />
-    </>
-  );
+function printTodo(todo: Todo): void {
+  const mark = todo.status === "done" ? "x" : " ";
+  const memoText = todo.memo ? ` (memo: ${todo.memo})` : "";
+  console.log(`[${mark}] ${todo.text}${memoText}`);
 }
 
-export default App;
+for (const todo of todos) {
+  printTodo(todo);
+}
 ```
 
-### `src/App.css`
+#### 期待出力
 
-```css
-.todo-list {
-  list-style: disc;
-  padding-left: 20px;
-  color: #222;
+```
+[ ] 牛乳を買う
+[x] 本を返す (memo: 駅前の図書館)
+[ ] ゴミを出す
+```
+
+`memo` を持つ項目だけ `(memo: ...)` が付き、完了しているものは `[x]`、未完了は `[ ]` になる。
+
+### 手順 4: 型のミスを見つけてもらう
+
+次の 3 つをそれぞれ試し、メッセージを確認する。確認したら元に戻す。
+
+```ts
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "todo" }, // typo
+];
+```
+
+```
+Type '"todo"' is not assignable to type '"open" | "done"'.
+```
+
+```ts
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" }, // status が足りない
+];
+```
+
+```
+Property 'status' is missing in type '{ id: string; text: string; }' but required in type 'Todo'.
+```
+
+```ts
+function printTodo(todo: Todo): void {
+  console.log(todo.memo.toUpperCase());
 }
+```
 
-.todo-list li {
-  padding: 4px 0;
-}
+```
+'todo.memo' is possibly 'undefined'.
+```
 
-@media (prefers-color-scheme: dark) {
-  .todo-list {
-    color: #eee;
+最後のパターンは、オプショナルプロパティが `undefined` になりうることを TS が警告してくれている例。`if (todo.memo)` を挟んでから `toUpperCase()` するのが正しい使い方。
+
+### 変えてみる
+
+`printTodo` の中で「未完了の TODO のテキストを大文字にして目立たせる」実装にしてみる。
+
+```ts
+function printTodo(todo: Todo): void {
+  if (todo.status === "open") {
+    console.log(`TODO: ${todo.text.toUpperCase()}`);
+  } else {
+    console.log(`DONE: ${todo.text}`);
   }
 }
 ```
 
-### 期待出力
-
-画面に次のような表示が出ます。
+期待出力:
 
 ```
-今日のタスク
-  ・ 牛乳を買う
-  ・ 原稿を書く
-  ・ 散歩する
+TODO: 牛乳を買う
+DONE: 本を返す
+TODO: ゴミを出す
 ```
-
-ブラウザのコンソールに `key` に関する警告が **出ない** ことも確認してください。
-
-### 変える
-
-- `sampleTodos` に要素を 2, 3 件追加して、画面が 1 行ずつ増えることを確認
-- `<li key={todo.id}>` の `key={todo.id}` を削除して、コンソールに警告が出ることを確認（確認できたら戻す）
-- `sampleTodos` を空配列 `[]` にすると `<ul>` が空になる。エラーにはならないことを確認
 
 ### 自分で書く
 
-- `src/TodoList.tsx` を少しだけ変えて、リストの頭に `<p>合計 N 件</p>` を表示する
-- ヒント: `<ul>` の外側を `<div>` やフラグメントで包み、`<p>合計 {todos.length} 件</p>` を足す
-- 期待出力: 「今日のタスク」の下に「合計 3 件」と出て、その下にリスト
+`Todo` 型の配列 `todos` に対して、次の 2 つの関数を書く。
+
+1. `countOpen(todos: Todo[]): number` — `status === "open"` の件数を返す。
+2. `filterDone(todos: Todo[]): Todo[]` — `status === "done"` のものだけを新しい配列で返す。
+
+呼び出して結果を Console に出す。使える道具は章 2 で学んだ `for...of`、`filter`、`length` など。どれを使っても構わない。
+
+### スコープ外の明記
+
+TS には「列挙型」を作る `enum` や、値を型に格上げする `as const` という機能もあります。**本コースでは扱いません**。理由は次の通り。
+
+- `"open" | "done"` のようなリテラル型ユニオンで、列挙型が担う用途のほとんどは代替できる。
+- `enum` はランタイムにコードを生成するため、`import type` で消せない副作用を持つ。
+- `as const` は学習コストに対してこのコースのゴール（Next.js で小さなアプリ）への寄与が薄い。
+
+使う場面に出会ったら、そのときに公式ドキュメントを読めば十分追いつけます。
 
 ## まとめ
 
-- 配列の描画は `配列.map((item) => <JSX />)` でおこなう
-- 各要素に **ユニークな `key`** を付ける（インデックスは避ける）
-- `for` / `appendChild` を書く素の JS と違い、React は「前のツリーとの差分」を自分で計算して DOM を更新する
-- 型（`Todo`）は章 3 の `types.ts` から `import type` で再利用できる
+- 配列の型は `T[]` / `Array<T>` の 2 通り。普段は `T[]`。
+- ユニオン型 `A | B` で「どちらでも受け入れる」が書ける。
+- リテラル型とユニオン型を組み合わせると、`"open" | "done"` のように「決まった値だけ許す」型が書ける。
+- `?:` で省略可能なプロパティを書ける。使う側では `undefined` を意識した分岐が必要。
+- `Todo` 型を `status` と `memo?` まで育てた。この形のまま lesson39 / lesson40 でも使う。次章でも `import type` して再利用する。
+- `enum` / `as const` は本コースでは扱わない。

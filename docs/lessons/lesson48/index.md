@@ -1,192 +1,296 @@
-# lesson48: 動的ルート
+# lesson48: フォームと制御コンポーネント
 
 ## ゴール
 
-- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
-- Next.js 15 で `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
-- 章 2 lesson20 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
+- `value` と `onChange` を使って、入力値を state と同期できる（制御コンポーネント）
+- lesson06 の HTML フォーム（`name` 属性で値を集める形）と、React の書き方との違いを説明できる
+- `<form action={fn}>` にも触れ、章 5 lesson68 で本格的に使うことを予告として受け取る
 
 ## 解説
 
-### 動的ルートとは
+### lesson06 の HTML フォームとの対比
 
-「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
+章 1 lesson06 の自己紹介フォームを思い出してください。次のような形でした。
 
-App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
-
-```
-app/
-└── posts/
-    ├── page.tsx            → /posts（一覧）
-    └── [id]/
-        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
+```html
+<form action="/contact" method="POST">
+  <label for="email">メール</label>
+  <input id="email" name="email" type="email" required />
+  <button type="submit">送信</button>
+</form>
 ```
 
-`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
+- `name="email"` が「この入力欄はメールです」という目印
+- 送信ボタンを押すと、ブラウザが `name` 属性をキーにして値を集め、`action` に指定された URL に送る
+- 値の持ち主は **ブラウザ**
 
-### `params` は Promise になった
+React の**制御コンポーネント**はこの形と少し違います。
 
-Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
+- 値の持ち主は **React の state**
+- `<input>` には「今の state の値」を `value` として渡す
+- 入力するたびに `onChange` で state を更新する
+- `<input>` は常に state と同期している
 
-> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
+どちらも「フォームを作る」ことには違いありません。使い分けの現場感としては、HTML ネイティブで十分なら前者、入力値を**その場で JS から使いたい**（リアルタイムプレビュー、バリデーション、条件付き無効化など）なら後者です。React では制御コンポーネントが基本です。
 
-型は次のように書きます。
+### 制御コンポーネントの最小形
 
 ```tsx
-type Props = {
-  params: Promise<{ id: string }>;
-};
+import { useState } from "react";
 
-export default async function PostPage({ params }: Props) {
-  const { id } = await params;
-  // id を使って処理
-}
-```
-
-- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
-- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
-- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
-
-### `find` で 1 件だけ取り出す
-
-章 2 lesson20 末尾で「`find` は章 5 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
-
-```ts
-const target = posts.find((p) => p.id === id);
-```
-
-- 見つかったとき: その要素を返します。
-- 見つからないとき: `undefined` を返します。
-
-なので、詳細ページでは次のような流れになります。
-
-1. 一覧を `fetch` で全部取ってくる（Server Component）。
-2. `await params` で URL の `id` を取り出す。
-3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは後述の「存在しない ID」の処理に渡す（lesson49）。
-
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は次の lesson49 で扱います。
-
-### searchParams は今回扱わない
-
-URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 で Promise 化されていますが、**このレッスンでは扱いません**。lesson52（ミニ統合）の中で「指定された ID にハイライトを付ける」演習で初めて使います。
-
-## 演習
-
-### 前回のプロジェクトを開く
-
-lesson47 で作ったプロジェクトを開き直しましょう。
-
-### 手順 1: 一覧ページを詳細リンク付きに更新
-
-`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
-
-```tsx
-import Link from "next/link";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+function NameInput() {
+  const [name, setName] = useState("");
 
   return (
-    <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <Link href={`/posts/${post.id}`}>
-              <strong>#{post.id}</strong> {post.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </>
+    <div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="名前"
+      />
+      <p>こんにちは、{name} さん</p>
+    </div>
   );
 }
 ```
 
-### 手順 2: 動的ルートのファイルを作る
+- `value={name}` で「いま表示する値」を指定
+- `onChange={(e) => setName(e.target.value)}` で「入力されたら state を更新」
+- これで `<input>` と `name` state がつねに一致する
 
-`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
+ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。つまり、**見た目の真実は state 側にある**。
+
+### `e.target.value`
+
+`onChange` が受け取る `e`（イベント）の中に、変化があった要素（`target`）が入っています。`<input>` の value は常に文字列型です。
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+<input
+  type="number"
+  value={age}
+  onChange={(e) => setAge(Number(e.target.value))}
+/>
+```
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
+数値で扱いたいときは、`Number()` で変換する必要があります。HTML 的には `type="number"` でも、JS から見えるのは文字列です。
 
-export default async function PostPage({ params }: Props) {
-  const { id } = await params;
+### textarea と select も同じ形
 
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+HTML では `<textarea>入る文字</textarea>` のように子要素として書いていましたが、React では `<input>` と同じく `value` と `onChange` を使います。
 
-  // URL の id は string、API の id は number なので揃える
-  const post = posts.find((p) => String(p.id) === id);
+```tsx
+<textarea value={memo} onChange={(e) => setMemo(e.target.value)} />
+<select value={category} onChange={(e) => setCategory(e.target.value)}>
+  <option value="home">家事</option>
+  <option value="work">仕事</option>
+</select>
+```
 
-  if (!post) {
-    return (
-      <>
-        <h1>見つかりません</h1>
-        <p>ID: {id} の記事は存在しない。</p>
-      </>
-    );
+### `<form>` の送信
+
+送信ボタンを押したときの動作は 2 通り書き方があります。
+
+#### (a) `onSubmit` で書く（本コースの章 4 はこれ）
+
+```tsx
+<form
+  onSubmit={(e) => {
+    e.preventDefault();
+    // state をもとに処理する
+  }}
+>
+  {/* ... */}
+</form>
+```
+
+- `e.preventDefault()` で、ブラウザ既定の送信（ページ遷移）を止める
+- その後は自分で `fetch` なり state 更新なりをする
+- lesson50、lesson57 で使う形
+
+#### (b) `<form action={fn}>`（紹介のみ、章 5 で本格使用）
+
+React 19 では、`<form>` の `action` 属性に **関数** も渡せるようになりました。
+
+```tsx
+<form action={submitTodo}>
+  <input name="text" />
+  <button type="submit">送信</button>
+</form>
+```
+
+- `action` が関数なら、React が送信時に `FormData` を渡してその関数を呼ぶ
+- React が**自動で `preventDefault` を呼んでくれる**（書く必要がない）
+- 従来どおり `action="/contact"` のように **URL 文字列** を渡すこともできる（普通の HTML 送信）
+
+本コースでは章 4 の段階では **紹介のみ**です。章 5 lesson68 の Server Actions でこの形を使うときに「関数を渡すパターン」を詳しく学びます。「章 4 は `onSubmit` 形、章 5 で `action={fn}` 形に乗り換える」という流れを予告として覚えておいてください。
+
+## 演習
+
+### ゴール
+
+- 名前とメモの入力欄を作り、入力内容がリアルタイムに下に表示されるプレビュー画面を作る
+- 送信ボタンを押したら（`onSubmit` で）入力内容をまとめて表示する
+
+### 手順
+
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/App.tsx` を書き換える
+3. `src/App.css` を書き換える
+
+### `src/App.tsx`
+
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+import "./App.css";
+
+function App() {
+  const [name, setName] = useState("");
+  const [memo, setMemo] = useState("");
+  const [submitted, setSubmitted] = useState<{ name: string; memo: string } | null>(
+    null
+  );
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitted({ name, memo });
   }
 
   return (
     <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
+      <h1>入力プレビュー</h1>
+
+      <form onSubmit={handleSubmit} className="box">
+        <div className="row">
+          <label htmlFor="name">名前</label>
+          <input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        <div className="row">
+          <label htmlFor="memo">メモ</label>
+          <textarea
+            id="memo"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+          />
+        </div>
+
+        <button type="submit">送信</button>
+      </form>
+
+      <section className="box">
+        <h2>リアルタイムプレビュー</h2>
+        <p>名前: {name}</p>
+        <p>メモ: {memo}</p>
+      </section>
+
+      {submitted !== null && (
+        <section className="box">
+          <h2>送信結果</h2>
+          <p>名前: {submitted.name}</p>
+          <p>メモ: {submitted.memo}</p>
+        </section>
+      )}
     </>
   );
 }
+
+export default App;
 ```
 
-ポイント:
+### `src/App.css`
 
-- `type Props = { params: Promise<{ id: string }> }` の形で型を書きます。
-- `await params` してから `id` を取り出します。
-- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは次の lesson49 で扱います。
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
+
+.row {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
+}
+
+.row label {
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+.row input,
+.row textarea {
+  padding: 6px;
+  border: 1px solid #999;
+  border-radius: 4px;
+}
+
+button {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+  .row input,
+  .row textarea {
+    color: #eee;
+    background-color: #2a2a2a;
+    border-color: #666;
+  }
+}
+```
 
 ### 期待出力
 
-1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
-2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
-3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
-4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
+- 画面に「名前」入力欄と「メモ」テキストエリア、「送信」ボタン
+- 「リアルタイムプレビュー」セクションに、入力内容が**打つたびに**反映される
+- 「送信」を押すと、「送信結果」セクションが現れて、押した時点の入力内容が固定表示される
+- その後もリアルタイムプレビューは入力に追従するが、「送信結果」は次に押すまで変わらない
 
-### 変えてみる
+### 変える
 
-1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
-2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
-3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`type Props = { params: Promise<{ postId: string }> }` に合わせて書き直します。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
+- `onChange` を消して `value={name}` だけ残すと、**入力できなくなる**（読み取り専用扱い）。確認したら戻す
+- `<input>` のラベル `<label htmlFor="name">` の `htmlFor` を `for` に書き換えると、ブラウザのコンソールに警告が出る（JSX では `htmlFor`）
+- `handleSubmit` から `e.preventDefault()` を消すと、送信時にページがリロードされてプレビューが消える。**なぜリロードされるのか** を自分の言葉で説明してみる
 
 ### 自分で書く
 
-`/users/[id]/page.tsx` を自力で作ってみましょう。lesson47 の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
+- カテゴリ選択用の `<select>` を追加し、`state.category` と同期させる
+- 選択肢: `"家事"` / `"仕事"` / `"趣味"`
+- プレビューと送信結果にカテゴリも表示する
 
-- URL: `/users/1`
-- API: `https://jsonplaceholder.typicode.com/users`
-- 表示: `name` と `email`、`phone`
+ヒント:
 
-`type Props = { params: Promise<{ id: string }> }` の型定義、`await params`、`find` の 3 点が書ければ合格です。
+```tsx
+const [category, setCategory] = useState("家事");
+// ...
+<select value={category} onChange={(e) => setCategory(e.target.value)}>
+  <option value="家事">家事</option>
+  <option value="仕事">仕事</option>
+  <option value="趣味">趣味</option>
+</select>;
+```
+
+### 末尾予告
+
+- 章 4 内では `<form onSubmit={(e) => { e.preventDefault(); ... }}>` の形を lesson50 / lesson57 で使い続ける
+- `<form action={fn}>` 形は章 5 lesson68 の Server Actions で登場する。そこで `preventDefault` が不要になる理由とあわせて扱う
 
 ## まとめ
 
-- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
-- Next.js 15 では `params: Promise<{ id: string }>` の形です。`await params` で取り出します。
-- 配列から 1 件取り出すのは章 2 lesson20 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
-- 見つからない場合の「正しい 404 ページ」は次の lesson49 で扱います。
-- クエリ文字列（`?key=value`）を受け取る `searchParams` は lesson52 で初登場します。
+- 制御コンポーネントは `value={state}` + `onChange` の組み合わせ。値の持ち主は state
+- `e.target.value` は常に文字列。数値で扱いたいなら `Number()` で変換
+- `<label>` の `for` は JSX では **`htmlFor`**
+- フォーム送信は当面 `onSubmit` + `e.preventDefault()`。`<form action={fn}>` は章 5 でフル活用

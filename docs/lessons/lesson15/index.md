@@ -1,81 +1,78 @@
-# lesson15: 配列を扱う
+# lesson15: 最初の JavaScript
 
 ## ゴール
 
-- 配列を作り、中の要素を取り出せる
-- `length` で要素数を確認できる
-- `push` / `pop` で末尾に追加・削除できる
+- HTML に外部 JavaScript ファイルを読み込める
+- `console.log` で値を出力できる
+- `let` と `const` で変数を宣言できる
+- DevTools の Console パネルでログを確認できる
+- `<script defer>` を「外部 JS を読み込む標準の書き方」として身につける
 
 ## 解説
 
-### 配列とは
+### JavaScript はブラウザの中で動く
 
-同じ種類のデータを複数まとめたものが配列です。「やることリスト」「買い物リスト」のように「並んでいるもの」に使います。
+章 1 で書いてきた HTML と CSS は「何を置くか」と「どう見せるか」を担当します。ここから学ぶ JavaScript（以降 JS）は「動きをつける」担当です。ボタンを押したら何かが起きる、入力した内容に応じて画面が変わる、といった処理はすべて JS が担当します。
 
-```js
-const fruits = ["apple", "banana", "cherry"];
+JS は基本的にブラウザの中で動くプログラミング言語です。HTML に JS を読み込ませると、ページを開いたときにブラウザが JS を実行してくれます。
+
+### JS を HTML に読み込む方法
+
+今回から、JS は `script.js` という別ファイルに書いて、HTML から読み込む形にします。HTML に直接書くより読みやすく、後で管理しやすくなります。
+
+読み込むタグは `<script>` です。本コースでは以下の形に固定します。
+
+```html
+<script defer src="./script.js"></script>
 ```
 
-- `[` と `]` で囲む
-- 要素と要素はカンマで区切る
-- 中身は文字列でも数値でも何でも入れられる
+`defer` 属性を付けると、ブラウザは「HTML をすべて読み終えてから JS を実行する」という順序で動いてくれます。これを徹底しておくと、後のレッスンで `document.querySelector(...)` が `null` を返す事故（HTML より先に JS が走り、まだ存在しない要素を探してしまう）を防げます。
 
-### インデックスで取り出す
+### なぜ `defer` か（コラム）
 
-配列の中の要素には、先頭から `0`, `1`, `2`, ... と番号が振られています。これをインデックスと呼びます。
+`<script>` の書き方には昔からいくつかの流派があります。
 
-```js
-const fruits = ["apple", "banana", "cherry"];
-console.log(fruits[0]); // "apple"
-console.log(fruits[1]); // "banana"
-console.log(fruits[2]); // "cherry"
-```
+- `<head>` の中に `<script src="...">` だけ書く → HTML の解析が止まって遅くなる
+- `<body>` の末尾に `<script src="...">` を書く → 動くが、書く場所が散らばる
+- `<head>` の中に `<script defer src="...">` を書く → HTML の解析を止めず、解析完了後に実行される
 
-0 から始まる点に注意します。`fruits[1]` は「2 番目」ではなく「インデックス 1 の要素（=先頭から 2 つ目）」です。
+3 つ目の書き方が現在の推奨です。HTML が完成してから JS が動くため、DOM を探しに行く処理（lesson28 以降）でも安心して使えます。本コースではこの形だけを使います。
 
-存在しないインデックスを指定すると `undefined` が返ります。
+### `console.log` と DevTools の Console
 
-```js
-console.log(fruits[5]); // undefined
-```
+`console.log(...)` は「この値をログに出す」命令です。ブラウザの DevTools にある「Console」パネルを開くと、そこにログが表示されます。画面には出ませんが、開発中の確認に最も使う命令です。
 
-### `length` で要素数を知る
+DevTools の開き方は章 1 で学んだ Elements パネルと同じで、右クリック → 「検証」、または `F12` キーです。Elements の隣に Console タブがあります。
 
-```js
-const fruits = ["apple", "banana", "cherry"];
-console.log(fruits.length); // 3
-```
+### `let` と `const`
 
-末尾の要素は `fruits[fruits.length - 1]` で取れます（インデックスは 0 始まりなので `-1`）。
+値に名前をつけておくしくみを変数と呼びます。JS では 2 つのキーワードを使い分けます。
 
-### 追加と削除
+- `const`: 後から値を書き換えない変数。迷ったらまずこちら
+- `let`: 後から値を書き換える可能性がある変数
 
-- `push(値)`: 末尾に追加する
-- `pop()`: 末尾を取り除く（取り除いた値を返す）
+古い教材では `var` も出てきますが、本コースでは使いません。
 
 ```js
-const fruits = ["apple", "banana"];
-fruits.push("cherry");
-console.log(fruits); // ["apple", "banana", "cherry"]
-
-const removed = fruits.pop();
-console.log(removed); // "cherry"
-console.log(fruits);  // ["apple", "banana"]
+const userName = "Alice";
+let count = 0;
+count = count + 1;
 ```
 
-`const` で宣言した配列に対しても `push` や `pop` は使えます。`const` は「変数に入っている配列そのものを別のものに差し替えない」という約束で、配列の中身の操作はできます。
+`const` で宣言した変数に別の値を代入しようとすると、エラーになります。これは「うっかり書き換え」を防いでくれる仕組みです。
 
 ## 演習
 
 ### ゴール
 
-- 「やることリスト」の配列を作り、要素を足したり取り出したりしてコンソールに表示する
+- `script.js` を作り、自分の名前を変数に入れてコンソールに表示する
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson15` に変える
-2. `script.js` を以下に書き換える
-3. Console を確認する
+1. StackBlitz の Vanilla（HTML + CSS + JS）テンプレートを開く
+2. `index.html` を以下の内容にする
+3. `script.js` を以下の内容にする
+4. プレビューを開き、DevTools の Console を開く
 
 ### `index.html`
 
@@ -89,7 +86,8 @@ console.log(fruits);  // ["apple", "banana"]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson15: 配列を扱う</h1>
+    <h1>lesson15: 最初の JavaScript</h1>
+    <p>DevTools の Console を開いてください。</p>
   </body>
 </html>
 ```
@@ -97,55 +95,48 @@ console.log(fruits);  // ["apple", "banana"]
 ### `script.js`
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+const userName = "Alice";
+let count = 0;
 
-console.log(todos);
-console.log(todos.length);
-console.log(todos[0]);
-console.log(todos[todos.length - 1]);
+console.log("Hello, JavaScript");
+console.log(name);
+console.log(count);
 
-todos.push("部屋を片付ける");
-console.log(todos);
-console.log(todos.length);
-
-const last = todos.pop();
-console.log(last);
-console.log(todos);
-
-console.log(todos[99]);
+count = count + 1;
+console.log(count);
 ```
 
 ### 期待出力
 
+DevTools の Console に、上から順に次のように表示されます。
+
 ```
-["牛乳を買う", "本を読む", "ジョギング"]
-3
-牛乳を買う
-ジョギング
-["牛乳を買う", "本を読む", "ジョギング", "部屋を片付ける"]
-4
-部屋を片付ける
-["牛乳を買う", "本を読む", "ジョギング"]
-undefined
+Hello, JavaScript
+Alice
+0
+1
 ```
 
-配列の表示形式はブラウザによって少し変わりますが、要素の並びは同じです。
+画面には何も追加で表示されません（JS は Console にだけ書き出しています）。
 
 ### 変える
 
-- `todos` の初期値に 5 つ要素を入れる → `length` が `5` になることを確認
-- `todos.push(...)` を 2 回連続で呼んで、末尾に 2 つ追加する
-- `todos.pop()` を 3 回呼んで、3 つ取り除く（配列が空になる）
-- 空の配列 `[]` に `pop` を呼ぶと何が返るか確認する（`undefined`）
+- `userName` の中身を自分の名前に書き換える → Console の 2 行目が変わる
+- `count = count + 1;` の下にもう 1 行 `count = count + 1;` を足して `console.log(count);` を追加 → `2` が表示される
+- `const` で宣言した `userName` に別の値を代入する行を追加（例: `userName = "Bob";`）→ Console に赤字でエラーが出ることを確認（下記の注意を参照）
+
+**`const` への再代入を試したときの挙動について**: 再代入の行を加えると、スクリプト全体の実行が **途中で止まる** ことがある。最初の `console.log("Hello, JavaScript")` までしか出ず、その下の `console.log(userName)` などが出ないケースもある。これは環境によって「実行中のエラー」ではなく「パース段階でのエラー」扱いになるため。動作が変だと感じたら、足した 1 行を削除して元に戻せばよい。
+
+**変数名に `name` を使わない理由**: 今回は `userName` を使っている。ブラウザの `window` には組み込みで `window.name` というプロパティがあり、`const name = ...` を書くと環境によって衝突して予想外の挙動になる。他人のコードで `name` を見たときはこの落とし穴を思い出すとよい。
 
 ### 自分で書く
 
-- 好きな食べ物 3 つを配列 `foods` に入れて、それぞれをインデックスで取り出して `console.log` する
-- `foods` の末尾に 2 つ追加し、末尾から 1 つ取り除いてから、最終的な `foods` を `console.log` する
+- `const age = 20;` のような行を追加し、`console.log(age);` で値を表示する
+- `let message = "こんにちは";` と書き、後から `message = "さようなら";` に書き換えて 2 回 `console.log(message)` する
 
 ## まとめ
 
-- 配列は `[値1, 値2, ...]` で作る
-- インデックスは 0 から始まる
-- 要素数は `length`、末尾追加は `push`、末尾削除は `pop`
-- 存在しないインデックスを読むと `undefined` が返る
+- 外部 JS は `<head>` に `<script defer src="...">` で読み込む
+- `console.log(...)` は DevTools の Console にログを出す
+- 変数は `const`（書き換え不可）を基本にし、必要なときだけ `let` を使う
+- `<script defer>` は以降すべてのレッスンで標準形として使い続ける

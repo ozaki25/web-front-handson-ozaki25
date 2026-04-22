@@ -1,96 +1,81 @@
-# lesson18: オブジェクト
+# lesson18: 配列を扱う
 
 ## ゴール
 
-- `{ key: value }` の形でオブジェクトを作れる
-- ドット記法でプロパティを読み書きできる
-- プロパティを追加・更新できる
+- 配列を作り、中の要素を取り出せる
+- `length` で要素数を確認できる
+- `push` / `pop` で末尾に追加・削除できる
 
 ## 解説
 
-### オブジェクトとは
+### 配列とは
 
-「名前付きの値」をいくつかまとめたものがオブジェクトです。配列が「並んだリスト」なら、オブジェクトは「ラベル付きの箱の集まり」です。
-
-```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
-};
-```
-
-- `{` と `}` で囲む
-- 中は `キー: 値` のペアをカンマで区切る
-- キーのことをプロパティ名と呼ぶ
-
-キーは文字列（クオートは省略できる）、値は何でも入れられます（文字列・数値・真偽値・別のオブジェクト・配列など）。
-
-### ドット記法で読み書き
-
-プロパティを読むときも書くときも、ドット（`.`）を使います。
+同じ種類のデータを複数まとめたものが配列です。「やることリスト」「買い物リスト」のように「並んでいるもの」に使います。
 
 ```js
-const user = {
-  name: "Alice",
-  age: 20,
-};
-
-console.log(user.name); // "Alice"
-console.log(user.age);  // 20
-
-user.age = 21;          // 書き換え
-console.log(user.age);  // 21
-
-user.city = "Tokyo";    // 新しいプロパティを追加
-console.log(user.city); // "Tokyo"
+const fruits = ["apple", "banana", "cherry"];
 ```
 
-存在しないプロパティを読むと `undefined` が返ります。
+- `[` と `]` で囲む
+- 要素と要素はカンマで区切る
+- 中身は文字列でも数値でも何でも入れられる
+
+### インデックスで取り出す
+
+配列の中の要素には、先頭から `0`, `1`, `2`, ... と番号が振られています。これをインデックスと呼びます。
 
 ```js
-console.log(user.email); // undefined
+const fruits = ["apple", "banana", "cherry"];
+console.log(fruits[0]); // "apple"
+console.log(fruits[1]); // "banana"
+console.log(fruits[2]); // "cherry"
 ```
 
-`const` で宣言したオブジェクトでも、プロパティの追加や書き換えはできます（配列と同じ）。
+0 から始まる点に注意します。`fruits[1]` は「2 番目」ではなく「インデックス 1 の要素（=先頭から 2 つ目）」です。
 
-### 配列の中にオブジェクトを並べる
-
-実際のデータでよくある形です。
+存在しないインデックスを指定すると `undefined` が返ります。
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-console.log(users[0].name);      // "Alice"
-console.log(users[1].age);       // 25
-console.log(users.length);       // 3
+console.log(fruits[5]); // undefined
 ```
 
-`for...of` と組み合わせると、全員の情報を順に処理できます。
+### `length` で要素数を知る
 
 ```js
-for (const user of users) {
-  console.log(`${user.name} は ${user.age} 歳`);
-}
+const fruits = ["apple", "banana", "cherry"];
+console.log(fruits.length); // 3
 ```
 
-この「配列にオブジェクトを並べる」形は、TODO アプリやユーザー一覧など、後のレッスンで頻繁に使います。
+末尾の要素は `fruits[fruits.length - 1]` で取れます（インデックスは 0 始まりなので `-1`）。
+
+### 追加と削除
+
+- `push(値)`: 末尾に追加する
+- `pop()`: 末尾を取り除く（取り除いた値を返す）
+
+```js
+const fruits = ["apple", "banana"];
+fruits.push("cherry");
+console.log(fruits); // ["apple", "banana", "cherry"]
+
+const removed = fruits.pop();
+console.log(removed); // "cherry"
+console.log(fruits);  // ["apple", "banana"]
+```
+
+`const` で宣言した配列に対しても `push` や `pop` は使えます。`const` は「変数に入っている配列そのものを別のものに差し替えない」という約束で、配列の中身の操作はできます。
 
 ## 演習
 
 ### ゴール
 
-- `user` オブジェクトを作り、ドット記法で名前と年齢を読み書きする
-- 配列に複数のユーザーを並べて、`for...of` で全員分表示する
+- 「やることリスト」の配列を作り、要素を足したり取り出したりしてコンソールに表示する
 
 ### 手順
 
 1. `index.html` のタイトルを `lesson18` に変える
 2. `script.js` を以下に書き換える
+3. Console を確認する
 
 ### `index.html`
 
@@ -104,7 +89,7 @@ for (const user of users) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: オブジェクト</h1>
+    <h1>lesson18: 配列を扱う</h1>
   </body>
 </html>
 ```
@@ -112,67 +97,55 @@ for (const user of users) {
 ### `script.js`
 
 ```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
-};
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-console.log(user);
-console.log(user.name);
-console.log(user.age);
+console.log(todos);
+console.log(todos.length);
+console.log(todos[0]);
+console.log(todos[todos.length - 1]);
 
-user.age = 21;
-console.log(user.age);
+todos.push("部屋を片付ける");
+console.log(todos);
+console.log(todos.length);
 
-user.city = "Tokyo";
-console.log(user.city);
-console.log(user);
+const last = todos.pop();
+console.log(last);
+console.log(todos);
 
-console.log(user.email);
-
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-for (const u of users) {
-  console.log(`${u.name} は ${u.age} 歳`);
-}
+console.log(todos[99]);
 ```
 
 ### 期待出力
 
 ```
-{name: "Alice", age: 20, isStudent: true}
-Alice
-20
-21
-Tokyo
-{name: "Alice", age: 21, isStudent: true, city: "Tokyo"}
+["牛乳を買う", "本を読む", "ジョギング"]
+3
+牛乳を買う
+ジョギング
+["牛乳を買う", "本を読む", "ジョギング", "部屋を片付ける"]
+4
+部屋を片付ける
+["牛乳を買う", "本を読む", "ジョギング"]
 undefined
-Alice は 20 歳
-Bob は 25 歳
-Carol は 30 歳
 ```
 
-オブジェクト全体を `console.log` したときの表示形式はブラウザで少し異なります。
+配列の表示形式はブラウザによって少し変わりますが、要素の並びは同じです。
 
 ### 変える
 
-- `user` に `hobby: "読書"` というプロパティを追加で持たせて `console.log(user.hobby)` を試す
-- `user.isStudent = false;` で値を書き換えて Console に出してみる
-- `users` に 4 人目 `{ name: "Dave", age: 40 }` を `push` で追加し、もう一度 `for...of` で全員出す
+- `todos` の初期値に 5 つ要素を入れる → `length` が `5` になることを確認
+- `todos.push(...)` を 2 回連続で呼んで、末尾に 2 つ追加する
+- `todos.pop()` を 3 回呼んで、3 つ取り除く（配列が空になる）
+- 空の配列 `[]` に `pop` を呼ぶと何が返るか確認する（`undefined`）
 
 ### 自分で書く
 
-- `book` オブジェクト（`title` / `author` / `year`）を作り、3 つのプロパティをテンプレートリテラルで 1 行にまとめて表示する
-- 本を 3 冊入れた `books` 配列を作り、`for...of` で「『タイトル』（著者, 年）」の形で全件出す
+- 好きな食べ物 3 つを配列 `foods` に入れて、それぞれをインデックスで取り出して `console.log` する
+- `foods` の末尾に 2 つ追加し、末尾から 1 つ取り除いてから、最終的な `foods` を `console.log` する
 
 ## まとめ
 
-- オブジェクトは `{ key: value, ... }` で作る
-- 読み書きはドット記法（`user.name`）
-- 存在しないプロパティを読むと `undefined`
-- 配列にオブジェクトを並べる形は実務でもよく使う
+- 配列は `[値1, 値2, ...]` で作る
+- インデックスは 0 から始まる
+- 要素数は `length`、末尾追加は `push`、末尾削除は `pop`
+- 存在しないインデックスを読むと `undefined` が返る

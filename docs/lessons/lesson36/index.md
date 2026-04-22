@@ -1,239 +1,322 @@
-# lesson36: state で状態を持つ
+# lesson36: `unknown` と `never`
 
 ## ゴール
 
-- `useState` で状態（state）を持ち、ボタンクリックで画面が更新される仕組みを書ける
-- `setCount(count + 1)` と `setCount((c) => c + 1)` の違いを、動く画面で確認できる
-- 「同じイベント内の複数の `setX` をまとめて処理する」というバッチングの考え方を説明できる
+- `any` を使うと TS の型チェックが無効化されること、本コースでは `any` を **原則禁止** にする方針を理解する。
+- 「型が分からない値」は `unknown` で受けられる。`unknown` のままでは **何もできない** 制約を体験する。
+- `never`（「起こり得ない」を表す型）の役割を知り、`switch` + `never` による **網羅性チェック** を書ける。
+- 具体的な型ガードで `unknown` を絞り込む書き方は **次の lesson37** で扱うと理解する。
 
 ## 解説
 
-### state とは
+### `any` とその問題点
 
-画面が変化するアプリには、必ず「状態」があります。TODO の件数、ログインしているかどうか、入力欄の文字、選んでいるタブ、など。
+TS には、型チェックを **一時的にすべて無効にする** `any` という型があります。何を代入しても、何を呼び出しても、TS は何も警告しません。
 
-素の JS では変数や DOM にその状態を持たせ、イベントのたびに DOM を直接書き換えていました。React では、状態を**フック**と呼ばれる仕組みで扱います。本レッスンで使うのが `useState` です。
+```ts
+let x: any = 123;
+x = "hello";        // OK
+x = { a: 1 };       // OK
+x.toUpperCase();    // 実行時エラーになるのに、TS は止めない
+x.bar.baz.qux();    // これも通ってしまう
+```
 
-```tsx
-import { useState } from "react";
+`any` は JS の世界に戻るのと同じことです。コンパイルは通ってしまい、**実行してはじめて壊れていることに気付きます**。
 
-function Counter() {
-  const [count, setCount] = useState(0);
+本コースでは **`any` は原則禁止** とします。既存ライブラリの型情報が不足している場合などに仕方なく使う場面はありますが、学習中は使う場面をゼロにして差し支えありません。
 
-  return (
-    <>
-      <p>現在: {count}</p>
-      <button onClick={() => setCount(count + 1)}>+1</button>
-    </>
-  );
+### `unknown`: 「型が分からない」を安全に受ける
+
+「型が分からない値」を受ける安全な代替が **`unknown`** です。`any` と違い、`unknown` はそのままでは **ほとんど何も操作できません**。
+
+```ts
+let x: unknown = 123;
+x = "hello";   // 代入自体は何でも OK
+x = { a: 1 };  // OK
+
+console.log(x.toUpperCase()); // エラー
+```
+
+```
+'x' is of type 'unknown'.
+```
+
+`unknown` のままでは、プロパティアクセスもメソッド呼び出しもできません。**「使う前に型を絞り込め」** と TS が促してくれます。
+
+この「絞り込む」具体的な方法は **次のレッスン（lesson37）で扱う型ガード** に委ねます。本レッスンでは、`unknown` が「絞り込まないと何もできない型」であることだけを体験します。
+
+### `unknown` の使いどころ
+
+`unknown` が登場する典型は、**外から入ってくる値** です。
+
+- `JSON.parse(text)` の戻り値
+- `fetch(...).then(r => r.json())` の戻り値
+- Server Actions / Route Handlers のリクエストボディ
+
+これらは実行時まで中身が何か分かりません。かつては `any` で受けていましたが、現在の TS では `unknown` で受けて、あとから型ガードで絞り込むのが基本形です。
+
+```ts
+const raw: unknown = JSON.parse('{"name":"Alice"}');
+// raw.name と書きたくても書けない。lesson37 で絞り込み方を学ぶ。
+```
+
+### `never`: 「起こり得ない」を表す型
+
+`never` は「**値が存在しえない**」ことを表す型です。次のような場面で登場します。
+
+- 関数が **例外しか投げない**、あるいは **無限ループで絶対に return しない** 場合の戻り値型
+
+    ```ts
+    function fail(message: string): never {
+      throw new Error(message);
+    }
+    ```
+
+- `switch` の全ケースを処理し終えた後の残り物。これを使って **網羅性チェック** ができる。
+
+「`never` に値を代入しようとするとエラーになる」という性質を逆手にとると、「**ここに値が来たら漏れがある**」という警告を TS に書かせることができます。
+
+### 網羅性チェック（`switch` + `never`）
+
+章 3 lesson35 で学んだリテラル型のユニオンを `switch` で分岐するとき、**全ケースを処理したことを TS に検証させる** 書き方を紹介します。
+
+```ts
+type Status = "open" | "done" | "archived";
+
+function label(status: Status): string {
+  switch (status) {
+    case "open":
+      return "未完了";
+    case "done":
+      return "完了";
+    case "archived":
+      return "保管";
+    default: {
+      const _exhaustive: never = status; // ここに来たら網羅できていない
+      return _exhaustive;
+    }
+  }
 }
 ```
 
-- `useState(0)` は「初期値 0 で state を 1 つ作って」という意味
-- 戻り値は 2 要素のタプル。配列の分割代入で `[count, setCount]` として受け取る
-  - `count`: 今の値
-  - `setCount`: 値を更新するための関数
-- 名前は自由。`[score, setScore]` でも OK
+ポイントは `default` で `const _exhaustive: never = status;` と書いている部分です。
 
-`setCount(1)` を呼ぶと、React が「state が変わった」と気づいてコンポーネントを**再実行**します。再実行した結果の JSX を前回のツリーと比較し、変わった部分だけ DOM に反映します。
+- `Status` が `"open" | "done" | "archived"` のとき、上の 3 つの `case` で全部処理している。
+- `default` に到達する時点で `status` の型は **残りがない** ので `never` 型になる。
+- `never` 型の変数に代入できるのは `never` 型の値だけ。このとき `status` が `never` なので代入が通る。
 
-### ボタンに関数を渡すときの形
+ここで `Status` に **新しいケースを足した** とします。
 
-`onClick` には **関数** を渡します。関数呼び出しの結果ではありません。
-
-```tsx
-{/* OK: クリックされたら setCount(count + 1) が走る */}
-<button onClick={() => setCount(count + 1)}>+1</button>
-
-{/* NG: 描画の瞬間に setCount が呼ばれ、無限ループになる */}
-<button onClick={setCount(count + 1)}>+1</button>
+```ts
+type Status = "open" | "done" | "archived" | "deleted";
 ```
 
-アロー関数 `() => ...` で包むのが基本です。
+すると `label` の `default` で、`status` の型は `"deleted"` が残っている状態（= `never` ではない）になります。
 
-### 壊れやすい書き方 vs 正しい書き方
-
-state を更新する関数には、2 つの渡し方があります。
-
-```tsx
-// (A) 値で渡す形
-setCount(count + 1);
-
-// (B) 関数形式
-setCount((prev) => prev + 1);
+```
+Type '"deleted"' is not assignable to type 'never'.
 ```
 
-1 回だけ呼ぶ分には、どちらも同じに見えます。違いが出るのは、**同じイベントの中で連続して呼んだとき**です。
+TS が `label` 関数の中で「`"deleted"` ケースを書き忘れている」と教えてくれます。新しい状態を追加したときに処理漏れを防ぐ、強力な仕組みです。
 
-```tsx
-// 壊れやすい書き方: 3 回呼んでも 1 しか増えない
-function handleClickA() {
-  setCount(count + 1);
-  setCount(count + 1);
-  setCount(count + 1);
-}
+### このレッスンで扱わないこと
 
-// 正しい書き方: 3 回呼ぶと 3 増える
-function handleClickB() {
-  setCount((c) => c + 1);
-  setCount((c) => c + 1);
-  setCount((c) => c + 1);
-}
-```
-
-なぜか。React は **同じイベント内で呼ばれた `setX` をまとめて（バッチで）処理します**。処理するタイミングまで、`count` の値は「このイベントが始まった時点の値」のままです。
-
-つまり (A) では、3 回とも `count + 1` が「0 + 1」と評価され、最終的に state は 1 になります。
-
-(B) の関数形式は「**今 state に入っている値を受け取って、次の値を返す**」書き方です。React は内部で state を更新するたびに `prev` を最新に差し替えてくれるので、3 回目は `prev = 2` が渡されて 3 が返ります。
-
-### バッチングのまとめ
-
-- React は同じイベントで呼ばれた複数の state 更新を、**まとめて 1 回の再レンダリング**にする
-- そのため、同じイベント内では state の値は「イベント開始時点」のまま
-- 現在の state から次の値を計算したいなら、**必ず関数形式 `setX((prev) => ...)`** を使う
-
-規模の大きいアプリでもこの原則は同じです。将来書く `setTodos((prev) => [...prev, newTodo])` のような形も、この延長線上にあります。
-
-### 補足: バッチングが効くのは同期イベントハンドラだけ
-
-上の「3 回呼んでも 1 しか増えない」は、`onClick` のような **同期のイベントハンドラの中** で 3 回連続で `setCount` を呼んだケースです。非同期処理（`setTimeout` や `await` のあと）から `setCount` を呼ぶ場合でも React 18 以降は原則バッチングされますが、条件によってはイベントの境界が切れ、1 回の `setCount(count + 1)` で素直に 1 増える挙動になります。挙動に違和感を感じたら、まずは関数形式 `setX((prev) => ...)` に書き換えて安全側に倒すのが無難です。
-
-### `useState` の型
-
-`useState(0)` のように初期値を渡すと、TypeScript は「state の型は `number`」と推論します。
-
-```tsx
-const [count, setCount] = useState(0); // count: number
-const [name, setName] = useState(""); // name: string
-```
-
-複雑な型（配列、オブジェクト、ユニオン）は、次のように明示的に指定できます。
-
-```tsx
-const [todos, setTodos] = useState<Todo[]>([]);
-```
-
-今回は数値しか使わないので、型推論に任せます。
+`unknown` を **どう絞り込むか**（`typeof` / `in` / カスタム型ガード）は、次の lesson37 で扱います。ここでは「絞り込まないと何もできない」こと、そして「`never` で網羅性を検査できる」ことだけ押さえればじゅうぶんです。
 
 ## 演習
 
-### ゴール
+### 手順 1: `any` の危うさを確認する
 
-- カウンター UI を作り、「壊れやすい書き方」と「正しい書き方」のボタンを並べる
-- 実際に押して、増え方の違いを画面で確認する
+`src/main.ts` の中身を以下に置き換える。
 
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` を書き換える
-3. `src/App.css` を書き換える
-
-### `src/App.tsx`
-
-```tsx
-import { useState } from "react";
-import "./App.css";
-
-function App() {
-  const [countA, setCountA] = useState(0);
-  const [countB, setCountB] = useState(0);
-
-  // (A) 壊れやすい書き方: count + 1 を 3 回
-  function handleClickA() {
-    setCountA(countA + 1);
-    setCountA(countA + 1);
-    setCountA(countA + 1);
-  }
-
-  // (B) 正しい書き方: 関数形式を 3 回
-  function handleClickB() {
-    setCountB((c) => c + 1);
-    setCountB((c) => c + 1);
-    setCountB((c) => c + 1);
-  }
-
-  return (
-    <>
-      <h1>バッチングを体感する</h1>
-
-      <section className="box">
-        <h2>(A) 壊れやすい書き方</h2>
-        <p>現在: {countA}</p>
-        <button onClick={handleClickA}>3 回 setCountA(countA + 1)</button>
-      </section>
-
-      <section className="box">
-        <h2>(B) 正しい書き方</h2>
-        <p>現在: {countB}</p>
-        <button onClick={handleClickB}>3 回 setCountB((c) =&gt; c + 1)</button>
-      </section>
-    </>
-  );
-}
-
-export default App;
+```ts
+let x: any = 123;
+x = "hello";
+console.log(x.toUpperCase()); // OK
+console.log(x.bar.baz.qux()); // TS は止めないが、実行するとクラッシュする
 ```
 
-### `src/App.css`
+エディタでは赤線が出ない。ビルドも通る。しかし実行すると次のような実行時エラーになる。
 
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
+```
+TypeError: Cannot read properties of undefined (reading 'baz')
+```
+
+`any` を使うと、TS は「ある型として扱える」と信じ込んでしまう。**実行するまで壊れていることに気付けない** のがポイント。
+
+### 手順 2: `unknown` に置き換えて、エラーが出ることを確認する
+
+同じコードを `unknown` で書き直す。
+
+```ts
+let x: unknown = 123;
+x = "hello";
+console.log(x.toUpperCase());
+```
+
+期待されるメッセージ（`x.toUpperCase()` の行に赤線）:
+
+```
+'x' is of type 'unknown'.
+```
+
+さらにプロパティアクセスも試す。
+
+```ts
+console.log(x.bar);
+```
+
+期待されるメッセージ:
+
+```
+'x' is of type 'unknown'.
+```
+
+`unknown` は「中身が何か分からない」ので、プロパティにもメソッドにも触らせてくれない。`any` のように **実行してから壊れる** のではなく、**書いた瞬間に TS が止める**。
+
+### 手順 3: `JSON.parse` の戻り値を受けてみる
+
+TS の型定義では `JSON.parse` の戻り値は `any` ですが、実務では安全のため `unknown` にキャストして受けるやり方があります。ここでは学習のため明示的に `unknown` で受けます。
+
+```ts
+const raw: unknown = JSON.parse('{"name":"Alice","age":20}');
+
+console.log(raw.name);
+```
+
+期待されるメッセージ:
+
+```
+'raw' is of type 'unknown'.
+```
+
+`raw` を `unknown` 型で受けると、中身にアクセスする前に「絞り込み」が必要になる。この絞り込みを次の lesson37 で `typeof` や `in` や自作の型ガード関数で書けるようになる。
+
+確認できたら `console.log(raw.name);` は消しておく（ビルドを通すため）。
+
+### 手順 4: `never` による網羅性チェック
+
+次のコードを `src/main.ts` に書く。
+
+```ts
+type Status = "open" | "done" | "archived";
+
+function label(status: Status): string {
+  switch (status) {
+    case "open":
+      return "未完了";
+    case "done":
+      return "完了";
+    case "archived":
+      return "保管";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
 }
 
-.box button {
-  padding: 6px 10px;
-  cursor: pointer;
-}
+console.log(label("open"));
+console.log(label("done"));
+console.log(label("archived"));
+```
 
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
+#### 期待出力
+
+```
+未完了
+完了
+保管
+```
+
+### 手順 5: ユニオンにケースを追加して、処理漏れを検出させる
+
+`Status` に `"deleted"` を追加する。
+
+```ts
+type Status = "open" | "done" | "archived" | "deleted";
+```
+
+`label` 関数の本体は変えない。すると `default` 節の `const _exhaustive: never = status;` に赤線が出る。
+
+期待されるメッセージ:
+
+```
+Type '"deleted"' is not assignable to type 'never'.
+```
+
+「`label` 関数で `"deleted"` のケースが処理されていない」と TS が教えてくれる。
+
+`case "deleted":` を追加して処理を書き足すと、エラーが消える。
+
+```ts
+function label(status: Status): string {
+  switch (status) {
+    case "open":
+      return "未完了";
+    case "done":
+      return "完了";
+    case "archived":
+      return "保管";
+    case "deleted":
+      return "削除済み";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
   }
 }
 ```
 
-### 期待出力
+これで `Status` が増えるたびに、処理を書き忘れたら TS が止めてくれる。
 
-- 画面に 2 つのボックス「(A) 壊れやすい書き方」「(B) 正しい書き方」が並ぶ
-- (A) のボタンを 1 回押す → 表示が **0 → 1**。もう 1 回 → **1 → 2**。**1 ずつしか増えない**
-- (B) のボタンを 1 回押す → 表示が **0 → 3**。もう 1 回 → **3 → 6**。**3 ずつ増える**
+### 変えてみる
 
-押したボタンごとに、増え方が明確に違うことを確認してください。
+`never` を返す関数を試す。
 
-### 変える
+```ts
+function fail(message: string): never {
+  throw new Error(message);
+}
 
-- (A) の `handleClickA` の中の `setCountA(countA + 1)` を 5 回に増やしてみる → それでも 1 しか増えない
-- (B) の `setCountB((c) => c + 1)` を 5 回に増やすと、1 クリックで 5 増える
-- (A) を `setCountA((c) => c + 1)` に差し替えると、3 ずつ増える側に変わる
+const value: string = fail("ここでストップ");
+console.log(value); // ここには到達しない
+```
+
+実行すると例外で止まり、`console.log` の行は動かない。
+
+```
+Error: ここでストップ
+```
+
+`never` を戻り値とする関数は「呼んだら戻ってこない」ことを型レベルで表現している。
 
 ### 自分で書く
 
-- 別の state `[step, setStep]` を作り、初期値を `1` にする
-- `<input>` で `step` の値を数値として編集できるようにする（本格的なフォームは lesson38 で扱うので、ここでは下記のヒントをコピペでよい）
-- 既存のボタンを「`step` ずつ増やす」ボタンに差し替える（`setCountB((c) => c + step)` の形）
+次のユニオン型と関数を書く。
 
-ヒント（`<input>` まわりはコピペで OK です）:
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number };
 
-```tsx
-<input
-  type="number"
-  value={step}
-  onChange={(e) => setStep(Number(e.target.value))}
-/>
+function area(shape: Shape): number {
+  // ...
+}
 ```
+
+- `case "circle":` で `Math.PI * shape.radius ** 2` を返す。
+- `case "square":` で `shape.side ** 2` を返す。
+- `default:` で `const _exhaustive: never = shape;` を書く。
+
+書けたら、わざと `Shape` に `{ kind: "triangle"; base: number; height: number }` を追加して、`_exhaustive` に赤線が出ることを確認する。確認できたら追加分を元に戻す。
+
+ヒント: `switch (shape.kind)` で分岐する。このような「プロパティで種類を見分ける」形は次々回の lesson38 で **判別共用体** として本格的に扱う。
 
 ## まとめ
 
-- 状態は `useState(初期値)` で持つ。戻り値は `[値, 更新関数]`
-- `setX(v)` を呼ぶと React がコンポーネントを再実行して差分を DOM に反映する
-- 同じイベント内の複数の `setX` は**バッチで**処理されるので、同じイベントの中では state の値は変わらない
-- 現在の state を元に次の値を計算するなら、**関数形式 `setX((prev) => ...)`** を使う
+- `any` は型チェックを無効化してしまうため、**本コースでは原則禁止**。
+- `unknown` は「型が分からない」を安全に受ける型。そのままでは **何もできない** 制約がある。
+- `unknown` の **具体的な絞り込み方**（`typeof` / `in` / カスタム型ガード）は **次の lesson37** で扱う。
+- `never` は「起こり得ない」を表す型。`switch` の `default` で `const _: never = x;` と書くと、処理漏れを TS に検出してもらえる（網羅性チェック）。
+- リテラル型のユニオンが増えたとき、網羅性チェックが入っていれば **処理を書き忘れた場所が赤線で分かる**。安全にユニオンを育てていくための定番パターン。

@@ -1,100 +1,91 @@
-# lesson22: fetch で API から取得する
+# lesson22: オブジェクト
 
 ## ゴール
 
-- `fetch` で外部 API からデータを取得できる
-- `response.json()` でレスポンスを JS のデータに変換できる
-- `try` / `catch` でエラーを捕まえられる
-- 「`fetch` も `response.json()` も Promise を返すので **両方 `await` が必要**」を覚える
+- `{ key: value }` の形でオブジェクトを作れる
+- ドット記法でプロパティを読み書きできる
+- プロパティを追加・更新できる
 
 ## 解説
 
-### fetch で取得する流れ
+### オブジェクトとは
 
-ネット越しにデータを取得する標準の関数が `fetch` です。URL を渡すと、レスポンス（応答）を Promise で返します。
+「名前付きの値」をいくつかまとめたものがオブジェクトです。配列が「並んだリスト」なら、オブジェクトは「ラベル付きの箱の集まり」です。
 
 ```js
-async function main() {
-  const response = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const data = await response.json();
-  console.log(data);
-}
-
-main();
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
 ```
 
-手順を分解すると:
+- `{` と `}` で囲む
+- 中は `キー: 値` のペアをカンマで区切る
+- キーのことをプロパティ名と呼ぶ
 
-1. `fetch(url)` を呼ぶ → **Promise** が返る
-2. `await` して完了を待つ → `response` オブジェクトが得られる
-3. `response.json()` を呼ぶ → これも **Promise** が返る（ここで `await` を忘れやすい）
-4. `await` して完了を待つ → 実際のデータ（配列やオブジェクト）が得られる
+キーは文字列（クオートは省略できる）、値は何でも入れられます（文字列・数値・真偽値・別のオブジェクト・配列など）。
 
-### `await` を 2 回書く理由
+### ドット記法で読み書き
 
-冒頭で強調したとおり、**戻り値が Promise の関数・メソッドには `await` が必要** です。`fetch` と `response.json()` はどちらも Promise を返すため、両方に `await` を付けます。
-
-`response.json()` の `await` を書き忘れると、Promise オブジェクトがそのまま変数に入ってしまい、データのつもりで使うとおかしな挙動になります（演習で体験します）。
-
-### JSON とは
-
-API が返すデータは、ほとんどの場合 **JSON** というテキスト形式で送られてきます。JS のオブジェクト / 配列と見た目がそっくりなので、`response.json()` を通すと JS のオブジェクトや配列として扱えるようになります。
-
-### エラーを捕まえる: `try` / `catch`
-
-ネットワークの処理は「URL が間違っている」「接続できない」など失敗する可能性があります。失敗に備えて `try` / `catch` で囲みます。
+プロパティを読むときも書くときも、ドット（`.`）を使います。
 
 ```js
-async function main() {
-  try {
-    const response = await fetch("https://example.com/this-will-fail");
-    const data = await response.json();
-    console.log(data);
-  } catch (error) {
-    console.log("失敗しました");
-    console.log(error);
-  }
-}
+const user = {
+  name: "Alice",
+  age: 20,
+};
 
-main();
+console.log(user.name); // "Alice"
+console.log(user.age);  // 20
+
+user.age = 21;          // 書き換え
+console.log(user.age);  // 21
+
+user.city = "Tokyo";    // 新しいプロパティを追加
+console.log(user.city); // "Tokyo"
 ```
 
-- `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
-- `error` にはエラー情報が入る
-
-`try` / `catch` は lesson25 の `JSON.parse` でも再利用します。
-
-### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
-
-`fetch` で最初につまずきやすい点があります。**サーバーから 404 や 500 などのエラーステータスが返ってきても、`fetch` は失敗とみなさず `try` / `catch` の `catch` には飛びません**。`catch` に飛ぶのは、
-
-- URL の形式がおかしい
-- ネットワーク接続に失敗した（オフラインなど）
-- DNS で名前解決に失敗した
-
-といった **通信そのものが成立しなかった** ときだけです。HTTP の 404 / 500 は「通信は成功、ただしサーバーが『エラーです』と返してきた」状態なので、`fetch` にとっては成功扱いになります。
-
-HTTP エラーを自分で拾いたいときは、`response.ok` という真偽値（200〜299 のときに `true`）を見て分岐します。本コースの演習では深追いしませんが、次の 1 行を覚えておくと実務で役立ちます。
+存在しないプロパティを読むと `undefined` が返ります。
 
 ```js
-if (!response.ok) {
-  throw new Error(`HTTP ${response.status}`);
+console.log(user.email); // undefined
+```
+
+`const` で宣言したオブジェクトでも、プロパティの追加や書き換えはできます（配列と同じ）。
+
+### 配列の中にオブジェクトを並べる
+
+実際のデータでよくある形です。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+  { name: "Carol", age: 30 },
+];
+
+console.log(users[0].name);      // "Alice"
+console.log(users[1].age);       // 25
+console.log(users.length);       // 3
+```
+
+`for...of` と組み合わせると、全員の情報を順に処理できます。
+
+```js
+for (const user of users) {
+  console.log(`${user.name} は ${user.age} 歳`);
 }
 ```
 
-これを書いておくと、4xx / 5xx のときに `throw` して `catch` に飛ばせます。
-
-### ブラウザ側 fetch の注意（予告）
-
-ブラウザ側で `fetch` を使うと、ローディング状態の管理や競合（複数の fetch が同時に走って結果がずれる）など、考えることが多くなります。本コースでは、こうしたブラウザ側の fetch の難しさを扱わず、**章 5 の Server Component でサーバー側 fetch に任せる** 方針を取ります。本レッスンでは「Console に出す」までに絞ります。
+この「配列にオブジェクトを並べる」形は、TODO アプリやユーザー一覧など、後のレッスンで頻繁に使います。
 
 ## 演習
 
 ### ゴール
 
-- JSONPlaceholder（無料の練習用 API）から記事一覧を取得して Console に出す
-- URL をわざと壊して `catch` の中が実行されることを確認する
-- `response.json()` の `await` を外して挙動を観察する
+- `user` オブジェクトを作り、ドット記法で名前と年齢を読み書きする
+- 配列に複数のユーザーを並べて、`for...of` で全員分表示する
 
 ### 手順
 
@@ -113,8 +104,7 @@ if (!response.ok) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson22: fetch で API から取得する</h1>
-    <p>DevTools の Console を確認してください。</p>
+    <h1>lesson22: オブジェクト</h1>
   </body>
 </html>
 ```
@@ -122,66 +112,67 @@ if (!response.ok) {
 ### `script.js`
 
 ```js
-async function main() {
-  try {
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
-    const posts = await response.json();
-    console.log("取得件数:", posts.length);
-    console.log("先頭:", posts[0]);
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
 
-    for (const post of posts.slice(0, 3)) {
-      console.log(`#${post.id} ${post.title}`);
-    }
-  } catch (error) {
-    console.log("エラーが発生しました");
-    console.log(error);
-  }
+console.log(user);
+console.log(user.name);
+console.log(user.age);
+
+user.age = 21;
+console.log(user.age);
+
+user.city = "Tokyo";
+console.log(user.city);
+console.log(user);
+
+console.log(user.email);
+
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+  { name: "Carol", age: 30 },
+];
+
+for (const u of users) {
+  console.log(`${u.name} は ${u.age} 歳`);
 }
-
-main();
 ```
 
 ### 期待出力
 
-Console に次のような内容が出ます（API 側の内容によって文字列は変わる場合があります）。
+```
+{name: "Alice", age: 20, isStudent: true}
+Alice
+20
+21
+Tokyo
+{name: "Alice", age: 21, isStudent: true, city: "Tokyo"}
+undefined
+Alice は 20 歳
+Bob は 25 歳
+Carol は 30 歳
+```
 
-```
-取得件数: 100
-先頭: {userId: 1, id: 1, title: "sunt aut facere ...", body: "..."}
-#1 sunt aut facere repellat provident occaecati excepturi optio reprehenderit
-#2 qui est esse
-#3 ea molestias quasi exercitationem repellat qui ipsa sit aut
-```
+オブジェクト全体を `console.log` したときの表示形式はブラウザで少し異なります。
 
 ### 変える
 
-#### URL を壊して `catch` を動かす
-
-`fetch` の URL の途中を適当に壊して（例: `https://jsonplaceholder.typicode.com/no-such-path-xxxxx`）、Console で「エラーが発生しました」が出ることを確認します。
-
-> 注意: JSONPlaceholder はどのパスでも空配列や JSON を返す傾向があるので、ドメインごと壊す（`https://this-domain-does-not-exist-xxxxx.test/posts`）方が確実にエラーになります。
-
-#### `await` を外すとどうなるか
-
-以下のように `response.json()` の `await` を外してみます。
-
-```js
-const posts = response.json(); // await を外す
-console.log(posts);
-console.log(posts.length);
-```
-
-Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これが「Promise をそのまま使ってしまった状態」です。`await` を忘れると値がおかしい、という失敗の形を体験しておきます。
+- `user` に `hobby: "読書"` というプロパティを追加で持たせて `console.log(user.hobby)` を試す
+- `user.isStudent = false;` で値を書き換えて Console に出してみる
+- `users` に 4 人目 `{ name: "Dave", age: 40 }` を `push` で追加し、もう一度 `for...of` で全員出す
 
 ### 自分で書く
 
-- URL を `https://jsonplaceholder.typicode.com/users` に変えて、ユーザー一覧を取得し、各ユーザーの `name` と `email` を Console に出す
-- 取得した `posts` の中から「`id` が 10 以下」のものだけを `filter` で抜き出して出す
-- `try` / `catch` の `catch` の中で、エラーが起きたときに `console.log("読み込みに失敗しました")` と日本語メッセージも表示する
+- `book` オブジェクト（`title` / `author` / `year`）を作り、3 つのプロパティをテンプレートリテラルで 1 行にまとめて表示する
+- 本を 3 冊入れた `books` 配列を作り、`for...of` で「『タイトル』（著者, 年）」の形で全件出す
 
 ## まとめ
 
-- `fetch(url)` と `response.json()` は **どちらも Promise を返す**。両方 `await` が必要
-- `try` / `catch` で失敗に備える
-- `await` を忘れると Promise オブジェクトがそのまま出てきて、後続の処理が壊れる
-- ブラウザ側 fetch の state との組み合わせは罠が多いので、本コースでは章 5 の Server Component で扱う
+- オブジェクトは `{ key: value, ... }` で作る
+- 読み書きはドット記法（`user.name`）
+- 存在しないプロパティを読むと `undefined`
+- 配列にオブジェクトを並べる形は実務でもよく使う

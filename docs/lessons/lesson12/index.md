@@ -1,142 +1,245 @@
-# lesson12: 最初の JavaScript
+# lesson12: CSS Grid で二次元レイアウト
+
+lesson11 で Flexbox を使って要素を横並びにしました。Flexbox は「一方向」に並べるのが得意な仕組みです。今回は、**行と列を同時に扱う「二次元レイアウト」** を書くための **CSS Grid** を学びます。
 
 ## ゴール
 
-- HTML に外部 JavaScript ファイルを読み込める
-- `console.log` で値を出力できる
-- `let` と `const` で変数を宣言できる
-- DevTools の Console パネルでログを確認できる
-- `<script defer>` を「外部 JS を読み込む標準の書き方」として身につける
+- Flexbox（一次元）と Grid（二次元）の使い分けを説明できる。
+- `display: grid` と `grid-template-columns` / `grid-template-rows` で列と行を定義できる。
+- `fr` 単位と `repeat()` で列の並びを簡潔に書ける。
+- `minmax()` と `auto-fit` を組み合わせて、画面幅に応じてカード数が自動で折り返すレイアウトを作れる。
+- lesson11 で作った自己紹介ページの「好きなもの」カード部分を Grid で書き直せる。
 
 ## 解説
 
-### JavaScript はブラウザの中で動く
+### Flexbox と Grid の使い分け
 
-章 1 で書いてきた HTML と CSS は「何を置くか」と「どう見せるか」を担当します。ここから学ぶ JavaScript（以降 JS）は「動きをつける」担当です。ボタンを押したら何かが起きる、入力した内容に応じて画面が変わる、といった処理はすべて JS が担当します。
+どちらも「子要素を並べる」ための仕組みですが、得意分野が違います。
 
-JS は基本的にブラウザの中で動くプログラミング言語です。HTML に JS を読み込ませると、ページを開いたときにブラウザが JS を実行してくれます。
+| 仕組み | 得意な形 | 典型例 |
+|---|---|---|
+| Flexbox | 一次元（横 **または** 縦） | ヘッダーの左右配置、ナビのリンク並び |
+| Grid | 二次元（横 **かつ** 縦） | カードを N 列 × M 行に敷き詰める、ページ全体のレイアウト |
 
-### JS を HTML に読み込む方法
+「行と列の両方を同時に考えたい」ときは Grid が向きます。lesson11 でカード 3 枚を横並びにしたのは一次元なので Flexbox で十分でしたが、**画面幅が狭くなったら 2 列、もっと狭くなったら 1 列に自動で折り返したい**、というのは Grid の方が自然に書けます。
 
-今回から、JS は `script.js` という別ファイルに書いて、HTML から読み込む形にします。HTML に直接書くより読みやすく、後で管理しやすくなります。
+### Grid の最小形
 
-読み込むタグは `<script>` です。本コースでは以下の形に固定します。
+並べたい要素たちを包む親要素に `display: grid` を付け、`grid-template-columns` で列の並びを定義します。
 
 ```html
-<script defer src="./script.js"></script>
+<div class="grid">
+  <div class="cell">A</div>
+  <div class="cell">B</div>
+  <div class="cell">C</div>
+</div>
 ```
 
-`defer` 属性を付けると、ブラウザは「HTML をすべて読み終えてから JS を実行する」という順序で動いてくれます。これを徹底しておくと、後のレッスンで `document.querySelector(...)` が `null` を返す事故（HTML より先に JS が走り、まだ存在しない要素を探してしまう）を防げます。
-
-### なぜ `defer` か（コラム）
-
-`<script>` の書き方には昔からいくつかの流派があります。
-
-- `<head>` の中に `<script src="...">` だけ書く → HTML の解析が止まって遅くなる
-- `<body>` の末尾に `<script src="...">` を書く → 動くが、書く場所が散らばる
-- `<head>` の中に `<script defer src="...">` を書く → HTML の解析を止めず、解析完了後に実行される
-
-3 つ目の書き方が現在の推奨です。HTML が完成してから JS が動くため、DOM を探しに行く処理（lesson23 以降）でも安心して使えます。本コースではこの形だけを使います。
-
-### `console.log` と DevTools の Console
-
-`console.log(...)` は「この値をログに出す」命令です。ブラウザの DevTools にある「Console」パネルを開くと、そこにログが表示されます。画面には出ませんが、開発中の確認に最も使う命令です。
-
-DevTools の開き方は章 1 で学んだ Elements パネルと同じで、右クリック → 「検証」、または `F12` キーです。Elements の隣に Console タブがあります。
-
-### `let` と `const`
-
-値に名前をつけておくしくみを変数と呼びます。JS では 2 つのキーワードを使い分けます。
-
-- `const`: 後から値を書き換えない変数。迷ったらまずこちら
-- `let`: 後から値を書き換える可能性がある変数
-
-古い教材では `var` も出てきますが、本コースでは使いません。
-
-```js
-const userName = "Alice";
-let count = 0;
-count = count + 1;
+```css
+.grid {
+  display: grid;
+  grid-template-columns: 100px 100px 100px;
+  gap: 16px;
+}
 ```
 
-`const` で宣言した変数に別の値を代入しようとすると、エラーになります。これは「うっかり書き換え」を防いでくれる仕組みです。
+`grid-template-columns: 100px 100px 100px` は「100px の列を 3 つ並べる」という意味です。`gap` で子要素同士の間隔を指定できます（Flexbox と同じ `gap` が使えます）。
+
+### `fr` 単位
+
+ピクセルで固定すると画面幅に合いません。Grid では **`fr`（fraction、利用可能な幅を何分の何で分け合うか）** という便利な単位が使えます。
+
+```css
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+```
+
+これは「親の幅を 3 等分する 3 列」という意味です。`1fr 2fr 1fr` と書けば「左:中央:右 = 1:2:1 の比率で分ける」になります。
+
+### `repeat()` で繰り返し
+
+同じ幅の列を何個も並べたいとき、毎回書くのは面倒です。`repeat()` を使うとまとめられます。
+
+```css
+.grid {
+  grid-template-columns: repeat(3, 1fr);
+}
+```
+
+`repeat(3, 1fr)` は `1fr 1fr 1fr` と同じ意味です。
+
+### `minmax()` で最小幅と最大幅を指定
+
+`minmax(最小, 最大)` は「この範囲の中で幅を決める」という関数です。
+
+```css
+.grid {
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
+}
+```
+
+これは「200px を下回らないようにしつつ、余った幅は均等に伸ばす 3 列」です。親が狭すぎて 200px × 3 に収まらないときは、子要素が親からはみ出すこともあります。
+
+### `auto-fit` でカード数を自動調整
+
+ここまで「3 列」「4 列」と数を決めていましたが、画面幅に応じて列数そのものを自動で増減させたい場合があります。その用途に作られたのが **`auto-fit`** です。
+
+```css
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+```
+
+意味を分解します。
+
+- `auto-fit`: 列数をブラウザに任せる。
+- `minmax(250px, 1fr)`: 1 列の幅は最低 250px、余った幅は均等配分。
+
+これで画面が広ければ多くの列、狭ければ少ない列に自動で切り替わります。**`@media` を書かなくてもレスポンシブになる** のが強みです。
+
+### `grid-template-rows` と行の指定
+
+行を明示したい場合は `grid-template-rows` を使います。
+
+```css
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 100px 200px;
+  gap: 16px;
+}
+```
+
+ただし、今回の演習のように「カードを敷き詰める」ときは、行の高さは中身に任せるのが普通なので `grid-template-rows` を省くことが多いです。
+
+### 特定のセルをまたぐ（発展、今回は使わない）
+
+`grid-column: span 2` で「このセルは 2 列ぶんの幅を取る」のように、個別のセルを大きくもできます。ページ全体のレイアウトで「サイドバーは 1 列、メインは 3 列ぶん」のような指定に便利ですが、今回の演習では使いません。
 
 ## 演習
 
-### ゴール
+### やること
 
-- `script.js` を作り、自分の名前を変数に入れてコンソールに表示する
+lesson11 で作った自己紹介ページの「好きなもの」カード部分を、**Flexbox から Grid に書き換え**、画面幅に応じて 3 列 → 2 列 → 1 列と **自動で折り返す** ようにします。`@media` を自分で書く必要はありません。
 
-### 手順
+### ステップ 1: lesson11 のプロジェクトを開く
 
-1. StackBlitz の Vanilla（HTML + CSS + JS）テンプレートを開く
-2. `index.html` を以下の内容にする
-3. `script.js` を以下の内容にする
-4. プレビューを開き、DevTools の Console を開く
+StackBlitz で lesson11 のプロジェクトを開きます。`index.html` と `style.css` があり、カード 3 枚が Flexbox で横並びに表示されている状態です。
 
-### `index.html`
+### ステップ 2: HTML を少し増やす
+
+Grid の効果が分かりやすいよう、カードを 3 枚から 6 枚に増やします。`index.html` の `<section id="likes">` を次のように書き換えます。
 
 ```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson12</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson12: 最初の JavaScript</h1>
-    <p>DevTools の Console を開いてください。</p>
-  </body>
-</html>
+<section id="likes">
+  <h2>好きなもの</h2>
+  <div class="cards">
+    <article class="card">
+      <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+      <h3>コーヒー</h3>
+      <p>朝の 1 杯が欠かせない。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+      <h3>本</h3>
+      <p>技術書からエッセイまで。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+      <h3>散歩</h3>
+      <p>行き先を決めずに歩く。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.jp/300x200.png" alt="音楽のプレースホルダ画像" />
+      <h3>音楽</h3>
+      <p>作業中はインストゥルメンタル。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.jp/300x200.png" alt="写真のプレースホルダ画像" />
+      <h3>写真</h3>
+      <p>スマホで散歩の途中に。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.jp/300x200.png" alt="料理のプレースホルダ画像" />
+      <h3>料理</h3>
+      <p>凝らない、続ける。</p>
+    </article>
+  </div>
+</section>
 ```
 
-### `script.js`
+### ステップ 3: `.cards` を Grid に書き換える
 
-```js
-const userName = "Alice";
-let count = 0;
+`style.css` の `.cards` と `.cards .card` の 2 つのブロックを、次のように書き換えます。lesson11 の `@media (max-width: 600px)` 内にあった `.cards { flex-direction: column; }` は **削除** してください（Grid 側で自動折り返しを扱うため不要になります）。
 
-console.log("Hello, JavaScript");
-console.log(name);
-console.log(count);
-
-count = count + 1;
-console.log(count);
+```css
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
 ```
+
+`.cards .card` の `flex: 1` は **削除** します。Grid では列幅を `grid-template-columns` 側で決めるので、子要素に個別の幅指定は不要です。
 
 ### 期待出力
 
-DevTools の Console に、上から順に次のように表示されます。
+- プレビューを広く表示: カード 6 枚が **3 列 × 2 行** に並ぶ。
+- プレビューを中くらいに縮める: カードが **2 列 × 3 行** になる。
+- プレビューをスマホ幅まで縮める: カードが **1 列 × 6 行** になる。
+- DevTools の「デバイスツールバー」（Chrome では `Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE（375px）などに切り替えても、カードが 1 列に並ぶことを確認できる。
+- `@media` を書いていないのにレスポンシブになっていることに注目する。
 
-```
-Hello, JavaScript
-Alice
-0
-1
-```
+### Flexbox 版と見比べる
 
-画面には何も追加で表示されません（JS は Console にだけ書き出しています）。
+lesson11 では Flexbox で 3 枚を `flex: 1` で等分していました。あのやり方だと、**カードを 10 枚に増やしても 1 行に 10 枚並んでしまい**（それぞれが細くなる）、手動で `flex-wrap: wrap` と個々の `flex-basis` を調整する必要がありました。
 
-### 変える
+Grid の `auto-fit + minmax()` は、この「折り返しと列幅の調整」をまとめて面倒見てくれるので、**カードが増えても減ってもコードを変える必要がありません**。
 
-- `userName` の中身を自分の名前に書き換える → Console の 2 行目が変わる
-- `count = count + 1;` の下にもう 1 行 `count = count + 1;` を足して `console.log(count);` を追加 → `2` が表示される
-- `const` で宣言した `userName` に別の値を代入する行を追加（例: `userName = "Bob";`）→ Console に赤字でエラーが出ることを確認（下記の注意を参照）
+### 変えてみる
 
-**`const` への再代入を試したときの挙動について**: 再代入の行を加えると、スクリプト全体の実行が **途中で止まる** ことがある。最初の `console.log("Hello, JavaScript")` までしか出ず、その下の `console.log(userName)` などが出ないケースもある。これは環境によって「実行中のエラー」ではなく「パース段階でのエラー」扱いになるため。動作が変だと感じたら、足した 1 行を削除して元に戻せばよい。
-
-**変数名に `name` を使わない理由**: 今回は `userName` を使っている。ブラウザの `window` には組み込みで `window.name` というプロパティがあり、`const name = ...` を書くと環境によって衝突して予想外の挙動になる。他人のコードで `name` を見たときはこの落とし穴を思い出すとよい。
+1. `minmax(250px, 1fr)` の `250px` を `180px` や `320px` に変えてみる。それぞれ「1 列の最小幅」が変わり、結果として折り返すタイミングが変わることを確認する。
+2. `repeat(auto-fit, ...)` を `repeat(3, 1fr)` に変えてみる。これだとカード 6 枚が **常に 3 列** になり、スマホ幅に縮めるとはみ出してしまう（自動折り返ししない）ことを確認する。その後、元の `auto-fit` に戻す。
+3. `gap: 16px` を `gap: 4px` / `gap: 32px` に変えて、見た目の印象の変化を確認する。
 
 ### 自分で書く
 
-- `const age = 20;` のような行を追加し、`console.log(age);` で値を表示する
-- `let message = "こんにちは";` と書き、後から `message = "さようなら";` に書き換えて 2 回 `console.log(message)` する
+lesson11 の `<section id="contact">` の下に、新しい `<section id="gallery">` を追加します。
+
+```html
+<section id="gallery">
+  <h2>ギャラリー</h2>
+  <div class="gallery">
+    <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 1" />
+    <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 2" />
+    <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 3" />
+    <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 4" />
+  </div>
+</section>
+```
+
+そして `style.css` に、`.gallery` を Grid で組むスタイルを **自分で書いて** みます。条件:
+
+- 画像が幅 200px を下回らないようにする
+- `gap` は 12px
+- `auto-fit` で列数は自動
+
+ヒントは `.cards` のコードをなぞること。完成したら、`.gallery` 内の画像が画面幅に応じて 4 列 → 3 列 → 2 列 → 1 列と折り返されることを確認します。
+
+### よくあるつまずき
+
+- `grid-template-columns` を親ではなく子要素に書いてしまう。Grid の指定は **並べたい要素を包む親** に付けます。
+- `auto-fit` と `auto-fill` を混同する。今回は `auto-fit`（余った幅を既存の列で分け合う）を使います。`auto-fill` だと「空の列を作って詰める」挙動になり、1〜2 個しかカードがないときに妙に細く見えることがあります。
+- `gap` が効かない → 親に `display: grid` が付いていない。まず親のセレクタに `display: grid` があるか確認する。
 
 ## まとめ
 
-- 外部 JS は `<head>` に `<script defer src="...">` で読み込む
-- `console.log(...)` は DevTools の Console にログを出す
-- 変数は `const`（書き換え不可）を基本にし、必要なときだけ `let` を使う
-- `<script defer>` は以降すべてのレッスンで標準形として使い続ける
+- Flexbox は一次元、Grid は二次元のレイアウトに向く。カードを敷き詰めたいときは Grid が楽。
+- `display: grid` と `grid-template-columns` で列を定義する。`fr` 単位で比率、`repeat()` で繰り返し、`minmax()` で最小幅を指定できる。
+- `repeat(auto-fit, minmax(250px, 1fr))` は「画面幅に応じて列数が自動で切り替わる」定番パターン。`@media` なしでレスポンシブになる。
+- 次の lesson13 では、`position` を使って要素を「通常の流れから切り離して」任意の位置に配置する方法を学ぶ。

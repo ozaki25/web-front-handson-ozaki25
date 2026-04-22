@@ -1,74 +1,159 @@
-# lesson25: TODO アプリを作る（ミニ統合）
+# lesson25: import / export でモジュール化
 
 ## ゴール
 
-- 章 2 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
-- 入力・追加・削除できる TODO アプリを HTML + JS で完成させる
-- `localStorage` に保存して、リロードしても残るようにする
-- 後続章で進化させる共通題材として、最終形を StackBlitz に保存する
+- JS ファイルを複数に分割して、`import` と `export` で繋げられる
+- 名前付き export と `export default` の違いを使い分けられる
+- `<script type="module">` を使ってモジュールを読み込める
+- TODO アプリのロジックを `storage.js` / `render.js` / `main.js` の 3 ファイルに分割できる
 
 ## 解説
 
-ここまでのレッスンで積み上げてきた道具で、実際に動く小さなアプリを組み立てます。新しい概念は 1 つだけ: **`localStorage`** です。
+### なぜファイルを分けるのか
 
-### `localStorage` とは
+1 つの `script.js` に全部書いていくと、だんだん「どの処理がどこにあるか」がわからなくなります。
 
-ブラウザが提供する「文字列を保存しておける箱」です。ページを閉じてもデータは残り、次に同じページを開いたときに読み出せます。
+- 保存 / 読み込みのロジック
+- 画面への描画ロジック
+- イベントを受け取るエントリーポイント
 
-```js
-localStorage.setItem("key", "value"); // 保存
-const v = localStorage.getItem("key"); // 取り出し（なければ null）
+これらを **役割ごとに別ファイルに分けておく** と、1 ファイルあたりの責任が小さくなり、読みやすくなります。これを **モジュール化** と呼びます。
+
+### モジュールとして読み込む: `type="module"`
+
+HTML から JS ファイルを読み込むとき、通常の `<script>` ではなく `<script type="module">` を使います。こうすると、その JS ファイルは「モジュール」として扱われ、`import` / `export` が使えるようになります。
+
+```html
+<script type="module" src="./main.js"></script>
 ```
 
-- 保存できるのは **文字列だけ**
-- 配列やオブジェクトをそのまま入れることはできない
+- `type="module"` を付けないと `import` / `export` は使えない
+- `defer` を付けなくても、モジュールは自動的に遅延読み込みされる
 
-### `JSON.stringify` / `JSON.parse`
+### export（外に出す）
 
-配列やオブジェクトを文字列に変換 / 戻すための道具です。
+他のファイルから使ってほしい関数や値は、`export` で外に出します。書き方は 2 種類あります。
 
-```js
-const todos = [{ id: "1", text: "A" }, { id: "2", text: "B" }];
+#### 名前付き export
 
-const str = JSON.stringify(todos);
-// '[{"id":"1","text":"A"},{"id":"2","text":"B"}]'
-
-const back = JSON.parse(str);
-// [{ id: "1", text: "A" }, { id: "2", text: "B" }]
-```
-
-- `JSON.stringify(値)`: JS のデータを JSON 文字列に
-- `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
-
-`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **lesson22 で学んだ `try` / `catch` で囲む** のが安全です。
-
-### id をユニークに作る
-
-削除のたびに「どの TODO を消したか」を判断するために、各 TODO には **一意な id** を持たせます。ブラウザ標準の `crypto.randomUUID()` を使うと、衝突しない id 文字列が手に入ります。
+**その名前のまま** 外に出します。1 つのファイルから複数の値を出すときに向きます。
 
 ```js
-const id = crypto.randomUUID();
-// 例: "8a7c3f...-...-..."
+// math.js
+export function add(a, b) {
+  return a + b;
+}
+
+export function sub(a, b) {
+  return a - b;
+}
+
+export const PI = 3.14;
 ```
 
-### 画面構成
+まとめて最後に書くこともできます。どちらでも動きます。
 
-完成系は以下の構造です。
+```js
+// math.js
+function add(a, b) {
+  return a + b;
+}
+function sub(a, b) {
+  return a - b;
+}
+const PI = 3.14;
 
-- 画面上部: 入力欄 `<input>` と「追加」ボタン
-- 下部: TODO 一覧 `<ul>`（各行は `<li>` で、テキストと「削除」ボタンを含む）
+export { add, sub, PI };
+```
 
-新しい TODO を追加すると一覧の末尾に `<li>` が 1 件増え、削除ボタンを押すとその行だけが消えます。リロードしてもデータが残ります。
+#### デフォルト export
+
+ファイルから **「主役となる 1 つ」だけを出す** 書き方です。1 ファイルにつき 1 つだけ書けます。
+
+```js
+// greeter.js
+export default function greet(name) {
+  return `こんにちは、${name} さん`;
+}
+```
+
+### import（読み込む）
+
+別のファイルから `export` したものを受け取ります。パスの末尾には **`.js` まで書きます**（ブラウザで動かすときの決まり）。
+
+#### 名前付き import
+
+`{ }` で囲んで、export したときと同じ名前で受け取ります。
+
+```js
+// main.js
+import { add, sub, PI } from "./math.js";
+
+console.log(add(1, 2)); // 3
+console.log(sub(5, 3)); // 2
+console.log(PI);        // 3.14
+```
+
+- `{ add, sub }` のように必要なものだけ受け取れる
+- 名前は export 側と **同じ** にする
+
+#### デフォルト import
+
+`{ }` を付けず、好きな名前で受け取れます。
+
+```js
+// main.js
+import greet from "./greeter.js";
+
+console.log(greet("Alice")); // "こんにちは、Alice さん"
+```
+
+- `{ }` を付けない
+- 名前は自由に決められる（`greet` でも `hello` でも動く）
+
+#### 名前付きとデフォルトの混在
+
+同じファイルから両方 import することもできます。
+
+```js
+import greet, { PI } from "./greeter.js";
+```
+
+### 使い分けの目安
+
+- **複数の関数 / 値を出すファイル** → 名前付き export（本コースではこちらを基本に）
+- **主役が 1 つだけのファイル**（例: 1 つのコンポーネント） → デフォルト export
+
+どちらが正解ということはなく、プロジェクトの方針で決めます。本コースでは **名前付き export を基本** にします。
+
+### `.js` 拡張子は省略しない
+
+Node.js のパッケージ開発では省略されることもありますが、**ブラウザで直接読み込むときは `.js` まで書きます**。
+
+```js
+// OK
+import { add } from "./math.js";
+
+// NG（ブラウザで 404 になる）
+import { add } from "./math";
+```
 
 ## 演習
 
-本レッスンは **3 段構え** です。各段でコミット（ファイル保存）して、次の段に進みます。
+### ゴール
 
-### 共通: HTML と CSS
+- TODO アプリのロジックを 3 ファイルに分割する
+  - `storage.js`: `localStorage` に配列を保存 / 読み出し（`JSON.parse` は `try` / `catch` で囲む）
+  - `render.js`: 配列を受け取って `<ul>` に `<li>` を並べる
+  - `main.js`: 2 つを import して、画面の初期描画だけを行うエントリ
+- 画面を開くと、`storage.js` に仕込んだ初期データが `<ul>` に並んで表示される
 
-3 段を通して使います。
+### 手順
 
-#### `index.html`
+1. 以下 4 ファイルをプロジェクトに作る: `index.html` / `main.js` / `storage.js` / `render.js`
+2. HTML から `<script type="module" src="./main.js">` を読み込む
+
+### `index.html`
 
 ```html
 <!DOCTYPE html>
@@ -76,214 +161,24 @@ const id = crypto.randomUUID();
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson25 TODO</title>
-    <link rel="stylesheet" href="./style.css" />
-    <script defer src="./script.js"></script>
+    <title>lesson25</title>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>TODO</h1>
-
-    <form id="form">
-      <input id="input" type="text" placeholder="やることを入力" />
-      <button type="submit">追加</button>
-    </form>
-
+    <h1>lesson25: import / export</h1>
     <ul id="list"></ul>
   </body>
 </html>
 ```
 
-#### `style.css`
+### `storage.js`
 
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-  max-width: 480px;
-}
-
-#form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-#input {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 1rem;
-}
-
-button {
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-#list {
-  list-style: none;
-  padding: 0;
-}
-
-#list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #ddd;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  #input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  #list li {
-    border-bottom-color: #444;
-  }
-}
-```
-
-### ステップ 1: 入力 + 一覧表示
-
-まずは追加だけを作ります。削除や localStorage はまだ考えません。
-
-#### `script.js`（ステップ 1）
-
-**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（lesson19 で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、章 4 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、章 2 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、lesson27 で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
 
 ```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-let todos = [];
-
-function render() {
-  list.textContent = ""; // 一度空にする
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    list.appendChild(li);
-  }
-}
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  input.value = "";
-  render();
-});
-
-render();
-```
-
-#### 期待出力（ステップ 1）
-
-- 入力欄に「牛乳を買う」と入力して「追加」を押す → `<ul>` の末尾に `牛乳を買う` の `<li>` が 1 件増える
-- さらに「本を読む」を追加 → 2 件目が末尾に並ぶ
-- 入力欄に何も入れずに「追加」を押しても何も起きない（空文字は弾く）
-- **リロードすると全部消える**（localStorage はまだ使っていない）
-
-ここでいったんファイルを保存（コミット相当）します。
-
-### ステップ 2: 削除ボタンを追加
-
-各 `<li>` に「削除」ボタンを付け、lesson20 の `filter` を使って対象を取り除きます。
-
-#### `script.js`（ステップ 2）
-
-```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-let todos = [];
-
-function render() {
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-
-    const span = document.createElement("span");
-    span.textContent = todo.text;
-    li.appendChild(span);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "削除";
-    deleteBtn.addEventListener("click", () => {
-      todos = todos.filter((t) => t.id !== todo.id);
-      render();
-    });
-    li.appendChild(deleteBtn);
-
-    list.appendChild(li);
-  }
-}
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  input.value = "";
-  render();
-});
-
-render();
-```
-
-#### 期待出力（ステップ 2）
-
-- 各行に「削除」ボタンが付いている
-- 「削除」を押すとその行だけが消える（他の行は残る）
-- 3 件追加 → 真ん中の「削除」を押すと、その 1 件だけ消える
-- リロードするとまだ全部消える（localStorage はまだ）
-
-ここでもう一度保存（2 回目のコミット相当）します。
-
-### ステップ 3: `localStorage` で保存・復元
-
-最終形です。TODO の変更があるたびに localStorage に保存し、起動時に読み戻します。
-
-#### `script.js`（最終形）
-
-```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
 const STORAGE_KEY = "lesson25-todos";
 
-function loadTodos() {
+export function loadTodos() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw === null) {
     return [];
@@ -301,77 +196,94 @@ function loadTodos() {
   }
 }
 
-function saveTodos() {
+export function saveTodos(todos) {
   localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
 }
+```
+
+- `loadTodos()`: 保存されている配列を返す。なければ空配列、壊れていても空配列
+- `saveTodos(todos)`: 配列を文字列に変えて保存
+
+### `render.js`
+
+DOM への描画だけを担当します。「どこに描くか」と「何を描くか」を引数で受け取れるようにしておくと、画面構成が変わっても中身を書き直さずに済みます。
+
+```js
+export function renderTodos(listElement, todos) {
+  listElement.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    listElement.appendChild(li);
+  }
+}
+```
+
+- `listElement.textContent = ""` で一度中身を空にする
+- 配列の各要素に対して `<li>` を作って `<ul>` に追加する
+
+### `main.js`
+
+エントリーポイントです。`storage.js` と `render.js` を import して、初期データがあれば描画、なければ動作確認用の初期データを入れて保存します。
+
+```js
+import { loadTodos, saveTodos } from "./storage.js";
+import { renderTodos } from "./render.js";
+
+const list = document.querySelector("#list");
 
 let todos = loadTodos();
 
-function render() {
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-
-    const span = document.createElement("span");
-    span.textContent = todo.text;
-    li.appendChild(span);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "削除";
-    deleteBtn.addEventListener("click", () => {
-      todos = todos.filter((t) => t.id !== todo.id);
-      saveTodos();
-      render();
-    });
-    li.appendChild(deleteBtn);
-
-    list.appendChild(li);
-  }
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "本を読む" },
+    { id: "a3", text: "掃除する" },
+  ];
+  saveTodos(todos);
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  saveTodos();
-  input.value = "";
-  render();
-});
-
-render();
+renderTodos(list, todos);
 ```
 
-#### 期待出力（最終形）
+- 2 つのファイルから必要な関数を **名前付き import** で受け取る
+- 初回起動時だけ、動作確認用のサンプルデータを保存する
+- `renderTodos` に `<ul>` 要素と配列を渡して描画
 
-- 3 件追加 → リロード → 3 件がそのまま表示される
-- 削除 → リロード → 削除後の状態が残る
-- 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
-- DevTools の Application（または Storage）タブ → Local Storage の項目で `lesson25-todos` に JSON 文字列が入っているのが確認できる
-- Console で `localStorage.setItem("lesson25-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
+### 期待出力
+
+- 画面に以下の 3 行が `<ul>` の中に並ぶ
+
+```
+牛乳を買う
+本を読む
+掃除する
+```
+
+- DevTools の Application（または Storage）タブ → Local Storage に `lesson25-todos` というキーで JSON 文字列が保存されている
+- Console で `localStorage.setItem("lesson25-todos", "{ broken")` と壊れた文字列をわざと入れてリロード → Console に「保存データの読み込みに失敗しました」と出て、サンプルデータで起動し直される（`try` / `catch` の効果）
+- Console に `Uncaught SyntaxError: Cannot use import statement outside a module` が **出ない** ことを確認（出ていたら `<script type="module">` になっていない）
 
 ### 変える
 
-- `STORAGE_KEY` を好きな名前に変える → 以前の保存と別扱いになり、リストが空から始まる
-- 追加時に `todos = [...todos, newTodo]` を `todos = [newTodo, ...todos]` に変えて、新しいものが先頭に来るようにする
-- 入力値の前後の空白を許すように、`trim()` を外してみる（半角スペースだけで追加できてしまう）
+- `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `lesson25-todos` を削除してからリロードすると、新しいサンプルが表示される
+- `renderTodos` の `textContent` を `textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
+- `main.js` で `renderTodos(list, todos)` を呼ばないようにコメントアウト → `<ul>` が空のまま
 
 ### 自分で書く
 
-- 「すべて削除」ボタンを追加し、押すと `todos = []` にして保存・再描画する
-- 各 `<li>` をクリックすると `classList.toggle("done")` が切り替わり、CSS で打ち消し線を付ける（打ち消し線の状態自体は保存しなくてよい）
-- 現在の件数を「全 N 件」として画面上部に表示する
+- `storage.js` に `clearTodos()` という関数を追加して export する。中身は `localStorage.removeItem(STORAGE_KEY)` だけ。`main.js` から import して、ページ読み込み時に 1 回呼んでみる（動作確認したら外す）
+- `render.js` を **デフォルト export** に書き換える（`export default function renderTodos(...) { ... }`）。`main.js` 側の import を `import renderTodos from "./render.js";` に変えて、同じ動きをすることを確認する
+- 新しいファイル `format.js` を作り、`export function formatTodo(todo) { return `[${todo.id}] ${todo.text}`; }` を書く。`render.js` の中で import して、`<li>` に整形後の文字列を表示する
 
 ## まとめ
 
-- TODO アプリの最小構成は **配列の state + `render` 関数 + イベントハンドラ** で作れる
-- 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
-- `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
-- `JSON.parse` は失敗しうるので `try` / `catch` で囲む
-- **この TODO アプリは章 4 lesson42 で React 版に進化し、章 5 lesson50〜52 で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく
+- ファイルを役割ごとに分けると、読みやすく・変更しやすくなる
+- ブラウザで `import` / `export` を使うには `<script type="module" src="...">` で読み込む
+- **名前付き export**（`export function foo() {}`）と **デフォルト export**（`export default ...`）の 2 種類
+- **名前付き import** は `{ 名前 }` で受け取り、名前は export と同じにする
+- **デフォルト import** は `{ }` なしで、受け取り側で名前を自由に決められる
+- ブラウザで直接読み込む場合、import パスの末尾は **`.js` まで書く**
+- 本コースは **名前付き export を基本** とする
+- 次の **lesson26 〜 lesson29 で非同期・DOM・イベントを学び、lesson30 で今日作った 3 ファイル構成（`storage.js` / `render.js` / `main.js`）の TODO をそのまま出発点にして、追加・削除・永続化まで仕上げます**。今日作ったファイルは消さずに残しておいてください
+- **ここで体験した「役割ごとにファイルを分ける」発想は、章 4 lesson43（コンポーネントと props）で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります

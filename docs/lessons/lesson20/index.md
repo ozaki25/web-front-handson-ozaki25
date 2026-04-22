@@ -1,147 +1,86 @@
-# lesson20: 配列の変換
+# lesson20: 関数
 
 ## ゴール
 
-- `map` で配列の各要素を変換した新しい配列を作れる
-- `filter` で条件に合う要素だけを残した新しい配列を作れる
-- いずれも元の配列を変えない（新しい配列を返す）ことを理解する
+- `function` 宣言で関数を定義できる
+- アロー関数でも関数を定義できる
+- 引数と戻り値（`return`）を使える
 
 ## 解説
 
-### 「全部変換する」`map`
+### 関数とは
 
-`map` は配列の各要素に関数を適用して、結果を並べた **新しい配列** を返します。
+「決まった処理をまとめて名前をつけたもの」が関数です。同じ処理を何度も書く代わりに、関数を 1 つ作っておけば、名前を呼ぶだけで再利用できます。
 
-```js
-const numbers = [1, 2, 3, 4];
-const doubled = numbers.map((n) => n * 2);
+### `function` 宣言
 
-console.log(doubled); // [2, 4, 6, 8]
-console.log(numbers); // [1, 2, 3, 4] （元は変わらない）
-```
-
-- `配列.map((要素) => 新しい値)`
-- 戻り値は **同じ長さの新しい配列**
-- 元の配列は変わらない
-
-オブジェクトの配列でもよく使います。
+一番シンプルな書き方です。
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-];
+function greet(name) {
+  console.log(`こんにちは、${name} さん`);
+}
 
-const names = users.map((user) => user.name);
-console.log(names); // ["Alice", "Bob"]
+greet("Alice");
+greet("Bob");
 ```
 
-### 「条件で絞り込む」`filter`
+- `function 関数名(引数) { ... }` で定義
+- `関数名(値)` で呼び出す
+- 引数は「関数に渡す値」、関数の中では受け取った名前（`name`）で使う
 
-`filter` は条件を満たす要素だけを残した **新しい配列** を返します。
+### `return` で値を返す
+
+関数は「処理をする」だけでなく「結果を返す」こともできます。
 
 ```js
-const numbers = [1, 2, 3, 4, 5];
-const evens = numbers.filter((n) => n % 2 === 0);
+function add(a, b) {
+  return a + b;
+}
 
-console.log(evens);   // [2, 4]
-console.log(numbers); // [1, 2, 3, 4, 5]
+const result = add(1, 2);
+console.log(result); // 3
 ```
 
-- `配列.filter((要素) => 条件)`
-- 条件が `true` の要素だけが残る
-- 戻り値は **同じかそれより短い新しい配列**
-- 元の配列は変わらない
+- `return 値` で呼び出し元に結果を返す
+- `const result = add(1, 2)` のように、戻り値を変数に受け取れる
 
-オブジェクトの配列で絞り込む例。
+`return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
+
+### アロー関数
+
+もう 1 つの書き方がアロー関数です。lesson19 の `forEach` で一度出てきました。
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
+const add = (a, b) => {
+  return a + b;
+};
 
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-// [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
+console.log(add(1, 2)); // 3
 ```
 
-### `for...of` との違い
+- `(引数) => { ... }` の形
+- 変数に入れて使う（`const 関数名 = (引数) => { ... }`）
 
-lesson16 の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
-
-- 「変換 / 絞り込み」という **意図が名前で伝わる**
-- 結果が新しい配列で返るので、元の配列を壊さない
-- 1 行で書けて短い
-
-特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
-
-### 「1 件だけ取り出す」`find`
-
-`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
+波かっこの中で「計算 → 即 return」だけしたいときは、波かっこと `return` を省略できます。
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
-
-const found = users.find((user) => user.age >= 20);
-console.log(found); // { name: "Alice", age: 20 }
-
-const missing = users.find((user) => user.age >= 100);
-console.log(missing); // undefined
+const add = (a, b) => a + b;
+console.log(add(1, 2)); // 3
 ```
 
-- `配列.find((要素) => 条件)`
-- 戻り値は **1 件の要素**（配列ではない）
-- 該当がなければ `undefined`
-- `filter` と違って、見つけた時点で走査を打ち切る
+本コースでは、まず **両方の書き方を読める** ことを目指します。書き分けは後から慣れで身につきます。
 
-ID で目的の 1 件を取り出すような場面でよく使います。
+### どちらを使う？
 
-```js
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-];
-
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target); // { id: "a2", text: "本を返す" }
-```
-
-章 5 lesson48 で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
-
-### チェーン（つなげて書く）
-
-`map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-
-console.log(adultNames); // ["Alice", "Carol"]
-```
-
-「成人だけ絞り込んでから、名前だけ取り出す」という流れが素直に書けます。
+どちらでも動きます。近年のコードはアロー関数が多いですが、`function` 宣言も十分使われます。本コースでは混ぜて使うので、どちらも読めるようにしておきます。
 
 ## 演習
 
 ### ゴール
 
-- ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
-- ユーザー配列から「名前だけ」の配列を作る
-- 2 つを組み合わせて「成人の名前だけ」の配列を作る
-- ID で TODO の 1 件を取り出す（`find`）
+- 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く
+- 関数に挨拶文を作ってもらう
 
 ### 手順
 
@@ -160,7 +99,7 @@ console.log(adultNames); // ["Alice", "Carol"]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson20: 配列の変換</h1>
+    <h1>lesson20: 関数</h1>
   </body>
 </html>
 ```
@@ -168,76 +107,61 @@ console.log(adultNames); // ["Alice", "Carol"]
 ### `script.js`
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-  { name: "Dave", age: 17 },
-];
+function add(a, b) {
+  return a + b;
+}
 
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
+const addArrow = (a, b) => {
+  return a + b;
+};
 
-const names = users.map((user) => user.name);
-console.log(names);
+const addShort = (a, b) => a + b;
 
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-console.log(adultNames);
+console.log(add(1, 2));
+console.log(addArrow(10, 20));
+console.log(addShort(100, 200));
 
-const numbers = [1, 2, 3, 4, 5];
-const doubled = numbers.map((n) => n * 2);
-const evens = numbers.filter((n) => n % 2 === 0);
-console.log(doubled);
-console.log(evens);
-console.log(numbers);
+function greet(name) {
+  return `こんにちは、${name} さん`;
+}
 
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-  { id: "a3", text: "ゴミを出す" },
-];
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target);
+const message = greet("Alice");
+console.log(message);
+console.log(greet("Bob"));
 
-const missing = todos.find((todo) => todo.id === "zzz");
-console.log(missing);
+function introduce(name, age) {
+  return `${name}（${age} 歳）です`;
+}
+
+console.log(introduce("Carol", 30));
 ```
 
 ### 期待出力
 
 ```
-[{name: "Alice", age: 20}, {name: "Carol", age: 30}]
-["Alice", "Bob", "Carol", "Dave"]
-["Alice", "Carol"]
-[2, 4, 6, 8, 10]
-[2, 4]
-[1, 2, 3, 4, 5]
-{id: "a2", text: "本を返す"}
-undefined
+3
+30
+300
+こんにちは、Alice さん
+こんにちは、Bob さん
+Carol（30 歳）です
 ```
-
-最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
 
 ### 変える
 
-- `filter` の条件を `user.age < 20` に変えて「未成年」を取り出す
-- `map` を `(user) => user.age` に変えて「年齢だけ」の配列を作る
-- チェーンの `filter` と `map` の順番を入れ替えるとどうなるか考える（先に `map` で名前にしてしまうと `user.age` が使えなくなる）
+- `add` の中身を `a - b` に変える → Console の 1 行目が `-1` になる
+- `greet` に挨拶の文言 2 種類（朝と夜）を引数で受け取るように変える（`function greet(name, word) { return `${word}、${name} さん`; }`）
+- `introduce` で `return` を書き忘れるとどうなるか確認する（`console.log` で `undefined` が表示される）
 
 ### 自分で書く
 
-- 数値配列 `[10, 25, 7, 42, 3]` から「10 以上のものだけ」を残す → `[10, 25, 42]`
-- 文字列配列 `["apple", "banana", "cherry"]` から「すべて大文字に変えた新しい配列」を作る（ヒント: `s.toUpperCase()`）→ `["APPLE", "BANANA", "CHERRY"]`
-- TODO の配列 `[{ id: "1", text: "A" }, { id: "2", text: "B" }, { id: "3", text: "C" }]` から `id: "2"` だけを除いた新しい配列を作る（`filter` を使う）
+- 3 つの数を合計する関数 `sum3(a, b, c)` を書く
+- 1 つの数を受け取って「偶数」または「奇数」を返す関数 `evenOrOdd(n)` を書く（ヒント: `n % 2 === 0` で偶数判定）
+- 名前と点数を受け取り、点数が 60 以上なら「○○ さんは合格」、そうでなければ「○○ さんは不合格」を返す関数 `judge(name, score)` を書く
 
 ## まとめ
 
-- `map` は「同じ長さの新しい配列を作る」変換
-- `filter` は「条件で絞り込んだ新しい配列を作る」抽出
-- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
-- どれも元の配列は変えない
-- チェーンすると複数の処理を 1 行でつなげられる
-- **`find` は章 5 lesson48（動的ルートの詳細取得、URL の `id` から 1 件取り出す）で再登場する**
-- **`map` は章 4 lesson35 で JSX の配列を作る形で再登場する**
+- 関数は「処理に名前をつけて再利用するしくみ」
+- 書き方は 2 種類: `function 関数名(...) { ... }` とアロー関数 `(...) => { ... }`
+- `return` で値を返し、呼び出し元で `const 変数 = 関数(...)` で受け取れる
+- 引数は複数渡せる

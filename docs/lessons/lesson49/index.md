@@ -1,220 +1,258 @@
-# lesson49: エラーと見つからないページ
+# lesson49: 条件で出し分ける
 
 ## ゴール
 
-- レンダリング中に発生した例外を `error.tsx` で捕まえて、壊れた画面の代わりにエラー画面を出せます。
-- `notFound()` を呼んで `not-found.tsx` を表示できます。
-- `error.tsx` が担当する範囲と、Server Actions のフォームエラー（次の lesson51）の担当範囲が **別物** であることを理解しています。
+- `&&` / 三項演算子 / 早期 return の 3 パターンを使い分けて、状態に応じた表示切り替えができる
+- それぞれの使いどころを説明できる
 
 ## 解説
 
-### ページの事故を 2 種類に分ける
+### JSX は式だから、分岐も式で書く
 
-Web アプリで出会う「いつもの画面が出ない」状況は、Next.js では次の 2 つに分けて扱います。
+lesson42 で触れたとおり、JSX の `{ ... }` に書けるのは **式** だけです。`if` 文は書けません。なので、条件で出し分けるときも**式の形**を使います。
 
-1. **存在しない URL / データ**: 記事 ID が存在しない、ユーザーが削除済みなど。→ `not-found.tsx`
-2. **実行中の例外**: fetch が失敗、`throw new Error(...)` が飛んだ、など。→ `error.tsx`
+よく使うのは次の 3 つです。
 
-この 2 つをそれぞれ専用のファイルで受け止めます。
+1. `条件 && <JSX />`
+2. `条件 ? <A /> : <B />`
+3. 関数の先頭で `if` を使って早期 return
 
-### `not-found.tsx` と `notFound()`
+### (1) `&&` で「あるときだけ出す」
 
-該当データが見つからないときは、**`next/navigation`** から `notFound()` 関数を呼び出します。すると同じディレクトリ（またはその上位ディレクトリ）の `not-found.tsx` が表示されます。
-
-```
-app/
-└── posts/
-    └── [id]/
-        ├── page.tsx
-        └── not-found.tsx
-```
+「条件が真のときだけ表示する / 偽なら何も出さない」は `&&` が定番です。
 
 ```tsx
-// app/posts/[id]/page.tsx
-import { notFound } from "next/navigation";
-
-export default async function PostPage({ params }: Props) {
-  const { id } = await params;
-  // ...探す
-  const post = posts.find((p) => String(p.id) === id);
-  if (!post) {
-    notFound(); // ここで実行は止まり、not-found.tsx に切り替わる
-  }
-  return <div>{post.title}</div>;
+{
+  isLoggedIn && <p>ログイン中</p>;
 }
 ```
 
-- `notFound()` は呼ぶだけで良いです。`return` は書きません（書いても問題はありませんが、`notFound()` が例外を投げる仕組みで実行を止めるため、それ以降は走りません）。
-- `not-found.tsx` はそのディレクトリに置きます。上位のディレクトリに置いておけば、配下のページ全部で共通利用できます。
+- `isLoggedIn` が `true` なら `<p>ログイン中</p>` が評価されて表示される
+- `isLoggedIn` が `false` なら `false` が評価結果になり、JSX としては何も描画されない
 
-### `error.tsx`
+#### `&&` の落とし穴（数値 0）
 
-レンダリング中に `throw` された例外を捕まえるのが `error.tsx` です。**Client Component として書く必要があります**（`"use client"` が必要です）。エラーの情報とリトライ関数を props で受け取ります。
-
-```
-app/
-└── posts/
-    └── [id]/
-        ├── page.tsx
-        └── error.tsx
-```
+`&&` の左側には **本当に真偽値** を置くようにしてください。数値の `0` を書くと、そのまま `0` が画面に表示されてしまいます。
 
 ```tsx
-"use client";
+{
+  count && <p>{count} 件あります</p>;
+}
+// count が 0 だと、画面に「0」という数字が出てしまう
+```
 
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
+件数のような**数値**で判定したいときは、明示的に真偽値に変換します。
+
+```tsx
+{
+  count > 0 && <p>{count} 件あります</p>;
+}
+```
+
+`string` や `Todo[]` は `length === 0` を意識しつつ、迷ったら三項演算子を使うとより安全です。
+
+### (2) 三項演算子で「A か B か」
+
+「ログイン中なら A、ログアウト中なら B を表示」のように **2 択** で切り替えたいときは三項演算子が素直です。
+
+```tsx
+{
+  isLoggedIn ? <p>ログイン中</p> : <a href="/login">ログインへ</a>;
+}
+```
+
+- `isLoggedIn` が `true` なら左側、`false` なら右側が表示される
+
+3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次の 3 番目の方が読みやすいです。
+
+### (3) 早期 return
+
+関数の**一番上**で条件判定して、不要な場合は `return` してしまう書き方です。
+
+```tsx
+type MessageProps = {
+  text: string;
 };
 
-export default function Error({ error, reset }: Props) {
-  return (
-    <div>
-      <h1>問題が発生した</h1>
-      <p>{error.message}</p>
-      <button onClick={reset}>もう一度試す</button>
-    </div>
-  );
+function Message({ text }: MessageProps) {
+  if (text.length === 0) {
+    return null; // null を返すと「何も描画しない」
+  }
+  return <p>{text}</p>;
 }
 ```
 
-- 1 行目に `"use client"` を書きます。
-- `error` は `Error` オブジェクトです。本番ビルドでは `message` は潰されます（情報漏れ防止）。開発中は読めます。
-- `reset()` を呼ぶとページを再レンダリングしようとします。
+- `null` を `return` すると、そのコンポーネントは **何も描画しない**
+- 条件が多い場合は、三項や `&&` を重ねるより圧倒的に読みやすい
 
-### `error.tsx` の範囲は「レンダリング中」
+ローディング中専用のスピナー、エラー時専用のメッセージ、3 択以上の状態分岐など、分岐ごとに違う大きな JSX を返したい場合に使うとスッキリします。
 
-ここが混同しやすいポイントです。**`error.tsx` はレンダリング中の例外だけを拾います**。
+### 小さなコンポーネントに分ける発想
 
-- Server Component の中で `throw` / `fetch` 失敗 → `error.tsx` で拾えます。
-- Server Actions のフォーム送信で「空入力」のようなバリデーションエラー → `error.tsx` では **拾いません**。
+条件が重なってきたら、「サブコンポーネントに切り出す」ことも考えます。
 
-Server Actions のフォームエラーは、例外を投げる代わりに **戻り値でエラー情報を返す** 設計になっています。次の lesson51 で扱う `useActionState` がその受け皿です。フォーム送信のエラーを `error.tsx` に落とそうとしても動かないので、混同しないでください。
+```tsx
+function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
+  if (isLoggedIn) {
+    return <p>ようこそ！</p>;
+  }
+  return <a href="/login">ログイン</a>;
+}
 
-まとめると:
+// 呼び出し側
+<UserStatus isLoggedIn={isLoggedIn} />;
+```
 
-| 事故の種類 | 担当 |
-|---|---|
-| 存在しない ID / ユーザー | `notFound()` + `not-found.tsx` |
-| fetch 失敗・レンダリング中の `throw` | `error.tsx` |
-| フォームの入力エラー | lesson51 の `useActionState`（戻り値） |
+1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは lesson50 以降で使っていきます。
 
 ## 演習
 
-### 前回のプロジェクトを開く
+### ゴール
 
-lesson48 で作ったプロジェクトを開き直しましょう。
+- ログイン / ログアウトの状態で表示を切り替える画面を作る
+- `&&` / 三項 / 早期 return の 3 パターンそれぞれを、別の箇所で 1 回ずつ書く
 
-### 手順 1: `not-found.tsx` を置く
+### 手順
 
-`app/posts/[id]/not-found.tsx` を新規作成します。
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/App.tsx` と `src/Message.tsx` を書く
 
-```tsx
-import Link from "next/link";
-
-export default function NotFound() {
-  return (
-    <>
-      <h1>記事が見つからない</h1>
-      <p>指定された ID の記事は存在しない。</p>
-      <Link href="/posts">一覧に戻る</Link>
-    </>
-  );
-}
-```
-
-### 手順 2: 詳細ページで `notFound()` を呼ぶ
-
-`app/posts/[id]/page.tsx` を書き換えます。見つからないときは `notFound()` を呼ぶ形に変更します。
+### `src/Message.tsx`
 
 ```tsx
-import { notFound } from "next/navigation";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
+type MessageProps = {
+  text: string;
 };
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PostPage({ params }: Props) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    notFound();
+export function Message({ text }: MessageProps) {
+  // 早期 return: 空文字なら何も描画しない
+  if (text.length === 0) {
+    return null;
   }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
+  return <p className="message">{text}</p>;
 }
 ```
 
-### 手順 3: `error.tsx` を置く
-
-`app/posts/[id]/error.tsx` を新規作成します。
+### `src/App.tsx`
 
 ```tsx
-"use client";
+import { useState } from "react";
+import { Message } from "./Message";
+import "./App.css";
 
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
-};
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [memo, setMemo] = useState("");
 
-export default function Error({ error, reset }: Props) {
   return (
     <>
-      <h1>読み込み中に問題が発生した</h1>
-      <p>{error.message}</p>
-      <button onClick={reset}>もう一度試す</button>
+      <h1>条件表示のデモ</h1>
+
+      <section className="box">
+        <h2>(A) 三項演算子: ログイン状態で切り替え</h2>
+        {isLoggedIn ? (
+          <p>ようこそ、Alice さん</p>
+        ) : (
+          <p>ゲストさん、こんにちは</p>
+        )}
+        <button onClick={() => setIsLoggedIn((v) => !v)}>
+          {isLoggedIn ? "ログアウト" : "ログイン"}
+        </button>
+      </section>
+
+      <section className="box">
+        <h2>(B) && で「あるときだけ出す」</h2>
+        <p>未読: {unread}</p>
+        {unread > 0 && <p className="alert">{unread} 件の未読があります</p>}
+        <button onClick={() => setUnread((c) => c + 1)}>+1</button>
+        <button onClick={() => setUnread(0)}>既読にする</button>
+      </section>
+
+      <section className="box">
+        <h2>(C) 早期 return: Message コンポーネント</h2>
+        <input
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="空のままだと表示されない"
+        />
+        <Message text={memo} />
+      </section>
     </>
   );
 }
+
+export default App;
 ```
 
-### 手順 4: わざとエラーを起こす
+### `src/App.css`
 
-`app/posts/[id]/page.tsx` の fetch URL をタイポで壊します（例: `typicodee`）。
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
 
-```tsx
-const res = await fetch("https://jsonplaceholder.typicodee.com/posts");
+.box button {
+  margin-right: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.alert {
+  color: #b3261e;
+  font-weight: bold;
+}
+
+.message {
+  background-color: #eaf6ff;
+  padding: 6px 10px;
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+  .alert {
+    color: #ff7a6d;
+  }
+  .message {
+    background-color: #13344d;
+    color: #eee;
+  }
+}
 ```
-
-このままでは `res.json()` の手前で fetch が失敗し、例外が飛びます。`error.tsx` が表示されます。
 
 ### 期待出力
 
-1. `/posts/1` にアクセス → タイポ URL のせいで `error.tsx` の「読み込み中に問題が発生した」が表示されます。
-2. 「もう一度試す」ボタン → 同じエラーが再発します（URL を直さない限り）。
-3. URL を正しい `typicode.com` に戻して再読み込み → 通常どおり記事が表示されます。
-4. `/posts/999` にアクセス（存在しない ID）→ `not-found.tsx` の「記事が見つからない」と「一覧に戻る」リンクが表示されます。
-5. エラー画面と not-found 画面は **別のファイルで扱われている** ことを確認しましょう。
+- (A) ボタン「ログイン」を押すと、見出し下のメッセージが `ゲストさん、こんにちは` → `ようこそ、Alice さん` に変わる。ボタンの文言も `ログアウト` に変わる
+- (B) `+1` ボタンを押すと「未読」の数字が増え、**1 以上になると初めて** 「N 件の未読があります」が赤文字で現れる。`既読にする` を押すと数字が 0 になり、警告文も消える
+- (C) 入力欄に文字を入れると、下に水色背景の `<p>` が現れる。空にすると `<p>` ごと消える（`null` を返している）
 
-### 変えてみる
+### 変える
 
-1. `not-found.tsx` にイラストや再検索用のテキストを足して、よりユーザーに優しい表示にしましょう。
-2. `error.tsx` の「もう一度試す」の下に `<Link href="/">トップに戻る</Link>` を追加しましょう。
-3. `notFound()` を呼ぶ代わりに直接 `throw new Error("not found")` としてみましょう → `error.tsx` が出ることを確認します（`notFound()` を使わないと 404 ではなく 500 系扱いになる、という違いを体感できます）。
+- (B) の条件を `unread > 0 &&` から `unread &&` に書き換えて、未読 0 のときに **画面に `0` が表示される** 現象を再現する。確認したら戻す
+- (A) の三項を `&&` と `||` の組み合わせに書き換えてみる（余裕があれば）
+- (C) の `if (text.length === 0)` を `if (text === "")` に変えても同じ動きになることを確認
 
 ### 自分で書く
 
-「存在しないユーザー ID のときの `not-found.tsx`」を `/users/[id]/` 配下に自力で追加してみましょう（lesson48 の「自分で書く」で `/users/[id]/page.tsx` を作っていればその続きです）。見た目は posts 側と同じレベルで良いです。
+- 「ステータス」の state を `"offline" | "loading" | "online"` のユニオン型で作る
+- 値に応じて、`offline → 灰色の丸`、`loading → 黄色の丸 + "接続中..."`、`online → 緑の丸 + "接続済み"` を表示する
+- 3 択なので、早期 return か、または `switch` で `if ... return` を 3 本重ねる形がおすすめ
+- ヒント: `const [status, setStatus] = useState<"offline" | "loading" | "online">("offline");`
 
 ## まとめ
 
-- 「見つからない」ときは `notFound()` + `not-found.tsx` です。
-- 「レンダリング中の例外」は `error.tsx` です（`"use client"` 必須）。
-- 2 つは担当範囲が違います。フォーム送信エラーはどちらでもなく、次の lesson50 / 51 で学ぶ `useActionState` の戻り値で扱います。
-- 次の lesson50 では、フォームをサーバー側の関数（Server Actions）で受け取る仕組みを作り始めます。
+- JSX の中に書けるのは式だけ。条件分岐も **式の形** で書く
+- `&&`: あるときだけ出す（ただし数値 0 に注意）
+- 三項演算子: 2 択の切り替え
+- 早期 return（`return null` を含む）: 3 択以上 / それぞれが大きいとき
+- 条件が増えてきたら **コンポーネント分割** も選択肢

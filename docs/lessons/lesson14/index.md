@@ -1,163 +1,245 @@
-# lesson14: 条件で分岐する
+# lesson14: Transition と hover アニメーション
+
+章 1 の締めくくりです。ここまでで作ってきた自己紹介ページに、**マウスを乗せたとき（hover）になめらかに変化する動き** を足します。また、動きが苦手な人への配慮として **`prefers-reduced-motion`** で動きを抑える書き方も学びます。
 
 ## ゴール
 
-- `if` / `else if` / `else` で処理を分けられる
-- `===` / `!==` で等しい / 等しくないを判定できる
-- `&&` / `||` / `!` を組み合わせて条件を書ける
+- `transition` プロパティで、CSS の値の変化をなめらかに補間できる。
+- `transition-property` / `transition-duration` / `transition-timing-function` の役割を説明できる。
+- `transform: translate` で要素を動かし、`transform: scale` で拡大縮小できる。
+- `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。
+- DevTools の Rendering タブで `prefers-reduced-motion: reduce` をエミュレートして動作確認できる。
 
 ## 解説
 
-### `if` の基本形
+### `transition` は「値の変化をなめらかにつなぐ」
 
-```js
-if (条件) {
-  // 条件が true のときに実行される
+通常、CSS の値が変わると **一瞬で** 切り替わります。たとえば `:hover` で色を変えると、マウスを乗せた瞬間にパッと色が変わります。
+
+`transition` プロパティを付けると、**値の変化に時間をかけて** くれます。結果として「ふわっと色が変わる」「じわっと位置が動く」ような演出ができます。
+
+```css
+.button {
+  background-color: #2563eb;
+  transition: background-color 200ms ease;
+}
+
+.button:hover {
+  background-color: #1d4ed8;
 }
 ```
 
-条件が「真（`true`）」のときだけ、波かっこの中が実行されます。「偽（`false`）」なら飛ばされます。
+この例では「`background-color` が変化するときだけ、200ms（= 0.2 秒）かけて `ease`（ゆっくり始まってゆっくり終わる）でつなぐ」という意味になります。
 
-### `else` と `else if`
+### `transition` の 4 つのパーツ
 
-「そうでないとき」は `else`、「別の条件も試したい」は `else if` を使います。
+`transition` は 4 つのサブプロパティをまとめたショートハンドです。
 
-```js
-if (age >= 20) {
-  console.log("成人");
-} else if (age >= 13) {
-  console.log("中高生");
-} else {
-  console.log("それ以外");
+| プロパティ | 意味 | 例 |
+|---|---|---|
+| `transition-property` | どのプロパティに掛けるか | `background-color`、`all`（全部） |
+| `transition-duration` | 何 ms / 何 s かけるか | `200ms`、`0.3s` |
+| `transition-timing-function` | 変化の緩急 | `ease`、`linear`、`ease-in-out` |
+| `transition-delay` | 変化が始まるまでの待ち時間 | `0s`、`100ms` |
+
+ショートハンドで書くと次のようになります（`delay` は省略可）。
+
+```css
+.button {
+  transition: background-color 200ms ease;
 }
 ```
 
-上から順に条件を見て、最初に `true` になったブロックだけが実行されます。どれも当てはまらなければ `else` が実行されます。
+複数のプロパティに別々の時間を掛けたいときはカンマ区切りで並べられます。
 
-### 比較演算子
-
-| 演算子 | 意味 |
-| --- | --- |
-| `===` | 等しい |
-| `!==` | 等しくない |
-| `>` | 左が右より大きい |
-| `>=` | 左が右以上 |
-| `<` | 左が右より小さい |
-| `<=` | 左が右以下 |
-
-等しいかどうかは **必ず `===` と `!==`** を使います。`==` と `!=` は値の種類が違っても自動で変換して比較する古い演算子で、混乱の原因になるため本コースでは使いません。
-
-### 論理演算子
-
-複数の条件をつなぎたいときに使います。
-
-| 演算子 | 意味 |
-| --- | --- |
-| `&&` | 両方とも `true` のとき `true` |
-| `\|\|` | どちらかが `true` なら `true` |
-| `!` | `true` と `false` を反転 |
-
-```js
-if (age >= 13 && age <= 19) {
-  console.log("10 代");
-}
-
-if (name === "" || name === null) {
-  console.log("名前が未入力");
-}
-
-if (!isStudent) {
-  console.log("学生ではない");
+```css
+.card {
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease;
 }
 ```
+
+最初のうちは、**`all 200ms ease`** と書いて「変化する全プロパティに同じ時間をかける」くらいで十分実用になります。
+
+```css
+.card {
+  transition: all 200ms ease;
+}
+```
+
+### `transform` で位置・拡大を変える
+
+`transition` と組み合わせるとよく使うのが `transform` です。
+
+- `transform: translateY(-4px)` → 要素を 4px 上に動かす。
+- `transform: scale(1.05)` → 要素を 1.05 倍（5% 大きく）に拡大する。
+- `transform: translateY(-4px) scale(1.05)` → 両方同時。
+
+`transform` の利点は、**レイアウトを壊さない** ことです。`margin-top: -4px` でも似た動きに見えますが、こちらは周囲の要素の位置計算に影響を与えます。`transform` は描画だけをズラすのでパフォーマンスもよく、アニメーションに向いています。
+
+### `prefers-reduced-motion` で動きを抑える
+
+動きのあるアニメーションは楽しい一方で、**乗り物酔い** のように画面の動きで気分が悪くなる人がいます。OS 側に「動きを減らす」設定があり（macOS の「視差効果を減らす」、Windows の「アニメーションを表示」OFF など）、この設定は CSS から **`@media (prefers-reduced-motion: reduce)`** で検出できます。
+
+```css
+.card {
+  transition: all 200ms ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+}
+```
+
+この書き方で「動きを減らす設定の人にはアニメーションを OFF」にできます。CSS だけで配慮できるので、足しておく価値が十分にあります。
+
+### DevTools で `prefers-reduced-motion` をエミュレート
+
+自分の OS 設定を変えなくても、ブラウザの DevTools 側で「動きを減らす」状態を一時的に再現できます。Chrome の手順:
+
+1. DevTools を開く（`F12` / `Ctrl+Shift+I` / `Cmd+Option+I`）。
+2. DevTools の右上の **3 点メニュー**（縦の `⋮`）→ **More tools** → **Rendering** を選ぶ。
+3. 出てきた Rendering パネル（下部か横に並ぶ）をスクロールして **Emulate CSS media feature prefers-reduced-motion** を探す。
+4. ドロップダウンで `reduce` を選ぶ。
+
+以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
+
+### 章 1 全体を通してのまとめ（先取り）
+
+章 1 では HTML（lesson01〜06）、CSS 基礎（lesson07〜10）、Flexbox と統合（lesson11）、Grid（lesson12）、Position（lesson13）と進めてきました。今回の Transition を加えると、**静的なページに「動き」を足す** という現代的な CSS の基礎が一通り揃います。章 1 全体のまとめは、このレッスンの末尾の「まとめ」セクションに書いています。
 
 ## 演習
 
-### ゴール
+### やること
 
-- 年齢を表す変数 `age` の値によって「成人 / 未成年」を分岐表示する
-- 年齢を変えて結果が切り替わることを確認する
+自己紹介ページの「好きなもの」カードに、以下のアニメーションを付けます。
 
-### 手順
+1. `:hover` で **カードが少し上に浮く**（`translateY(-4px)`）。
+2. 同時に **影が少し濃くなる**（`box-shadow` の変化）。
+3. `transition: all 200ms ease` で滑らかに補間する。
+4. `prefers-reduced-motion: reduce` の環境では `transition: none` に切り替え、動きを OFF にする。
 
-1. `index.html` のタイトルを `lesson14` に変える
-2. `script.js` を以下に書き換える
-3. Console で結果を確認する
+### ステップ 1: カードにデフォルトの影を付ける
 
-### `index.html`
+`style.css` の `.card` を次のように書き換えます（lesson11 / 12 / 13 で既に背景色や padding は指定済みの前提）。
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson14</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson14: 条件で分岐する</h1>
-  </body>
-</html>
-```
+```css
+.card {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
 
-### `script.js`
-
-```js
-const age = 20;
-const userName = "Alice";
-const isStudent = true;
-
-if (age >= 20) {
-  console.log(`${userName} さんは成人です`);
-} else {
-  console.log(`${userName} さんは未成年です`);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 200ms ease;
 }
 
-if (age >= 13 && age <= 19) {
-  console.log("10 代です");
-} else if (age >= 20 && age < 60) {
-  console.log("大人です");
-} else {
-  console.log("それ以外の年代です");
-}
-
-if (isStudent && age >= 20) {
-  console.log("成人の学生です");
-}
-
-if (!isStudent) {
-  console.log("学生ではありません");
-} else {
-  console.log("学生です");
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #111827;
+    border-color: #374151;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
+  }
 }
 ```
+
+ポイント:
+
+- lesson13 で追加した `position: relative`（バッジの基準用）はそのまま残す。
+- `box-shadow` で薄い影を付ける（ダークモードでは影を濃く）。
+- `transition: all 200ms ease` を書いておく。`all` にしておけば、`:hover` で変わる全プロパティに同じ補間が掛かる。
+
+### ステップ 2: `:hover` で浮き上がらせる
+
+`style.css` に次を追加します。
+
+```css
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+  }
+}
+```
+
+`translateY(-4px)` で 4px 上に、`box-shadow` を濃く大きくして「浮いている」印象を強めます。
+
+### ステップ 3: `prefers-reduced-motion` で動きを OFF
+
+`style.css` の末尾に次を追加します。
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}
+```
+
+これで、OS やブラウザが「動きを減らす」設定のときは、カードはパッと切り替わるだけで、浮き上がるアニメーションは発生しません。影の変化も瞬時になるので気分を悪くしにくくなります。
 
 ### 期待出力
 
-`age = 20` の場合、Console には次のように表示されます。
+- プレビューのカードにマウスを乗せると、**約 200ms かけてカードが 4px 上に浮き**、同時に **影が濃く大きく** なる。
+- マウスを外すと、また約 200ms かけて元の位置と影に戻る。
+- DevTools の **Rendering タブで `prefers-reduced-motion: reduce` をエミュレート** した状態にすると、マウスを乗せた瞬間にパッと位置と影が変わり、動きが無くなる。戻すと（`no-preference`）また滑らかに動く。
+- Chrome で `Ctrl+Shift+P`（macOS は `Cmd+Shift+P`）でコマンドパレットを開き、「Show Rendering」と入力しても Rendering タブを呼び出せる。
 
-```
-Alice さんは成人です
-大人です
-成人の学生です
-学生です
-```
+### 変えてみる
 
-### 変える
-
-- `age` を `18` に変える → 「未成年です」「10 代です」「学生です」に変わる（「成人の学生です」の行は出なくなる）
-- `age` を `65` に変える → 「成人です」「それ以外の年代です」「学生です」になる（`isStudent` が `true` のまま）
-- `isStudent` を `false` に変える → 「学生ではありません」に切り替わる
-- `===` と `==`、`!==` と `!=` は本コースでは前者だけを使う。試しに `age == "20"` と書いてみると `true` になる（型が違うのに等しいと判定される）ので、その気持ち悪さだけ体験しておく
+1. `transition: all 200ms ease` の `200ms` を `500ms` や `1000ms` に変えてみる。動きが「ゆっくり」になることを確認する。
+2. `ease` を `linear` に変えてみる。緩急が無くなり機械的な動きになる。`ease-in-out` にすると、始まりと終わりが特にゆっくりになる。
+3. `transform: translateY(-4px)` に `scale(1.03)` を足す（`transform: translateY(-4px) scale(1.03);`）。浮きながら少し拡大される効果になる。
 
 ### 自分で書く
 
-- 変数 `score`（テストの点数）を作り、90 以上なら「A」、70 以上なら「B」、50 以上なら「C」、それ未満なら「D」と出すコードを書く
-- 変数 `hour`（0〜23）を作り、`6 <= hour && hour < 12` なら「おはよう」、`12 <= hour && hour < 18` なら「こんにちは」、そうでなければ「こんばんは」と出すコードを書く
+「ページトップに戻る」ボタン（lesson13 で追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
+
+- hover で背景色が濃い青（`#1d4ed8`）に変わる
+- hover で 1.05 倍に拡大する（`transform: scale(1.05)`）
+- `transition: all 200ms ease` で補間
+- `prefers-reduced-motion: reduce` のときは `transition: none` と `transform: none`
+
+ヒントは `.card` のコードを真似すること。完成したら、DevTools の Rendering タブで `prefers-reduced-motion` を切り替え、動きの有無を確認します。
+
+### よくあるつまずき
+
+- `transition` を `:hover` の側に書いてしまう。`transition` は **通常状態** に書きます。そうしないと「マウスを離すとき」の戻りが補間されません（厳密には `:hover` 側にも書く書き方もありますが、最初は通常状態に付けるのが素直です）。
+- `transform` を使わず `margin-top: -4px` で浮かせる → 周囲のレイアウトがガタつく。`transform` を使う。
+- `transition: all` が効かない → そもそも変化するプロパティが書かれていない（`:hover` で色も位置も変わっていないなど）。まず何を変えたいかを決めて、`:hover` 側に書く。
 
 ## まとめ
 
-- `if` / `else if` / `else` で分岐を書く
-- 等しいかの判定は `===` / `!==`（`==` / `!=` は使わない）
-- 複数条件は `&&`（かつ）/ `||`（または）/ `!`（否定）を使い分ける
+### lesson14 のまとめ
+
+- `transition` で値の変化をなめらかに補間できる。最初は `transition: all 200ms ease` で十分。
+- `transform: translateY()` / `scale()` はレイアウトを壊さずに位置・大きさを変えられる。
+- `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。動きが苦手な人への最低限の配慮として覚えておく。
+- DevTools の Rendering タブで `prefers-reduced-motion` をエミュレートして動作確認できる。
+
+### 章 1 全体のまとめ
+
+ここまでの 14 レッスンで、次のことができるようになりました。
+
+- HTML の基本タグ（見出し・段落・リスト・リンク・画像・フォーム・セマンティックタグ）で文書を組み立てられる（lesson01〜06）
+- CSS を外部ファイルで読み込み、セレクタ・擬似クラス・色や文字・余白を指定できる（lesson07〜10）
+- Flexbox（一次元）と Grid（二次元）でモダンなレイアウトを組める（lesson11〜12）
+- `position` で要素を通常の流れから切り離して配置し、`z-index` で前後関係を制御できる（lesson13）
+- `transition` と `transform` で動きを足し、`prefers-reduced-motion` で配慮できる（lesson14）
+- `@media` メディアクエリで画面幅やダークモード、動きの設定に応じてスタイルを変えられる
+
+章 1 で作った **自己紹介ページ** は、章 5 lesson59 で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。
+
+次の章 2 lesson15 からは **JavaScript** に入ります。これまで作ったページには動きがありませんでしたが、JS を使うとボタンを押したときの反応や、データの表示・更新ができるようになります。章 2 の山場は lesson30 の **TODO アプリ** です。HTML + CSS + JavaScript だけで、1 つの小さなアプリを完成させます。
