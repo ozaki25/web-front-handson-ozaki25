@@ -2,10 +2,10 @@
 
 ## ゴール
 
-- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できる。
-- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解する。
-- 画面に出る部品がデフォルトで **Server Component** として動くことを知る。
-- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できる。
+- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できます。
+- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解します。
+- 画面に出る部品がデフォルトで **Server Component** として動くことを知ります。
+- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できます。
 
 ## 解説
 
@@ -72,9 +72,9 @@ export default function Page() {
 }
 ```
 
-- ファイル名は `page.tsx` 固定。
-- `export default` で関数コンポーネントを 1 つ返す。
-- 関数名は何でもよい（慣例で `Page` とすることが多い）。
+- ファイル名は `page.tsx` 固定です。
+- `export default` で関数コンポーネントを 1 つ返します。
+- 関数名は何でも構いません（慣例で `Page` とすることが多いです）。
 
 これだけで、`/`（トップページ）にアクセスしたときにこの JSX が表示されます。
 
@@ -86,10 +86,10 @@ export default function Page() {
 
 ### 手順
 
-1. <https://stackblitz.com/> を開く。
-2. 「Create new project」から **Next.js** の **TypeScript** テンプレートを選ぶ（Node を内部で動かす WebContainers 版）。
-3. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開く。
-4. 中身をすべて消し、次のコードに置き換える。
+1. <https://stackblitz.com/> を開きます。
+2. 「Create new project」から **Next.js** の **TypeScript** テンプレートを選びます（Node を内部で動かす WebContainers 版）。
+3. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
+4. 中身をすべて消し、次のコードに置き換えます。
 
 ```tsx
 export default function Page() {
@@ -106,14 +106,14 @@ export default function Page() {
 
 ### 期待出力
 
-- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並ぶ。
-- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示される。
-- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ている。
+- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並びます。
+- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示されます。
+- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ています。
 
 ### 変えてみる
 
-1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存する。プレビューが更新されることを確認する。
-2. `<p>` を 2 行に増やす。
+1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存します。プレビューが更新されることを確認しましょう。
+2. `<p>` を 2 行に増やします。
 
 ```tsx
 export default function Page() {
@@ -129,25 +129,25 @@ export default function Page() {
 
 ### ファイル構造を眺める
 
-左側のツリーから以下を開いて中身を確認する。書き換えは不要。
+左側のツリーから以下を開いて中身を確認しましょう。書き換えは不要です。
 
-- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。lesson45 で触る。
+- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。lesson45 で触ります。
 - `app/page.tsx`: 今書き換えたトップページ。
-- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいる。
+- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいます。
 
-`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になる。これを次の lesson44 で実際にやる。
+`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になります。これを次の lesson44 で実際にやります。
 
 ### 自分で書く
 
-`app/page.tsx` を何も見ずに書き直してみる。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格。
+`app/page.tsx` を何も見ずに書き直してみましょう。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格です。
 
 ## まとめ
 
-- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワーク。
-- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱う。`pages/` 形式は使わない。
-- `app/page.tsx` がトップページ（`/`）の中身。ディレクトリ名がそのまま URL になる。
-- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動く。
-- 次の lesson44 ではページを増やして `<Link>` で行き来し、章 1 の自己紹介ページを `/about` として復活させる。
+- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワークです。
+- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
+- `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
+- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
+- 次の lesson44 ではページを増やして `<Link>` で行き来し、章 1 の自己紹介ページを `/about` として復活させます。
 
 ### コラム: RSC ペイロードって何？
 

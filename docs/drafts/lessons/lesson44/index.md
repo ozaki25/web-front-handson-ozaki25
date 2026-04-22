@@ -2,23 +2,23 @@
 
 ## ゴール
 
-- `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れる。
-- `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できる。
-- 章 1 lesson11 で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられる。
-- HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書ける。
+- `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
+- `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
+- 章 1 lesson11 で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられます。
+- HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
 
 ## 解説
 
 ### 前回のプロジェクトを開く
 
-前の lesson43 で作った StackBlitz の Next.js プロジェクトを開き直す。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開ける。
+前の lesson43 で作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
 
 ### 新しいページを作る手順
 
-App Router では、ディレクトリ名がそのまま URL になります。`/about` というページを作るには次の 2 ステップだけ。
+App Router では、ディレクトリ名がそのまま URL になります。`/about` というページを作るには次の 2 ステップだけです。
 
-1. `app/` の下に `about/` ディレクトリを作る。
-2. その中に `page.tsx` を作り、コンポーネントを `export default` する。
+1. `app/` の下に `about/` ディレクトリを作ります。
+2. その中に `page.tsx` を作り、コンポーネントを `export default` します。
 
 ```
 app/
@@ -29,28 +29,28 @@ app/
     └── page.tsx       → /todos
 ```
 
-`/todos` も同じ要領。`app/todos/page.tsx` を作るだけで `/todos` でアクセスできる。
+`/todos` も同じ要領です。`app/todos/page.tsx` を作るだけで `/todos` でアクセスできます。
 
 ### HTML → JSX の違い 3 点
 
-章 1 で書いた HTML を Next.js に持ち込むと、そのままでは動かない。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要。
+章 1 で書いた HTML を Next.js に持ち込むと、そのままでは動きません。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要です。
 
 1. `class` → `className`
-   - JS の `class` 構文（クラス構文）と衝突するため、JSX では `className` を使う。
+   - JS の `class` 構文（クラス構文）と衝突するため、JSX では `className` を使います。
    - 例: `<p class="lead">` → `<p className="lead">`
 2. `for`（`<label for="...">`）→ `htmlFor`
-   - `for` も JS の `for` 文と衝突するため、`htmlFor` に変える。
+   - `for` も JS の `for` 文と衝突するため、`htmlFor` に変えます。
    - 例: `<label for="name">` → `<label htmlFor="name">`
 3. 自己閉じタグに `/` が必要
-   - HTML では `<img>` や `<br>` は終了タグなしで書けるが、JSX では必ず `/` で閉じる。
+   - HTML では `<img>` や `<br>` は終了タグなしで書けますが、JSX では必ず `/` で閉じます。
    - 例: `<img src="..." alt="">` → `<img src="..." alt="" />`
    - 例: `<br>` → `<br />`
 
-他にも細かい違いはあるが、当面はこの 3 点を意識すれば章 1 の HTML を移植できる。
+他にも細かい違いはありますが、当面はこの 3 点を意識すれば章 1 の HTML を移植できます。
 
 ### `<Link>` でページ遷移する
 
-ブラウザの `<a href="...">` でもページは切り替わるが、その都度ページ全体を再読み込みする重い動きになる。Next.js では `next/link` の `<Link>` を使うことで、必要な部分だけを差し替える軽い遷移ができる。
+ブラウザの `<a href="...">` でもページは切り替わりますが、その都度ページ全体を再読み込みする重い動きになります。Next.js では `next/link` の `<Link>` を使うことで、必要な部分だけを差し替える軽い遷移ができます。
 
 ```tsx
 import Link from "next/link";
@@ -66,15 +66,15 @@ export default function Home() {
 }
 ```
 
-- `import` は **`next/link`** から（`next/router` ではない。`next/router` は古い Pages Router 用）。
-- `href` の値は `/about` のように **URL のパス**。
-- `<Link>` は内部的には `<a>` タグを生成するので、見た目は普通のリンクと同じ。
+- `import` は **`next/link`** からです（`next/router` ではありません。`next/router` は古い Pages Router 用です）。
+- `href` の値は `/about` のように **URL のパス** です。
+- `<Link>` は内部的には `<a>` タグを生成するので、見た目は普通のリンクと同じです。
 
 ## 演習
 
 ### 手順 1: `/todos` の空ページを作る
 
-StackBlitz のファイルツリーで、`app/` を右クリックして「New Folder」→ `todos` を作る。その中に「New File」で `page.tsx` を作り、以下を貼る。
+StackBlitz のファイルツリーで、`app/` を右クリックして「New Folder」→ `todos` を作ります。その中に「New File」で `page.tsx` を作り、以下を貼ります。
 
 ```tsx
 export default function TodosPage() {
@@ -87,11 +87,11 @@ export default function TodosPage() {
 }
 ```
 
-ブラウザのプレビュー URL に `/todos` を付けてアクセスし、この文言が出ることを確認する。
+ブラウザのプレビュー URL に `/todos` を付けてアクセスし、この文言が出ることを確認しましょう。
 
 ### 手順 2: 章 1 の自己紹介ページを `/about` に移植
 
-章 1 lesson11 で作った自己紹介ページの HTML と CSS をもう一度開く。このレッスンでは **lesson11 の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進める。手元に無ければ、lesson11 を開いて HTML / CSS をコピーしてから戻ってくる。
+章 1 lesson11 で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **lesson11 の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、lesson11 を開いて HTML / CSS をコピーしてから戻ってきてください。
 
 元の HTML（lesson11 の完成形の抜粋）:
 
@@ -168,7 +168,7 @@ export default function TodosPage() {
 </html>
 ```
 
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーする。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（lesson45 で扱う）が担当するので **コピーしない**。`<header>` 〜 `<footer>` の中身だけ移す。
+これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（lesson45 で扱います）が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
 
 `app/about/page.tsx`:
 
@@ -240,18 +240,18 @@ export default function AboutPage() {
 }
 ```
 
-書き換えたのは **HTML → JSX の 3 点の違い** にほぼ収まる:
+書き換えたのは **HTML → JSX の 3 点の違い** にほぼ収まります:
 
 - `class="..."` → `className="..."`（`.site-header` / `.site-nav` / `.cards` / `.card` / `.site-footer` すべて）
 - `<label for="...">` → `<label htmlFor="...">`（3 箇所）
 - `<input ...>` → `<input ... />`、`<img ...>` → `<img ... />` の自己閉じ
 - 追加で `<textarea rows="4">` の属性は **数値中括弧 `rows={4}`** に（JSX では数値属性は中括弧が慣例）
 
-ほぼ機械的な置換で済むのが JSX の嬉しいところ。章 1 で作った見た目・レイアウトがそのまま Next.js で動く。
+ほぼ機械的な置換で済むのが JSX の嬉しいところです。章 1 で作った見た目・レイアウトがそのまま Next.js で動きます。
 
 ### 手順 3: CSS を当てる
 
-章 1 lesson11 の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` する。中身はそのまま流用できる（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効く）。
+章 1 lesson11 の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
 
 `app/about/about.css`（lesson11 の CSS をそのまま貼る、抜粋）:
 
@@ -341,9 +341,9 @@ main {
 }
 ```
 
-（フォームや hover など、lesson11 で書いた他のスタイルも一緒にコピーしてよい。）
+（フォームや hover など、lesson11 で書いた他のスタイルも一緒にコピーして構いません。）
 
-`app/about/page.tsx` の **1 行目に CSS の import を追加する**。ファイル全体は次のような形になる（関数本体は先ほど書いたものをそのまま維持する）。
+`app/about/page.tsx` の **1 行目に CSS の import を追加します**。ファイル全体は次のような形になります（関数本体は先ほど書いたものをそのまま維持します）。
 
 ```tsx
 import "./about.css";
@@ -415,11 +415,11 @@ export default function AboutPage() {
 }
 ```
 
-**期待出力**: `/about` を開くと、章 1 lesson11 で作ったページと **ほぼ同じ見た目** になる。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きる。
+**期待出力**: `/about` を開くと、章 1 lesson11 で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
 
 ### 手順 4: ナビを `/` に置く
 
-`app/page.tsx` を以下に書き換える。これでトップページから 3 つのページに飛べるナビが完成する。
+`app/page.tsx` を以下に書き換えます。これでトップページから 3 つのページに飛べるナビが完成します。
 
 ```tsx
 import Link from "next/link";
@@ -448,25 +448,25 @@ export default function Page() {
 
 ### 期待出力
 
-- `/` にアクセスすると「ようこそ」の見出しと 3 つのリンクが出る。
-- 「About」をクリックすると章 1 と同じ見た目の自己紹介ページが表示される（CSS が当たっている）。
-- 「Todos」をクリックすると「TODO 一覧はここに実装する。」が表示される。
-- ブラウザのネットワークタブを開きながら遷移すると、ページ全体ではなくデータだけが追加で読み込まれる（フル再読み込みにはならない）。
-- `class` や `for` をそのまま残すと、StackBlitz のターミナルやブラウザ Console に「Invalid DOM property `class`. Did you mean `className`?」のような警告が出る。
+- `/` にアクセスすると「ようこそ」の見出しと 3 つのリンクが出ます。
+- 「About」をクリックすると章 1 と同じ見た目の自己紹介ページが表示されます（CSS が当たっています）。
+- 「Todos」をクリックすると「TODO 一覧はここに実装する。」が表示されます。
+- ブラウザのネットワークタブを開きながら遷移すると、ページ全体ではなくデータだけが追加で読み込まれます（フル再読み込みにはなりません）。
+- `class` や `for` をそのまま残すと、StackBlitz のターミナルやブラウザ Console に「Invalid DOM property `class`. Did you mean `className`?」のような警告が出ます。
 
 ### 変えてみる
 
-1. 自己紹介ページに好きな見出しを 1 つ追加する。
-2. `/about` のナビ内に「Top に戻る」`<Link>` を追加する。
+1. 自己紹介ページに好きな見出しを 1 つ追加しましょう。
+2. `/about` のナビ内に「Top に戻る」`<Link>` を追加しましょう。
 
 ### 自分で書く
 
-`/contact` という 3 つ目のページを、ディレクトリ作成 → `page.tsx` → ナビへの `<Link>` 追加、の手順だけを見ないで試してみる。中身は「Contact ページです」の 1 行で十分。
+`/contact` という 3 つ目のページを、ディレクトリ作成 → `page.tsx` → ナビへの `<Link>` 追加、の手順だけを見ないで試してみましょう。中身は「Contact ページです」の 1 行で十分です。
 
 ## まとめ
 
-- `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになる。
-- ページ遷移は `next/link` の `<Link>` で。`<a>` より軽い遷移になる。
-- HTML を JSX にするときは **3 点だけ** 書き換える: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
-- 章 1 の自己紹介ページを `/about` として復活させた。`/todos` は次以降で中身を作っていく。
-- 次の lesson45 では、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめる。
+- `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになります。
+- ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
+- HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
+- 章 1 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
+- 次の lesson45 では、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。

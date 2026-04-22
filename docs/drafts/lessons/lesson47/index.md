@@ -2,16 +2,16 @@
 
 ## ゴール
 
-- `async` な Server Component を書けるようになる。
-- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できる。
-- `loading.tsx` でローディング UI を挟めるようになる。
-- Next.js 15 で fetch のキャッシュ既定が「キャッシュしない」に変わったことを知り、3 パターン（`force-cache` / `revalidate` / `tags`）を見分けられる。
+- `async` な Server Component を書けるようになります。
+- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
+- `loading.tsx` でローディング UI を挟めるようになります。
+- Next.js 15 で fetch のキャッシュ既定が「キャッシュしない」に変わったことを知り、3 パターン（`force-cache` / `revalidate` / `tags`）を見分けられます。
 
 ## 解説
 
 ### Server Component は `async` にできる
 
-章 4 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違い。
+章 4 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
 
 ```tsx
 export default async function Page() {
@@ -20,14 +20,14 @@ export default async function Page() {
 }
 ```
 
-- 関数の頭に `async` を付けられるのは Server Component のみ。Client Component では使えない（`"use client"` のファイルに `async` を付けるとエラー）。
-- `await` で取得が終わるまで待てる。ブラウザ側の `useState` + `useEffect` で組む必要が一切ない。
+- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
+- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
 
-ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（章 4 lesson41 末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなる。
+ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（章 4 lesson41 末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
 
 ### `loading.tsx` でローディング UI
 
-`fetch` が終わるまでの間、ユーザーには空白のページが見える。これを防ぐには `loading.tsx` を同じディレクトリに置く。
+`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
 
 ```
 app/
