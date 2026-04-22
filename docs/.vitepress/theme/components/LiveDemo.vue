@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref, shallowRef } from 'vue'
 
 // HTML / CSS / JS を iframe srcdoc で隔離実行するコンポーネント。
 // レッスン本文に直接 <script> や <style> を書くと他ページに影響が漏れるため、
@@ -110,6 +110,48 @@ const srcdoc = computed(() => {
   ]
   return parts.join('\n')
 })
+
+// <details> が最初に開かれた瞬間だけ Shiki を動的 import してコードを
+// ハイライトする。ハイライト結果は <pre class="shiki"> ... </pre> 形式の
+// HTML を返すので、そのまま v-html で差し込む。
+// - VitePress 本体が既に shiki を依存に持っているため、追加の install 不要
+// - 開かれていない details では 1 バイトも取りに行かない（lazy）
+// - ライト/ダーク両対応のため shiki の dual theme 機能を使う
+const highlightedHtml = shallowRef<string | null>(null)
+const highlightedCss = shallowRef<string | null>(null)
+const highlightedJs = shallowRef<string | null>(null)
+const isHighlighting = ref(false)
+let highlightTriggered = false
+
+async function ensureHighlighted() {
+  if (highlightTriggered) return
+  highlightTriggered = true
+  isHighlighting.value = true
+  try {
+    const { createHighlighter } = await import('shiki/bundle/web')
+    const highlighter = await createHighlighter({
+      themes: ['github-light', 'github-dark'],
+      langs: ['html', 'css', 'js'],
+    })
+    const opts = {
+      themes: { light: 'github-light', dark: 'github-dark' },
+      defaultColor: false,
+    } as const
+    if (props.html) {
+      highlightedHtml.value = highlighter.codeToHtml(props.html, { lang: 'html', ...opts })
+    }
+    if (props.css) {
+      highlightedCss.value = highlighter.codeToHtml(props.css, { lang: 'css', ...opts })
+    }
+    if (props.js) {
+      highlightedJs.value = highlighter.codeToHtml(props.js, { lang: 'js', ...opts })
+    }
+  } catch (_) {
+    // ハイライト失敗時は素のコード表示にフォールバック（初期表示と同じ）
+  } finally {
+    isHighlighting.value = false
+  }
+}
 </script>
 
 <template>
@@ -122,19 +164,22 @@ const srcdoc = computed(() => {
       title="Live demo"
       loading="lazy"
     />
-    <details v-if="showCode" class="live-demo-source">
+    <details v-if="showCode" class="live-demo-source" @toggle="ensureHighlighted">
       <summary>このデモのソース（HTML / CSS / JS）</summary>
       <div v-if="html" class="live-demo-block">
         <div class="live-demo-label">HTML</div>
-        <pre><code class="language-html">{{ html }}</code></pre>
+        <div v-if="highlightedHtml" class="live-demo-highlight" v-html="highlightedHtml" />
+        <pre v-else><code class="language-html">{{ html }}</code></pre>
       </div>
       <div v-if="css" class="live-demo-block">
         <div class="live-demo-label">CSS</div>
-        <pre><code class="language-css">{{ css }}</code></pre>
+        <div v-if="highlightedCss" class="live-demo-highlight" v-html="highlightedCss" />
+        <pre v-else><code class="language-css">{{ css }}</code></pre>
       </div>
       <div v-if="js" class="live-demo-block">
         <div class="live-demo-label">JavaScript</div>
-        <pre><code class="language-js">{{ js }}</code></pre>
+        <div v-if="highlightedJs" class="live-demo-highlight" v-html="highlightedJs" />
+        <pre v-else><code class="language-js">{{ js }}</code></pre>
       </div>
     </details>
   </div>
@@ -206,5 +251,37 @@ const srcdoc = computed(() => {
   font-family: ui-monospace, Menlo, Consolas, monospace;
   color: var(--vp-c-text-1);
   white-space: pre;
+}
+
+/* Shiki が生成する <pre class="shiki"> に同じ余白・背景を当てる。
+   Shiki の dual theme モードは各トークンに --shiki-light / --shiki-dark の
+   CSS 変数を仕込み、html.dark で切り替える。 */
+.live-demo-highlight :deep(pre.shiki) {
+  margin: 0;
+  padding: 0.75rem 1rem;
+  border-radius: 4px;
+  overflow-x: auto;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  background-color: var(--shiki-light-bg, #ffffff);
+  color: var(--shiki-light, inherit);
+}
+
+.live-demo-highlight :deep(pre.shiki code) {
+  font-family: ui-monospace, Menlo, Consolas, monospace;
+  white-space: pre;
+}
+
+.live-demo-highlight :deep(pre.shiki span) {
+  color: var(--shiki-light);
+}
+
+html.dark .live-demo-highlight :deep(pre.shiki) {
+  background-color: var(--shiki-dark-bg, #0b1220);
+  color: var(--shiki-dark, inherit);
+}
+
+html.dark .live-demo-highlight :deep(pre.shiki span) {
+  color: var(--shiki-dark);
 }
 </style>
