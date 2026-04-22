@@ -1,288 +1,267 @@
-# lesson46: Server Component と Client Component
+# lesson46: イベントと配列のイミュータブル更新
 
 ## ゴール
 
-- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できます。
-- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子にも Client 扱いが伝播することを理解できます。
-- Client Component が Server Component を `import` はできませんが、`children` や props として受け取れることを知っています。
-- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを自分の目で確認できます。
+- `onClick` など代表的なイベントハンドラを書ける
+- 配列の state を、新しい配列を作って更新する書き方（イミュータブル更新）ができる
+- 「末尾に追加 / 先頭に追加 / id で削除」の 3 パターンを実装できる
 
 ## 解説
 
-### 2 種類のコンポーネントがある
+### 配列 state の注意点
 
-App Router では、コンポーネントが 2 種類あります。
+lesson45 でカウンター（数値）の state を扱いました。配列の state でも考え方は同じですが、**守らないといけないルール** が 1 つあります。
 
-- **Server Component**（デフォルト）
-  - サーバー側で React を実行します。
-  - `useState` / `useEffect` / `onClick` など、**ブラウザでしか動かないもの** は使えません。
-  - データベースアクセスや秘密情報を扱えます。
-  - 送り出されたあとはブラウザでは再実行されません。
-- **Client Component**
-  - ブラウザで動きます。章 4 までの React と同じ感覚で書けます。
-  - `useState` / `useEffect` / `onClick` が使えます。
-  - 先頭に `"use client"` を書いて明示します。
-
-章 4 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
-
-### `"use client"` のルール
-
-Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
+> **直接 `push` や `splice` で書き換えない**。必ず「新しい配列」を作って渡す。
 
 ```tsx
-"use client";
+const [todos, setTodos] = useState<Todo[]>([]);
 
-import { useState } from "react";
+// NG: 元の配列を書き換えている
+todos.push(newTodo);
+setTodos(todos); // 同じ配列を渡しているので、React から見れば「変わっていない」
 
-export function Counter() {
-  // ...
+// OK: 新しい配列を作って渡す
+setTodos((prev) => [...prev, newTodo]);
+```
+
+これを「イミュータブル（immutable、書き換えない）更新」と呼びます。
+
+理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
+
+スプレッド構文 `...`（lesson23）は、このイミュータブル更新で頻出します。
+
+### よく使う 3 パターン
+
+#### (1) 末尾に追加
+
+```tsx
+setTodos((prev) => [...prev, newTodo]);
+```
+
+`[...prev, newTodo]` は「`prev` を広げて、最後に `newTodo` を足した新しい配列」。
+
+#### (2) 先頭に追加
+
+```tsx
+setTodos((prev) => [newTodo, ...prev]);
+```
+
+順番を入れ替えるだけ。最新のものを上に表示したいときはこちら。
+
+#### (3) id で削除
+
+```tsx
+setTodos((prev) => prev.filter((t) => t.id !== id));
+```
+
+`filter`（lesson24）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
+
+### イベントハンドラの型（コピペで与える）
+
+TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペで与える**ものとして覚えてください。意味は追い追い分かります。
+
+```tsx
+import type { MouseEvent, ChangeEvent, FormEvent } from "react";
+
+// ボタンのクリック
+function handleClick(e: MouseEvent<HTMLButtonElement>) {
+  /* ... */
+}
+
+// input の変化
+function handleChange(e: ChangeEvent<HTMLInputElement>) {
+  /* ... */
+}
+
+// フォームの送信
+function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  /* ... */
 }
 ```
 
-- 必ず **ファイル先頭 1 行目**（`import` より上）です。
-- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
+これらの型は `react` パッケージから `import type` で呼びます。`React.MouseEvent` のように名前空間経由で書くこともできますが、新しい JSX ランタイム（Vite の React + TS テンプレート）では名前空間経由だとエラーになる環境があるので、**個別に import する形に統一します**。
 
-つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
-
-### 境界のイメージ
-
-ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
-
-```mermaid
-graph TD
-  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
-  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
-
-  Layout["RootLayout (Server)"]:::server
-  Page["page.tsx (Server)"]:::server
-  Nav["Nav (Server)"]:::server
-  Counter["Counter (Client)"]:::client
-  Form["TodoForm (Client)"]:::client
-
-  Layout --> Page
-  Page --> Nav
-  Page --> Counter
-  Page --> Form
-```
-
-- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
-- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
-- Client の部分は「葉」に配置します。ページ全体を Client にしません。
-
-上記図はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965`、枠 `#95d5b2` / `#62b6cb`、文字 `#ffffff`）を指定しています。
-
-### Client → Server の呼び出しルール
-
-ここがよく詰まるポイントです。
-
-- Client Component が Server Component を **`import` することはできません**。
-- ただし、`children` や props として **受け取ること** は可能です。
-
-つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
+とはいえ、**JSX の中にインラインで書くとき**は、型推論が効くので書かなくても OK です。
 
 ```tsx
-// Server Component（親）
-import { ClientWrapper } from "./ClientWrapper";
-import { ServerInfo } from "./ServerInfo";
-
-export default function Page() {
-  return (
-    <ClientWrapper>
-      <ServerInfo />
-    </ClientWrapper>
-  );
-}
+<button onClick={(e) => console.log(e)}>
+  {/* e は MouseEvent<HTMLButtonElement> 型と自動推論される */}
+</button>
 ```
 
-```tsx
-// ClientWrapper.tsx
-"use client";
+関数を別の場所で定義するときだけ、上の型をコピペして付けます。
 
-import type { ReactNode } from "react";
-import { useState } from "react";
+### スコープ外: オブジェクトの state 更新
 
-export function ClientWrapper({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <button onClick={() => setOpen((o) => !o)}>開閉</button>
-      {open && children}
-    </div>
-  );
-}
-```
-
-`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
-
-### `"use client"` を忘れたときのエラー
-
-`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
-
-```
-You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
-```
-
-このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
+配列ではなく、**オブジェクト** を state に入れたときの更新（`setUser((prev) => ({ ...prev, age: 30 }))` など）も同じ発想でできます。ただし覚える量を分散させるため、本コースでは **lesson57（React 版 TODO のミニ統合）で扱います**。このレッスンでは配列更新だけに集中します。
 
 ## 演習
 
-### 前回のプロジェクトを開く
+### ゴール
 
-lesson45 で作ったプロジェクトを開き直しましょう。
+- カウンターに「+1」「-1」「リセット」の 3 ボタンを実装
+- `Todo` の配列 state に対して「末尾に追加」「先頭に追加」「id で削除」の 3 パターンを実装
+- いずれの操作も、イミュータブル更新で行う
 
-### 手順 1: Client Component の `Counter` を作る
+### 手順
 
-`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（lesson45 のを使い回しても OK）
+2. `src/types.ts` を作成
+3. `src/App.tsx` を書き換える
 
-`app/components/Counter.tsx`:
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+### `src/App.tsx`
 
 ```tsx
-"use client";
-
 import { useState } from "react";
+import type { Todo } from "./types";
+import "./App.css";
 
-export function Counter() {
+function App() {
   const [count, setCount] = useState(0);
-  console.log("client render");
-  return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-    </div>
-  );
-}
-```
+  const [todos, setTodos] = useState<Todo[]>([
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "原稿を書く" },
+  ]);
 
-- 1 行目に `"use client"` を書きます。
-- `useState` と `onClick` を使っています。
-- `console.log("client render")` をレンダリング中に仕掛けます。
+  // ---- カウンター ----
+  function handlePlus() {
+    setCount((c) => c + 1);
+  }
+  function handleMinus() {
+    setCount((c) => c - 1);
+  }
+  function handleReset() {
+    setCount(0);
+  }
 
-### 手順 2: Server Component の `page.tsx` に埋め込む
+  // ---- TODO ----
+  function addToEnd() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `末尾 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [...prev, newTodo]);
+  }
 
-`app/page.tsx` を次のように書き換えます。
+  function addToTop() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `先頭 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [newTodo, ...prev]);
+  }
 
-```tsx
-import { Counter } from "./components/Counter";
+  function removeById(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
 
-export default function Page() {
-  console.log("server render");
   return (
     <>
-      <h1>ようこそ</h1>
-      <p>Counter は Client Component として動く。</p>
-      <Counter />
+      <section className="box">
+        <h2>カウンター</h2>
+        <p>現在: {count}</p>
+        <button onClick={handlePlus}>+1</button>
+        <button onClick={handleMinus}>-1</button>
+        <button onClick={handleReset}>リセット</button>
+      </section>
+
+      <section className="box">
+        <h2>TODO</h2>
+        <div className="row">
+          <button onClick={addToEnd}>末尾に追加</button>
+          <button onClick={addToTop}>先頭に追加</button>
+        </div>
+        <ul>
+          {todos.map((todo) => (
+            <li key={todo.id}>
+              {todo.text}
+              <button onClick={() => removeById(todo.id)}>削除</button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </>
   );
 }
+
+export default App;
 ```
 
-- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
-- `console.log("server render")` を仕掛けます。
+`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。章 2 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。
 
-### 手順 3: 境界を確認する
+### `src/App.css`
 
-1. ブラウザで `/` を開きます。
-2. ブラウザの DevTools → Console を開きます。
-3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
-4. ページを再読み込みします。
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
 
-#### 期待出力
+.box button {
+  margin-right: 8px;
+  padding: 4px 10px;
+  cursor: pointer;
+}
 
-- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
-- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
-- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
+.row {
+  margin-bottom: 8px;
+}
 
-これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
-
-### 手順 4: `"use client"` を消してみる
-
-`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
-
-ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
-
-```
-You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
-```
-
-このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
-
-### 手順 5: Server を Client の children として渡す
-
-以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
-
-`app/components/ClientBox.tsx`:
-
-```tsx
-"use client";
-
-import type { ReactNode } from "react";
-import { useState } from "react";
-
-export function ClientBox({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div>
-      <button onClick={() => setOpen((o) => !o)}>
-        {open ? "閉じる" : "開く"}
-      </button>
-      {open && <div>{children}</div>}
-    </div>
-  );
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
 }
 ```
 
-`app/components/ServerInfo.tsx`:
+### 期待出力
 
-```tsx
-export function ServerInfo() {
-  // Server Component なので、ここでサーバー時刻が取れる
-  const now = new Date().toISOString();
-  return <p>サーバー時刻: {now}</p>;
-}
-```
+- 画面上部に「カウンター」ボックス。`+1` を 3 回押すと 3、`-1` を 1 回押すと 2、`リセット` で 0 に戻る
+- 下に「TODO」ボックス。
+  - 初期状態で `牛乳を買う` と `原稿を書く` の 2 件が並ぶ
+  - `末尾に追加` を 2 回押すと、`末尾 3` / `末尾 4` が一番下に追加される
+  - `先頭に追加` を 1 回押すと、`先頭 5` が一番上に追加される
+  - 各行の `削除` ボタンで、その行だけが消える
 
-`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
+### 変える
 
-```tsx
-import { Counter } from "./components/Counter";
-import { ClientBox } from "./components/ClientBox";
-import { ServerInfo } from "./components/ServerInfo";
-
-export default function Page() {
-  console.log("server render");
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <Counter />
-      <ClientBox>
-        <ServerInfo />
-      </ClientBox>
-    </>
-  );
-}
-```
-
-#### 期待出力
-
-- 最初は `サーバー時刻: 2026-...` が見えています。
-- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
-- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
-
-もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
-
-### 変えてみる
-
-1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
-2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
+- `removeById` を次のように書き換えると、**バグ** が起きる。試してから元に戻すこと
+  ```tsx
+  function removeById(id: string) {
+    const index = todos.findIndex((t) => t.id === id);
+    todos.splice(index, 1); // NG: 元の配列を破壊している
+    setTodos(todos); // React から見ると変化していない
+  }
+  ```
+  クリックしても削除されない（実際は配列が変わっているのに、React は「同じ配列」と見て再レンダリングしない）
+- `addToEnd` の `setTodos((prev) => [...prev, newTodo])` を `setTodos((prev) => [newTodo, ...prev])` に書き換えると、動作が `addToTop` と同じになる
 
 ### 自分で書く
 
-「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
+- 「逆順」ボタンを追加し、クリックで配列を逆順にする（**新しい配列を作る**）
+  - ヒント: `setTodos((prev) => [...prev].reverse())`（`.reverse()` 単体は元の配列を書き換える破壊的メソッド。スプレッドでコピーしてから呼ぶ）
+- 「全消し」ボタンを追加し、クリックで空配列にする
+  - ヒント: `setTodos([])`
 
 ## まとめ
 
-- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
-- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
-- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
-- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。
-- 次の lesson47 では Server Component で実際にデータを `fetch` します。Client では扱いにくかった「サーバー側取得」のうまみを体験しましょう。
+- 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
+- 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
+- イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
+- **オブジェクトの state 更新は lesson57 で扱う**。このレッスンでは配列に集中

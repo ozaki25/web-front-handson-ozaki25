@@ -1,194 +1,169 @@
-# lesson26: TypeScript ってなに？
+# lesson26: 非同期処理の基本
 
 ## ゴール
 
-- TypeScript（以下 TS）が何を解決する言語なのか、JavaScript（以下 JS）との違いを自分の言葉で説明できる。
-- プリミティブ型（`string` / `number` / `boolean`）の変数に **型注釈** を付けられる。
-- わざと間違った値を入れて、エディタの赤線と `tsc` の型エラーを自分の目で確認できる。
+- 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
+- `async` / `await` を使って「結果を待ってから続ける」書き方ができる
+- Promise を「まだ完了していない結果を表す箱」として直感的に理解する
 
 ## 解説
 
-### この章で使う環境
+### 同期と非同期
 
-この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。「Create new project」→「Vanilla」グループの中から **TypeScript** と書かれたテンプレートを選んでください（lesson01 で使った HTML / CSS / JS 版ではなく、TypeScript 版）。
-
-テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の章 3 のレッスンでは、この `main.ts` を書き換えていきます。
-
-### JS だけだと何が困るのか
-
-章 2 までに書いてきた JS では、変数にどんな値でも入れられました。
+ここまで書いてきた処理は、上から順にすぐ実行されていました。これを **同期処理** と呼びます。
 
 ```js
-let age = 20;
-age = "二十歳"; // 何の警告もなく通る
+console.log("A");
+console.log("B");
+console.log("C");
+// 出力: A → B → C
 ```
 
-小さなファイルなら困りません。しかし人数やファイルが増え、関数が関数を呼ぶようになると、次のような事故が起き始めます。
+一方で、「ネットワーク通信」「一定時間待つ」など、**時間がかかる処理** もあります。こうした処理は、途中で止まらず後続のコードを先に進めておく仕組みになっています。これを **非同期処理** と呼びます。
 
-- 数値を期待している関数に、うっかり文字列を渡してしまう。
-- オブジェクトのプロパティ名を typo したのに、そのまま `undefined` が流れて画面が壊れる。
-- 自分以外の人が書いた関数に、何を渡せばよいか分からない。
-
-これらは **実行してみるまで分からない** 種類のバグです。しかもブラウザで動かしてはじめて「`undefined is not a function`」のようなメッセージに出会うので、原因の追跡に時間がかかります。
-
-### TS は「書いた瞬間にチェックしてくれる JS」
-
-TypeScript は、JavaScript に **型（かた）** の仕組みを足した言語です。値や変数に「これは文字列」「これは数値」というラベルを付けておくと、コンパイラ（`tsc`）やエディタが、書いた直後に「その操作はラベルに合っていない」と教えてくれます。
-
-- 型のチェックは **実行する前** に行われる。これを **静的型付け** と呼ぶ。
-- 型のチェックを通った TS コードは、最終的に JS に変換（コンパイル）されてブラウザで動く。ブラウザは TS を直接は読めない。
-- 型の情報はコンパイル後の JS には残らない。**実行時の速度は JS と変わらない**。
-
-ざっくり言うと、TS は「書いた直後に typo と型の食い違いを指摘してくれる JS」です。
-
-### 型注釈の書き方
-
-変数を宣言するときに、変数名の後ろに `: 型名` を付けます。これを **型注釈（type annotation）** と呼びます。
-
-```ts
-const userName: string = "Alice";
-const age: number = 20;
-const isAdmin: boolean = false;
+```js
+console.log("A");
+setTimeout(() => {
+  console.log("B");
+}, 1000);
+console.log("C");
+// 出力: A → C → （1秒後に）B
 ```
 
-- `string`: 文字列（`"hello"`、`` `template` ``、`'single'` すべて含む）
-- `number`: 数値（整数も小数も区別しない）
-- `boolean`: 真偽値（`true` / `false`）
+`setTimeout(関数, ミリ秒)` は「指定時間後に関数を呼ぶ」ブラウザの機能です。1 秒待っている間に `C` が先に出る、というのが非同期の挙動です。
 
-型注釈は **変数名の直後にコロン**、そのあとに型名、という順番です。JS の代入 (`=`) とは位置が違うので混同しないようにします。
+### Promise というもの
 
-### 書かなくても型は付く（型推論）
+非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise（プロミス）** という仕組みがあります。
 
-毎回型を書くのは面倒です。TS は右辺を見て型を自動で決めてくれます。これを **型推論（type inference）** と呼びます。
+- `fetch` は「結果そのもの」ではなく「Promise」を返す
+- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
+- Promise は「いつか結果が入る箱」
+- 結果を取り出すには「箱が埋まるのを待つ」必要がある
 
-```ts
-const userName = "Alice"; // userName は string 型と推論される
-const age = 20;        // age は number 型と推論される
+本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
+
+### `async` / `await`
+
+関数の前に `async` と書き、Promise を返す処理の前に `await` と書くと、「結果が返ってくるのを待ってから続きを実行」できます。
+
+```js
+async function main() {
+  console.log("start");
+  await wait(1000);   // 1 秒待つ
+  console.log("end"); // 1 秒後に実行される
+}
+
+main();
 ```
 
-型推論で十分なときは型注釈を省略するのが普通です。このレッスンでは学習目的であえて型注釈を書き、間違った値を入れたらどうなるかを体験します。
+- `async function` は「中で `await` を使える関数」
+- `await Promise` は「その Promise の結果が返るまで待つ」
+- `await` は `async function` の中でしか使えない
 
-### エラーの出方は 2 段階
+### `wait(ms)` 関数（コピペで使う）
 
-型が合っていないとき、TS は次の 2 か所でエラーを教えてくれます。
+「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
 
-1. **エディタ上の赤い波線**: StackBlitz のコード画面で該当箇所に赤線が出る。マウスを乗せるとメッセージが出る。
-2. **`tsc` のコンパイルエラー**: ターミナルで `tsc` を実行する（テンプレートでは通常自動で走る）と、ファイル名・行番号付きでエラーが一覧表示される。
-
-どちらも同じ内容です。エディタの赤線は「書いている最中に教えてくれる」、`tsc` は「保存 / ビルドのタイミングで全ファイルまとめて確認してくれる」くらいの違いです。
-
-典型的なエラーメッセージは例えばこうなります。
-
-```
-Type 'string' is not assignable to type 'number'.
+```js
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 ```
 
-「文字列型は数値型には代入できない」という意味です。実際に出してみるのは演習で行います。
+この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
+
+### 次のレッスンへの橋渡し
+
+**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば次のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+
+「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 
 ## 演習
 
-### 手順 1: テンプレートを開く
+### ゴール
 
-1. <https://stackblitz.com/> を開き、「Create new project」から **TypeScript**（Vanilla TS）テンプレートを選ぶ。
-2. `src/main.ts` を開く。中身はサンプルが入っているので、すべて消す。
-3. プレビュー横のコンソールも見えるようにしておく（DevTools の Console、または StackBlitz 下部のターミナル）。
+- `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る
 
-### 手順 2: 型注釈付きの変数を書く
+### 手順
 
-`src/main.ts` の中身を以下に置き換える。
+1. `index.html` のタイトルを `lesson26` に変える
+2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
 
-```ts
-const userName: string = "Alice";
-const age: number = 20;
-const isAdmin: boolean = false;
+### `index.html`
 
-console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson26</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson26: 非同期処理の基本</h1>
+  </body>
+</html>
 ```
 
-保存するとプレビューが再読み込みされる。ブラウザの DevTools の Console に次のように出れば成功。
+### `script.js`
 
-```
-Alice は 20 歳です。管理者: false
-```
+```js
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-### 手順 3: わざと型を間違えてエラーを見る
+async function main() {
+  console.log("start");
+  await wait(1000);
+  console.log("1 秒経過");
+  await wait(1000);
+  console.log("2 秒経過");
+  await wait(1000);
+  console.log("3 秒経過");
+  console.log("end");
+}
 
-次のコードに書き換える。
+main();
 
-```ts
-const userName: string = "Alice";
-const age: number = "二十歳"; // わざと文字列を入れる
-const isAdmin: boolean = false;
-
-console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
-```
-
-#### 期待出力
-
-- `"二十歳"` の下に **赤い波線** が引かれる。
-- マウスを乗せると次のようなメッセージが出る。
-
-```
-Type 'string' is not assignable to type 'number'.
+console.log("main を呼んだ後のコード");
 ```
 
-- StackBlitz 下部のターミナル（または Problems タブ）にも同じエラーが出る。
+### 期待出力
 
-これが **静的型付けが実行前にエラーを教えてくれる** 体験です。章 2 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
-
-### 手順 4: 変えてみる
-
-次の 3 つをそれぞれ試し、どんなメッセージが出るか見比べる。エラーを確認したら元に戻すこと。
-
-1. `const isAdmin: boolean = "yes";`
-2. `const age: number = true;`
-3. `const userName: string = 123;`
-
-期待される代表的なメッセージは次の通り。
+Console に、1 秒ごとに以下が順に追加されます。
 
 ```
-Type 'string' is not assignable to type 'boolean'.
-Type 'boolean' is not assignable to type 'number'.
-Type 'number' is not assignable to type 'string'.
+start
+main を呼んだ後のコード
+1 秒経過
+2 秒経過
+3 秒経過
+end
 ```
 
-型名のところだけ入れ替わっているのが分かる。
+ポイント:
 
-### 手順 5: 型推論に任せてみる
+- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
+- `main` の内部は `await` があるので、順番に待ちながら進む
+- 合計で「約 3 秒」かけて順番にログが出る
 
-型注釈を消しても、右辺から型が決まることを確認する。
+### 変える
 
-```ts
-const userName = "Alice";
-const age = 20;
-const isAdmin = false;
-
-age = "二十歳"; // ここで赤線が出るはず
-```
-
-`age` に型注釈は書いていないが、`20` が入っていたので TS は `number` 型と推論している。そこに文字列を入れようとすると、やはり次のようなメッセージが出る。
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-（`const` なので「そもそも再代入できない」というエラーも同時に出る場合がある。その場合は `let age = 20;` に変えてから試す。）
+- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
+- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
+- `main()` の呼び出しを削除すると、何も実行されないことを確認
 
 ### 自分で書く
 
-何も見ずに、次の条件を満たすコードを `src/main.ts` に書く。
-
-- `string` 型の変数 `city` に自分が住んでいる都市名を入れる。
-- `number` 型の変数 `population` に適当な人口を入れる。
-- `boolean` 型の変数 `hasSea` に「海に面しているか」を入れる。
-- 3 つをテンプレートリテラルで繋げて `console.log` する。
-
-書き終わったら、わざとどれか 1 つの型注釈と値を食い違わせ、どんなエラーメッセージが出るかを確認してから元に戻す。
+- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
+- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
 
 ## まとめ
 
-- TypeScript は JS に型を足した言語で、**実行する前に** 型の食い違いを教えてくれる。
-- 型注釈は `const 変数名: 型名 = 値` の形で書く。プリミティブ型は `string` / `number` / `boolean` の 3 つから。
-- 右辺から型が自動で決まる **型推論** もあるので、実務では型注釈を省略する場面も多い。
-- 型が合わないと、エディタの赤線と `tsc` の両方が `Type 'X' is not assignable to type 'Y'.` のような形で教えてくれる。
-- 次のレッスンでは、関数の引数と戻り値に型を付ける。章 2 で書いた関数を TS 化していく。
+- 同期は「上から順にすぐ実行」、非同期は「時間がかかる処理を待たずに先へ進む」
+- 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
+- `async` 関数の中で `await Promise` すると、結果が返るまで待てる
+- `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
+- **戻り値が Promise の関数・メソッドには `await` が必要**。次の lesson27 の `fetch` / `response.json()` で実例を扱う

@@ -1,85 +1,152 @@
-# lesson24: イベントで画面を動かす
+# lesson24: 配列の変換
 
 ## ゴール
 
-- `addEventListener` でボタンのクリックに反応できる
-- `submit` イベントでフォーム送信に反応できる
-- `event.preventDefault()` でブラウザ既定の動作を止められる
-- カウンターアプリを作る
+- `map` で配列の各要素を変換した新しい配列を作れる
+- `filter` で条件に合う要素だけを残した新しい配列を作れる
+- いずれも元の配列を変えない（新しい配列を返す）ことを理解する
 
 ## 解説
 
-### イベントとは
+### 「全部変換する」`map`
 
-ユーザーがボタンを押したり、フォームを送信したり、キーを押したりすると、ブラウザは **イベント** を発生させます。JS でそのイベントを「待ち構えて」処理を登録できます。
-
-### `addEventListener`
-
-「どの要素の」「どのイベントに」「何をする関数を呼ぶか」を指定します。
+`map` は配列の各要素に関数を適用して、結果を並べた **新しい配列** を返します。
 
 ```js
-const btn = document.querySelector("#btn");
+const numbers = [1, 2, 3, 4];
+const doubled = numbers.map((n) => n * 2);
 
-btn.addEventListener("click", () => {
-  console.log("クリックされた");
-});
+console.log(doubled); // [2, 4, 6, 8]
+console.log(numbers); // [1, 2, 3, 4] （元は変わらない）
 ```
 
-- 第 1 引数: イベント名（`"click"` / `"submit"` / `"input"` など）
-- 第 2 引数: そのイベントが起きたときに呼ばれる関数
+- `配列.map((要素) => 新しい値)`
+- 戻り値は **同じ長さの新しい配列**
+- 元の配列は変わらない
 
-### `click` イベント
-
-最もよく使うイベントです。任意の要素に登録できます。
+オブジェクトの配列でもよく使います。
 
 ```js
-btn.addEventListener("click", () => {
-  count = count + 1;
-  label.textContent = `カウント: ${count}`;
-});
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+];
+
+const names = users.map((user) => user.name);
+console.log(names); // ["Alice", "Bob"]
 ```
 
-### `submit` イベントと `preventDefault`
+### 「条件で絞り込む」`filter`
 
-`<form>` を送信したときに発生するのが `submit` イベントです。
-
-ただし、HTML の `<form>` はデフォルトで「送信するとページがリロード（または別 URL に遷移）する」動きをします。JS で処理したいときはこの既定動作を止める必要があります。
+`filter` は条件を満たす要素だけを残した **新しい配列** を返します。
 
 ```js
-const form = document.querySelector("#form");
+const numbers = [1, 2, 3, 4, 5];
+const evens = numbers.filter((n) => n % 2 === 0);
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault(); // ページ遷移を止める
-  console.log("送信されました");
-});
+console.log(evens);   // [2, 4]
+console.log(numbers); // [1, 2, 3, 4, 5]
 ```
 
-- イベントハンドラの引数 `event` は「今起きたイベントの情報」
-- `event.preventDefault()` で「ブラウザの既定動作をキャンセル」
+- `配列.filter((要素) => 条件)`
+- 条件が `true` の要素だけが残る
+- 戻り値は **同じかそれより短い新しい配列**
+- 元の配列は変わらない
 
-この `preventDefault` は、フォームを JS で扱うときのほぼ定番の呪文です。
-
-### ハンドラの 2 つの書き方
+オブジェクトの配列で絞り込む例。
 
 ```js
-btn.addEventListener("click", () => { ... });         // アロー関数
-btn.addEventListener("click", handleClick);           // 関数名を渡す
-function handleClick() { ... }
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
+// [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
 ```
 
-どちらでも動きます。短ければアロー関数、再利用するなら関数名を渡す、が目安です。
+### `for...of` との違い
+
+lesson19 の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
+
+- 「変換 / 絞り込み」という **意図が名前で伝わる**
+- 結果が新しい配列で返るので、元の配列を壊さない
+- 1 行で書けて短い
+
+特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
+
+### 「1 件だけ取り出す」`find`
+
+`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const found = users.find((user) => user.age >= 20);
+console.log(found); // { name: "Alice", age: 20 }
+
+const missing = users.find((user) => user.age >= 100);
+console.log(missing); // undefined
+```
+
+- `配列.find((要素) => 条件)`
+- 戻り値は **1 件の要素**（配列ではない）
+- 該当がなければ `undefined`
+- `filter` と違って、見つけた時点で走査を打ち切る
+
+ID で目的の 1 件を取り出すような場面でよく使います。
+
+```js
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+];
+
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target); // { id: "a2", text: "本を返す" }
+```
+
+章 5 lesson66 で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
+
+### チェーン（つなげて書く）
+
+`map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+
+console.log(adultNames); // ["Alice", "Carol"]
+```
+
+「成人だけ絞り込んでから、名前だけ取り出す」という流れが素直に書けます。
 
 ## 演習
 
 ### ゴール
 
-- 「+1」「-1」「リセット」のボタンを持つカウンターアプリを作る
-- フォームの `submit` を捕まえ、入力した値を `preventDefault` で遷移させずに画面に表示する
+- ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
+- ユーザー配列から「名前だけ」の配列を作る
+- 2 つを組み合わせて「成人の名前だけ」の配列を作る
+- ID で TODO の 1 件を取り出す（`find`）
 
 ### 手順
 
-1. 3 ファイルを以下の内容にする
-2. プレビューでボタンとフォームの挙動を確認する
+1. `index.html` のタイトルを `lesson24` に変える
+2. `script.js` を以下に書き換える
 
 ### `index.html`
 
@@ -90,139 +157,87 @@ function handleClick() { ... }
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson24</title>
-    <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson24: カウンター</h1>
-
-    <section>
-      <p id="count-label">カウント: 0</p>
-      <button id="inc">+1</button>
-      <button id="dec">-1</button>
-      <button id="reset">リセット</button>
-    </section>
-
-    <hr />
-
-    <section>
-      <h2>フォーム送信</h2>
-      <form id="form">
-        <label for="name-input">名前:</label>
-        <input id="name-input" type="text" />
-        <button type="submit">送信</button>
-      </form>
-      <p id="form-result">（未入力）</p>
-    </section>
+    <h1>lesson24: 配列の変換</h1>
   </body>
 </html>
-```
-
-### `style.css`
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-  max-width: 480px;
-}
-
-button {
-  margin-right: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-hr {
-  margin: 24px 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-}
 ```
 
 ### `script.js`
 
 ```js
-// カウンター
-let count = 0;
-const label = document.querySelector("#count-label");
-const incBtn = document.querySelector("#inc");
-const decBtn = document.querySelector("#dec");
-const resetBtn = document.querySelector("#reset");
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+  { name: "Dave", age: 17 },
+];
 
-function render() {
-  label.textContent = `カウント: ${count}`;
-}
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
 
-incBtn.addEventListener("click", () => {
-  count = count + 1;
-  render();
-});
+const names = users.map((user) => user.name);
+console.log(names);
 
-decBtn.addEventListener("click", () => {
-  count = count - 1;
-  render();
-});
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+console.log(adultNames);
 
-resetBtn.addEventListener("click", () => {
-  count = 0;
-  render();
-});
+const numbers = [1, 2, 3, 4, 5];
+const doubled = numbers.map((n) => n * 2);
+const evens = numbers.filter((n) => n % 2 === 0);
+console.log(doubled);
+console.log(evens);
+console.log(numbers);
 
-// フォーム
-const form = document.querySelector("#form");
-const nameInput = document.querySelector("#name-input");
-const result = document.querySelector("#form-result");
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target);
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = nameInput.value;
-  result.textContent = `こんにちは、${value} さん`;
-});
+const missing = todos.find((todo) => todo.id === "zzz");
+console.log(missing);
 ```
 
 ### 期待出力
 
-- 「+1」を押すと「カウント: 1」「カウント: 2」... と増える
-- 「-1」を押すと減る
-- 「リセット」を押すと 0 に戻る
-- 名前を入力して「送信」を押すと `（未入力）` が「こんにちは、◯◯ さん」に変わる
-- 送信してもページはリロードされない（URL が変わらない、スクロール位置もそのまま）
+```
+[{name: "Alice", age: 20}, {name: "Carol", age: 30}]
+["Alice", "Bob", "Carol", "Dave"]
+["Alice", "Carol"]
+[2, 4, 6, 8, 10]
+[2, 4]
+[1, 2, 3, 4, 5]
+{id: "a2", text: "本を返す"}
+undefined
+```
+
+最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
 
 ### 変える
 
-- `preventDefault` の行を **コメントアウト** すると、送信のたびにページが一瞬リロードされることを確認（URL に `?` が付く）。確認できたら戻す
-- 「+1」ボタンを 3 回押したあと「リセット」を押して 0 に戻ることを確認
-- `incBtn.addEventListener("click", ...)` の `"click"` を `"dblclick"`（ダブルクリック）に変えて、動きの違いを見る
+- `filter` の条件を `user.age < 20` に変えて「未成年」を取り出す
+- `map` を `(user) => user.age` に変えて「年齢だけ」の配列を作る
+- チェーンの `filter` と `map` の順番を入れ替えるとどうなるか考える（先に `map` で名前にしてしまうと `user.age` が使えなくなる）
 
 ### 自分で書く
 
-- 「×2」ボタンを追加して、押すとカウントが 2 倍になるようにする
-- フォームに「年齢」入力欄（`<input id="age-input" type="number">`）を追加し、送信時に「◯◯ さん（◯◯ 歳）」の形で表示する
-- カウントが 0 未満になったら `#count-label` に `classList.add("negative")` を付け、CSS で赤色にする（0 以上なら `remove`）
+- 数値配列 `[10, 25, 7, 42, 3]` から「10 以上のものだけ」を残す → `[10, 25, 42]`
+- 文字列配列 `["apple", "banana", "cherry"]` から「すべて大文字に変えた新しい配列」を作る（ヒント: `s.toUpperCase()`）→ `["APPLE", "BANANA", "CHERRY"]`
+- TODO の配列 `[{ id: "1", text: "A" }, { id: "2", text: "B" }, { id: "3", text: "C" }]` から `id: "2"` だけを除いた新しい配列を作る（`filter` を使う）
 
 ## まとめ
 
-- `要素.addEventListener("click", 関数)` でクリックに反応する
-- フォーム送信は `"submit"` イベント、`event.preventDefault()` で既定動作を止める
-- カウンターや入力フォームは、DOM 操作とイベントを組み合わせる定番の練習題
-- **`preventDefault` は章 5 lesson50 で登場する Server Actions では、React が自動でやってくれるようになる（コードから消える）**
+- `map` は「同じ長さの新しい配列を作る」変換
+- `filter` は「条件で絞り込んだ新しい配列を作る」抽出
+- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
+- どれも元の配列は変えない
+- チェーンすると複数の処理を 1 行でつなげられる
+- **`find` は章 5 lesson66（動的ルートの詳細取得、URL の `id` から 1 件取り出す）で再登場する**
+- **`map` は章 4 lesson44 で JSX の配列を作る形で再登場する**

@@ -1,4 +1,4 @@
-# lesson52: 小さなアプリを仕上げる（統合）
+# lesson73: 小さなアプリを仕上げる（統合）
 
 ## ゴール
 
@@ -11,16 +11,16 @@
 
 ### 今まで作ってきたものを並べる
 
-章 2 lesson25 で素の JS で作った TODO、章 4 lesson42 で React + localStorage に移植した TODO、そして lesson50 / 51 で Server Actions 化した TODO。
+章 2 lesson30 で素の JS で作った TODO、章 4 lesson57 で React + localStorage に移植した TODO、そして lesson68 / 51 で Server Actions 化した TODO。
 
 ここまでで以下が揃っています:
 
-- `app/layout.tsx`（lesson45）: ナビとフッターを含む共通レイアウト
-- `app/page.tsx`（lesson43-46）: トップページ
-- `app/about/page.tsx`（lesson44）: 章 1 の自己紹介ページを移植
-- `app/posts/page.tsx` / `app/posts/[id]/page.tsx`（lesson47-49）: 練習用の記事一覧
-- `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（lesson50-51）: 追加フォーム付き一覧
-- `app/actions.ts`（lesson50-51）: Server Actions
+- `app/layout.tsx`（lesson60）: ナビとフッターを含む共通レイアウト
+- `app/page.tsx`（lesson58-46）: トップページ
+- `app/about/page.tsx`（lesson59）: 章 1 の自己紹介ページを移植
+- `app/posts/page.tsx` / `app/posts/[id]/page.tsx`（lesson63-49）: 練習用の記事一覧
+- `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（lesson68-51）: 追加フォーム付き一覧
+- `app/actions.ts`（lesson68-51）: Server Actions
 
 このレッスンで足すものは次のとおりです:
 
@@ -89,7 +89,7 @@ export default async function TodosPage({ searchParams }: Props) {
 
 ### 前回のプロジェクトを開く
 
-lesson51 で作ったプロジェクトを開き直しましょう。
+lesson69 で作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: 削除アクションを追加する
 
@@ -272,7 +272,7 @@ export default async function TodoDetailPage({ params }: Props) {
 ポイント:
 
 - `generateMetadata` で動的タイトルを返します。`await params` と `getTodo(id)` を呼びます。
-- 見つからないときは `notFound()` を呼びます（lesson49 と同じです）。
+- 見つからないときは `notFound()` を呼びます（lesson67 と同じです）。
 - `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
 
 ### 手順 5: 詳細ページの `not-found.tsx`
@@ -324,8 +324,8 @@ export const metadata = {
 
 ### 動作確認チェックリスト
 
-- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（lesson51 の成果）
-- [ ] 送信中はボタンが disabled になる（lesson51 の成果）
+- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（lesson69 の成果）
+- [ ] 送信中はボタンが disabled になる（lesson69 の成果）
 - [ ] 追加 → 一覧が自動で更新される（`revalidatePath` の成果）
 - [ ] 削除 → 該当 1 件だけが消える
 - [ ] `/todos?highlight=<id>` でその行だけ黄色背景
@@ -348,15 +348,15 @@ TODO に「完了」のフラグを追加する演習です。
 - 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出します。
 - 完了済みの項目はテキストに `text-decoration: line-through` を当てます（CSS に `.todo-item--done` を追加）。
 
-実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターンです。lesson50-51 でやったことの応用です。
+実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターンです。lesson68-51 でやったことの応用です。
 
 ## まとめ
 
 - `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
 - `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できます。`template` を使うと子ページのタイトルを共通で包めます。
 - `searchParams: Promise<{ highlight?: string }>` で URL クエリを受け取り、条件付きスタイルに反映できます。
-- 章 2 lesson25（素の JS）→ 章 4 lesson42（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
-- 次の lesson53 では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。
+- 章 2 lesson30（素の JS）→ 章 4 lesson57（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
+- 次の lesson75 では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。
 
 ### 補足: レイアウトのおさらい
 
@@ -370,7 +370,7 @@ app/
 ├── actions.ts                # Server Actions
 ├── types.ts                  # Todo 型
 ├── components/               # 共通部品
-│   ├── Counter.tsx           # lesson46 で作った Client コンポーネント
+│   ├── Counter.tsx           # lesson62 で作った Client コンポーネント
 │   ├── ClientBox.tsx
 │   └── ServerInfo.tsx
 ├── about/
@@ -382,7 +382,7 @@ app/
 │   └── [id]/
 │       ├── page.tsx          # TODO 詳細 (Server)
 │       └── not-found.tsx
-└── posts/                    # lesson47-49 の練習用
+└── posts/                    # lesson63-49 の練習用
     ├── page.tsx
     ├── loading.tsx
     └── [id]/

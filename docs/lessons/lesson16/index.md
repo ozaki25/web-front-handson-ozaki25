@@ -1,71 +1,69 @@
-# lesson16: 繰り返し処理
+# lesson16: 値の種類
 
 ## ゴール
 
-- `for...of` で配列の全要素を順に処理できる
-- `forEach` でも同じことができることを知る
+- 文字列・数値・真偽値・`null` / `undefined` を区別できる
+- テンプレートリテラルで文字列の中に変数を埋め込める
 
 ## 解説
 
-### 「全部に対して同じことをする」
+### 値には「種類」がある
 
-配列の要素を 1 つずつ取り出して `console.log` したいとき、`todos[0]` / `todos[1]` / `todos[2]` ... と書き並べるのは大変です。要素数が増えるたびに書き足す必要があり、現実的ではありません。
+JS では、変数に入れる値にいくつかの種類があります。今回は 5 種類を覚えます。
 
-こういう「全部の要素に対して同じことをする」ために、繰り返し処理を使います。
+| 種類 | 例 | 説明 |
+| --- | --- | --- |
+| 文字列 | `"Alice"` / `'hello'` | テキスト。ダブルクオート / シングルクオートで囲む |
+| 数値 | `42` / `3.14` | 整数と小数の両方。クオートを付けない |
+| 真偽値 | `true` / `false` | 「はい / いいえ」の 2 値。条件分岐で使う |
+| `null` | `null` | 「意図的に空」 |
+| `undefined` | `undefined` | 「まだ値がない」 |
 
-### `for...of`
+`null` と `undefined` はどちらも「空」を表しますが、ニュアンスが違います。
 
-本コースで最初に覚える書き方は `for...of` です。配列専用ではありませんが、配列との相性がよく、書き方が素直です。
+- `null`: プログラマが「ここは空にしておくぞ」と明示的に入れるもの
+- `undefined`: 変数を宣言しただけで値を入れていないときに、自動で付く初期状態
 
-```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+当面は「どちらも空を表す」くらいの理解で十分です。使い分けは徐々に身につきます。
 
-for (const todo of todos) {
-  console.log(todo);
-}
-```
-
-- `for (const 変数名 of 配列)` と書く
-- `{ ... }` の中が「各要素に対してやりたい処理」
-- ループのたびに `todo` に次の要素が順番に入る
-
-インデックスは使わず、「要素そのもの」を直接受け取ります。インデックスが必要なときは後の章で別の書き方を学びますが、まずはこの形で十分です。
-
-### `forEach`（軽く触れる）
-
-配列には `forEach` というメソッドもあります。書き味が少し違うだけで、できることはほぼ同じです。
+### 数値と文字列は混ぜない
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
-
-todos.forEach((todo) => {
-  console.log(todo);
-});
+const a = 1 + 2;       // 3 （数値の足し算）
+const b = "1" + "2";   // "12" （文字列の連結）
+const c = 1 + "2";     // "12" （文字列側に寄せられる）
 ```
 
-- `(todo) => { ... }` はアロー関数と呼ばれる記法（lesson17 で詳しく扱う）
-- 配列の各要素に対して、カッコの中の処理が呼ばれる
+`+` は数値なら足し算、文字列なら連結になります。片方が文字列だと全体が文字列になる、という挙動だけ頭の片隅に置いておきます。
 
-本コースでは `for...of` を主に使いますが、後のレッスンや実際のコードでは `forEach` もよく見かけます。「同じ意味の別の書き方」として覚えておきます。
+### テンプレートリテラル
 
-### どちらを使う？
+文字列の中に変数を埋め込みたいとき、バッククオート（`` ` ``）で囲む書き方が便利です。これをテンプレートリテラルと呼びます。
 
-- 読みやすさ重視なら `for...of`
-- 既存コードに合わせるなら `forEach`
+```js
+const userName = "Alice";
+const age = 20;
 
-迷ったら `for...of` で統一して構いません。
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
+```
+
+- バッククオートで囲む
+- `${ ... }` の中に変数や式を書く
+
+シングルクオート / ダブルクオートで囲んだ文字列では `${ ... }` は使えません。埋め込みたいときは必ずバッククオートを使います。
 
 ## 演習
 
 ### ゴール
 
-- やることリストの配列を `for...of` で全件 Console に出す
-- 同じ処理を `forEach` でも書いてみる
+- 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson16` に変える
-2. `script.js` を以下に書き換える
+1. lesson15 の `index.html` をそのまま使う（タイトルだけ `lesson16` に変える）
+2. `script.js` を以下の内容に書き換える
+3. プレビューの Console を開く
 
 ### `index.html`
 
@@ -79,7 +77,7 @@ todos.forEach((todo) => {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson16: 繰り返し処理</h1>
+    <h1>lesson16: 値の種類</h1>
   </body>
 </html>
 ```
@@ -87,55 +85,51 @@ todos.forEach((todo) => {
 ### `script.js`
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+const userName = "Alice";
+const age = 20;
+const isStudent = true;
+const nickname = null;
+let score;
 
-console.log("--- for...of ---");
-for (const todo of todos) {
-  console.log(todo);
-}
+console.log(userName);
+console.log(age);
+console.log(isStudent);
+console.log(nickname);
+console.log(score);
 
-console.log("--- forEach ---");
-todos.forEach((todo) => {
-  console.log(todo);
-});
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
 
-console.log("--- 合計 ---");
-const numbers = [1, 2, 3, 4, 5];
-let total = 0;
-for (const n of numbers) {
-  total = total + n;
-}
-console.log(total);
+const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
+console.log(summary);
 ```
 
 ### 期待出力
 
 ```
---- for...of ---
-牛乳を買う
-本を読む
-ジョギング
---- forEach ---
-牛乳を買う
-本を読む
-ジョギング
---- 合計 ---
-15
+Alice
+20
+true
+null
+undefined
+あなたは Alice さんで、20 歳です
+名前: Alice / 学生: true / 点数: undefined
 ```
+
+`score` は `let score;` と宣言しただけで値を入れていないので、自動で `undefined` になります。テンプレートリテラルの中に入れると `undefined` という文字列として表示されます。
 
 ### 変える
 
-- `todos` の要素を 5 つに増やす → どちらのループも自動で 5 回実行される
-- `console.log(todo)` を `console.log("- " + todo)` に変える → 各行の先頭に `- ` が付く
-- `numbers` の合計処理で、`total = total + n` を `total = total + n * 2` に変える → 出力が `30` になる
+- `age` を `20` から `"20"`（文字列）に変えて、`age + 1` の結果を `console.log` してみる → `201` になる（文字列連結）
+- `isStudent` を `false` に変えて Console を確認
+- `nickname` を `"あり"` に変えて `summary` の出力に含まれる挙動を確認
 
 ### 自分で書く
 
-- 数値の配列 `scores = [80, 95, 62, 77, 90]` を作り、`for...of` で合計と平均を計算して出す（平均 = 合計 / 要素数）
-- 文字列の配列 `names = ["Alice", "Bob", "Carol"]` を作り、`for...of` で「こんにちは、○○ さん」と 1 人ずつ出力する
+- 自分の情報（名前・好きな数字・趣味）を 3 つの変数に入れ、「私は ○○ です。好きな数字は ○○ で、趣味は ○○ です。」という 1 行の文をテンプレートリテラルで作って表示する
 
 ## まとめ
 
-- 配列の全要素を処理するには `for...of` を使う
-- `forEach` でも同じことが書けるが、本コースでは `for...of` を主に使う
-- ループの中で `let` で用意した合計用変数を更新すると、合計や平均も計算できる
+- 値には文字列 / 数値 / 真偽値 / `null` / `undefined` の 5 種類（当面はこれで十分）
+- 文字列の中に変数を埋め込むときはバッククオート + `${ ... }`
+- クオートの種類（`` ` `` と `"` と `'`）を取り違えると `${ ... }` が文字通りに出てしまうので注意

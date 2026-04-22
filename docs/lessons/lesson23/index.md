@@ -1,94 +1,108 @@
-# lesson23: DOM を操作する
+# lesson23: 分割代入とスプレッド
 
 ## ゴール
 
-- `document.querySelector` で HTML の要素を取得できる
-- `textContent` で中身のテキストを読み書きできる
-- `classList` で CSS クラスを付け外しできる
-- `createElement` と `appendChild` で要素を JS から作って追加できる
+- オブジェクトや配列から値を分割代入で取り出せる
+- スプレッド構文でオブジェクトや配列をコピー・結合できる
+- 2 つの書き方を「取り出す」vs「まとめる・広げる」で使い分けられる
 
 ## 解説
 
-### DOM とは
+### 最初に注意
 
-ブラウザは HTML を読み込むと、それを木構造のデータ（DOM = Document Object Model）として保持します。JS から DOM を操作することで、ページの内容を動的に変えられます。
+分割代入とスプレッドは **見た目が似ていて混同しやすい** 機能です。先に目的の違いを押さえます。
 
-これまでは Console に出すだけでしたが、本レッスンから「画面を書き換える」世界に入ります。
+| 構文 | どこに書く | 目的 | イメージ |
+| --- | --- | --- | --- |
+| 分割代入 | 代入の **左辺** | 値を **取り出す** | 箱の中身を取り出す |
+| スプレッド `...` | 代入の **右辺**（配列・オブジェクトの中） | 値を **まとめる・広げる** | 中身を並べ直す |
 
-### 要素を取得する: `document.querySelector`
+この表を意識していれば、コードを読むときに迷いにくくなります。
 
-CSS セレクタで要素を 1 つ取り出します。
+### オブジェクトの分割代入
 
-```js
-const title = document.querySelector("h1");
-const box = document.querySelector("#box");
-const btn = document.querySelector(".btn");
-```
-
-- `"h1"`: 要素セレクタ
-- `"#id名"`: id セレクタ
-- `".クラス名"`: クラスセレクタ
-
-見つからない場合は `null` が返ります。
-
-> `<script defer>` を使っていれば、HTML の解析が終わってから JS が動くので、要素がまだ存在せず `null` になる事故を防げます。
-
-### テキストの読み書き: `textContent`
-
-取得した要素の中身のテキストを読み書きします。
+オブジェクトから特定のプロパティを取り出して、同じ名前の変数に入れます。
 
 ```js
-const title = document.querySelector("h1");
+const user = { name: "Alice", age: 20 };
 
-console.log(title.textContent);    // 元のテキストを読む
-title.textContent = "書き換えました"; // 書き換える
+const { name, age } = user;
+console.log(name); // "Alice"
+console.log(age);  // 20
 ```
 
-### クラスの操作: `classList`
+`const { name } = user;` のように、欲しいものだけ取り出すこともできます。従来の書き方は `const name = user.name;` で、分割代入はそれを一度に書くための構文です。
 
-CSS クラスを付け外しするための専用 API です。
+### 配列の分割代入
+
+配列の場合は `[` `]` を使います。位置（インデックス）で取り出します。
 
 ```js
-const box = document.querySelector("#box");
+const colors = ["red", "green", "blue"];
 
-box.classList.add("active");      // クラスを追加
-box.classList.remove("active");   // クラスを削除
-box.classList.toggle("active");   // あれば消す、なければ付ける
+const [first, second] = colors;
+console.log(first);  // "red"
+console.log(second); // "green"
 ```
 
-CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
+### オブジェクトのスプレッド
 
-### 要素を作って追加: `createElement` / `appendChild`
-
-新しい要素を作って、既存の要素の子として追加します。
+既存のオブジェクトの中身を「展開」して、新しいオブジェクトを作るときに使います。
 
 ```js
-const ul = document.querySelector("ul");
+const user = { name: "Alice", age: 20 };
 
-const li = document.createElement("li");
-li.textContent = "新しい項目";
-ul.appendChild(li);
+const copy = { ...user };
+console.log(copy); // { name: "Alice", age: 20 }
+
+const updated = { ...user, age: 21 };
+console.log(updated); // { name: "Alice", age: 21 }
+console.log(user);    // { name: "Alice", age: 20 } （元のオブジェクトは変わらない）
 ```
 
-手順:
+- `{ ...user }` で元の中身を展開してコピー
+- 後ろに `age: 21` を書くと、同じキーは上書きされる
+- 元のオブジェクトは変わらない（これを「イミュータブルな更新」と呼ぶ。章 4 で再登場）
 
-1. `document.createElement("li")` で `<li>` 要素を作る（まだ画面には出ていない）
-2. `li.textContent = "..."` で中身のテキストを入れる
-3. `ul.appendChild(li)` で実際にページに追加する
+### 配列のスプレッド
 
-この「作る → テキストを入れる → 追加する」の流れは、次のレッスン以降で繰り返し使います。
+配列も同じように展開できます。
+
+```js
+const a = [1, 2];
+const b = [3, 4];
+
+const merged = [...a, ...b];
+console.log(merged); // [1, 2, 3, 4]
+
+const appended = [...a, 100];
+console.log(appended); // [1, 2, 100]
+```
+
+### 分割代入とスプレッドの対比表
+
+もう一度整理します。
+
+| やりたいこと | 書き方 | 例 |
+| --- | --- | --- |
+| オブジェクトから値を取り出す | `const { key } = obj` | `const { name } = user` |
+| 配列から値を取り出す | `const [a, b] = arr` | `const [first, second] = colors` |
+| オブジェクトをコピー / 一部だけ変える | `{ ...obj, key: newValue }` | `{ ...user, age: 21 }` |
+| 配列をコピー / 結合 / 末尾追加 | `[...arr, newValue]` | `[...todos, "新しい"]` |
+
+「左辺に書く `{ }` / `[ ]`」は取り出す。「右辺の中に書く `...`」はまとめる・広げる。この対比で覚えます。
 
 ## 演習
 
 ### ゴール
 
-- ボタンっぽい見た目の要素のクラスを JS で付け替える
-- JS から新しい `<li>` 要素を作って `<ul>` に追加する
+- （A）`user` オブジェクトから `name` と `age` を分割代入で取り出して表示する
+- （B）分割代入で取り出した値と、既存オブジェクトをスプレッドでマージして新しいオブジェクトを作る
 
 ### 手順
 
-1. `index.html` / `style.css` / `script.js` をそれぞれ以下の内容にする
-2. プレビューを確認する
+1. `index.html` のタイトルを `lesson23` に変える
+2. `script.js` を以下に書き換える
 
 ### `index.html`
 
@@ -99,107 +113,80 @@ ul.appendChild(li);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson23</title>
-    <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1 id="title">lesson23</h1>
-    <p id="box">このボックスのクラスが切り替わります</p>
-    <ul id="list">
-      <li>既存の項目 1</li>
-      <li>既存の項目 2</li>
-    </ul>
+    <h1>lesson23: 分割代入とスプレッド</h1>
   </body>
 </html>
-```
-
-### `style.css`
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-}
-
-#box {
-  padding: 12px;
-  border: 1px solid #888;
-  border-radius: 6px;
-}
-
-#box.active {
-  background-color: #ffe58f;
-  color: #222;
-  border-color: #d48806;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  #box {
-    border-color: #aaa;
-  }
-
-  #box.active {
-    background-color: #5a4600;
-    color: #fff;
-    border-color: #e6a817;
-  }
-}
 ```
 
 ### `script.js`
 
 ```js
-const title = document.querySelector("#title");
-console.log(title.textContent);
-title.textContent = "DOM を書き換えました";
+// 演習 A: 分割代入
+const user = { name: "Alice", age: 20, city: "Tokyo" };
 
-const box = document.querySelector("#box");
-box.classList.add("active");
+const { name, age } = user;
+console.log(name);
+console.log(age);
 
-const list = document.querySelector("#list");
+const colors = ["red", "green", "blue"];
+const [first, second] = colors;
+console.log(first);
+console.log(second);
 
-const items = ["りんご", "みかん", "ぶどう"];
-for (const item of items) {
-  const li = document.createElement("li");
-  li.textContent = item;
-  list.appendChild(li);
-}
+// 演習 B: スプレッド
+const copy = { ...user };
+console.log(copy);
 
-const newLi = document.createElement("li");
-newLi.textContent = "最後に追加した項目";
-list.appendChild(newLi);
+const updated = { ...user, age: 21 };
+console.log(updated);
+console.log(user);
+
+const a = [1, 2];
+const b = [3, 4];
+const merged = [...a, ...b];
+console.log(merged);
+
+const todos = ["牛乳を買う", "本を読む"];
+const added = [...todos, "ジョギング"];
+console.log(added);
+console.log(todos);
 ```
 
 ### 期待出力
 
-- 画面の見出し: 「DOM を書き換えました」になっている
-- ボックスは背景黄色（または枠色が濃いオレンジ）に変わる
-- リストに `既存の項目 1` / `既存の項目 2` / `りんご` / `みかん` / `ぶどう` / `最後に追加した項目` の 6 項目が並ぶ
-- Console に元のタイトル「lesson23」が出る
+```
+Alice
+20
+red
+green
+{name: "Alice", age: 20, city: "Tokyo"}
+{name: "Alice", age: 21, city: "Tokyo"}
+{name: "Alice", age: 20, city: "Tokyo"}
+[1, 2, 3, 4]
+["牛乳を買う", "本を読む", "ジョギング"]
+["牛乳を買う", "本を読む"]
+```
+
+スプレッドで作った `updated` や `added` は新しいオブジェクト / 配列で、元の `user` や `todos` は変わらないことを確認します。
 
 ### 変える
 
-- `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
-- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（次レッスンでクリックに結び付ける）
-- `items` に要素を 2 つ足して、リストが 8 行になることを確認
-- `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
+- 分割代入で `const { name, city } = user;` に変え、`city` の値を取り出す
+- `const [, second, third] = colors;` で先頭を飛ばして 2 番目と 3 番目を取り出す（カンマで位置をずらす）
+- `const updated2 = { ...user, name: "Bob" };` で名前を上書きした新オブジェクトを作る
+- `const added2 = ["先頭", ...todos];` で先頭に追加してみる
 
 ### 自分で書く
 
-- 新しい段落要素 `<p>` を `createElement` で作り、好きな文章を入れて `document.body.appendChild` で本文末尾に追加する
-- `#title` の `textContent` を、JS 側で `const userName = "..."` と定義した名前を含むテンプレートリテラル（`` `ようこそ、${userName} さん` ``）に置き換える
+- `book = { title: "JS入門", author: "山田", year: 2024 }` を作り、分割代入で `title` と `author` を取り出して「『○○』（○○）」の形で表示
+- 上記 `book` からスプレッドを使って `year` だけ `2025` に変えた新しいオブジェクトを作り、両方とも Console に出して、元は変わらないことを確認
 
 ## まとめ
 
-- `document.querySelector` は CSS セレクタで要素を 1 つ取る（見つからないと `null`）
-- `textContent` でテキストの読み書き
-- `classList.add` / `remove` / `toggle` でクラスの付け外し
-- `createElement` で要素を作り、`appendChild` で親に追加
-- 次レッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る
+- 分割代入は左辺で書く「取り出し」の構文
+- スプレッドは右辺で書く「まとめる・広げる」の構文
+- 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本
+- **この分割代入の書き方は lesson43 で `function Greeting({ name }: Props)` のように React の props として再登場する**

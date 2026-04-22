@@ -1,296 +1,205 @@
-# lesson28: オブジェクトの型と type エイリアス
+# lesson28: DOM を操作する
 
 ## ゴール
 
-- オブジェクトの「形」を型で書ける（オブジェクト型リテラル）。
-- `type` エイリアスで型に名前を付けられる。
-- `export type` / `import type` で型を別ファイルから使い回せる。
-- 章 2 の TODO アプリの 1 件を表す `Todo` 型を作り、関数で受け取れる。
+- `document.querySelector` で HTML の要素を取得できる
+- `textContent` で中身のテキストを読み書きできる
+- `classList` で CSS クラスを付け外しできる
+- `createElement` と `appendChild` で要素を JS から作って追加できる
 
 ## 解説
 
-### オブジェクトの型を書く
+### DOM とは
 
-章 2 lesson18 で、オブジェクトを使って「人」や「TODO」のような複数の値をまとめました。TS ではそのオブジェクトの **形** を型で書けます。
+ブラウザは HTML を読み込むと、それを木構造のデータ（DOM = Document Object Model）として保持します。JS から DOM を操作することで、ページの内容を動的に変えられます。
 
-```ts
-const user: { name: string; age: number } = {
-  name: "Alice",
-  age: 20,
-};
-```
+これまでは Console に出すだけでしたが、本レッスンから「画面を書き換える」世界に入ります。
 
-- `{ name: string; age: number }` が **オブジェクト型リテラル**。波括弧の中に「プロパティ名: 型」を並べる。
-- プロパティの区切りは **セミコロン `;`**（カンマでも通るが、TS では `;` が慣例）。
-- 値のオブジェクト（右辺）はプロパティの区切りが **カンマ `,`**。左と右で記号が違うので注意する。
+### 要素を取得する: `document.querySelector`
 
-このオブジェクトに、宣言した形と違う値を入れるとエラーになる。
-
-```ts
-const user: { name: string; age: number } = {
-  name: "Alice",
-  age: "二十", // ここで赤線
-};
-```
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-プロパティが足りない / 余っている場合もエラーになる。
-
-```ts
-const user: { name: string; age: number } = {
-  name: "Alice",
-}; // age が足りない
-```
-
-```
-Property 'age' is missing in type '{ name: string; }' but required in type '{ name: string; age: number; }'.
-```
-
-### `type` エイリアスで名前を付ける
-
-同じオブジェクト型を何か所も書くのは大変です。`type` キーワードで型に **名前** を付けられます。
-
-```ts
-type User = {
-  name: string;
-  age: number;
-};
-
-const alice: User = { name: "Alice", age: 20 };
-const bob: User = { name: "Bob", age: 25 };
-```
-
-- `type 名前 = 型の中身;` の形。末尾のセミコロンを忘れない。
-- 慣習として、型の名前は **大文字で始める**（`User`、`Todo` など）。変数とぶつかりにくくするため。
-- `type` エイリアスは「型に別名を付けるだけ」なので、コンパイル後の JS には残らない（実行時には影響しない）。
-
-関数の引数にも使える。
-
-```ts
-function printUser(user: User): void {
-  console.log(`${user.name} (${user.age})`);
-}
-
-printUser(alice);
-```
-
-### 型を別ファイルに置く（`export type` / `import type`）
-
-同じ型をあちこちのファイルで使う場面では、型だけをまとめたファイルを作ります。慣習的に `types.ts` という名前にすることが多いです。
-
-```ts
-// src/types.ts
-export type User = {
-  name: string;
-  age: number;
-};
-```
-
-`export type` と書くと、この型を他のファイルから読み込めるようになります。
-
-使う側は `import type` で読み込みます。
-
-```ts
-// src/main.ts
-import type { User } from "./types";
-
-const alice: User = { name: "Alice", age: 20 };
-console.log(alice);
-```
-
-- `import type { ... } from "./types";` と書く。`import` の後ろに `type` が付いているのがポイント。
-- `import type` で読み込んだ名前は **型の場所でしか使えない**（値としては使えない）。これは TS が「この import はコンパイル後の JS からは完全に消してよい」と判断できるようにするための書き方。
-- 普通の `import { User }` でも動くが、`import type` のほうが意図がはっきりして、ビルド後のサイズにも優しい。
-
-### 章 2 の TODO を型にする
-
-章 2 lesson25 で、TODO 1 件を次のようなオブジェクトで表しました。
+CSS セレクタで要素を 1 つ取り出します。
 
 ```js
-{ id: "abc123", text: "牛乳を買う" }
+const title = document.querySelector("h1");
+const box = document.querySelector("#box");
+const btn = document.querySelector(".btn");
 ```
 
-この形を TS で書くと次のようになります。
+- `"h1"`: 要素セレクタ
+- `"#id名"`: id セレクタ
+- `".クラス名"`: クラスセレクタ
 
-```ts
-type Todo = {
-  id: string;
-  text: string;
-};
+見つからない場合は `null` が返ります。
+
+> `<script defer>` を使っていれば、HTML の解析が終わってから JS が動くので、要素がまだ存在せず `null` になる事故を防げます。
+
+### テキストの読み書き: `textContent`
+
+取得した要素の中身のテキストを読み書きします。
+
+```js
+const title = document.querySelector("h1");
+
+console.log(title.textContent);    // 元のテキストを読む
+title.textContent = "書き換えました"; // 書き換える
 ```
 
-このレッスンでは、`id` と `text` の 2 プロパティだけの最小の `Todo` 型を作ります。「未完了 / 完了」の状態や「メモ」のような追加情報は次のレッスン（lesson29）で足していきます。
+### クラスの操作: `classList`
 
-### このレッスンで扱わないこと
+CSS クラスを付け外しするための専用 API です。
 
-オプショナルプロパティ（`name?: string` のような `?` 付きプロパティ）は lesson29 で扱います。このレッスンでは **全プロパティが必須** の形だけを書きます。
+```js
+const box = document.querySelector("#box");
+
+box.classList.add("active");      // クラスを追加
+box.classList.remove("active");   // クラスを削除
+box.classList.toggle("active");   // あれば消す、なければ付ける
+```
+
+CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
+
+### 要素を作って追加: `createElement` / `appendChild`
+
+新しい要素を作って、既存の要素の子として追加します。
+
+```js
+const ul = document.querySelector("ul");
+
+const li = document.createElement("li");
+li.textContent = "新しい項目";
+ul.appendChild(li);
+```
+
+手順:
+
+1. `document.createElement("li")` で `<li>` 要素を作る（まだ画面には出ていない）
+2. `li.textContent = "..."` で中身のテキストを入れる
+3. `ul.appendChild(li)` で実際にページに追加する
+
+この「作る → テキストを入れる → 追加する」の流れは、次のレッスン以降で繰り返し使います。
 
 ## 演習
 
-### 手順 1: `User` 型を書く
+### ゴール
 
-`src/main.ts` の中身を以下に置き換える。
+- ボタンっぽい見た目の要素のクラスを JS で付け替える
+- JS から新しい `<li>` 要素を作って `<ul>` に追加する
 
-```ts
-type User = {
-  name: string;
-  age: number;
-};
+### 手順
 
-const alice: User = { name: "Alice", age: 20 };
-const bob: User = { name: "Bob", age: 25 };
+1. `index.html` / `style.css` / `script.js` をそれぞれ以下の内容にする
+2. プレビューを確認する
 
-function printUser(user: User): void {
-  console.log(`${user.name} (${user.age})`);
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson28</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1 id="title">lesson28</h1>
+    <p id="box">このボックスのクラスが切り替わります</p>
+    <ul id="list">
+      <li>既存の項目 1</li>
+      <li>既存の項目 2</li>
+    </ul>
+  </body>
+</html>
+```
+
+### `style.css`
+
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
 }
 
-printUser(alice);
-printUser(bob);
-```
-
-#### 期待出力
-
-```
-Alice (20)
-Bob (25)
-```
-
-### 手順 2: わざとプロパティを欠けさせてエラーを見る
-
-次のように書き換えて、赤線が出る場所を確認する。
-
-```ts
-const charlie: User = { name: "Charlie" };
-```
-
-期待されるメッセージ:
-
-```
-Property 'age' is missing in type '{ name: string; }' but required in type 'User'.
-```
-
-続けて、余分なプロパティも試す。
-
-```ts
-const dave: User = { name: "Dave", age: 30, email: "dave@example.com" };
-```
-
-期待されるメッセージ:
-
-```
-Object literal may only specify known properties, and 'email' does not exist in type 'User'.
-```
-
-「`User` 型に `email` というプロパティは定義されていない」と教えてくれている。
-
-### 手順 3: `types.ts` を作って `Todo` 型を置く
-
-1. StackBlitz で `src/` の下に新しいファイル `types.ts` を作る。
-2. 中身を次のように書く。
-
-```ts
-// src/types.ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-3. `src/main.ts` を次のように書き換える。
-
-```ts
-import type { Todo } from "./types";
-
-const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-];
-
-function printTodo(todo: Todo): void {
-  console.log(`- [${todo.id}] ${todo.text}`);
+#box {
+  padding: 12px;
+  border: 1px solid #888;
+  border-radius: 6px;
 }
 
-for (const todo of todos) {
-  printTodo(todo);
+#box.active {
+  background-color: #ffe58f;
+  color: #222;
+  border-color: #d48806;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
+
+  #box {
+    border-color: #aaa;
+  }
+
+  #box.active {
+    background-color: #5a4600;
+    color: #fff;
+    border-color: #e6a817;
+  }
 }
 ```
 
-`Todo[]` は「`Todo` の配列」を意味する型注釈。次のレッスンで詳しく扱うが、ここでは「配列の各要素が `Todo` 型」とだけ理解しておけばよい。
+### `script.js`
 
-#### 期待出力
+```js
+const title = document.querySelector("#title");
+console.log(title.textContent);
+title.textContent = "DOM を書き換えました";
 
-Console に次のように出る。
+const box = document.querySelector("#box");
+box.classList.add("active");
 
-```
-- [a1] 牛乳を買う
-- [a2] 本を返す
-```
+const list = document.querySelector("#list");
 
-### 手順 4: 型に合わない値を入れてエラーを見る
+const items = ["りんご", "みかん", "ぶどう"];
+for (const item of items) {
+  const li = document.createElement("li");
+  li.textContent = item;
+  list.appendChild(li);
+}
 
-`printTodo` に TODO ではないものを渡してみる。
-
-```ts
-printTodo({ id: "a3" }); // text が足りない
-```
-
-期待されるメッセージ:
-
-```
-Argument of type '{ id: string; }' is not assignable to parameter of type 'Todo'.
-  Property 'text' is missing in type '{ id: string; }' but required in type 'Todo'.
+const newLi = document.createElement("li");
+newLi.textContent = "最後に追加した項目";
+list.appendChild(newLi);
 ```
 
-続けて、`id` に数値を入れてみる。
+### 期待出力
 
-```ts
-printTodo({ id: 3, text: "書類を出す" });
-```
+- 画面の見出し: 「DOM を書き換えました」になっている
+- ボックスは背景黄色（または枠色が濃いオレンジ）に変わる
+- リストに `既存の項目 1` / `既存の項目 2` / `りんご` / `みかん` / `ぶどう` / `最後に追加した項目` の 6 項目が並ぶ
+- Console に元のタイトル「lesson28」が出る
 
-期待されるメッセージ:
+### 変える
 
-```
-Type 'number' is not assignable to type 'string'.
-```
-
-### 変えてみる
-
-`types.ts` の `Todo` 型の `text` プロパティを一時的に `number` に変えてみる。
-
-```ts
-export type Todo = {
-  id: string;
-  text: number; // わざと変える
-};
-```
-
-`main.ts` の配列で定義した各 `{ id: ..., text: "..." }` の `text` の下に一斉に赤線が出るのを確認する。型を 1 か所変えると、その型を **import している全ファイル** で整合性のチェックが走るのが TS の強み。
-
-確認できたら `text: string` に戻す。
+- `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
+- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（次レッスンでクリックに結び付ける）
+- `items` に要素を 2 つ足して、リストが 8 行になることを確認
+- `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
 
 ### 自分で書く
 
-`types.ts` に **新しい型** `User` を追記する（`Todo` はそのまま残す）。
-
-```ts
-export type User = {
-  id: string;
-  name: string;
-  age: number;
-};
-```
-
-`main.ts` から `import type { User } from "./types";` で読み込み、`User` 型の配列を 3 件作って、各ユーザーの `name` と `age` を Console に出す関数を書く。`printUser(user: User): void` の形。
-
-書けたら、わざと `age` に文字列を入れるなどしてエラーメッセージを確認してから戻す。
+- 新しい段落要素 `<p>` を `createElement` で作り、好きな文章を入れて `document.body.appendChild` で本文末尾に追加する
+- `#title` の `textContent` を、JS 側で `const userName = "..."` と定義した名前を含むテンプレートリテラル（`` `ようこそ、${userName} さん` ``）に置き換える
 
 ## まとめ
 
-- オブジェクト型は `{ プロパティ名: 型; ... }` で書く。区切りはセミコロン。
-- `type 名前 = ...` で型に名前を付けられる。型の名前は大文字始まりが慣習。
-- 型を別ファイルに置くときは `export type`、使う側は `import type` で読み込む。型専用の import と明示できる。
-- 章 2 の TODO の `{ id, text }` を `Todo` 型として `types.ts` にまとめた。この型は次のレッスンで `status` と `memo?` を足して育てていく。
-- 次のレッスンでは、配列の型 `T[]`、ユニオン型 `|`、リテラル型、オプショナルプロパティ `?` を扱う。
+- `document.querySelector` は CSS セレクタで要素を 1 つ取る（見つからないと `null`）
+- `textContent` でテキストの読み書き
+- `classList.add` / `remove` / `toggle` でクラスの付け外し
+- `createElement` で要素を作り、`appendChild` で親に追加
+- 次レッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る

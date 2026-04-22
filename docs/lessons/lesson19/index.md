@@ -1,103 +1,66 @@
-# lesson19: 分割代入とスプレッド
+# lesson19: 繰り返し処理
 
 ## ゴール
 
-- オブジェクトや配列から値を分割代入で取り出せる
-- スプレッド構文でオブジェクトや配列をコピー・結合できる
-- 2 つの書き方を「取り出す」vs「まとめる・広げる」で使い分けられる
+- `for...of` で配列の全要素を順に処理できる
+- `forEach` でも同じことができることを知る
 
 ## 解説
 
-### 最初に注意
+### 「全部に対して同じことをする」
 
-分割代入とスプレッドは **見た目が似ていて混同しやすい** 機能です。先に目的の違いを押さえます。
+配列の要素を 1 つずつ取り出して `console.log` したいとき、`todos[0]` / `todos[1]` / `todos[2]` ... と書き並べるのは大変です。要素数が増えるたびに書き足す必要があり、現実的ではありません。
 
-| 構文 | どこに書く | 目的 | イメージ |
-| --- | --- | --- | --- |
-| 分割代入 | 代入の **左辺** | 値を **取り出す** | 箱の中身を取り出す |
-| スプレッド `...` | 代入の **右辺**（配列・オブジェクトの中） | 値を **まとめる・広げる** | 中身を並べ直す |
+こういう「全部の要素に対して同じことをする」ために、繰り返し処理を使います。
 
-この表を意識していれば、コードを読むときに迷いにくくなります。
+### `for...of`
 
-### オブジェクトの分割代入
-
-オブジェクトから特定のプロパティを取り出して、同じ名前の変数に入れます。
+本コースで最初に覚える書き方は `for...of` です。配列専用ではありませんが、配列との相性がよく、書き方が素直です。
 
 ```js
-const user = { name: "Alice", age: 20 };
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-const { name, age } = user;
-console.log(name); // "Alice"
-console.log(age);  // 20
+for (const todo of todos) {
+  console.log(todo);
+}
 ```
 
-`const { name } = user;` のように、欲しいものだけ取り出すこともできます。従来の書き方は `const name = user.name;` で、分割代入はそれを一度に書くための構文です。
+- `for (const 変数名 of 配列)` と書く
+- `{ ... }` の中が「各要素に対してやりたい処理」
+- ループのたびに `todo` に次の要素が順番に入る
 
-### 配列の分割代入
+インデックスは使わず、「要素そのもの」を直接受け取ります。インデックスが必要なときは後の章で別の書き方を学びますが、まずはこの形で十分です。
 
-配列の場合は `[` `]` を使います。位置（インデックス）で取り出します。
+### `forEach`（軽く触れる）
+
+配列には `forEach` というメソッドもあります。書き味が少し違うだけで、できることはほぼ同じです。
 
 ```js
-const colors = ["red", "green", "blue"];
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-const [first, second] = colors;
-console.log(first);  // "red"
-console.log(second); // "green"
+todos.forEach((todo) => {
+  console.log(todo);
+});
 ```
 
-### オブジェクトのスプレッド
+- `(todo) => { ... }` はアロー関数と呼ばれる記法（lesson20 で詳しく扱う）
+- 配列の各要素に対して、カッコの中の処理が呼ばれる
 
-既存のオブジェクトの中身を「展開」して、新しいオブジェクトを作るときに使います。
+本コースでは `for...of` を主に使いますが、後のレッスンや実際のコードでは `forEach` もよく見かけます。「同じ意味の別の書き方」として覚えておきます。
 
-```js
-const user = { name: "Alice", age: 20 };
+### どちらを使う？
 
-const copy = { ...user };
-console.log(copy); // { name: "Alice", age: 20 }
+- 読みやすさ重視なら `for...of`
+- 既存コードに合わせるなら `forEach`
 
-const updated = { ...user, age: 21 };
-console.log(updated); // { name: "Alice", age: 21 }
-console.log(user);    // { name: "Alice", age: 20 } （元のオブジェクトは変わらない）
-```
-
-- `{ ...user }` で元の中身を展開してコピー
-- 後ろに `age: 21` を書くと、同じキーは上書きされる
-- 元のオブジェクトは変わらない（これを「イミュータブルな更新」と呼ぶ。章 4 で再登場）
-
-### 配列のスプレッド
-
-配列も同じように展開できます。
-
-```js
-const a = [1, 2];
-const b = [3, 4];
-
-const merged = [...a, ...b];
-console.log(merged); // [1, 2, 3, 4]
-
-const appended = [...a, 100];
-console.log(appended); // [1, 2, 100]
-```
-
-### 分割代入とスプレッドの対比表
-
-もう一度整理します。
-
-| やりたいこと | 書き方 | 例 |
-| --- | --- | --- |
-| オブジェクトから値を取り出す | `const { key } = obj` | `const { name } = user` |
-| 配列から値を取り出す | `const [a, b] = arr` | `const [first, second] = colors` |
-| オブジェクトをコピー / 一部だけ変える | `{ ...obj, key: newValue }` | `{ ...user, age: 21 }` |
-| 配列をコピー / 結合 / 末尾追加 | `[...arr, newValue]` | `[...todos, "新しい"]` |
-
-「左辺に書く `{ }` / `[ ]`」は取り出す。「右辺の中に書く `...`」はまとめる・広げる。この対比で覚えます。
+迷ったら `for...of` で統一して構いません。
 
 ## 演習
 
 ### ゴール
 
-- （A）`user` オブジェクトから `name` と `age` を分割代入で取り出して表示する
-- （B）分割代入で取り出した値と、既存オブジェクトをスプレッドでマージして新しいオブジェクトを作る
+- やることリストの配列を `for...of` で全件 Console に出す
+- 同じ処理を `forEach` でも書いてみる
 
 ### 手順
 
@@ -116,7 +79,7 @@ console.log(appended); // [1, 2, 100]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson19: 分割代入とスプレッド</h1>
+    <h1>lesson19: 繰り返し処理</h1>
   </body>
 </html>
 ```
@@ -124,69 +87,55 @@ console.log(appended); // [1, 2, 100]
 ### `script.js`
 
 ```js
-// 演習 A: 分割代入
-const user = { name: "Alice", age: 20, city: "Tokyo" };
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-const { name, age } = user;
-console.log(name);
-console.log(age);
+console.log("--- for...of ---");
+for (const todo of todos) {
+  console.log(todo);
+}
 
-const colors = ["red", "green", "blue"];
-const [first, second] = colors;
-console.log(first);
-console.log(second);
+console.log("--- forEach ---");
+todos.forEach((todo) => {
+  console.log(todo);
+});
 
-// 演習 B: スプレッド
-const copy = { ...user };
-console.log(copy);
-
-const updated = { ...user, age: 21 };
-console.log(updated);
-console.log(user);
-
-const a = [1, 2];
-const b = [3, 4];
-const merged = [...a, ...b];
-console.log(merged);
-
-const todos = ["牛乳を買う", "本を読む"];
-const added = [...todos, "ジョギング"];
-console.log(added);
-console.log(todos);
+console.log("--- 合計 ---");
+const numbers = [1, 2, 3, 4, 5];
+let total = 0;
+for (const n of numbers) {
+  total = total + n;
+}
+console.log(total);
 ```
 
 ### 期待出力
 
 ```
-Alice
-20
-red
-green
-{name: "Alice", age: 20, city: "Tokyo"}
-{name: "Alice", age: 21, city: "Tokyo"}
-{name: "Alice", age: 20, city: "Tokyo"}
-[1, 2, 3, 4]
-["牛乳を買う", "本を読む", "ジョギング"]
-["牛乳を買う", "本を読む"]
+--- for...of ---
+牛乳を買う
+本を読む
+ジョギング
+--- forEach ---
+牛乳を買う
+本を読む
+ジョギング
+--- 合計 ---
+15
 ```
-
-スプレッドで作った `updated` や `added` は新しいオブジェクト / 配列で、元の `user` や `todos` は変わらないことを確認します。
 
 ### 変える
 
-- 分割代入で `const { name, city } = user;` に変え、`city` の値を取り出す
-- `const [, second, third] = colors;` で先頭を飛ばして 2 番目と 3 番目を取り出す（カンマで位置をずらす）
-- `const updated2 = { ...user, name: "Bob" };` で名前を上書きした新オブジェクトを作る
-- `const added2 = ["先頭", ...todos];` で先頭に追加してみる
+- `todos` の要素を 5 つに増やす → どちらのループも自動で 5 回実行される
+- `console.log(todo)` を `console.log("- " + todo)` に変える → 各行の先頭に `- ` が付く
+- `numbers` の合計処理で、`total = total + n` を `total = total + n * 2` に変える → 出力が `30` になる
 
 ### 自分で書く
 
-- `book = { title: "JS入門", author: "山田", year: 2024 }` を作り、分割代入で `title` と `author` を取り出して「『○○』（○○）」の形で表示
-- 上記 `book` からスプレッドを使って `year` だけ `2025` に変えた新しいオブジェクトを作り、両方とも Console に出して、元は変わらないことを確認
+- 数値の配列 `scores = [80, 95, 62, 77, 90]` を作り、`for...of` で合計と平均を計算して出す（平均 = 合計 / 要素数）
+- 文字列の配列 `names = ["Alice", "Bob", "Carol"]` を作り、`for...of` で「こんにちは、○○ さん」と 1 人ずつ出力する
 
 ## まとめ
 
-- 分割代入は左辺で書く「取り出し」の構文
-- スプレッドは右辺で書く「まとめる・広げる」の構文
-- 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本
-- **この分割代入の書き方は lesson34 で `function Greeting({ name }: Props)` のように React の props として再登場する**
+- 配列の全要素を処理するには `for...of` を使う
+- `forEach` でも同じことが書けるが、本コースでは `for...of` を主に使う
+- ループの中で `let` で用意した合計用変数を更新すると、合計や平均も計算できる

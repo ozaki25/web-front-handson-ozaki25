@@ -1,222 +1,377 @@
-# lesson30: ジェネリクス入門
+# lesson30: TODO アプリを作る（ミニ統合）
 
 ## ゴール
 
-- 「どんな型にも使える関数」を書くための仕組みである **ジェネリクス**（型パラメータ `<T>`）を理解する。
-- `first<T>(arr: T[]): T | undefined` を自分で書けて、数値配列でも文字列配列でも `Todo` 配列でも動かせる。
-- 呼び出し側で型パラメータを明示的に書かなくても、**型推論** が働いて正しい型になることを確認できる。
+- 章 2 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
+- 入力・追加・削除できる TODO アプリを HTML + JS で完成させる
+- `localStorage` に保存して、リロードしても残るようにする
+- 後続章で進化させる共通題材として、最終形を StackBlitz に保存する
 
 ## 解説
 
-### 「どんな型でも受け入れる関数」を書きたい
+ここまでのレッスンで積み上げてきた道具で、実際に動く小さなアプリを組み立てます。新しい概念は 1 つだけ: **`localStorage`** です。
 
-配列の先頭の要素を返す関数を書いてみます。数値配列なら次のように書けます。
+### `localStorage` とは
 
-```ts
-function firstNumber(arr: number[]): number | undefined {
-  return arr[0];
-}
+ブラウザが提供する「文字列を保存しておける箱」です。ページを閉じてもデータは残り、次に同じページを開いたときに読み出せます。
+
+```js
+localStorage.setItem("key", "value"); // 保存
+const v = localStorage.getItem("key"); // 取り出し（なければ null）
 ```
 
-- 配列が空なら `arr[0]` は `undefined` なので、戻り値の型は `number | undefined`。
-- 文字列配列でも同じことをしたい場合、`firstString(arr: string[]): string | undefined` をもう 1 つ書く必要がある。
-- `Todo` 配列でも同じことをしたくなったら、さらにもう 1 つ。
+- 保存できるのは **文字列だけ**
+- 配列やオブジェクトをそのまま入れることはできない
 
-明らかに繰り返しです。中身の処理はどれも `return arr[0];` で同じ。違うのは **配列の要素の型と戻り値の型だけ**。
+### `JSON.stringify` / `JSON.parse`
 
-### ジェネリクス: 型を引数として受け取る
+配列やオブジェクトを文字列に変換 / 戻すための道具です。
 
-関数が **値** を引数で受け取るのと同じように、TS は **型** を引数で受け取れます。これを **ジェネリクス**（総称型）と呼びます。
+```js
+const todos = [{ id: "1", text: "A" }, { id: "2", text: "B" }];
 
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
-}
+const str = JSON.stringify(todos);
+// '[{"id":"1","text":"A"},{"id":"2","text":"B"}]'
+
+const back = JSON.parse(str);
+// [{ id: "1", text: "A" }, { id: "2", text: "B" }]
 ```
 
-- `<T>`: 関数名の直後に書く **型パラメータ**。`T` は「まだ決まっていない型」の仮の名前。
-- 慣習的に `T`（Type の頭文字）を使う。複数あれば `T, U, V` や `TKey, TValue` のように付ける。
-- 引数 `arr: T[]`: 「`T` の配列」。
-- 戻り値 `T | undefined`: 「`T`、または空配列のときは `undefined`」。
+- `JSON.stringify(値)`: JS のデータを JSON 文字列に
+- `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
 
-この関数を呼び出すとき、`T` には **呼び出したときの値の型が自動で入ります**。
+`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **lesson27 で学んだ `try` / `catch` で囲む** のが安全です。
 
-```ts
-const n = first([1, 2, 3]);         // T = number、n は number | undefined
-const s = first(["a", "b", "c"]);   // T = string、s は string | undefined
+### id をユニークに作る
+
+削除のたびに「どの TODO を消したか」を判断するために、各 TODO には **一意な id** を持たせます。ブラウザ標準の `crypto.randomUUID()` を使うと、衝突しない id 文字列が手に入ります。
+
+```js
+const id = crypto.randomUUID();
+// 例: "8a7c3f...-...-..."
 ```
 
-これが **型推論** です。呼び出し側が `<number>` のように書かなくても、渡した値の型から TS が決めてくれます。
+### 画面構成
 
-### 明示的に書くこともできる
+完成系は以下の構造です。
 
-型推論に任せず、呼び出し側で `<型>` を明示することもできます。
+- 画面上部: 入力欄 `<input>` と「追加」ボタン
+- 下部: TODO 一覧 `<ul>`（各行は `<li>` で、テキストと「削除」ボタンを含む）
 
-```ts
-const n = first<number>([1, 2, 3]);
-```
-
-普段は型推論に任せるほうが読みやすいですが、推論の結果が期待と違うときや、配列が空で推論のヒントがないときには明示します。
-
-```ts
-const empty = first([]); // T = never と推論されてしまう
-const empty2 = first<number>([]); // T = number と明示
-```
-
-### 型パラメータは「使う側が決める」
-
-ジェネリクスは「関数を書く側」ではなく「関数を使う側」が型を決める仕組みです。`first` の実装は `T` が何であるかを知りません。だから `T` の中身（`.toUpperCase()` や `.toFixed()` など）を呼ぶことはできません。
-
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0].toUpperCase(); // エラー
-}
-```
-
-```
-Property 'toUpperCase' does not exist on type 'T'.
-```
-
-「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。この「中身に触らず通すだけの関数」が、ジェネリクスが最も活きる形です。
-
-### `Array.prototype.map` もジェネリクス
-
-実は章 2 で使った `map` / `filter` も TS の世界ではジェネリクス関数です。`map` は「`T[]` を受け取って、`(t: T) => U` の関数で変換して `U[]` を返す」という形で定義されています。ライブラリの内部ではこの形の型定義が大量に書かれていて、私たちは呼び出すだけで恩恵を受けています。
+新しい TODO を追加すると一覧の末尾に `<li>` が 1 件増え、削除ボタンを押すとその行だけが消えます。リロードしてもデータが残ります。
 
 ## 演習
 
-### 手順 1: `first` を書く
+本レッスンは **3 段構え** です。各段でコミット（ファイル保存）して、次の段に進みます。
 
-`src/main.ts` の中身を以下に置き換える。
+### 共通: HTML と CSS
 
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
+3 段を通して使います。
+
+#### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson30 TODO</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>TODO</h1>
+
+    <form id="form">
+      <input id="input" type="text" placeholder="やることを入力" />
+      <button type="submit">追加</button>
+    </form>
+
+    <ul id="list"></ul>
+  </body>
+</html>
+```
+
+#### `style.css`
+
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+  max-width: 480px;
 }
 
-const n = first([1, 2, 3]);
-const s = first(["a", "b", "c"]);
-const empty = first<number>([]);
-
-console.log(n);
-console.log(s);
-console.log(empty);
-```
-
-#### 期待出力
-
-```
-1
-a
-undefined
-```
-
-- `n` は `1`（数値）。
-- `s` は `"a"`（文字列）。
-- `empty` は `undefined`（空配列なので 0 番目がない）。
-
-エディタで `n` にマウスを乗せると `const n: number | undefined` と表示される。`s` は `const s: string | undefined`。型が正しく推論されていることを確認する。
-
-### 手順 2: `Todo` 配列でも動くことを確認する
-
-`src/main.ts` を次の形に書き換える（`types.ts` は lesson29 で作ったものをそのまま使う）。
-
-```ts
-import type { Todo } from "./types";
-
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
+#form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
 }
 
-const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う", status: "open" },
-  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
-];
-
-const topTodo = first(todos);
-
-if (topTodo) {
-  console.log(`先頭の TODO: ${topTodo.text} (status: ${topTodo.status})`);
-} else {
-  console.log("TODO はありません");
+#input {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 1rem;
 }
-```
 
-#### 期待出力
+button {
+  padding: 6px 12px;
+  cursor: pointer;
+}
 
-```
-先頭の TODO: 牛乳を買う (status: open)
-```
+#list {
+  list-style: none;
+  padding: 0;
+}
 
-`topTodo` の型は `Todo | undefined` になっている（`if` で絞り込むと、中では `Todo` として `.text` や `.status` にアクセスできる）。
+#list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #ddd;
+}
 
-### 手順 3: わざと型を間違えてエラーを見る
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
 
-`first` の中で `T` の中身を使おうとしてみる。
+  #input {
+    background-color: #222;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
 
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0].toUpperCase();
+  button {
+    background-color: #333;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+
+  #list li {
+    border-bottom-color: #444;
+  }
 }
 ```
 
-期待されるメッセージ:
+### ステップ 1: 入力 + 一覧表示
 
-```
-Property 'toUpperCase' does not exist on type 'T'.
-```
+まずは追加だけを作ります。削除や localStorage はまだ考えません。
 
-続けて、呼び出し側で配列ではないものを渡してみる。
+#### `script.js`（ステップ 1）
 
-```ts
-const n = first(123);
-```
+**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（lesson23 で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、章 4 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、章 2 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
 
-期待されるメッセージ:
+```js
+const form = document.querySelector("#form");
+const input = document.querySelector("#input");
+const list = document.querySelector("#list");
 
-```
-Argument of type 'number' is not assignable to parameter of type 'unknown[]'.
-```
+let todos = [];
 
-「配列を渡してくれないと `T[]` にならない」と TS が止めてくれている。確認したら `first([1, 2, 3])` に戻す。
-
-### 変えてみる
-
-配列の最後の要素を返す `last` を書いてみる。
-
-```ts
-function last<T>(arr: T[]): T | undefined {
-  return arr[arr.length - 1];
+function render() {
+  list.textContent = ""; // 一度空にする
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    list.appendChild(li);
+  }
 }
 
-console.log(last([1, 2, 3]));
-console.log(last(["a", "b", "c"]));
-console.log(last<number>([]));
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (text === "") {
+    return;
+  }
+  const newTodo = {
+    id: crypto.randomUUID(),
+    text: text,
+  };
+  todos = [...todos, newTodo];
+  input.value = "";
+  render();
+});
+
+render();
 ```
 
-期待出力:
+#### 期待出力（ステップ 1）
 
+- 入力欄に「牛乳を買う」と入力して「追加」を押す → `<ul>` の末尾に `牛乳を買う` の `<li>` が 1 件増える
+- さらに「本を読む」を追加 → 2 件目が末尾に並ぶ
+- 入力欄に何も入れずに「追加」を押しても何も起きない（空文字は弾く）
+- **リロードすると全部消える**（localStorage はまだ使っていない）
+
+ここでいったんファイルを保存（コミット相当）します。
+
+### ステップ 2: 削除ボタンを追加
+
+各 `<li>` に「削除」ボタンを付け、lesson24 の `filter` を使って対象を取り除きます。
+
+#### `script.js`（ステップ 2）
+
+```js
+const form = document.querySelector("#form");
+const input = document.querySelector("#input");
+const list = document.querySelector("#list");
+
+let todos = [];
+
+function render() {
+  list.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+
+    const span = document.createElement("span");
+    span.textContent = todo.text;
+    li.appendChild(span);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", () => {
+      todos = todos.filter((t) => t.id !== todo.id);
+      render();
+    });
+    li.appendChild(deleteBtn);
+
+    list.appendChild(li);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (text === "") {
+    return;
+  }
+  const newTodo = {
+    id: crypto.randomUUID(),
+    text: text,
+  };
+  todos = [...todos, newTodo];
+  input.value = "";
+  render();
+});
+
+render();
 ```
-3
-c
-undefined
+
+#### 期待出力（ステップ 2）
+
+- 各行に「削除」ボタンが付いている
+- 「削除」を押すとその行だけが消える（他の行は残る）
+- 3 件追加 → 真ん中の「削除」を押すと、その 1 件だけ消える
+- リロードするとまだ全部消える（localStorage はまだ）
+
+ここでもう一度保存（2 回目のコミット相当）します。
+
+### ステップ 3: `localStorage` で保存・復元
+
+最終形です。TODO の変更があるたびに localStorage に保存し、起動時に読み戻します。
+
+#### `script.js`（最終形）
+
+```js
+const form = document.querySelector("#form");
+const input = document.querySelector("#input");
+const list = document.querySelector("#list");
+
+const STORAGE_KEY = "lesson30-todos";
+
+function loadTodos() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (error) {
+    console.log("保存データの読み込みに失敗しました");
+    console.log(error);
+    return [];
+  }
+}
+
+function saveTodos() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+
+let todos = loadTodos();
+
+function render() {
+  list.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+
+    const span = document.createElement("span");
+    span.textContent = todo.text;
+    li.appendChild(span);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", () => {
+      todos = todos.filter((t) => t.id !== todo.id);
+      saveTodos();
+      render();
+    });
+    li.appendChild(deleteBtn);
+
+    list.appendChild(li);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (text === "") {
+    return;
+  }
+  const newTodo = {
+    id: crypto.randomUUID(),
+    text: text,
+  };
+  todos = [...todos, newTodo];
+  saveTodos();
+  input.value = "";
+  render();
+});
+
+render();
 ```
+
+#### 期待出力（最終形）
+
+- 3 件追加 → リロード → 3 件がそのまま表示される
+- 削除 → リロード → 削除後の状態が残る
+- 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
+- DevTools の Application（または Storage）タブ → Local Storage の項目で `lesson30-todos` に JSON 文字列が入っているのが確認できる
+- Console で `localStorage.setItem("lesson30-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
+
+### 変える
+
+- `STORAGE_KEY` を好きな名前に変える → 以前の保存と別扱いになり、リストが空から始まる
+- 追加時に `todos = [...todos, newTodo]` を `todos = [newTodo, ...todos]` に変えて、新しいものが先頭に来るようにする
+- 入力値の前後の空白を許すように、`trim()` を外してみる（半角スペースだけで追加できてしまう）
 
 ### 自分で書く
 
-次の 2 つの関数をジェネリクスで書く。
-
-1. `second<T>(arr: T[]): T | undefined` — 配列の 2 番目の要素を返す（なければ `undefined`）。
-2. `wrapInArray<T>(value: T): T[]` — 値を 1 つ受け取り、それだけを入れた配列を返す。
-
-書けたら、数値・文字列・`Todo` の 3 パターンで呼び出し、期待通りの型が推論されていること（エディタでマウスオーバーして確認）と、期待通りの出力が出ることを確認する。
-
-`wrapInArray` のヒント: `function wrapInArray<T>(value: T): T[] { return [value]; }` で書ける。
+- 「すべて削除」ボタンを追加し、押すと `todos = []` にして保存・再描画する
+- 各 `<li>` をクリックすると `classList.toggle("done")` が切り替わり、CSS で打ち消し線を付ける（打ち消し線の状態自体は保存しなくてよい）
+- 現在の件数を「全 N 件」として画面上部に表示する
 
 ## まとめ
 
-- ジェネリクスは「関数が型を引数として受け取る仕組み」。`<T>` で仮の型名を宣言する。
-- `first<T>(arr: T[]): T | undefined` のように書くと、数値配列でも文字列配列でも `Todo` 配列でも、**同じ実装** で型安全に動く。
-- 呼び出し側では通常 `<型>` を書かず、型推論に任せる。空配列などで推論のヒントがないときだけ明示する。
-- 実装の中では `T` の中身に触れない（`T` が何かを知らないから）。「中身に触らず通すだけ」の関数がジェネリクスの得意分野。
-- 次のレッスンでは、既にある型から新しい型を派生させる **Utility Types**（`Pick` / `Partial`）を学ぶ。`Todo` 型をさらに「一覧用」「下書き用」に派生させる。
+- TODO アプリの最小構成は **配列の state + `render` 関数 + イベントハンドラ** で作れる
+- 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
+- `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
+- `JSON.parse` は失敗しうるので `try` / `catch` で囲む
+- **この TODO アプリは章 4 lesson57 で React 版に進化し、章 5 lesson68〜52 で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく

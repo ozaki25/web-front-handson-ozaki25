@@ -1,158 +1,272 @@
-# lesson43: Next.js ってなに？
+# lesson43: コンポーネントと props
 
 ## ゴール
 
-- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できます。
-- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解します。
-- 画面に出る部品がデフォルトで **Server Component** として動くことを知ります。
-- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できます。
+- コンポーネントを分けて再利用できる
+- `type` で props の型を定義し、`import type` して使える
+- `children` を受け取って自由な中身を差し込めるコンポーネントが書ける
 
 ## 解説
 
-### React と Next.js の関係
+### lesson23 の分割代入と同じ書き方
 
-章 4 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
+本題の前に、1 行で接続しておきます。
 
-一方で、実際に Web アプリを作ろうとすると、React 単体では足りないものが出てきます。
+lesson23 で学んだオブジェクトの分割代入を思い出してください。
 
-- URL に応じてページを切り替える仕組み（ルーティング）
-- SEO やシェア用にページごとのタイトルや OG 画像を設定する仕組み
-- 一部の処理をサーバーで先に走らせ、初期表示を速くする仕組み
-- データ取得やフォーム送信をサーバーに任せる仕組み
-
-こうした「React の周りに必要な土台」を一式まとめて提供するのが **Next.js** です。Next.js は React を内部で使っているので、React のコンポーネントの書き方はそのまま使えます。React の上に乗る大きめの枠組み、と考えてください。
-
-このコースで使うバージョンは **Next.js 15** / **React 19** です。
-
-### App Router とは
-
-Next.js には現在 2 つのルーター（URL の担当部分）があります。
-
-- 古い方: `pages/` ディレクトリを使う Pages Router
-- 新しい方: `app/` ディレクトリを使う **App Router**
-
-本コースでは新しい **App Router** のみを扱います。古い `pages/` ルーターは使いません。
-
-App Router は **ファイルベースルーティング** です。つまり、`app/` 以下のディレクトリ構造がそのまま URL になります。
-
-```
-app/
-├── page.tsx           → /
-├── about/
-│   └── page.tsx       → /about
-└── todos/
-    └── page.tsx       → /todos
+```ts
+const user = { name: "Alice", age: 20 };
+const { name, age } = user; // 取り出す
 ```
 
-`page.tsx` という名前のファイルが、その URL で表示される中身を書く場所です。ディレクトリ名がそのまま URL のパスになります。
-
-### Server Component がデフォルト
-
-App Router のもう 1 つの大きな特徴は、**コンポーネントが既定でサーバー側で実行される** ことです。これを **Server Component** と呼びます。
-
-今までの React（章 4）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
-
-- Server Component: サーバーで動きます。データベース接続やファイル読み込みなど、秘密情報を扱えます。`useState` や `onClick` は使えません。
-- Client Component: ブラウザで動きます。`useState` / イベント / ブラウザ API が使えます。先頭に `"use client"` と書いて明示します（詳しくは lesson46）。
-
-最初は「書いたコンポーネントは何もしなければサーバー側で動く」とだけ覚えておけば十分です。
-
-### `app/page.tsx` の最小形
-
-App Router で最初に書くトップページは、こんな形です。
+React コンポーネントの props も、**全く同じ書き方**で値を取り出します。「lesson23 の分割代入の再登場」と思ってください。
 
 ```tsx
-export default function Page() {
+function Greeting({ name }: GreetingProps) {
+  return <p>こんにちは、{name} さん</p>;
+}
+```
+
+### props とは
+
+コンポーネントを関数として見たとき、props は **引数** です。呼び出し側から値を渡し、コンポーネントの中で使います。HTML タグに属性を付ける感覚で書けます。
+
+```tsx
+<Greeting name="Alice" />
+<Greeting name="Bob" />
+```
+
+同じ `Greeting` コンポーネントを、`name` を変えながら何回でも使い回せます。
+
+### 型付き props
+
+TypeScript で書くときは、props の形を型で表します。章 3 lesson33 で学んだ `type` エイリアスをそのまま使います。
+
+```tsx
+type GreetingProps = {
+  name: string;
+};
+
+function Greeting({ name }: GreetingProps) {
+  return <p>こんにちは、{name} さん</p>;
+}
+```
+
+- `GreetingProps` は「`name` という string を持つオブジェクト」の型
+- `function Greeting({ name }: GreetingProps)` は「props（`GreetingProps`）を受け取り、その中の `name` を取り出して使う関数」
+
+オブジェクト分割代入と同じ書き方がそのまま効きます。
+
+### `import type` で型を別ファイルから持ってくる
+
+章 3 の lesson33 / lesson40 で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
+
+```ts
+// src/types.ts
+import type { ReactNode } from "react";
+
+export type GreetingProps = {
+  name: string;
+  age?: number;
+  children?: ReactNode;
+};
+```
+
+```tsx
+// src/Greeting.tsx
+import type { GreetingProps } from "./types";
+```
+
+- `import type { ... }` は「**型だけ** を持ってくる」という書き方
+- ビルド後の JS には残らない（実行時のコストはゼロ）
+- `ReactNode` は `react` パッケージから import する。`React.ReactNode` のように名前空間経由で書くこともできるが、新しい Vite テンプレート（自動 JSX ランタイム前提）では名前空間経由だと「`React` が見つからない」エラーが出やすいので、**個別に import する形に統一する**
+
+### オプショナルプロパティ `?`
+
+`age?: number` は「`age` は省略しても OK」という意味です。書く側は `<Greeting name="Alice" />` でも `<Greeting name="Alice" age={20} />` でも動きます。省略された場合、`age` の値は `undefined` になります。
+
+### `children`（コピペで与える `ReactNode`）
+
+コンポーネントのタグの**中身**を受け取りたいことがあります。例えばこう書きたい。
+
+```tsx
+<Card>
+  <h2>タイトル</h2>
+  <p>本文</p>
+</Card>
+```
+
+`Card` の中身（`<h2>` と `<p>`）を、`Card` の中の好きな場所にはめ込みたい。この「中身」を受け取る特別な props の名前が **`children`** です。
+
+型は `ReactNode` を使います（`react` パッケージから `import type` する）。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
+
+```tsx
+import type { ReactNode } from "react";
+
+type CardProps = {
+  title: string;
+  children?: ReactNode;
+};
+
+function Card({ title, children }: CardProps) {
   return (
-    <main>
-      <h1>Hello, Next.js</h1>
-      <p>最初のページ。</p>
-    </main>
+    <div className="card">
+      <h2>{title}</h2>
+      <div className="card-body">{children}</div>
+    </div>
   );
 }
 ```
 
-- ファイル名は `page.tsx` 固定です。
-- `export default` で関数コンポーネントを 1 つ返します。
-- 関数名は何でも構いません（慣例で `Page` とすることが多いです）。
+使う側は、タグの中に何でも書けます。
 
-これだけで、`/`（トップページ）にアクセスしたときにこの JSX が表示されます。
+```tsx
+<Card title="お知らせ">
+  <p>本日は休業です。</p>
+</Card>
+```
+
+### コンポーネントの作り方（ファイル分割）
+
+コンポーネントが増えてきたら、1 ファイル 1 コンポーネントに分けます。
+
+```tsx
+// src/Greeting.tsx
+import type { GreetingProps } from "./types";
+
+export function Greeting({ name, age, children }: GreetingProps) {
+  return (
+    <div>
+      <p>こんにちは、{name} さん</p>
+      {age !== undefined && <p>{age} 歳です</p>}
+      {children}
+    </div>
+  );
+}
+```
+
+- ファイル名はコンポーネント名に合わせる（大文字始まり）
+- **コンポーネント名は必ず大文字始まり**（`Greeting` / `Card`）。小文字で書くと JSX が通常の HTML タグとして解釈されてしまう
+- `export function ...` で名前付きエクスポートするのが本コースの基本形
+
+`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。条件表示の詳しい話は lesson49 で扱います。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
 
 ## 演習
 
-### 使う環境
+### ゴール
 
-本コース章 5 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。章 4 の React + Vite テンプレートとは別物なので、新しく作り直してください。
+- `Greeting` コンポーネントを別ファイルに切り出し、`App` から 3 パターンで呼び出す
+- 型 `GreetingProps` を `types.ts` に置き、`import type` で使う
+- `children` に JSX を差し込めることを確認する
 
 ### 手順
 
-1. <https://stackblitz.com/> を開きます。
-2. 「Create new project」から **Next.js** の **TypeScript** テンプレートを選びます（Node を内部で動かす WebContainers 版）。
-3. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
-4. 中身をすべて消し、次のコードに置き換えます。
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（lesson42 のを使い回しても OK）
+2. `src/types.ts` を新規作成
+3. `src/Greeting.tsx` を新規作成
+4. `src/App.tsx` を書き換える
+
+### `src/types.ts`
+
+```ts
+import type { ReactNode } from "react";
+
+export type GreetingProps = {
+  name: string;
+  age?: number;
+  children?: ReactNode;
+};
+```
+
+### `src/Greeting.tsx`
 
 ```tsx
-export default function Page() {
+import type { GreetingProps } from "./types";
+
+export function Greeting({ name, age, children }: GreetingProps) {
   return (
-    <main>
-      <h1>Hello, Next.js</h1>
-      <p>最初のページ。</p>
-    </main>
+    <div className="greeting">
+      <p>こんにちは、{name} さん</p>
+      {age !== undefined && <p>{age} 歳です</p>}
+      {children}
+    </div>
   );
 }
 ```
 
-保存すると、右側のプレビューに **「Hello, Next.js」と「最初のページ。」** が表示されます。
+### `src/App.tsx`
+
+```tsx
+import { Greeting } from "./Greeting";
+import "./App.css";
+
+function App() {
+  return (
+    <>
+      <h1>Greeting デモ</h1>
+
+      {/* (1) 名前のみ */}
+      <Greeting name="Alice" />
+
+      {/* (2) 名前 + 年齢 */}
+      <Greeting name="Bob" age={25} />
+
+      {/* (3) 名前 + children にメッセージ */}
+      <Greeting name="Carol">
+        <p>今日はよい天気ですね。</p>
+      </Greeting>
+    </>
+  );
+}
+
+export default App;
+```
+
+### `src/App.css`
+
+```css
+.greeting {
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  margin: 8px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
+
+@media (prefers-color-scheme: dark) {
+  .greeting {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+}
+```
 
 ### 期待出力
 
-- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並びます。
-- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示されます。
-- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ています。
+画面にカード風のブロックが 3 つ、縦に並びます。
 
-### 変えてみる
+1. `こんにちは、Alice さん`（1 行だけ）
+2. `こんにちは、Bob さん` / `25 歳です`（2 行）
+3. `こんにちは、Carol さん` / `今日はよい天気ですね。`（2 行、2 行目は `children` として渡した `<p>`）
 
-1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存します。プレビューが更新されることを確認しましょう。
-2. `<p>` を 2 行に増やします。
+### 変える
 
-```tsx
-export default function Page() {
-  return (
-    <main>
-      <h1>自己紹介アプリの入り口</h1>
-      <p>最初のページ。</p>
-      <p>これから少しずつページを増やす。</p>
-    </main>
-  );
-}
-```
-
-### ファイル構造を眺める
-
-左側のツリーから以下を開いて中身を確認しましょう。書き換えは不要です。
-
-- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。lesson45 で触ります。
-- `app/page.tsx`: 今書き換えたトップページ。
-- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいます。
-
-`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になります。これを次の lesson44 で実際にやります。
+- `<Greeting name="Bob" age={25} />` の `age` を消して `<Greeting name="Bob" />` にすると、2 枚目のカードが 1 行だけになることを確認
+- `<Greeting name="Carol">` の中身を `<ul><li>りんご</li><li>みかん</li></ul>` に変えると、`children` がリストとして表示される
+- `name` を消して `<Greeting age={30} />` と書くと、TypeScript が赤線で「`name` が足りない」と教えてくれる（`name` は必須のため）
 
 ### 自分で書く
 
-`app/page.tsx` を何も見ずに書き直してみましょう。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格です。
+- `types.ts` に `type CardProps = { title: string; children?: ReactNode }` を追加（`ReactNode` は `react` から `import type`）
+- `src/Card.tsx` を作って、`title` を `<h2>` で、`children` を `<div>` で包んで表示する `Card` コンポーネントを実装
+- `App.tsx` で `Card` を 2 個使ってみる（中身は自由）
 
 ## まとめ
 
-- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワークです。
-- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
-- `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
-- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
-- 次の lesson44 ではページを増やして `<Link>` で行き来し、章 1 の自己紹介ページを `/about` として復活させます。
-
-### コラム: RSC ペイロードって何？
-
-Server Component の結果は、実は **HTML そのもの** としてブラウザに届くわけではありません。Next.js はサーバー側で React をレンダリングし、その結果を **React が読める特殊な形式**（RSC ペイロードと呼ばれる）に変換してブラウザに送ります。ブラウザ側の React はそれを受け取って、ページのツリーに差し込みます。
-
-ブラウザの「ソースを表示」で見える HTML は、初回表示用に別で生成された HTML です。ページ遷移（lesson44 の `<Link>`）では、RSC ペイロードだけが追加で送られてきて、必要な部分だけがツリーに差し替わります。
-
-本コースでは RSC ペイロードの詳細までは踏み込みませんが、「Server Component は HTML を直接返すのとは違う仕組みで動いている」とだけ覚えておけば、後の章で困りません。
+- props は「コンポーネントの引数」。オブジェクトの分割代入（lesson23）で受け取る
+- 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
+- オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
+- `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
+- コンポーネント名は必ず大文字始まり

@@ -1,313 +1,313 @@
-# lesson40: 親子コンポーネントの連携
+# lesson40: Utility Types で仕上げる
 
 ## ゴール
 
-- 親から子へ、子から親へ値を受け渡す関係を整理できる
-- コールバック props を使って、子で起きたイベントを親の state に反映できる
-- 「state を親に持たせる（state lifting）」という考え方を説明できる
+- 既にある型から新しい型を派生させる **Utility Types** という仕組みを理解する。
+- `Partial<T>` で「全プロパティが省略可能」な型を作れる。
+- `Pick<T, K>` で「特定のプロパティだけ取り出した」型を作れる。
+- `Todo` 型から `TodoDraft`（下書き）と `TodoSummary`（一覧用）を派生させ、関数で使い分けられる。
 
 ## 解説
 
-### props は「親 → 子」の一方通行
+### 「似ているけど少しだけ違う型」問題
 
-props はコンポーネント間で値を渡す仕組みですが、**基本は上から下**に流れます。
-
-```
-親 (App)  --- todos ---> 子 (TodoList)
-```
-
-では、子から親に何かを伝えたいときはどうするか。例えば「子のフォームに文字を入力して追加ボタンを押したら、親が持っている配列に追加したい」場合です。
-
-### コールバック props
-
-答えは「親から子に **関数を渡し**、子はその関数を呼ぶ」です。親が渡した関数を子がコールバックする、という形で、**関数が値として props を流れる**点がポイントです。
-
-```
-親 (App)  --- onAdd (関数) ---> 子 (TodoInput)
-            <-- 関数呼び出し ---
-```
-
-親側:
-
-```tsx
-function App() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  return (
-    <>
-      <TodoInput onAdd={handleAdd} />
-      <ul>{/* ... */}</ul>
-    </>
-  );
-}
-```
-
-子側:
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    onAdd(trimmed); // 親の関数を呼ぶ
-    setText(""); // 入力欄をクリア
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input value={text} onChange={(e) => setText(e.target.value)} />
-      <button type="submit">追加</button>
-    </form>
-  );
-}
-```
-
-- 親は `onAdd` という関数を子に渡す
-- 子は入力欄の state（`text`）を自分で持つ
-- 送信時に `onAdd(text)` を呼ぶ → 親が state を更新 → 画面再レンダリング
-
-「関数を props として渡す」という発想に慣れるのがこのレッスンのコアです。
-
-### state lifting（状態の持ち上げ）
-
-上の例で、なぜ `todos`（一覧）の state を **親（App）** に置いたのでしょうか。一覧を描画するのは `TodoList` コンポーネントです。一見 `TodoList` に state を置いてもよさそうです。
-
-理由: **`todos` は「子の TodoInput」と「子の TodoList」の両方が関わる** からです。TodoInput は追加する側、TodoList は表示する側。2 つが同じ state を共有する必要があります。
-
-兄弟どうしの子コンポーネントは、直接 props で値を送れません。`App → TodoInput → App → TodoList` のように、**共通の親** を経由する必要があります。そのため、共通の親（App）に state を持たせます。
-
-これが「state lifting（共通の親に state を持ち上げる）」です。
-
-```
-        App (todos を持つ)
-       /              \
-  TodoInput        TodoList
-  (追加用)        (表示用)
-```
-
-### props のおさらい
-
-props を関数にすると、慣習的に名前は `onXxx` の形にします（HTML のイベントと同じ感覚）。
-
-| 親が子に渡すもの | 命名例 |
-| --- | --- |
-| 値（state） | `todos`、`user`、`count` |
-| 状態変更を依頼する関数 | `onAdd`、`onDelete`、`onToggle` |
-
-この命名で統一すると、「この props は関数か値か」が読み解きやすくなります。
-
-## 演習
-
-### ゴール
-
-- `TodoInput`（子）と `TodoList`（子）を、`App`（親）が `todos` state を持って束ねる
-- 入力 → 追加ボタンで一覧末尾に追加
-- 各項目の削除ボタンで 1 件削除
-
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/types.ts` を作成
-3. `src/TodoInput.tsx` を作成
-4. `src/TodoList.tsx` を作成
-5. `src/App.tsx` を書き換える
-
-### `src/types.ts`
+章 3 を通じて、TODO 1 件を表す `Todo` 型をここまで育ててきました。
 
 ```ts
 export type Todo = {
   id: string;
   text: string;
+  status: "open" | "done";
+  memo?: string;
 };
 ```
 
-### `src/TodoInput.tsx`
+ここで次のような場面を想像します。
 
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
+- **下書き**: ユーザーが「新規作成」ボタンを押した直後。まだ `id` も `text` も決まっていない。
+- **一覧用の要約**: 一覧画面では `id` と `text` だけ表示すればよい。`status` や `memo` は詳細画面でだけ使う。
 
-type TodoInputProps = {
-  onAdd: (text: string) => void;
+これらは `Todo` に似ていますが、「全部必須ではない」「一部しか使わない」という違いがあります。そのたびに別の `type` を手で書くと、`Todo` を変更したときに派生型もすべて追従させる必要があり、ズレが生まれます。
+
+TS には「既にある型から **自動で** 新しい型を作る」道具が用意されています。それが **Utility Types**（ユーティリティ型）です。
+
+### `Partial<T>`: 全プロパティをオプショナルにする
+
+`Partial` は「`T` のすべてのプロパティを省略可能（`?:` 付き）にした型」を作ります。
+
+```ts
+type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
 };
 
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    onAdd(trimmed);
-    setText("");
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="todo-input">
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="やることを入力"
-      />
-      <button type="submit">追加</button>
-    </form>
-  );
-}
+type TodoDraft = Partial<Todo>;
+// 展開すると次と同じ:
+// type TodoDraft = {
+//   id?: string;
+//   text?: string;
+//   status?: "open" | "done";
+//   memo?: string;
+// }
 ```
 
-### `src/TodoList.tsx`
+`TodoDraft` は「下書き」にぴったりです。まだ `id` が決まっていなくても、`text` だけ入力された状態でも受け入れられる。
 
-```tsx
+```ts
+const draft1: TodoDraft = {};                           // OK
+const draft2: TodoDraft = { text: "牛乳を買う" };         // OK
+const draft3: TodoDraft = { text: "本を返す", memo: "" }; // OK
+```
+
+オプショナル版になったので、使う側では `undefined` を意識する必要があります（lesson35 で扱った通り）。
+
+### `Pick<T, K>`: プロパティを選んで取り出す
+
+`Pick` は「`T` の中から指定したプロパティだけを取り出した型」を作ります。
+
+```ts
+type TodoSummary = Pick<Todo, "id" | "text">;
+// 展開すると次と同じ:
+// type TodoSummary = {
+//   id: string;
+//   text: string;
+// }
+```
+
+- 第 1 引数に元の型、第 2 引数に取り出したいプロパティ名のユニオン（`"id" | "text"`）。
+- 取り出したプロパティは、元の型の必須 / オプショナルをそのまま引き継ぐ。
+- 指定していないプロパティは含まれない。
+
+一覧画面のコンポーネントが「`id` と `text` しか使わない」と宣言したいとき、`Todo` 全体を受け取る代わりに `TodoSummary` で受け取れば、余計な情報を意識せずに済みます。
+
+### Utility Types が嬉しいのは「追従」してくれること
+
+`Todo` 型に新しいプロパティ（例えば `dueDate: string`）が増えたとします。
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+  dueDate: string; // 追加
+};
+```
+
+このとき:
+
+- `TodoDraft = Partial<Todo>` は自動的に `dueDate?: string` を含む型に更新される。
+- `TodoSummary = Pick<Todo, "id" | "text">` は影響を受けない（`dueDate` は含まないと指定しているから）。
+
+`type TodoDraft = { id?: string; text?: string; ... }` と手で書いていたら、`dueDate?` を追加し忘れる事故が起きます。Utility Types はこれを仕組みで防ぎます。
+
+### その他の Utility Types（コラム）
+
+TS には他にも Utility Types があります。代表的なものを名前だけ紹介します。
+
+- `Readonly<T>`: すべてのプロパティを読み取り専用にする。
+- `Record<K, V>`: キーと値の型を指定したオブジェクト型を作る（`Record<string, number>` など）。
+- `Omit<T, K>`: `Pick` の逆で「指定したプロパティ **以外**」を取り出す。
+- `Required<T>`: `Partial` の逆で「全プロパティを必須にする」。
+
+**このコースでは `Partial` と `Pick` の 2 つだけ** を使います。他は「必要になったときに TS の公式ドキュメントを検索すればすぐ使える」程度に覚えておけば十分です。名前と「こういう用途がある」だけ頭の片隅にあればよい、という距離感です。
+
+## 演習
+
+### 手順 1: `Todo` 型から派生型を作る
+
+lesson35 の `src/types.ts` をそのまま使う。`src/main.ts` を次の形に書き換える。
+
+```ts
 import type { Todo } from "./types";
 
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
+type TodoDraft = Partial<Todo>;
+type TodoSummary = Pick<Todo, "id" | "text">;
+
+const draft: TodoDraft = { text: "新しい TODO" };
+
+const summaries: TodoSummary[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+
+function printSummary(item: TodoSummary): void {
+  console.log(`- [${item.id}] ${item.text}`);
+}
+
+console.log("下書き:");
+console.log(draft);
+
+console.log("一覧:");
+for (const item of summaries) {
+  printSummary(item);
+}
+```
+
+#### 期待出力
+
+```
+下書き:
+{ text: '新しい TODO' }
+一覧:
+- [a1] 牛乳を買う
+- [a2] 本を返す
+- [a3] ゴミを出す
+```
+
+（`draft` の表示形式は環境により `{text: "新しい TODO"}` のように表示される場合もある。プロパティの中身が同じであれば OK。）
+
+### 手順 2: 派生型の嬉しさを確かめる
+
+次のように、`TodoDraft` にはどのプロパティも必須ではないことを確認する。
+
+```ts
+const d1: TodoDraft = {};
+const d2: TodoDraft = { text: "メモだけ" };
+const d3: TodoDraft = { id: "a1", status: "open" };
+```
+
+いずれも赤線が出なければ OK。
+
+次に、`TodoSummary` には `status` を入れられないことを確認する。
+
+```ts
+const s: TodoSummary = { id: "a1", text: "牛乳を買う", status: "open" };
+```
+
+期待されるメッセージ:
+
+```
+Object literal may only specify known properties, and 'status' does not exist in type 'TodoSummary'.
+```
+
+`TodoSummary` は `id` と `text` しか持たない型として派生させたので、`status` を入れようとすると TS が止めてくれる。
+
+### 手順 3: `Partial` で「更新関数」を書く
+
+`Partial<Todo>` は「一部のプロパティだけ変える」という更新のときにも便利。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoDraft = Partial<Todo>;
+
+function updateTodo(todo: Todo, patch: TodoDraft): Todo {
+  return { ...todo, ...patch };
+}
+
+const original: Todo = {
+  id: "a1",
+  text: "牛乳を買う",
+  status: "open",
 };
 
-export function TodoList({ todos, onDelete }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p className="empty">まだタスクがありません</p>;
-  }
+const updated = updateTodo(original, { status: "done", memo: "牛乳コーナー" });
 
-  return (
-    <ul className="todo-list">
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          {todo.text}
-          <button onClick={() => onDelete(todo.id)}>削除</button>
-        </li>
-      ))}
-    </ul>
-  );
+console.log(original);
+console.log(updated);
+```
+
+#### 期待出力
+
+```
+{ id: 'a1', text: '牛乳を買う', status: 'open' }
+{ id: 'a1', text: '牛乳を買う', status: 'done', memo: '牛乳コーナー' }
+```
+
+- 元の `original` は変わらない（イミュータブル更新。章 4 で React と組み合わせて再登場）。
+- `patch` に `id` や `text` を含めてもよいし、含めなくてもよい。`Partial<Todo>` だから。
+
+### 手順 4: 元の型を変えて追従を体験する
+
+`src/types.ts` に `dueDate` プロパティを **一時的に** 追加してみる。
+
+```ts
+// src/types.ts（一時的な変更）
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+  dueDate: string;
+};
+```
+
+`src/main.ts` を見ると、`const original: Todo = { ... }` のところで赤線が出るはず。
+
+期待されるメッセージ:
+
+```
+Property 'dueDate' is missing in type '{ id: string; text: string; status: "open"; }' but required in type 'Todo'.
+```
+
+一方、`TodoSummary`（`Pick<Todo, "id" | "text">`）で作っていた `summaries` のほうは何も言われない。`dueDate` は `TodoSummary` の範囲外だから。
+
+これが **派生型が自動で追従する** 効果。確認できたら `dueDate` の追加は取り消して元に戻す。
+
+### 変えてみる
+
+`TodoSummary` に `status` も含めた新しい型 `TodoListItem` を派生させてみる。
+
+```ts
+type TodoListItem = Pick<Todo, "id" | "text" | "status">;
+
+const items: TodoListItem[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done" },
+];
+
+for (const item of items) {
+  const mark = item.status === "done" ? "x" : " ";
+  console.log(`[${mark}] ${item.text}`);
 }
 ```
 
-### `src/App.tsx`
+期待出力:
 
-```tsx
-import { useState } from "react";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-import type { Todo } from "./types";
-import "./App.css";
-
-function App() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  return (
-    <>
-      <h1>TODO（親子連携版）</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
-    </>
-  );
-}
-
-export default App;
 ```
-
-### `src/App.css`
-
-```css
-.todo-input {
-  margin: 12px 0;
-}
-
-.todo-input input {
-  padding: 6px;
-  margin-right: 8px;
-}
-
-.todo-input button,
-.todo-list button {
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.todo-list {
-  list-style: disc;
-  padding-left: 20px;
-  color: #222;
-}
-
-.todo-list li {
-  padding: 4px 0;
-}
-
-.todo-list li button {
-  margin-left: 8px;
-}
-
-.empty {
-  color: #666;
-}
-
-@media (prefers-color-scheme: dark) {
-  .todo-list {
-    color: #eee;
-  }
-  .empty {
-    color: #aaa;
-  }
-}
+[ ] 牛乳を買う
+[x] 本を返す
 ```
-
-### 期待出力
-
-- 画面上部に入力欄と「追加」ボタン
-- 最初は「まだタスクがありません」と薄い色で表示される
-- 入力して「追加」を押すと一覧に行が増え、各行に「削除」ボタンが付く
-- 「削除」ボタンを押すと、その行だけが消える
-- すべて消すと再び「まだタスクがありません」が現れる
-- 空欄のまま「追加」を押しても、一覧に何も増えない（`trim()` で空文字は弾いている）
-
-### 変える
-
-- `TodoList` の中で、一覧の上に「現在 N 件」という `<p>` を追加してみる（ヒント: `<p>現在 {todos.length} 件</p>`）
-- `handleAdd` を `setTodos((prev) => [newTodo, ...prev])` に変えると、新規が **先頭** に入るようになる
-- `TodoInput` 内の `if (trimmed.length === 0) return;` を消すと、空文字で追加されて一覧に空の行ができる。確認したら戻す
 
 ### 自分で書く
 
-- `TodoItem` コンポーネントを新たに作り、`<li>{text}<button>削除</button></li>` の部分を切り出す
-- `TodoList` は `TodoItem` を `map` で並べるだけにする
-- `TodoItem` が受け取る props の型:
-  ```ts
-  type TodoItemProps = {
-    todo: Todo;
-    onDelete: (id: string) => void;
-  };
-  ```
-- これは lesson42 でそのまま使う形です
+`Todo` 型から、次の 2 つの派生型を自分で書く。
+
+1. `TodoWithoutMemo` — `memo` を含まない型。ヒント: `Pick` で `"id" | "text" | "status"` を選ぶ。
+2. `TodoPatch` — すべて省略可能な型（`TodoDraft` と同じ中身でよいので、`Partial<Todo>` を使う）。
+
+それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
+
+## 章 3 のまとめと次章への予告
+
+### 章 3 で作ったもの
+
+- `src/types.ts` に `Todo` 型を定義した（`id`、`text`、`status`、`memo?`）。
+- `Partial<Todo>` で下書き用の `TodoDraft`、`Pick<Todo, "id" | "text">` で一覧用の `TodoSummary` を派生させた。
+- `export type` / `import type` で型を別ファイルから使い回す形を身につけた。
+
+### 次章で何が起きるか
+
+**章 4（React）の lesson43 以降で、この `Todo` 型を `import type` してそのまま使います**。
+
+- lesson43: コンポーネントに型付き `props` を渡すときの `types.ts` として再登場。
+- lesson44: 配列描画の題材として `Todo[]` をそのまま渡す。
+- lesson57: React 版 TODO アプリの型の基盤として、育てた `Todo` 型がそのまま使われる。
+
+つまり、ここまで書いてきた `types.ts` は **この先ずっと生き続けるファイル** です。StackBlitz のプロジェクトは章ごとに作り直しても、`types.ts` の中身はそのままコピーして持っていくのが基本の流れになります。
+
+### コラム: その他の Utility Types
+
+`Readonly<T>` / `Record<K, V>` / `Omit<T, K>` / `Required<T>` などは本コースでは扱いません。必要な場面に出会ったら TS 公式ドキュメント（<https://www.typescriptlang.org/docs/handbook/utility-types.html>）の該当項目を読めば、基本の使い方はすぐ身につきます。Utility Types はどれも「既にある型から別の型を作る」という同じ考え方の延長線上にあります。
 
 ## まとめ
 
-- props は基本「親 → 子」の一方通行
-- 子から親に伝えたいときは、親が渡した **関数を子が呼ぶ**（コールバック props）
-- 複数の子が関わる state は、**共通の親** に持たせる（state lifting）
-- 関数の props は `onXxx` という命名にするのが慣習
+- Utility Types は「既にある型から新しい型を派生させる道具」。手で別の `type` を書く代わりに、仕組みで自動追従させる。
+- `Partial<T>`: すべて省略可能にする。下書きや更新の差分に使える。
+- `Pick<T, K>`: 特定のプロパティだけ取り出す。一覧用の軽い型に使える。
+- `Todo` 型から `TodoDraft` と `TodoSummary` を派生させた。この `Todo` 型は次章 lesson43 以降で React の props として `import type` して再利用する。
+- 他の Utility Types（`Readonly` / `Record` / `Omit` / `Required` など）は本コースでは扱わない。必要になったら公式ドキュメントを参照する。

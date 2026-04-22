@@ -1,183 +1,190 @@
-# lesson41: useEffect の基本
+# lesson41: React ってなに？
 
 ## ゴール
 
-- `useEffect` が何のためにあるかを説明できる
-- 依存配列 `[]` とそれ以外（`[todos]` など）の違いを書き分けられる
-- `document.title` をマウント時に書き換える最小の例を手を動かして作れる
-
-## このレッスンの範囲（冒頭で明示）
-
-本コースで扱う `useEffect` は、この 2 パターンだけです。
-
-1. マウント時に 1 回だけ実行（依存配列 `[]`）: **このレッスン**
-2. 特定の値が変わるたびに実行（依存配列 `[todos]` など）: **次の lesson42** で localStorage 保存に使う
-
-**以下は扱いません**（本コースのスコープ外）。必要になった時点でドキュメントを調べてください。
-
-- クリーンアップ関数（`useEffect` の中で return する関数）
-- `addEventListener` / `removeEventListener` のようなイベントリスナの取り付け
-- `setInterval` / `setTimeout` のタイマー管理
+- React が何を解決する道具なのかを、自分の言葉で説明できる
+- Vite / npm / `package.json` / `npm run dev` の役割をざっくり理解する
+- StackBlitz の React + Vite（TypeScript）テンプレートから、自分の文字を画面に出せる
 
 ## 解説
 
-### 副作用（side effect）とは
+### ここまでの立ち位置
 
-ここまでのレッスンで書いたコンポーネントは、次の形でした。
+章 2 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。章 2 の仕上げの lesson30 では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
 
-- **入力**: props と state
-- **出力**: JSX（画面）
+そこまでできるのなら、React はなぜ必要なのでしょうか。
 
-この「入力から JSX を計算する」部分だけなら、コンポーネントは純粋な関数です。関数を呼ぶと JSX が返ってくる、それだけ。
+### React が解決すること
 
-ところが、実用的なアプリでは次のようなこともしたいことがあります。
+素の JS で画面を書き換えるコードを思い出してください。例えば「TODO を 1 件追加する」ためには、次のような手順が必要でした。
 
-- `document.title` を書き換える
-- ブラウザの localStorage にデータを書き込む
-- サーバーにデータを送る
+1. 新しい `<li>` 要素を `document.createElement` で作る
+2. その中に文字を入れる
+3. 削除ボタンを作って `<li>` の中にくっつける
+4. `<ul>` に `appendChild` で追加する
 
-これらはコンポーネントの「描画」そのものではなく、**画面を描いた結果として起きてほしい**処理です。こうした処理をまとめて **副作用（side effect）** と呼びます。
+「画面をこう変えたい」という気持ちから遠い、**手順の羅列**になりがちです。項目数が増えたり、削除・並び替え・ハイライトなど状態の種類が増えると、どの DOM をどう更新するかを一つずつ書かないといけません。バグも混入しやすいです。
 
-`useEffect` は「描画の後に、副作用を実行する」ためのフックです。
+React の発想はこうです。
 
-### 最小形
+> **画面（UI）を「今の状態」から計算される結果として書く**
 
-```tsx
-import { useEffect } from "react";
+コードの書き方は「今、TODO 配列がこうなっているなら、画面はこういう形です」と宣言するだけ。追加・削除で配列が変わると、React が「前の画面」と「新しい画面」を比べて、**変わった箇所だけ** DOM に反映してくれます。
 
-useEffect(() => {
-  document.title = "Hello";
-}, []);
-```
+### 「仮想 DOM」という言葉は使わない
 
-- 第 1 引数: 副作用として実行したい関数
-- 第 2 引数: **依存配列**
+古い記事では「仮想 DOM」という言葉で説明されていることがあります。本コースでは次のような現代的な表現を使います。
 
-### 依存配列の意味
+- React は UI を「JS のツリー」として保持している
+- 状態が変わるたびに、新しいツリーを作って前のツリーと比較する
+- 差があった部分だけ、本物の DOM に反映する
 
-依存配列は、「中に入っている値のうち 1 つでも前回と違ったら、副作用を再実行する」というルールで効きます。
+要は「全部書き換えるのではなく、変化した差分だけ反映する」仕組みだと覚えておけば十分です。
 
-- **`[]`**（空配列）: どの値も監視しない → **マウント時に 1 回だけ** 実行
-- **`[count]`**: `count` が変わるたびに実行
-- **`[todos]`**: `todos` が変わるたびに実行（次レッスンで使う）
-- 書かない（第 2 引数を省略）: **毎回の描画後** に実行。原則使わない（無限ループの原因になりやすい）
+### コンポーネントという単位
 
-本コースでは `[]` と `[何かの値]` の 2 通りだけ使います。
-
-### マウント時に 1 回だけ
-
-「マウント」はコンポーネントが **初めて画面に現れた瞬間** を指します。
+React では、画面を**コンポーネント**という部品に分けて組み立てます。コンポーネントは「JSX を返す関数」です。
 
 ```tsx
-useEffect(() => {
-  console.log("mounted");
-}, []);
-```
-
-このコードは、コンポーネントが表示されたときに一度だけ `mounted` をログに出します。その後、state が変わって再レンダリングされても、もうこの副作用は走りません。
-
-### 何かが変わるたび
-
-```tsx
-useEffect(() => {
-  document.title = `TODO (${todos.length})`;
-}, [todos]);
-```
-
-`todos` が変わるたびにタブのタイトルを更新する例です。配列の**中身**が変わっただけでなく、**配列オブジェクト自体**が前回と違う必要があります。lesson37 で学んだ「スプレッドで新しい配列を作る」イミュータブル更新が、このシグナルとして効きます。
-
-### コラム: React 19 では `<title>` を JSX に書ける
-
-React 19 では、JSX の中に `<title>` / `<meta>` / `<link>` を直接書くと、React が `<head>` に自動で差し込んでくれるようになりました。
-
-```tsx
-function Page() {
-  return (
-    <>
-      <title>TODO</title>
-      <h1>...</h1>
-    </>
-  );
+function Hello() {
+  return <h1>Hello, React</h1>;
 }
 ```
 
-つまり「タイトルを変えたいだけ」なら、`useEffect` で `document.title` を書き換える必要はありません。それでもこのレッスンでは **`useEffect` の素振り** として `document.title` を扱います。「タイトル書き換え」という用途に限れば `<title>` の方が簡単、という事実は頭の片隅に。
+この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。JSX の詳しい書き方は lesson42 で扱います。
+
+### Vite / npm / `package.json` の最低限
+
+素の JS なら `<script defer src="./script.js">` と書けば動きました。React + TypeScript では、TS を JS に変換したり、開発中に保存するとブラウザを自動更新したりする仕組みが必要です。その仕組みをまとめて提供してくれるのが **Vite（ヴィート）** です。
+
+Vite は次の 2 つを担います。
+
+- **開発サーバー**: ファイルを保存するたびに画面を自動更新（`npm run dev`）
+- **ビルド**: 本番公開用に最適化したファイルを出力（`npm run build`）
+
+そして Vite 本体や React 本体などの「外部ライブラリ」をダウンロード・管理する道具が **npm（Node Package Manager）** です。npm は `package.json` というファイルを見て、「このプロジェクトはどのライブラリを使っていて、どのコマンドで起動するか」を判断します。
+
+`package.json` の `scripts` セクションだけ見れば、とりあえず十分です。例えば次のような形です。
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
+```
+
+`npm run dev` と打つと、npm は `scripts.dev` に書かれているコマンド（ここでは `vite`）を実行します。Vite が開発サーバーを立ち上げて、ブラウザで表示できる状態になります。
+
+### StackBlitz なら自動で走る
+
+StackBlitz の React + Vite テンプレートを開くと、次のことが自動で起きます。
+
+1. `npm install`（`package.json` に書かれたライブラリをダウンロード）
+2. `npm run dev`（Vite 開発サーバーを起動）
+3. プレビューエリアに画面が表示される
+
+本コースでは `npm install` や `npm run dev` を **知っておく程度** でよく、コマンドを手で打つことはほとんどありません。それでも「StackBlitz の裏では Vite が動いている」「設定は `package.json` に書かれている」ことだけ頭に入れておくと、後で応用が利きます。
+
+### `App.tsx` の位置
+
+Vite の React + TS テンプレートでは、画面の入口となるファイルが 2 つあります。
+
+- `src/main.tsx`: React を起動する（ここは基本触らない）
+- `src/App.tsx`: 画面の中身を書く（本コースではここを中心に触る）
+
+`main.tsx` の中で `<App />` をブラウザに流し込んでいます。イメージとしてはこうです。
+
+```tsx
+// src/main.tsx（テンプレートに最初から入っている）
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+```
+
+`StrictMode` は「開発中に問題を見つけやすくするラッパー」です。今は気にしなくてよいです。
+
+本コースで意識的に編集するのは、基本的に `src/App.tsx` です。
 
 ## 演習
 
 ### ゴール
 
-- 画面の `<h1>` とカウンター UI を作り、マウント時に `document.title` を書き換える
-- カウンターの値が変わるたびに `document.title` を `TODO (N)` のように更新する
+- StackBlitz の React + Vite（TS）テンプレートから新しいプロジェクトを起動する
+- `src/App.tsx` を編集して「Hello, React」とあなたの名前を画面に表示する
+- `package.json` を開いて `scripts.dev` の値を確認する
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` を書き換える
+1. ブラウザで [https://stackblitz.com/](https://stackblitz.com/) を開く
+2. トップ画面の「Start a new project」セクションから、**Vite のロゴ付きで「react-ts」（あるいは「React + Vite + TS」「React TypeScript Vite」などと表記）** のテンプレートを選ぶ
+   - 旧 Create React App（CRA）ベースの「React」テンプレートも並んでいることがあるが、本コースでは **必ず「Vite」側** を選ぶ
+   - 「Vanilla TypeScript」「Next.js」は今回は選ばない
+3. 直接次の URL を開いても同じテンプレートが立ち上がる → [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts)
+4. 左のファイルツリーから `src/App.tsx` を開く
+5. 中身を下記の内容に書き換える
+6. 右のプレビューで確認する
 
 ### `src/App.tsx`
 
 ```tsx
-import { useEffect, useState } from "react";
-import "./App.css";
-
 function App() {
-  const [count, setCount] = useState(0);
-
-  // (1) マウント時に 1 回だけ
-  useEffect(() => {
-    console.log("mounted: 初期タイトルをセット");
-    document.title = "TODO (起動中)";
-  }, []);
-
-  // (2) count が変わるたびに
-  useEffect(() => {
-    document.title = `TODO (${count})`;
-  }, [count]);
-
+  const userName = "Alice";
   return (
-    <>
-      <h1>useEffect 入門</h1>
-      <p>カウンター: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-      <button onClick={() => setCount(0)}>リセット</button>
-    </>
+    <div>
+      <h1>Hello, React</h1>
+      <p>こんにちは、{userName} さん</p>
+    </div>
   );
 }
 
 export default App;
 ```
 
+`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です（詳しくは lesson42）。
+
 ### 期待出力
 
-- 画面に `useEffect 入門` という見出しと `カウンター: 0` 、`+1` / `リセット` ボタン
-- **ブラウザのタブのタイトル** が `TODO (0)` になっている（開いた直後は `TODO (起動中)` になることもあるが、すぐ `TODO (0)` に上書きされる）
-- `+1` を押すたびにタブのタイトルが `TODO (1)` → `TODO (2)` → ... に変わる
-- `リセット` を押すとタブのタイトルが `TODO (0)` に戻る
-- ブラウザのコンソールに `mounted: 初期タイトルをセット` が **一度だけ** 出る
+プレビューに次の 2 行が表示されます。
+
+```
+Hello, React
+こんにちは、Alice さん
+```
+
+見出しの `Hello, React` が `<h1>` の大きな文字、`こんにちは、Alice さん` が `<p>` の通常の大きさで並びます。
 
 ### 変える
 
-- (1) の依存配列 `[]` を消す（依存配列ごと省略する）と、`mounted: 初期タイトルをセット` がクリックのたびに出てしまう（描画のたびに副作用が走る）。確認したら戻す
-- (2) の `[count]` を `[]` に変えると、タブのタイトルが `+1` しても更新されなくなる（マウント時の 1 回だけになる）
-- (1) と (2) を 1 つにまとめてもよい（依存配列は `[count]` で、中で `document.title = TODO (${count})`）
+- `const userName = "Alice";` の `"Alice"` をあなたの名前に書き換えて保存する。保存するとプレビューが自動で更新されることを確認する
+- `<h1>Hello, React</h1>` を `<h1>Hello, 世界</h1>` に変えて保存。これも即反映されるはず
 
 ### 自分で書く
 
-- `count` の代わりに、lesson40 で作った `todos` state を使って、`document.title` を `TODO (${todos.length})` に更新する
-- `<input>` で文字を入れて追加ボタンで増やすと、タブのタイトルの件数が増える、という挙動を作る
-- lesson42 の準備として、ファイルを保存しておくと役立つ
+- 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
+- 変数の型は今は書かなくてよい（章 3 でやった型注釈は、次の lesson で必要に応じて使う）
 
-### 末尾予告
+### `package.json` を覗く小タスク
 
-- **ブラウザ側で `fetch` を `useEffect` で呼ぶパターン** は、競合状態、ローディング、エラー管理など罠が多いので、本コースでは扱いません。データ取得は章 5（Next.js）の **Server Component** にサーバー側 `fetch` としてまとめます
-- 次の **lesson42** では、`useEffect` を **localStorage への保存** に使います（依存配列に `todos` を渡す形）。lesson25 で作った「リロードしても消えない TODO」を、React 版でも取り戻します
+1. 左のファイルツリーから `package.json` を開く
+2. `"scripts"` の中を見つける
+3. `"dev": "vite"` のような行があることを確認する
+
+StackBlitz が自動で走らせているのは、この `vite` コマンドです。手元で同じことをやるなら、ターミナルで `npm install` → `npm run dev` と打つ流れになります。
 
 ## まとめ
 
-- `useEffect(() => { ... }, deps)` は「描画の後に走る処理」を書く場所
-- 依存配列 `[]` は **マウント時 1 回だけ**
-- 依存配列に値を入れると、その値が変わるたびに再実行
-- 本コースではこの 2 パターンのみ扱う。クリーンアップ関数やイベントリスナ管理は扱わない
-- React 19 では `<title>` を JSX に直接書けるので、実務で「タイトルだけ」なら `useEffect` は不要
-- 次は `useEffect` で localStorage 保存に挑戦
+- React は「画面を今の状態から計算する」発想の道具。差分だけを DOM に反映する
+- 画面は**コンポーネント**（JSX を返す関数）の組み合わせで作る
+- Vite は開発サーバーとビルドを担当し、`npm run dev` で起動する
+- `package.json` の `scripts` セクションに、起動やビルドのコマンドがまとまっている
+- StackBlitz を使う限り、`npm install` も `npm run dev` も自動で走る。コマンドは知っておく程度で OK
+- 編集するのは基本的に `src/App.tsx`
