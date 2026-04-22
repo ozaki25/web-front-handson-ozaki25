@@ -117,6 +117,30 @@ sequenceDiagram
 
 ## 演習
 
+### 途中から始める場合
+
+lesson67 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
+
+<details>
+<summary>出発点のファイル（TODO の最小出発点）</summary>
+
+**`app/todos/page.tsx`**（空でもよい。本文の手順 3 で全量置き換えます）
+
+```tsx
+export default function TodosPage() {
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
+    </>
+  );
+}
+```
+
+`app/types.ts` と `app/actions.ts` は、本文の手順 1・手順 2 で新規作成するので事前準備は不要です。
+
+</details>
+
 ### 前回のプロジェクトを開く
 
 lesson67 で作ったプロジェクトを開き直しましょう。

@@ -55,6 +55,47 @@ console.log(message);
 
 ## 演習
 
+### 途中から始める場合
+
+lesson15 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson15 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson15</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson15: 最初の JavaScript</h1>
+    <p>DevTools の Console を開いてください。</p>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const userName = "Alice";
+let count = 0;
+
+console.log("Hello, JavaScript");
+console.log(userName);
+console.log(count);
+
+count = count + 1;
+console.log(count);
+```
+
+</details>
+
 ### ゴール
 
 - 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する

@@ -71,6 +71,102 @@ function handleClick() { ... }
 
 ## 演習
 
+### 途中から始める場合
+
+lesson28 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson28 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson28</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1 id="title">lesson28</h1>
+    <p id="box">このボックスのクラスが切り替わります</p>
+    <ul id="list">
+      <li>既存の項目 1</li>
+      <li>既存の項目 2</li>
+    </ul>
+  </body>
+</html>
+```
+
+**`style.css`**
+
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+}
+
+#box {
+  padding: 12px;
+  border: 1px solid #888;
+  border-radius: 6px;
+}
+
+#box.active {
+  background-color: #ffe58f;
+  color: #222;
+  border-color: #d48806;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
+
+  #box {
+    border-color: #aaa;
+  }
+
+  #box.active {
+    background-color: #5a4600;
+    color: #fff;
+    border-color: #e6a817;
+  }
+}
+```
+
+**`script.js`**
+
+```js
+const title = document.querySelector("#title");
+console.log(title.textContent);
+title.textContent = "DOM を書き換えました";
+
+const box = document.querySelector("#box");
+box.classList.add("active");
+
+const list = document.querySelector("#list");
+
+const items = ["りんご", "みかん", "ぶどう"];
+for (const item of items) {
+  const li = document.createElement("li");
+  li.textContent = item;
+  list.appendChild(li);
+}
+
+const newLi = document.createElement("li");
+newLi.textContent = "最後に追加した項目";
+list.appendChild(newLi);
+```
+
+</details>
+
 ### ゴール
 
 - 「+1」「-1」「リセット」のボタンを持つカウンターアプリを作る

@@ -63,6 +63,10 @@ await fetch(url, { next: { tags: ["posts"] } });
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンの記事一覧演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/posts/page.tsx` と `app/posts/loading.tsx` の新規作成が中心です。手順 3 のヘッダーリンク追加は `app/layout.tsx` にナビがあれば足せますが、無ければスキップして構いません）。
+
 ### 前回のプロジェクトを開く
 
 lesson62 で作ったプロジェクトを開き直しましょう。

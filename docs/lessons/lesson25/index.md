@@ -140,6 +140,72 @@ import { add } from "./math";
 
 ## 演習
 
+### 途中から始める場合
+
+lesson24 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
+
+<details>
+<summary>出発点のコード（lesson24 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson24</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson24: 配列の変換</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+  { name: "Dave", age: 17 },
+];
+
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
+
+const names = users.map((user) => user.name);
+console.log(names);
+
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+console.log(adultNames);
+
+const numbers = [1, 2, 3, 4, 5];
+const doubled = numbers.map((n) => n * 2);
+const evens = numbers.filter((n) => n % 2 === 0);
+console.log(doubled);
+console.log(evens);
+console.log(numbers);
+
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target);
+
+const missing = todos.find((todo) => todo.id === "zzz");
+console.log(missing);
+```
+
+</details>
+
 ### ゴール
 
 - TODO アプリのロジックを 3 ファイルに分割する

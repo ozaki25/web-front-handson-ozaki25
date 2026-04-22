@@ -126,6 +126,10 @@ You're importing a component that needs useState. This React Hook only works in 
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
+
 ### 前回のプロジェクトを開く
 
 lesson60 で作ったプロジェクトを開き直しましょう。

@@ -134,6 +134,22 @@ export type Todo = {
 
 ## 演習
 
+### 途中から始める場合
+
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+
+<details>
+<summary>`src/types.ts`（lesson33 完成時点）</summary>
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+</details>
+
 ### 手順 1: 配列の型に慣れる
 
 `src/main.ts` の中身を以下に置き換える。

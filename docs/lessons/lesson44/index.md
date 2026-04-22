@@ -116,6 +116,26 @@ JSX の中の `{ ... }` には、式を 1 つだけ書きます。`for` 文や `
 
 ## 演習
 
+### 途中から始める場合
+
+lesson43 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+
+<details>
+<summary>出発点のファイル（lesson43 完成時点）</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+本レッスンの演習でこのファイルを `import type { Todo } from "./types"` の形で利用します。
+
+</details>
+
 ### ゴール
 
 - ハードコードした `todos` 配列を `<ul>` で描画する

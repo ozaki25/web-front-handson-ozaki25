@@ -90,6 +90,55 @@ if (!response.ok) {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson26 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson26 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson26</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson26: 非同期処理の基本</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function main() {
+  console.log("start");
+  await wait(1000);
+  console.log("1 秒経過");
+  await wait(1000);
+  console.log("2 秒経過");
+  await wait(1000);
+  console.log("3 秒経過");
+  console.log("end");
+}
+
+main();
+
+console.log("main を呼んだ後のコード");
+```
+
+</details>
+
 ### ゴール
 
 - JSONPlaceholder（無料の練習用 API）から記事一覧を取得して Console に出す

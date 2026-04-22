@@ -72,6 +72,10 @@ export default function Home() {
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で章 1 lesson11 の自己紹介ページの HTML と CSS を参照するため、先に章 1 lesson11 のコードを手元にコピーしておくとスムーズです。
+
 ### 手順 1: `/todos` の空ページを作る
 
 StackBlitz のファイルツリーで、`app/` を右クリックして「New Folder」→ `todos` を作ります。その中に「New File」で `page.tsx` を作り、以下を貼ります。

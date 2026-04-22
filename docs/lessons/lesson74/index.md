@@ -87,6 +87,10 @@ CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の章 5 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
+
 ### ゴール
 
 - `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する

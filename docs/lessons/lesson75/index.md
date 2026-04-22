@@ -38,6 +38,334 @@ StackBlitz → GitHub → Vercel → https://<project>.vercel.app
 
 ## 演習
 
+### 途中から始める場合
+
+lesson73 で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために lesson73 の完成品を推奨します）。
+
+<details>
+<summary>出発点のファイル（lesson73 完成時点の全量）</summary>
+
+**`app/layout.tsx`**
+
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+import "./globals.css";
+
+export const metadata = {
+  title: {
+    default: "TODO アプリ",
+    template: "%s | TODO アプリ",
+  },
+  description: "Next.js App Router の学習用 TODO アプリ",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 TODO アプリ</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
+```
+
+**`app/page.tsx`**
+
+```tsx
+export default function Page() {
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <p>このアプリについてはヘッダーのリンクから。</p>
+    </>
+  );
+}
+```
+
+**`app/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+**`app/actions.ts`**
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function getTodo(id: string): Promise<Todo | undefined> {
+  return todos.find((t) => t.id === id);
+}
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+
+export async function deleteTodo(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const index = todos.findIndex((t) => t.id === id);
+  if (index >= 0) {
+    todos.splice(index, 1);
+  }
+  revalidatePath("/todos");
+}
+```
+
+**`app/todos/TodoForm.tsx`**
+
+```tsx
+"use client";
+
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { addTodo, type AddTodoState } from "../actions";
+
+const initialState: AddTodoState = {};
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
+
+export function TodoForm() {
+  const [state, formAction, isPending] = useActionState(addTodo, initialState);
+
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.error && <p className="error">{state.error}</p>}
+      {isPending && <p>通信中...</p>}
+    </form>
+  );
+}
+```
+
+**`app/todos/page.tsx`**
+
+```tsx
+import { listTodos, deleteTodo } from "../actions";
+import { TodoForm } from "./TodoForm";
+import Link from "next/link";
+
+type Props = {
+  searchParams: Promise<{ highlight?: string }>;
+};
+
+export default async function TodosPage({ searchParams }: Props) {
+  const { highlight } = await searchParams;
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li
+            key={todo.id}
+            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
+          >
+            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
+            <form action={deleteTodo} style={{ display: "inline" }}>
+              <input type="hidden" name="id" value={todo.id} />
+              <button type="submit">削除</button>
+            </form>
+          </li>
+        ))}
+      </ul>
+      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
+    </>
+  );
+}
+```
+
+**`app/todos/[id]/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { getTodo } from "../../actions";
+
+type Props = {
+  params: Promise<{ id: string }>;
+};
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { id } = await params;
+  const todo = await getTodo(id);
+  return {
+    title: todo ? `Todo: ${todo.text}` : "Todo not found",
+  };
+}
+
+export default async function TodoDetailPage({ params }: Props) {
+  const { id } = await params;
+  const todo = await getTodo(id);
+
+  if (!todo) {
+    notFound();
+  }
+
+  return (
+    <>
+      <h1>Todo 詳細</h1>
+      <p>ID: {todo.id}</p>
+      <p>内容: {todo.text}</p>
+      <p>
+        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
+      </p>
+      <p>
+        <Link href="/todos">一覧に戻る</Link>
+      </p>
+    </>
+  );
+}
+```
+
+**`app/todos/[id]/not-found.tsx`**
+
+```tsx
+import Link from "next/link";
+
+export default function TodoNotFound() {
+  return (
+    <>
+      <h1>Todo が見つからない</h1>
+      <p>指定された ID の Todo は存在しない（または削除された）。</p>
+      <Link href="/todos">一覧に戻る</Link>
+    </>
+  );
+}
+```
+
+**`app/globals.css`**（共通 CSS + `.error` + `.todo-list` / `.todo-item--highlight`）
+
+```css
+.site-header ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding: 1rem;
+  background: #f5f5f5;
+}
+
+.site-header a {
+  text-decoration: none;
+  color: #0070f3;
+}
+
+.site-footer {
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  color: #555;
+}
+
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.todo-list {
+  list-style: none;
+  padding: 0;
+}
+
+.todo-item {
+  padding: 0.5rem;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.todo-item--highlight {
+  background: #fff3a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-header ul {
+    background: #1f1f1f;
+  }
+  .site-header a {
+    color: #4ea2ff;
+  }
+  .site-footer {
+    border-top-color: #333;
+    color: #bbb;
+  }
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
+  }
+  .todo-item {
+    border-bottom-color: #333;
+  }
+  .todo-item--highlight {
+    background: #665c1e;
+    color: #fff;
+  }
+}
+```
+
+</details>
+
+なお、Vercel デプロイの手順自体（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。出発点の全量を貼らずに、素の hello-world テンプレートのまま手順 1〜5 を通して URL 発行まで体験するのも有効です。
+
 ### 前回のプロジェクトを開く
 
 lesson73 で仕上げた StackBlitz の Next.js プロジェクトを開きましょう。

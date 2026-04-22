@@ -162,6 +162,22 @@ interface User {
 
 ## 演習
 
+### 途中から始める場合
+
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+
+<details>
+<summary>`src/types.ts`（lesson33 完成時点）</summary>
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+</details>
+
 ### 手順 1: `interface Todo` で書き直す
 
 lesson33 で作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。

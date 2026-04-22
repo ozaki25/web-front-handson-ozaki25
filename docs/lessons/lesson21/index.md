@@ -165,6 +165,64 @@ console.log(b); // 2 （ブロックの外でも見える）
 
 ## 演習
 
+### 途中から始める場合
+
+lesson20 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson20 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson20</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson20: 関数</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+const addArrow = (a, b) => {
+  return a + b;
+};
+
+const addShort = (a, b) => a + b;
+
+console.log(add(1, 2));
+console.log(addArrow(10, 20));
+console.log(addShort(100, 200));
+
+function greet(name) {
+  return `こんにちは、${name} さん`;
+}
+
+const message = greet("Alice");
+console.log(message);
+console.log(greet("Bob"));
+
+function introduce(name, age) {
+  return `${name}（${age} 歳）です`;
+}
+
+console.log(introduce("Carol", 30));
+```
+
+</details>
+
 ### ゴール
 
 - `makeCounter()` で独立したカウンタ `counterA` / `counterB` を作る

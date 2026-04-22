@@ -67,6 +67,64 @@ console.log(fruits);  // ["apple", "banana"]
 
 ## 演習
 
+### 途中から始める場合
+
+lesson17 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson17 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson17</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson17: 条件で分岐する</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const age = 20;
+const userName = "Alice";
+const isStudent = true;
+
+if (age >= 20) {
+  console.log(`${userName} さんは成人です`);
+} else {
+  console.log(`${userName} さんは未成年です`);
+}
+
+if (age >= 13 && age <= 19) {
+  console.log("10 代です");
+} else if (age >= 20 && age < 60) {
+  console.log("大人です");
+} else {
+  console.log("それ以外の年代です");
+}
+
+if (isStudent && age >= 20) {
+  console.log("成人の学生です");
+}
+
+if (!isStudent) {
+  console.log("学生ではありません");
+} else {
+  console.log("学生です");
+}
+```
+
+</details>
+
 ### ゴール
 
 - 「やることリスト」の配列を作り、要素を足したり取り出したりしてコンソールに表示する

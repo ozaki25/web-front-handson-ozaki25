@@ -63,6 +63,10 @@ count = count + 1;
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）から始められます。前のレッスンのコードは引き継ぎません。
+
 ### ゴール
 
 - `script.js` を作り、自分の名前を変数に入れてコンソールに表示する

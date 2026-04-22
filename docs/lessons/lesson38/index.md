@@ -137,6 +137,10 @@ type Action =
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+
 ### 手順 1: `Shape` の判別共用体
 
 `src/main.ts` の中身を以下に置き換える。

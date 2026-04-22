@@ -114,6 +114,93 @@
 
 ## 演習
 
+### 途中から始める場合
+
+lesson05 までで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
+
+<details>
+<summary>出発点のコード（lesson05 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>自己紹介</title>
+  </head>
+  <body>
+    <header>
+      <h1>オザキの自己紹介</h1>
+      <nav>
+        <ul>
+          <li><a href="#profile">プロフィール</a></li>
+          <li><a href="#likes">好きなもの</a></li>
+          <li><a href="#goals">今年やりたいこと</a></li>
+          <li><a href="#links">お気に入りサイト</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main>
+      <section id="profile">
+        <h2>プロフィール</h2>
+        <img
+          src="https://placehold.jp/200x200.png"
+          alt="オザキのプロフィール画像(仮)"
+          width="200"
+          height="200"
+        />
+        <p>はじめまして。Web フロントエンドを勉強中です。</p>
+        <p>
+          いまは <strong>HTML の基礎</strong> を学んでいます。読むだけでなく、<em>自分でも手を動かして</em> 覚えていきたいです。
+        </p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <ul>
+          <li>コーヒー</li>
+          <li>散歩</li>
+          <li>本</li>
+        </ul>
+      </section>
+
+      <section id="goals">
+        <h2>今年やりたいこと</h2>
+        <ol>
+          <li>Next.js で小さなアプリを作る</li>
+          <li>毎週 1 本ブログを書く</li>
+          <li>早起きする</li>
+        </ol>
+      </section>
+
+      <section id="links">
+        <h2>お気に入りサイト</h2>
+        <ul>
+          <li>
+            <a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs（日本語）</a>
+          </li>
+          <li>
+            <a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式（日本語）</a>
+          </li>
+          <li>
+            <a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js 公式</a>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 オザキ</p>
+    </footer>
+  </body>
+</html>
+```
+
+</details>
+
 ### 前レッスンの状態から始める
 
 lesson05 のプロジェクトを開きます。`<main>` の中にセクションが 4 つ並び、`<header>` / `<footer>` が付いた状態です。

@@ -118,6 +118,10 @@ const [todos, setTodos] = useState<Todo[]>([]);
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+
 ### ゴール
 
 - カウンター UI を作り、「壊れやすい書き方」と「正しい書き方」のボタンを並べる

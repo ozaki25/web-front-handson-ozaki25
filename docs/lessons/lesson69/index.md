@@ -104,6 +104,76 @@ export function SubmitButton() {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson68 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは lesson68 の `addTodo` を前提にしています。
+
+<details>
+<summary>出発点のファイル（lesson68 完成時点）</summary>
+
+**`app/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+**`app/actions.ts`**
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
+
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
+}
+```
+
+**`app/todos/page.tsx`**
+
+```tsx
+import { addTodo, listTodos } from "../actions";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+</details>
+
 ### 前回のプロジェクトを開く
 
 lesson68 で作ったプロジェクトを開き直しましょう。

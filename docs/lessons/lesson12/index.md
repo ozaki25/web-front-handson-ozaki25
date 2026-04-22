@@ -123,6 +123,247 @@ lesson11 で Flexbox を使って要素を横並びにしました。Flexbox は
 
 ## 演習
 
+### 途中から始める場合
+
+lesson11 までで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスンから章 1 統合版では `style.css` というファイル名を使います）。
+
+<details>
+<summary>出発点のコード（lesson11 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>私の自己紹介</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>私の名前</h1>
+      <nav class="site-nav">
+        <a href="#about">自己紹介</a>
+        <a href="#likes">好きなもの</a>
+        <a href="#contact">問い合わせ</a>
+      </nav>
+    </header>
+
+    <main>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div class="cards">
+          <article class="card">
+            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label for="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label for="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label for="message">メッセージ</label>
+            <textarea id="message" name="message" rows="4" required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <p>&copy; 私の名前</p>
+    </footer>
+  </body>
+</html>
+```
+
+**`style.css`**
+
+```css
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  background-color: #f9fafb;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e5e7eb;
+    background-color: #0b1220;
+  }
+}
+
+a {
+  color: #2563eb;
+}
+
+a:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  margin-top: 0;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.site-header {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-header h1 {
+  margin: 0;
+}
+
+.site-nav a {
+  color: #f9fafb;
+  margin-right: 16px;
+}
+
+.card {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #111827;
+    border-color: #374151;
+  }
+}
+
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.cards {
+  display: flex;
+  gap: 16px;
+}
+
+.cards .card {
+  flex: 1;
+}
+
+.site-footer {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .site-nav a {
+    margin-right: 0;
+    margin-top: 4px;
+    display: inline-block;
+  }
+
+  .cards {
+    flex-direction: column;
+  }
+}
+
+form div {
+  margin-bottom: 12px;
+}
+
+form label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+form input,
+form textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #9ca3af;
+  border-radius: 4px;
+  font: inherit;
+}
+
+form input:focus,
+form textarea:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 1px;
+}
+
+form button {
+  padding: 8px 16px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+form button:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+```
+
+</details>
+
 ### やること
 
 lesson11 で作った自己紹介ページの「好きなもの」カード部分を、**Flexbox から Grid に書き換え**、画面幅に応じて 3 列 → 2 列 → 1 列と **自動で折り返す** ようにします。`@media` を自分で書く必要はありません。
