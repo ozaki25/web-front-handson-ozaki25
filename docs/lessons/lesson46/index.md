@@ -10,7 +10,7 @@
 
 ### 配列 state の注意点
 
-lesson45 でカウンター（数値）の state を扱いました。配列の state でも考え方は同じですが、**守らないといけないルール** が 1 つあります。
+前のレッスンでカウンター（数値）の state を扱いました。配列の state でも考え方は同じですが、**守らないといけないルール** が 1 つあります。
 
 > **直接 `push` や `splice` で書き換えない**。必ず「新しい配列」を作って渡す。
 
@@ -29,7 +29,7 @@ setTodos((prev) => [...prev, newTodo]);
 
 理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
 
-スプレッド構文 `...`（lesson23）は、このイミュータブル更新で頻出します。
+スプレッド構文 `...`（章 2 の「分割代入とスプレッド」）は、このイミュータブル更新で頻出します。
 
 ### よく使う 3 パターン
 
@@ -55,7 +55,7 @@ setTodos((prev) => [newTodo, ...prev]);
 setTodos((prev) => prev.filter((t) => t.id !== id));
 ```
 
-`filter`（lesson24）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
+`filter`（章 2 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
 
 ### イベントハンドラの型（コピペで与える）
 
@@ -94,13 +94,13 @@ function handleSubmit(e: FormEvent<HTMLFormElement>) {
 
 ### スコープ外: オブジェクトの state 更新
 
-配列ではなく、**オブジェクト** を state に入れたときの更新（`setUser((prev) => ({ ...prev, age: 30 }))` など）も同じ発想でできます。ただし覚える量を分散させるため、本コースでは **lesson57（React 版 TODO のミニ統合）で扱います**。このレッスンでは配列更新だけに集中します。
+配列ではなく、**オブジェクト** を state に入れたときの更新（`setUser((prev) => ({ ...prev, age: 30 }))` など）も同じ発想でできます。ただし覚える量を分散させるため、本コースでは **「TODO アプリを React で作る」（React 版 TODO のミニ統合）で扱います**。このレッスンでは配列更新だけに集中します。
 
 ## 演習
 
 ### 途中から始める場合
 
-lesson45 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+前のレッスンまでで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
 <summary>出発点のファイル（lesson45 完成時点相当）</summary>
@@ -126,7 +126,7 @@ export type Todo = {
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（lesson45 のを使い回しても OK）
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（前のレッスンのを使い回しても OK）
 2. `src/types.ts` を作成
 3. `src/App.tsx` を書き換える
 
@@ -284,4 +284,4 @@ export default App;
 - 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
 - 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
 - イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
-- **オブジェクトの state 更新は lesson57 で扱う**。このレッスンでは配列に集中
+- **オブジェクトの state 更新は「TODO アプリを React で作る」で扱う**。このレッスンでは配列に集中

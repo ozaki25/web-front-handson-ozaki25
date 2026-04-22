@@ -8,18 +8,18 @@
 
 ## 解説
 
-### lesson23 の分割代入と同じ書き方
+### 章 2 の「分割代入とスプレッド」と同じ書き方
 
 本題の前に、1 行で接続しておきます。
 
-lesson23 で学んだオブジェクトの分割代入を思い出してください。
+章 2 の「分割代入とスプレッド」で学んだオブジェクトの分割代入を思い出してください。
 
 ```ts
 const user = { name: "Alice", age: 20 };
 const { name, age } = user; // 取り出す
 ```
 
-React コンポーネントの props も、**全く同じ書き方**で値を取り出します。「lesson23 の分割代入の再登場」と思ってください。
+React コンポーネントの props も、**全く同じ書き方**で値を取り出します。「章 2 の「分割代入とスプレッド」の再登場」と思ってください。
 
 ```tsx
 function Greeting({ name }: GreetingProps) {
@@ -40,7 +40,7 @@ function Greeting({ name }: GreetingProps) {
 
 ### 型付き props
 
-TypeScript で書くときは、props の形を型で表します。章 3 lesson33 で学んだ `type` エイリアスをそのまま使います。
+TypeScript で書くときは、props の形を型で表します。章 3 の「オブジェクトの型と type エイリアス」で学んだ `type` エイリアスをそのまま使います。
 
 ```tsx
 type GreetingProps = {
@@ -59,7 +59,7 @@ function Greeting({ name }: GreetingProps) {
 
 ### `import type` で型を別ファイルから持ってくる
 
-章 3 の lesson33 / lesson40 で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
+章 3 の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
 
 ```ts
 // src/types.ts
@@ -149,13 +149,13 @@ export function Greeting({ name, age, children }: GreetingProps) {
 - **コンポーネント名は必ず大文字始まり**（`Greeting` / `Card`）。小文字で書くと JSX が通常の HTML タグとして解釈されてしまう
 - `export function ...` で名前付きエクスポートするのが本コースの基本形
 
-`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。条件表示の詳しい話は lesson49 で扱います。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
+`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。条件表示の詳しい話は「条件で出し分ける」で扱います。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
 
 ## 演習
 
 ### 途中から始める場合
 
-lesson42 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。章 3 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
+前のレッスンまでで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。章 3 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
 
 <details>
 <summary>出発点のファイル（章 3 の <code>types.ts</code> を再掲）</summary>
@@ -181,7 +181,7 @@ export type Todo = {
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（lesson42 のを使い回しても OK）
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（前のレッスンのを使い回しても OK）
 2. `src/types.ts` を新規作成
 3. `src/Greeting.tsx` を新規作成
 4. `src/App.tsx` を書き換える
@@ -285,7 +285,7 @@ export default App;
 
 ## まとめ
 
-- props は「コンポーネントの引数」。オブジェクトの分割代入（lesson23）で受け取る
+- props は「コンポーネントの引数」。オブジェクトの分割代入（章 2 の「分割代入とスプレッド」）で受け取る
 - 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
 - オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
 - `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）

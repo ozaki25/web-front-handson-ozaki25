@@ -11,14 +11,14 @@
 
 ### `preventDefault` が要らなくなる
 
-章 2 lesson29 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（章 4）でも `onSubmit` の中で同じことをしていました。
+章 2 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（章 4）でも `onSubmit` の中で同じことをしていました。
 
 React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React が送信イベントを **自動で止めて** その関数を呼んでくれます。結果として、以下の対比になります。
 
 | 書き方 | 送信のデフォルトを止める |
 |---|---|
-| lesson29 の素の JS | `event.preventDefault()` を手書き |
-| lesson48 の React `onSubmit` | `e.preventDefault()` を手書き |
+| 章 2 の素の JS | `event.preventDefault()` を手書き |
+| 章 4 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
 | **本レッスンの `<form action={fn}>`** | **React が自動で止める** |
 
 `preventDefault` という呼び出しが消えることに注目しておきましょう。
@@ -28,7 +28,7 @@ React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React 
 `<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
 
 - クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
-- 戻り値はありません（あっても無視されます。戻り値を使いたいときは lesson69 の `useActionState`）。
+- 戻り値はありません（あっても無視されます。戻り値を使いたいときは次のレッスンの `useActionState`）。
 - 関数は **必ず `async`** です。
 
 ### `"use server"` の配置ルール
@@ -84,7 +84,7 @@ const todos: Todo[] = [];
 ```
 
 - サーバーのプロセスが生きている間は `todos` が残ります（同じプロセス内の呼び出しは同じ配列を共有します）。
-- **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（lesson75 末尾でも再度注意を書きます）。
+- **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（「Vercel にデプロイする」末尾でも再度注意を書きます）。
 
 ### `revalidatePath` の仕組み
 
@@ -119,7 +119,7 @@ sequenceDiagram
 
 ### 途中から始める場合
 
-lesson67 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
+前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
 
 <details>
 <summary>出発点のファイル（TODO の最小出発点）</summary>
@@ -143,7 +143,7 @@ export default function TodosPage() {
 
 ### 前回のプロジェクトを開く
 
-lesson67 で作ったプロジェクトを開き直しましょう。
+前のレッスンで作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: `Todo` 型を用意
 
@@ -193,7 +193,7 @@ export async function addTodo(formData: FormData): Promise<AddTodoResult> {
 - `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
 - `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
 - `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
-- **戻り値の型 `AddTodoResult`** は、章 3 lesson38 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は次の lesson69 で `useActionState` と結合するとき効きます。
+- **戻り値の型 `AddTodoResult`** は、章 3 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は次のレッスンで `useActionState` と結合するとき効きます。
 
 ### 手順 3: `/todos` を本物のページにする
 
@@ -227,7 +227,7 @@ export default async function TodosPage() {
 - このファイルは Server Component です（`"use client"` を書きません）。
 - `<form action={addTodo}>` に関数を直接渡しています。
 - `event.preventDefault()` も `onSubmit` も書いていません。React が自動で止めます。
-- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（章 1 lesson06 で学んだ `name` 属性がここで効いています）。
+- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（章 1 で学んだ `name` 属性がここで効いています）。
 
 ### 期待出力
 
@@ -245,8 +245,8 @@ export default async function TodosPage() {
 
 ### スコープ外
 
-- 送信中のボタン無効化、空入力エラー表示は **lesson69** で追加します。本レッスンでは最小形に集中します。
-- `Todo` ごとの削除ボタンも本レッスンでは扱いません（lesson73 の統合で扱います）。
+- 送信中のボタン無効化、空入力エラー表示は **次のレッスン** で追加します。本レッスンでは最小形に集中します。
+- `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
 
 ### 自分で書く
 
@@ -258,7 +258,7 @@ export default async function TodosPage() {
 - Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
 - データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
 - `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
-- 次の lesson69 では、送信中の状態表示とエラー表示を `useActionState` / `useFormStatus` で追加します。`addTodo` のシグネチャもそこで少し変えます。
+- 次のレッスンでは、送信中の状態表示とエラー表示を `useActionState` / `useFormStatus` で追加します。`addTodo` のシグネチャもそこで少し変えます。
 
 ### コラム: `revalidateTag`
 

@@ -10,7 +10,7 @@
 
 ### 同じ見た目を毎ページ書くのは大変
 
-lesson59 では 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
+前のレッスンでは 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
 
 この「全ページで共通の外側」を 1 箇所に集めるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
 
@@ -41,14 +41,14 @@ export default function RootLayout({
 重要なのは次の点です。
 
 - **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
-- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（lesson59 で「コピーしない」と言ったのはこのためです）。
+- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（前のレッスンで「コピーしない」と言ったのはこのためです）。
 - `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
 - `children` の型は `ReactNode` です。「React が画面に出せるもの全部」くらいの意味で、コピペで使えば良いです。
-- `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は lesson73）。
+- `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
 
 ### `children` の正体
 
-`children` はこれまで章 4 lesson43 で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
+`children` はこれまで章 4 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
 
 レイアウトの場合、Next.js が現在 URL に対応する `page.tsx` を自動で `children` に入れてくれます。学習者が直接 `<RootLayout>` を呼ぶことはありません。
 
@@ -70,7 +70,7 @@ export default function RootLayout({
 
 ### 途中から始める場合
 
-lesson59 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
+前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
 <summary>出発点のファイル（lesson59 完成時点）</summary>
@@ -279,7 +279,7 @@ export default function TodosPage() {
 
 ### 前回のプロジェクトを開く
 
-lesson59 で作った StackBlitz プロジェクトを開き直しましょう。
+前のレッスンで作った StackBlitz プロジェクトを開き直しましょう。
 
 ### 手順 1: ヘッダーとフッターをルートレイアウトに集める
 
@@ -381,9 +381,9 @@ export default function Page() {
 }
 ```
 
-`app/about/page.tsx` は lesson59 で書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
+`app/about/page.tsx` は前のレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
 
-lesson59 時点の `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始めます）。
+前のレッスン時点の `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始めます）。
 
 ```tsx
 import "./about.css";
@@ -440,7 +440,7 @@ export default function AboutPage() {
 }
 ```
 
-これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになります。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整えます（手順 5 で片付けます）。
+これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになります。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整えます。
 
 `app/todos/page.tsx` も同様にページ固有の中身だけ残します。
 
@@ -477,4 +477,4 @@ export default function TodosPage() {
 - `children` に現在のページ（`page.tsx`）の中身が自動で差し込まれます。
 - ルートレイアウトは何もしなければ Server Component です。ナビや文字を並べるだけなら `"use client"` は不要です。
 - 共通部分を 1 箇所に集めたので、ページを増やしても繰り返しコードが増えません。
-- 次の lesson62 で、Server Component と Client Component の違いに踏み込みます。`useState` が必要な部品だけを Client にする使い分けを覚えましょう。
+- このあとの「Server Component と Client Component」で、2 つの違いに踏み込みます。`useState` が必要な部品だけを Client にする使い分けを覚えましょう。

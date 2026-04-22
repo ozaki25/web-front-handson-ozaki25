@@ -10,7 +10,7 @@
 
 ### 前回までに作ったもの
 
-lesson60 で、全ページ共通のヘッダー・フッターを `app/layout.tsx` にまとめました。`/`、`/about`、`/todos` のどのページにアクセスしても、上にナビ・下にフッターが出る状態です。
+前のレッスンで、全ページ共通のヘッダー・フッターを `app/layout.tsx` にまとめました。`/`、`/about`、`/todos` のどのページにアクセスしても、上にナビ・下にフッターが出る状態です。
 
 一方で、今後アプリが大きくなると次のような悩みが出ます。
 
@@ -79,7 +79,7 @@ App Router には `@slot/page.tsx`（並列ルート）や `(.)path`（インタ
 
 ### 途中から始める場合
 
-lesson60 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
+前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
 <summary>出発点のファイル（lesson60 完成時点）</summary>
@@ -198,7 +198,7 @@ export default function AboutPage() {
 }
 ```
 
-**`app/about/about.css`**（lesson59 と同じ。`.cards` / `.card` のスタイル中心に必要なものを貼ってください）
+**`app/about/about.css`**（「ページを増やしてリンクで移動する」と同じ。`.cards` / `.card` のスタイル中心に必要なものを貼ってください）
 
 **`app/todos/page.tsx`**
 
@@ -253,7 +253,7 @@ export default function TodosPage() {
 
 ### 前回のプロジェクトを開く
 
-lesson60 で作った StackBlitz プロジェクトを開き直しましょう。
+前のレッスンで作った StackBlitz プロジェクトを開き直しましょう。
 
 ### 現状の確認
 
@@ -484,4 +484,4 @@ export default function AppLayout({
 - グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されます。
 - 典型的な使いどころは「公開ページ / アプリ側ページ」のような大きな 2 分割です。
 - 本コースで扱うのはここまで。並列ルート（`@slot`）やインターセプトルート（`(.)path`）は本コースでは扱いません。
-- 次の lesson62 では Server Component と Client Component の境界に踏み込みます（すでに済みの場合は lesson63 以降に進んでください）。
+- 次のレッスンでは Server Component と Client Component の境界に踏み込みます（すでに済みの場合は「Server Component でデータを取得する」以降に進んでください）。

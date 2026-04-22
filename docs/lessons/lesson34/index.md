@@ -11,7 +11,7 @@
 
 ### `interface` でオブジェクトの形に名前を付ける
 
-lesson33 では `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
+前のレッスンでは `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
 
 ```ts
 interface User {
@@ -121,7 +121,7 @@ type AdminUser = User & {
 
 4. **Utility Types の結果に名前を付ける**
 
-    lesson40 で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
+    「Utility Types で仕上げる」で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
 
     ```ts
     type TodoDraft = Partial<Todo>;
@@ -180,7 +180,7 @@ export type Todo = {
 
 ### 手順 1: `interface Todo` で書き直す
 
-lesson33 で作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
+前のレッスンで作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
 
 `src/types.ts` を次のように書き換える。
 
@@ -192,7 +192,7 @@ export interface Todo {
 }
 ```
 
-`src/main.ts` は lesson33 と同じで動くことを確認する。
+`src/main.ts` は前のレッスンと同じで動くことを確認する。
 
 ```ts
 import type { Todo } from "./types";
@@ -336,7 +336,7 @@ export type AdminUser = User & {
 
 `main.ts` の呼び出し側を書き換える必要はない。`User & { ... }` の形でも `interface extends` でも、呼び出し側から見たら区別がつかない。
 
-確認できたら、lesson35 以降で使いやすいように **`Todo` を `type` に戻して** おく。
+確認できたら、次のレッスン以降で使いやすいように **`Todo` を `type` に戻して** おく。
 
 ```ts
 // src/types.ts
@@ -364,4 +364,4 @@ export type Todo = {
 - ユニオン型・リテラル型・Utility Types の結果に名前を付けるのは **`type` のみ** ができる。
 - 宣言マージという機能もあるが、本コースでは使わない。
 - **本コースは `type` を基本** に使う。読者として `interface` も読める状態にしておき、書くときは `type` に揃える。次のレッスン以降の `types.ts` は `type Todo = { ... }` に戻しておく。
-- 次のレッスン（lesson35）では、`Todo` 型に配列・ユニオン・リテラル・オプショナルを足して育てる。
+- 次のレッスンでは、`Todo` 型に配列・ユニオン・リテラル・オプショナルを足して育てる。

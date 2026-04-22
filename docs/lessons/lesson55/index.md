@@ -1,6 +1,6 @@
 # lesson55: カスタムフック（`useTodos` に抽出）
 
-章 2 lesson21 で `makeCounter()` / `makeFilter(status)` という関数を書きました。「関数が state を閉じ込める（クロージャ）」という形です。React のカスタムフックは **同じ仕組みを React の文脈で使う** 形と思ってください。lesson21 の延長線上にあります。
+章 2 の「スコープとクロージャ」で `makeCounter()` / `makeFilter(status)` という関数を書きました。「関数が state を閉じ込める（クロージャ）」という形です。React のカスタムフックは **同じ仕組みを React の文脈で使う** 形と思ってください。章 2 の「スコープとクロージャ」の延長線上にあります。
 
 ## ゴール
 
@@ -43,9 +43,9 @@ function App() {
 
 使う側のコンポーネントからは **state の管理が見えなくなり**、`useTodos` の戻り値だけを触る形になります。似た処理を 2 つのコンポーネントで使いたいときも、フック 1 つ書けば共有できます。
 
-### lesson21 との対応
+### 章 2 の「スコープとクロージャ」との対応
 
-章 2 lesson21 で書いた `makeCounter()` を思い出してください。
+章 2 の「スコープとクロージャ」で書いた `makeCounter()` を思い出してください。
 
 ```js
 function makeCounter() {
@@ -88,7 +88,7 @@ const counterB = makeCounter();
 
 ### 途中から始める場合
 
-lesson50 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` に `done` を追加し、`src/useTodos.ts` を新規作成してロジックを抽出します。
+「親子コンポーネントの連携」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` に `done` を追加し、`src/useTodos.ts` を新規作成してロジックを抽出します。
 
 <details>
 <summary>出発点のファイル（lesson50 完成時点、本レッスンで <code>done</code> を追加）</summary>
@@ -202,14 +202,14 @@ export default App;
 
 ### ゴール
 
-- lesson46-50 で作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する
+- ここまでの React レッスンで作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する
 - 戻り値は `{ todos, addTodo, deleteTodo, toggleTodo }` の 4 つ
 - `App` から `useTodos()` を呼び出して使う
-- **localStorage 連携は今回は扱わない**（次の lesson57 ミニ統合で畳み込む）
+- **localStorage 連携は今回は扱わない**（次の「TODO アプリを React で作る」ミニ統合で畳み込む）
 
 ### 手順
 
-1. lesson50 か lesson53 の React プロジェクトをコピーして新規に開く（別プロジェクトでも可）
+1. 「親子コンポーネントの連携」か「useEffect の基本」の React プロジェクトをコピーして新規に開く（別プロジェクトでも可）
 2. `src/types.ts` は章 3 で作った `Todo` 型をそのまま使う
 3. `src/useTodos.ts` を新規作成（カスタムフック）
 4. `src/TodoInput.tsx`、`src/TodoList.tsx` は既存のままでよい
@@ -262,7 +262,7 @@ export function useTodos() {
 - ファイル名は `useTodos.ts`（拡張子は `.ts` で OK、JSX を書かないので `.tsx` 不要）
 - `use` で始まる関数名
 - 戻り値はオブジェクトで 4 要素を返す
-- `addTodo` の中で `trim` して空文字を弾く（lesson30 で覚えたロジック）
+- `addTodo` の中で `trim` して空文字を弾く（章 2 の「TODO アプリを作る」で覚えたロジック）
 
 ### `src/TodoInput.tsx`
 
@@ -373,7 +373,7 @@ export default function App() {
   const { todos } = useTodos();
   const { todos: todos2 } = useTodos();
   ```
-  それぞれ独立した state になる。lesson21 の `counterA` / `counterB` と同じ形
+  それぞれ独立した state になる。章 2 の「スコープとクロージャ」の `counterA` / `counterB` と同じ形
 - `useTodos` の戻り値にカスタムな派生値を加える: `const doneCount = todos.filter((t) => t.done).length;` を計算して返す
 
 ### 自分で書く
@@ -382,15 +382,15 @@ export default function App() {
 - 戻り値は `{ count, increment, decrement, reset }`
 - ヒント: `const [count, setCount] = useState(initial);` と、`useState` の更新関数を使った 3 つの操作関数
 
-### lesson57 への前振り
+### 「TODO アプリを React で作る」への前振り
 
 - 今の `useTodos` は state をメモリに持つだけで、リロードすると消える
-- 次の lesson57 で `useTodos` に **localStorage 連携** を内蔵させ、lesson57 の「バグあり版 → 修正版」構造でバグを体験しながら整える
+- 次の「TODO アプリを React で作る」で `useTodos` に **localStorage 連携** を内蔵させ、「TODO アプリを React で作る」の「バグあり版 → 修正版」構造でバグを体験しながら整える
 
 ## まとめ
 
 - カスタムフックは `use` で始まる関数。内部で他のフックを呼べる
 - state のロジックだけを切り出して、UI 側を身軽にできる
-- 章 2 lesson21 のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
+- 章 2 の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
 - フックのルールは 2 つ: トップレベルで呼ぶ / React 関数（コンポーネントまたはフック）の中でだけ呼ぶ
-- localStorage 連携は次の lesson57 で扱う
+- localStorage 連携は次の「TODO アプリを React で作る」で扱う

@@ -6,13 +6,13 @@
 - `in` 演算子でオブジェクトのプロパティの有無から型を絞り込める。
 - `Array.isArray` で「配列かどうか」を絞り込める。
 - `function isTodo(x: unknown): x is Todo` のような **ユーザー定義型ガード** を書ける。
-- lesson36 で受けた `unknown` を、型ガードを通して具体的な型まで絞り込める。
+- 前のレッスンで受けた `unknown` を、型ガードを通して具体的な型まで絞り込める。
 
 ## 解説
 
-### lesson36 からの接続
+### 前のレッスンからの接続
 
-前回の lesson36 で、`unknown` で受けた値は **そのままでは何もできない** こと、「絞り込む道具」は本レッスンで扱うと予告しました。このレッスンはその続きです。
+前のレッスンで、`unknown` で受けた値は **そのままでは何もできない** こと、「絞り込む道具」は本レッスンで扱うと予告しました。このレッスンはその続きです。
 
 `unknown` を扱うには、「この値は実際どの型なのか」を **実行時に確かめる** コードを書きます。TS はそのコードを読んで「このブロックの中では `unknown` ではなく具体的な型として扱ってよい」と判断してくれます。この「コードから型を絞り込む仕組み」を **型ガード** と呼びます。
 
@@ -94,7 +94,7 @@ Note: 今日は良い天気
 
 `in` は「文字列 `"プロパティ名"` が、オブジェクトの中に存在するか」を見ます。共通で持っているプロパティ（ここでは `kind`）ではなく、**片方だけが持つプロパティ**（`text` や `body`）で見分けるのがコツです。
 
-なお、`kind` のような **「種類を表す共通プロパティ」** で分岐する方法もあります。こちらの書き方は次回の lesson38 で **判別共用体** として本格的に扱います。
+なお、`kind` のような **「種類を表す共通プロパティ」** で分岐する方法もあります。こちらの書き方は次のレッスンで **判別共用体** として本格的に扱います。
 
 ### ユーザー定義型ガード（`x is Todo`）
 
@@ -108,7 +108,7 @@ function isTodo(x: unknown): x is Todo {
 
 ポイントは戻り値型 `x is Todo` の部分。通常の戻り値型 `boolean` の代わりにこれを書くと、「`true` を返したら **呼び出し側の `x` の型を `Todo` に絞ってよい**」と TS に教えられます。これを **型述語**（type predicate）と呼びます。
 
-具体的に書くと次のようになります（`Todo` は lesson35 で育てた `{ id: string; text: string; status: "open" | "done"; memo?: string }`）。
+具体的に書くと次のようになります（`Todo` は「配列・ユニオン・リテラル型・オプショナル」で育てた `{ id: string; text: string; status: "open" | "done"; memo?: string }`）。
 
 ```ts
 import type { Todo } from "./types";
@@ -129,7 +129,7 @@ function isTodo(x: unknown): x is Todo {
 - 各プロパティを順に `typeof` で確認。全部通ったら `return true`。
 - `memo` は `?:` なので「あるなら `string`、ないなら `undefined`」を許す。
 
-この形の `isTodo` は **章 5 lesson70 の Route Handlers で再び登場します**。サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのに、まさにこの関数を使い回せます。
+この形の `isTodo` は **章 5 の「Route Handlers」で再び登場します**。サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのに、まさにこの関数を使い回せます。
 
 ### 型ガードを通した `unknown` の扱い
 
@@ -148,7 +148,7 @@ if (isTodo(raw)) {
 - `if (isTodo(raw))` の中では `raw` の型が `unknown` から `Todo` に絞られている。`.text` や `.id` に安全にアクセスできる。
 - `else` 側では絞り込みが成立していないので、`raw` は `unknown` のまま。
 
-これが lesson36 で予告した「`unknown` を絞り込む具体的な方法」です。
+これが前のレッスンで予告した「`unknown` を絞り込む具体的な方法」です。
 
 ## 演習
 
@@ -254,7 +254,7 @@ Property 'text' does not exist on type 'Item'.
 
 ### 手順 3: `unknown` から `Todo` に絞り込むカスタム型ガード
 
-`src/types.ts` は lesson35 で育てた形をそのまま使う。
+`src/types.ts` は「配列・ユニオン・リテラル型・オプショナル」で育てた形をそのまま使う。
 
 ```ts
 // src/types.ts
@@ -386,7 +386,7 @@ if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
 次の型ガードを自分で書く。
 
 1. `isUser(x: unknown): x is User`
-    - `User` 型は `{ id: string; name: string; age: number }` とする（lesson33 で `types.ts` に追加した形）。
+    - `User` 型は `{ id: string; name: string; age: number }` とする（「オブジェクトの型と type エイリアス」で `types.ts` に追加した形）。
     - 戻り値の「`x is User`」を忘れない。
 2. `isUserArray(x: unknown): x is User[]`
     - `isTodoArray` を参考に、`Array.isArray` と `.every` を組み合わせて書く。
@@ -399,6 +399,6 @@ if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
 - `typeof`: プリミティブ（`string` / `number` / `boolean` など）の判定。`typeof null === "object"` の落とし穴に注意。
 - `Array.isArray`: 配列かどうかの専用判定。
 - `in`: オブジェクトに特定のプロパティがあるかで判定。
-- **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。lesson36 で受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
-- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、章 5 lesson70 Route Handlers で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
-- 次の lesson38 では、`kind` のような **「種類を表すプロパティ」で自動的に絞り込める** 書き方（判別共用体）を学ぶ。型ガード関数を書かなくても、`switch` だけで分岐できるようになる。
+- **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。前のレッスンで受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
+- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、章 5 の「Route Handlers」で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
+- 次のレッスンでは、`kind` のような **「種類を表すプロパティ」で自動的に絞り込める** 書き方（判別共用体）を学ぶ。型ガード関数を書かなくても、`switch` だけで分岐できるようになる。

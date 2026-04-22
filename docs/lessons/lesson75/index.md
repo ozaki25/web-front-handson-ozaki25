@@ -40,7 +40,7 @@ StackBlitz → GitHub → Vercel → https://<project>.vercel.app
 
 ### 途中から始める場合
 
-lesson73 で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために lesson73 の完成品を推奨します）。
+「小さなアプリを仕上げる」で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために「小さなアプリを仕上げる」の完成品を推奨します）。
 
 <details>
 <summary>出発点のファイル（lesson73 完成時点の全量）</summary>
@@ -368,7 +368,7 @@ export default function TodoNotFound() {
 
 ### 前回のプロジェクトを開く
 
-lesson73 で仕上げた StackBlitz の Next.js プロジェクトを開きましょう。
+「小さなアプリを仕上げる」で仕上げた StackBlitz の Next.js プロジェクトを開きましょう。
 
 ### 手順 1: GitHub アカウントを用意
 

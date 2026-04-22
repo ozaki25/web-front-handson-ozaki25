@@ -2,17 +2,15 @@ name: VitePress Build Check
 
 # commit 時のフックでは多行テンプレートリテラルの検出など限定的な検査しか行えないため、
 # VitePress の実ビルドで最終検証する CI を用意する。Vercel 本番デプロイと同じ
-# 内容のビルドを main / draft と PR で走らせて、公開前にビルドエラーを止める。
+# 内容のビルドを main と PR で走らせて、公開前にビルドエラーを止める。
 
 on:
   push:
     branches:
       - main
-      - draft
   pull_request:
     branches:
       - main
-      - draft
 
 jobs:
   build:

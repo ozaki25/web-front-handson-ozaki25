@@ -148,7 +148,7 @@ console.log(counterB()); // 2
 
 #### 関数を作って返す（`makeFilter`）
 
-同じパターンで、**設定を覚えた関数** を作ることもできます。lesson24 の `filter` と組み合わせる例を見てみます。
+同じパターンで、**設定を覚えた関数** を作ることもできます。「配列の変換」の `filter` と組み合わせる例を見てみます。
 
 ```js
 function makeFilter(status) {
@@ -197,7 +197,7 @@ console.log(b); // 2 （ブロックの外でも見える）
 
 ### 途中から始める場合
 
-lesson20 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson20 完成時点）</summary>
@@ -356,4 +356,4 @@ console.log(todos.filter(isTodo));
 - `makeCounter()` のように、関数を呼ぶたびに **独立した状態** を閉じ込めた関数を返せる
 - `makeFilter(status)` のように、**引数を覚えた関数** を作って他のメソッドに渡せる
 - 本コースでは `let` / `const` だけを使う。`var` の古い挙動は覚えなくてよい
-- **ここで体感した「関数が状態を閉じ込める」しくみは、章 4 lesson55 のカスタムフックで再登場します**。`useTodos()` のような関数が内部の state を閉じ込めて、呼び出し側に必要な操作だけを返す、という形で、`makeCounter` / `makeFilter` と同じ発想を React の文脈で使います
+- **ここで体感した「関数が状態を閉じ込める」しくみは、章 4 の「カスタムフック」で再登場します**。`useTodos()` のような関数が内部の state を閉じ込めて、呼び出し側に必要な操作だけを返す、という形で、`makeCounter` / `makeFilter` と同じ発想を React の文脈で使います

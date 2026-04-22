@@ -4,7 +4,7 @@
 
 - `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
 - Next.js 15 で `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
-- 章 2 lesson24 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
+- 章 2 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
 
 ## 解説
 
@@ -49,7 +49,7 @@ export default async function PostPage({ params }: Props) {
 
 ### `find` で 1 件だけ取り出す
 
-章 2 lesson24 末尾で「`find` は章 5 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
+章 2 の配列メソッド回の末尾で「`find` は章 5 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
 
 ```ts
 const target = posts.find((p) => p.id === id);
@@ -63,19 +63,19 @@ const target = posts.find((p) => p.id === id);
 1. 一覧を `fetch` で全部取ってくる（Server Component）。
 2. `await params` で URL の `id` を取り出す。
 3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは後述の「存在しない ID」の処理に渡す（lesson67）。
+4. 見つからないときは後述の「存在しない ID」の処理に渡す（次のレッスン）。
 
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は次の lesson67 で扱います。
+この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は次のレッスンで扱います。
 
 ### searchParams は今回扱わない
 
-URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 で Promise 化されていますが、**このレッスンでは扱いません**。lesson73（ミニ統合）の中で「指定された ID にハイライトを付ける」演習で初めて使います。
+URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 で Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」（ミニ統合）の中で「指定された ID にハイライトを付ける」演習で初めて使います。
 
 ## 演習
 
 ### 途中から始める場合
 
-lesson65 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは lesson63 の記事一覧を前提にしています。
+前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
 
 <details>
 <summary>出発点のファイル（lesson63 完成時点の `/posts`）</summary>
@@ -120,7 +120,7 @@ export default function Loading() {
 
 ### 前回のプロジェクトを開く
 
-lesson63 で作ったプロジェクトを開き直しましょう。
+「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: 一覧ページを詳細リンク付きに更新
 
@@ -203,7 +203,7 @@ export default async function PostPage({ params }: Props) {
 - `type Props = { params: Promise<{ id: string }> }` の形で型を書きます。
 - `await params` してから `id` を取り出します。
 - `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは次の lesson67 で扱います。
+- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは次のレッスンで扱います。
 
 ### 期待出力
 
@@ -220,7 +220,7 @@ export default async function PostPage({ params }: Props) {
 
 ### 自分で書く
 
-`/users/[id]/page.tsx` を自力で作ってみましょう。lesson63 の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
+`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
 
 - URL: `/users/1`
 - API: `https://jsonplaceholder.typicode.com/users`
@@ -232,6 +232,6 @@ export default async function PostPage({ params }: Props) {
 
 - `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
 - Next.js 15 では `params: Promise<{ id: string }>` の形です。`await params` で取り出します。
-- 配列から 1 件取り出すのは章 2 lesson24 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
-- 見つからない場合の「正しい 404 ページ」は次の lesson67 で扱います。
-- クエリ文字列（`?key=value`）を受け取る `searchParams` は lesson73 で初登場します。
+- 配列から 1 件取り出すのは章 2 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
+- 見つからない場合の「正しい 404 ページ」は次のレッスンで扱います。
+- クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

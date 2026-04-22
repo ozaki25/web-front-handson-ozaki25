@@ -123,7 +123,7 @@ undefined
 
 ### 手順 2: `Todo` 配列でも動くことを確認する
 
-`src/main.ts` を次の形に書き換える（`types.ts` は lesson35 で作ったものをそのまま使う）。
+`src/main.ts` を次の形に書き換える（`types.ts` は「配列・ユニオン・リテラル型・オプショナル」で作ったものをそのまま使う）。
 
 ```ts
 import type { Todo } from "./types";

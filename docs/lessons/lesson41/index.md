@@ -10,7 +10,7 @@
 
 ### ここまでの立ち位置
 
-章 2 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。章 2 の仕上げの lesson30 では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
+章 2 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。章 2 の仕上げの「TODO アプリを作る」では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
 
 そこまでできるのなら、React はなぜ必要なのでしょうか。
 
@@ -51,7 +51,7 @@ function Hello() {
 }
 ```
 
-この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。JSX の詳しい書き方は lesson42 で扱います。
+この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。JSX の詳しい書き方は次のレッスンで扱います。
 
 ### Vite / npm / `package.json` の最低限
 
@@ -153,7 +153,7 @@ function App() {
 export default App;
 ```
 
-`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です（詳しくは lesson42）。
+`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です（詳しくは次のレッスン）。
 
 ### 期待出力
 

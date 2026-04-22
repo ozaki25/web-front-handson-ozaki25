@@ -40,7 +40,7 @@ const back = JSON.parse(str);
 - `JSON.stringify(値)`: JS のデータを JSON 文字列に
 - `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
 
-`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **lesson27 で学んだ `try` / `catch` で囲む** のが安全です。
+`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **「fetch で API から取得する」で学んだ `try` / `catch` で囲む** のが安全です。
 
 ### id をユニークに作る
 
@@ -64,7 +64,7 @@ const id = crypto.randomUUID();
 
 ### 途中から始める場合
 
-lesson29 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは章 2 のミニ統合で、ここまでの演習ファイルがあるとスムーズですが、下のコードで lesson29 完成時点を再現してから演習に入っても同じ状態から始められます。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは章 2 のミニ統合で、ここまでの演習ファイルがあるとスムーズですが、下のコードで前のレッスン完成時点を再現してから演習に入っても同じ状態から始められます。
 
 <details>
 <summary>出発点のコード（lesson29 完成時点）</summary>
@@ -292,7 +292,7 @@ button {
 
 #### `script.js`（ステップ 1）
 
-**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（lesson23 で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、章 4 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、章 2 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（「分割代入とスプレッド」で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、章 4 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、章 2 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
 
 ```js
 const form = document.querySelector("#form");
@@ -339,7 +339,7 @@ render();
 
 ### ステップ 2: 削除ボタンを追加
 
-各 `<li>` に「削除」ボタンを付け、lesson24 の `filter` を使って対象を取り除きます。
+各 `<li>` に「削除」ボタンを付け、「配列の変換」の `filter` を使って対象を取り除きます。
 
 #### `script.js`（ステップ 2）
 
@@ -409,7 +409,7 @@ const form = document.querySelector("#form");
 const input = document.querySelector("#input");
 const list = document.querySelector("#list");
 
-const STORAGE_KEY = "lesson30-todos";
+const STORAGE_KEY = "todo-app-todos";
 
 function loadTodos() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -481,8 +481,8 @@ render();
 - 3 件追加 → リロード → 3 件がそのまま表示される
 - 削除 → リロード → 削除後の状態が残る
 - 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
-- DevTools の Application（または Storage）タブ → Local Storage の項目で `lesson30-todos` に JSON 文字列が入っているのが確認できる
-- Console で `localStorage.setItem("lesson30-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
+- DevTools の Application（または Storage）タブ → Local Storage の項目で `todo-app-todos` に JSON 文字列が入っているのが確認できる
+- Console で `localStorage.setItem("todo-app-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
 
 ### 変える
 
@@ -502,4 +502,4 @@ render();
 - 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
 - `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
 - `JSON.parse` は失敗しうるので `try` / `catch` で囲む
-- **この TODO アプリは章 4 lesson57 で React 版に進化し、章 5 lesson68〜52 で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく
+- **この TODO アプリは章 4 の「TODO アプリを React で作る」で React 版に進化し、章 5 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく

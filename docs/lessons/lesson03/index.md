@@ -104,7 +104,7 @@ HTML のリストは 2 種類あります。
 
 ### 途中から始める場合
 
-lesson02 までで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
+前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
 
 <details>
 <summary>出発点のコード（lesson02 完成時点）</summary>
@@ -133,7 +133,7 @@ lesson02 までで作った `index.html` を続けて使うのが理想ですが
 
 ### 前レッスンの状態から始める
 
-lesson02 で作ったプロジェクトを開き直します。`index.html` は以下の状態になっているはずです。
+前のレッスンで作ったプロジェクトを開き直します。`index.html` は以下の状態になっているはずです。
 
 ```html
 <!DOCTYPE html>

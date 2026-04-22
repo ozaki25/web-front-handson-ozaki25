@@ -307,7 +307,7 @@ export default App;
     onDelete: (id: string) => void;
   };
   ```
-- これは lesson57 でそのまま使う形です
+- これは「TODO アプリを React で作る」でそのまま使う形です
 
 ## まとめ
 

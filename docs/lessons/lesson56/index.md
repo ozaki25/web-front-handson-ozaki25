@@ -5,7 +5,7 @@
 - React Developer Tools ブラウザ拡張をインストールできる
 - Components パネルでツリーと state / props を観察できる
 - Profiler パネルで再レンダリングの回数と所要時間を測定できる
-- lesson54 で書いた `useMemo` が本当にスキップしているかを確認できる
+- 「useMemo で計算のメモ化」で書いた `useMemo` が本当にスキップしているかを確認できる
 
 ## 解説
 
@@ -65,7 +65,7 @@ Profiler のキーポイント:
 
 ### 途中から始める場合
 
-lesson54 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+「useMemo で計算のメモ化」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
 <summary>出発点のファイル（lesson54 完成時点）</summary>
@@ -145,11 +145,11 @@ export default App;
 
 ### ゴール
 
-- lesson54 の `useMemo` を使った「1 万件の合計」アプリで、Profiler を使って再計算スキップを確認する
+- 「useMemo で計算のメモ化」の `useMemo` を使った「1 万件の合計」アプリで、Profiler を使って再計算スキップを確認する
 
 ### 手順
 
-1. lesson54 の StackBlitz プロジェクトを開く（もしくは新規に作って lesson54 のコードを貼る）
+1. 「useMemo で計算のメモ化」の StackBlitz プロジェクトを開く（もしくは新規に作って「useMemo で計算のメモ化」のコードを貼る）
 2. プレビューを「Open in New Tab」で別タブに開く
 3. 別タブで DevTools を開き、Components と Profiler のタブが表示されていることを確認
 
@@ -188,12 +188,12 @@ export default App;
 
 ### 変える
 
-- lesson54 の `useMemo` を外してみる → Profiler の同じ操作で、色切り替え時にも Console に `computing total...` が出るようになる
+- 「useMemo で計算のメモ化」の `useMemo` を外してみる → Profiler の同じ操作で、色切り替え時にも Console に `computing total...` が出るようになる
 - 「色切り替え」を連打して Profiler で記録 → `useMemo` なしと `useMemo` あり で合計時間を比べる
 
 ### 自分で書く（挑戦）
 
-- lesson55 で作った `useTodos` 版の TODO アプリに Profiler をかけ、TODO を 50 件ほど追加して削除ボタンを押したときに `TodoList` がどのくらい時間を使うかを観察する
+- 前のレッスンで作った `useTodos` 版の TODO アプリに Profiler をかけ、TODO を 50 件ほど追加して削除ボタンを押したときに `TodoList` がどのくらい時間を使うかを観察する
 - 必要なら `TodoItem` を `React.memo` で包み、`useCallback` で `onDelete` / `onToggle` を安定化して、Profiler で再度計測する
 
 ### 環境トラブル時

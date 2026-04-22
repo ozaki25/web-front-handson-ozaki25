@@ -4,14 +4,14 @@
 
 - `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
 - `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
-- 章 1 lesson11 で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられます。
+- 章 1 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられます。
 - HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
 
 ## 解説
 
 ### 前回のプロジェクトを開く
 
-前の lesson58 で作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
+前のレッスンで作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
 
 ### 新しいページを作る手順
 
@@ -74,7 +74,7 @@ export default function Home() {
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で章 1 lesson11 の自己紹介ページの HTML と CSS を参照するため、先に章 1 lesson11 のコードを手元にコピーしておくとスムーズです。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で章 1 の「Flexbox とレスポンシブ」の自己紹介ページの HTML と CSS を参照するため、先に「Flexbox とレスポンシブ」のコードを手元にコピーしておくとスムーズです。
 
 ### 手順 1: `/todos` の空ページを作る
 
@@ -95,9 +95,9 @@ export default function TodosPage() {
 
 ### 手順 2: 章 1 の自己紹介ページを `/about` に移植
 
-章 1 lesson11 で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **lesson11 の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、lesson11 を開いて HTML / CSS をコピーしてから戻ってきてください。
+章 1 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **「Flexbox とレスポンシブ」の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、「Flexbox とレスポンシブ」を開いて HTML / CSS をコピーしてから戻ってきてください。
 
-元の HTML（lesson11 の完成形の抜粋）:
+元の HTML（「Flexbox とレスポンシブ」の完成形の抜粋）:
 
 ```html
 <!DOCTYPE html>
@@ -172,7 +172,7 @@ export default function TodosPage() {
 </html>
 ```
 
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（lesson60 で扱います）が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
+これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（次のレッスンで扱います）が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
 
 `app/about/page.tsx`:
 
@@ -255,9 +255,9 @@ export default function AboutPage() {
 
 ### 手順 3: CSS を当てる
 
-章 1 lesson11 の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
+章 1 の「Flexbox とレスポンシブ」の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
 
-`app/about/about.css`（lesson11 の CSS をそのまま貼る、抜粋）:
+`app/about/about.css`（「Flexbox とレスポンシブ」の CSS をそのまま貼る、抜粋）:
 
 ```css
 * {
@@ -345,7 +345,7 @@ main {
 }
 ```
 
-（フォームや hover など、lesson11 で書いた他のスタイルも一緒にコピーして構いません。）
+（フォームや hover など、「Flexbox とレスポンシブ」で書いた他のスタイルも一緒にコピーして構いません。）
 
 `app/about/page.tsx` の **1 行目に CSS の import を追加します**。ファイル全体は次のような形になります（関数本体は先ほど書いたものをそのまま維持します）。
 
@@ -419,7 +419,7 @@ export default function AboutPage() {
 }
 ```
 
-**期待出力**: `/about` を開くと、章 1 lesson11 で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
+**期待出力**: `/about` を開くと、章 1 の「Flexbox とレスポンシブ」で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
 
 ### 手順 4: ナビを `/` に置く
 
@@ -473,5 +473,5 @@ export default function Page() {
 - ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
 - 章 1 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
-- 次の lesson60 では、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
-- ここで使った `<img src="https://placehold.jp/...">` は、**章 5 lesson64 で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。
+- 次のレッスンでは、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
+- ここで使った `<img src="https://placehold.jp/...">` は、**章 5 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。

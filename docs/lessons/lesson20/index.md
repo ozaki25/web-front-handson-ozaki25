@@ -70,7 +70,7 @@ console.log(result); // 3
 
 ### アロー関数
 
-もう 1 つの書き方がアロー関数です。lesson19 の `forEach` で一度出てきました。
+もう 1 つの書き方がアロー関数です。前のレッスンの `forEach` で一度出てきました。
 
 ```js
 const add = (a, b) => {
@@ -100,7 +100,7 @@ console.log(add(1, 2)); // 3
 
 ### 途中から始める場合
 
-lesson19 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson19 完成時点）</summary>

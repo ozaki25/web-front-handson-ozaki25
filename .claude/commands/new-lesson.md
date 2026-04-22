@@ -14,8 +14,7 @@ description: 新規レッスン本文を、CLAUDE.md の執筆原則に従って
    - 6 章（執筆原則）: 座学 → 演習 / コードは省略しない / 知らない用語を前提にしない / 期待出力を必ず示す / コピペ → 変える → 自分で書くの 3 段階
    - 7 章（レッスン構成テンプレート）: `# lessonXX: タイトル` / `## ゴール` / `## 解説` / `## 演習` / `## まとめ` の 4 節
    - 11 章（避けたい書き方）: 長い前置き、読者前提の省略、古い API、レベル跳ね上がり、`…(省略)…`
-2. `docs/drafts/lesson-list.md` があれば、該当レッスンの仕様（新概念・演習・螺旋）を確認する
-3. 前後のレッスン（`docs/lessons/lesson<XX-1>/index.md`、`docs/lessons/lesson<XX+1>/index.md`）を読み、トーンと前提知識を揃える
+2. 前後のレッスン（`docs/lessons/lesson<XX-1>/index.md`、`docs/lessons/lesson<XX+1>/index.md`）を読み、トーンと前提知識を揃える
 
 ## 書き方のルール
 

@@ -1,12 +1,12 @@
 # lesson57: TODO アプリを React で作る（ミニ統合）
 
-章 4 の仕上げです。lesson30 で素の JS + DOM で作った TODO アプリを、章 4 で学んだ React + TS に全面移植します。さらに **localStorage で保存・復元する螺旋** を閉じます。章 4 で扱わなかった **オブジェクト state のイミュータブル更新** もここで扱います。
+章 4 の仕上げです。章 2 の「TODO アプリを作る」で素の JS + DOM で作った TODO アプリを、章 4 で学んだ React + TS に全面移植します。さらに **localStorage で保存・復元する螺旋** を閉じます。章 4 で扱わなかった **オブジェクト state のイミュータブル更新** もここで扱います。
 
 想定時間は **60〜120 分** です。焦らず段階的に組み立てましょう。
 
 ## ゴール
 
-- lesson30 の TODO アプリを React + TS に移植し、3 つのコンポーネント（`TodoInput` / `TodoList` / `TodoItem`）に分割できます。
+- 章 2 の「TODO アプリを作る」の TODO アプリを React + TS に移植し、3 つのコンポーネント（`TodoInput` / `TodoList` / `TodoItem`）に分割できます。
 - 章 3 の `Todo` 型を `import type` して使えます。
 - `useState` の **初期値関数** を使って localStorage から復元できます。
 - `useEffect` で localStorage に保存できます。
@@ -15,9 +15,9 @@
 
 ## 解説
 
-### lesson30 で作ったものを思い出す
+### 章 2 の「TODO アプリを作る」で作ったものを思い出す
 
-章 2 の lesson30 で、素の HTML + JS + localStorage で TODO アプリを作りました。構成は次のようなものでした。
+章 2 の「TODO アプリを作る」で、素の HTML + JS + localStorage で TODO アプリを作りました。構成は次のようなものでした。
 
 - `<input>` と「追加」ボタン、`<ul>` の一覧、各 `<li>` に「削除」ボタン
 - `todos` という配列を JS で持つ
@@ -29,11 +29,11 @@
 
 1. **配列を `useState` で持つ**: 自分で `render()` を呼ばなくても、`setTodos` を呼べば自動で描き直されます。
 2. **コンポーネントに分割する**: 入力欄、一覧、1 件、の 3 つに分けて見通しを良くします。
-3. **配列の更新はイミュータブル**: `push` / `splice` は使わず、新しい配列を作ります（lesson46 で学びました）。
+3. **配列の更新はイミュータブル**: `push` / `splice` は使わず、新しい配列を作ります（「イベントと配列のイミュータブル更新」で学びました）。
 
 ### 使う型（章 3 の `Todo`）
 
-章 3 lesson33 〜 31 で `types.ts` に次の型を育ててきました。
+章 3 の「TypeScript ってなに？」〜「オブジェクトの型と type エイリアス」で `types.ts` に次の型を育ててきました。
 
 ```ts
 export type Todo = {
@@ -78,7 +78,7 @@ type TodoItemProps = {
 };
 ```
 
-**状態の持ち主** は一番上の `App` です。`TodoInput` は「追加しました」を `onAdd` で伝えるだけ。`TodoList` と `TodoItem` は描画と削除イベントの伝達だけを担います（lesson50 で学んだ state lifting の応用です）。
+**状態の持ち主** は一番上の `App` です。`TodoInput` は「追加しました」を `onAdd` で伝えるだけ。`TodoList` と `TodoItem` は描画と削除イベントの伝達だけを担います（「親子コンポーネントの連携」で学んだ state lifting の応用です）。
 
 ### localStorage と `useEffect` の組み合わせ（ここで注意が必要）
 
@@ -135,11 +135,11 @@ useEffect(() => {
 - その後 `useEffect([todos])` が動きますが、そのときの `todos` は復元済みなので同じ内容を書き戻すだけです
 - 空配列で上書きするバグは起きません
 
-`try` / `catch` で囲んでいるのは、`localStorage` に不正な JSON が保存されていた場合（何かの事故で壊れた場合）に `JSON.parse` が例外を投げるためです。lesson27 で学んだ `try` / `catch` の復習になっています。
+`try` / `catch` で囲んでいるのは、`localStorage` に不正な JSON が保存されていた場合（何かの事故で壊れた場合）に `JSON.parse` が例外を投げるためです。章 2 の「fetch で API から取得する」で学んだ `try` / `catch` の復習になっています。
 
 ### オブジェクト state のイミュータブル更新
 
-lesson46 では配列の state 更新（`[...prev, newItem]` など）を扱いました。オブジェクトを state にするときも同じ発想が必要になります。
+「イベントと配列のイミュータブル更新」では配列の state 更新（`[...prev, newItem]` など）を扱いました。オブジェクトを state にするときも同じ発想が必要になります。
 
 ```tsx
 type Settings = { theme: "light" | "dark"; fontSize: number };
@@ -159,7 +159,7 @@ setSettings((prev) => ({ ...prev, theme: "dark" }));
 
 ### 途中から始める場合
 
-lesson55 までで作ったプロジェクト（`useTodos` カスタムフックを含む）があればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンはステップ 1 から新規に組み直す前提でも進められるように書いていますが、`useTodos` を先に持っていると `App.tsx` をそのフックベースに差し替える形で学べます。
+「カスタムフック」までで作ったプロジェクト（`useTodos` カスタムフックを含む）があればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンはステップ 1 から新規に組み直す前提でも進められるように書いていますが、`useTodos` を先に持っていると `App.tsx` をそのフックベースに差し替える形で学べます。
 
 <details>
 <summary>出発点のファイル（lesson55 完成時点の <code>useTodos</code> 版）</summary>
@@ -323,7 +323,7 @@ export default function App() {
 
 ### ステップ 1: StackBlitz で React + Vite（TS）テンプレートを開く
 
-StackBlitz のトップから「React + Vite + TypeScript」を選びます（もしくは lesson53 までで作ったプロジェクトをそのまま使っても構いません。本レッスンは新規プロジェクトの方が整理しやすいです）。`npm install` と `npm run dev` は自動で実行されます。
+StackBlitz のトップから「React + Vite + TypeScript」を選びます（もしくは「useEffect の基本」までで作ったプロジェクトをそのまま使っても構いません。本レッスンは新規プロジェクトの方が整理しやすいです）。`npm install` と `npm run dev` は自動で実行されます。
 
 ### ステップ 2: `types.ts` で `Todo` 型を用意する
 
@@ -336,7 +336,7 @@ export type Todo = {
 };
 ```
 
-lesson35 で追加した `status` と `memo` は今回は使わないので省略します。章 5 で Server Actions 版に移植するときに拡張します。
+章 3 の「配列・ユニオン・リテラル型・オプショナル」で追加した `status` と `memo` は今回は使わないので省略します。章 5 で Server Actions 版に移植するときに拡張します。
 
 ### ステップ 3: `TodoInput` コンポーネントを作る
 
@@ -375,7 +375,7 @@ export function TodoInput({ onAdd }: TodoInputProps) {
 }
 ```
 
-lesson48 で扱った制御コンポーネントの形です。`onSubmit` で `preventDefault()` を呼んでいます（章 5 lesson68 の Server Actions ではこれが不要になります）。空文字列は追加しません。
+「フォームと制御コンポーネント」で扱った制御コンポーネントの形です。`onSubmit` で `preventDefault()` を呼んでいます（章 5 の「Server Actions の最小形」の Server Actions ではこれが不要になります）。空文字列は追加しません。
 
 ### ステップ 4: `TodoItem` コンポーネントを作る
 
@@ -401,7 +401,7 @@ export function TodoItem({ todo, onDelete }: TodoItemProps) {
 }
 ```
 
-`import type` で `Todo` 型を取り込んでいます（lesson33 の形）。`onDelete(todo.id)` で親に削除要求を渡します。
+`import type` で `Todo` 型を取り込んでいます（章 3 の「オブジェクトの型と type エイリアス」の形）。`onDelete(todo.id)` で親に削除要求を渡します。
 
 ### ステップ 5: `TodoList` コンポーネントを作る
 
@@ -431,7 +431,7 @@ export function TodoList({ todos, onDelete }: TodoListProps) {
 }
 ```
 
-lesson44 の `.map` + `key` パターンです。`key={todo.id}` を忘れないでください。`todos.length === 0` のときの早期 return は lesson49 で学んだ条件表示の形です。
+「配列を描画する」の `.map` + `key` パターンです。`key={todo.id}` を忘れないでください。`todos.length === 0` のときの早期 return は「条件で出し分ける」で学んだ条件表示の形です。
 
 ### ステップ 6: `App.tsx` で全体を組み立てる（最初はバグあり版）
 
@@ -605,16 +605,16 @@ const [settings, setSettings] = useState<Settings>({ showCount: true });
 
 章 4 の統合ポイントです。
 
-- 章 2 lesson30 の素の JS + DOM の TODO が、React + TS + コンポーネント分割 + localStorage + `useEffect` で書き直せました
+- 章 2 の「TODO アプリを作る」の素の JS + DOM の TODO が、React + TS + コンポーネント分割 + localStorage + `useEffect` で書き直せました
 - 章 3 の `Todo` 型を `import type` して、props にも state にも使っています
 - `useState` の初期値関数で **localStorage 書き戻しバグ** を避けました
 - オブジェクト state のイミュータブル更新（`prev => ({ ...prev, ... })`）を体験しました
 
 次は章 5、**Next.js** です。TODO アプリはここからさらに進化します。
 
-- lesson59 で章 1 の自己紹介ページを `/about` として復活させます
-- lesson63 でデータ取得を Server Component に任せます（ブラウザ側 `fetch` + `useEffect` の罠を避けられます）
-- lesson68 で **Server Actions** を使い、今回書いた `onSubmit` + `preventDefault()` の代わりに `<form action={serverAction}>` で送信をサーバーに届けます
-- lesson73 で TODO アプリが一覧 + 詳細 + 追加フォームを備えた「実用っぽい」形になります
+- 章 5 の「ページを増やしてリンクで移動する」で章 1 の自己紹介ページを `/about` として復活させます
+- 章 5 の「Server Component でデータを取得する」でデータ取得を Server Component に任せます（ブラウザ側 `fetch` + `useEffect` の罠を避けられます）
+- 章 5 の「Server Actions の最小形」で **Server Actions** を使い、今回書いた `onSubmit` + `preventDefault()` の代わりに `<form action={serverAction}>` で送信をサーバーに届けます
+- 章 5 の「小さなアプリを仕上げる」で TODO アプリが一覧 + 詳細 + 追加フォームを備えた「実用っぽい」形になります
 
-本レッスンの成果物（`App.tsx` / `TodoInput.tsx` / `TodoList.tsx` / `TodoItem.tsx` / `types.ts`）は、章 5 lesson68 で Server Actions 版に書き換えるときの **出発点** になります。StackBlitz のプロジェクトは残しておくか、ローカルにコピーしておきましょう。
+本レッスンの成果物（`App.tsx` / `TodoInput.tsx` / `TodoList.tsx` / `TodoItem.tsx` / `types.ts`）は、章 5 の「Server Actions の最小形」で Server Actions 版に書き換えるときの **出発点** になります。StackBlitz のプロジェクトは残しておくか、ローカルにコピーしておきましょう。

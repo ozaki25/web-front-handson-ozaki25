@@ -140,13 +140,13 @@ body { padding: 24px; background: #f5f7fa; }
 
 ### 章 1 全体を通してのまとめ（先取り）
 
-章 1 では HTML（lesson01〜06）、CSS 基礎（lesson07〜10）、Flexbox と統合（lesson11）、Grid（lesson12）、Position（lesson13）と進めてきました。今回の Transition を加えると、**静的なページに「動き」を足す** という現代的な CSS の基礎が一通り揃います。章 1 全体のまとめは、このレッスンの末尾の「まとめ」セクションに書いています。
+章 1 では HTML の基本タグ、CSS 基礎、Flexbox と統合、Grid、Position と進めてきました。今回の Transition を加えると、**静的なページに「動き」を足す** という現代的な CSS の基礎が一通り揃います。章 1 全体のまとめは、このレッスンの末尾の「まとめ」セクションに書いています。
 
 ## 演習
 
 ### 途中から始める場合
 
-lesson13 までで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
+前のレッスンまでで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
 
 <details>
 <summary>出発点のコード（lesson13 完成時点）</summary>
@@ -477,7 +477,7 @@ form button:focus {
 
 ### ステップ 1: カードにデフォルトの影を付ける
 
-`style.css` の `.card` を次のように書き換えます（lesson11 / 12 / 13 で既に背景色や padding は指定済みの前提）。
+`style.css` の `.card` を次のように書き換えます（これまでのレッスンで既に背景色や padding は指定済みの前提）。
 
 ```css
 .card {
@@ -502,7 +502,7 @@ form button:focus {
 
 ポイント:
 
-- lesson13 で追加した `position: relative`（バッジの基準用）はそのまま残す。
+- 前のレッスンで追加した `position: relative`（バッジの基準用）はそのまま残す。
 - `box-shadow` で薄い影を付ける（ダークモードでは影を濃く）。
 - `transition: all 200ms ease` を書いておく。`all` にしておけば、`:hover` で変わる全プロパティに同じ補間が掛かる。
 
@@ -558,7 +558,7 @@ form button:focus {
 
 ### 自分で書く
 
-「ページトップに戻る」ボタン（lesson13 で追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
+「ページトップに戻る」ボタン（前のレッスンで追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
 
 - hover で背景色が濃い青（`#1d4ed8`）に変わる
 - hover で 1.05 倍に拡大する（`transform: scale(1.05)`）
@@ -575,7 +575,7 @@ form button:focus {
 
 ## まとめ
 
-### lesson14 のまとめ
+### このレッスンのまとめ
 
 - `transition` で値の変化をなめらかに補間できる。最初は `transition: all 200ms ease` で十分。
 - `transform: translateY()` / `scale()` はレイアウトを壊さずに位置・大きさを変えられる。
@@ -584,15 +584,15 @@ form button:focus {
 
 ### 章 1 全体のまとめ
 
-ここまでの 14 レッスンで、次のことができるようになりました。
+ここまでの章 1 のレッスンで、次のことができるようになりました。
 
-- HTML の基本タグ（見出し・段落・リスト・リンク・画像・フォーム・セマンティックタグ）で文書を組み立てられる（lesson01〜06）
-- CSS を外部ファイルで読み込み、セレクタ・擬似クラス・色や文字・余白を指定できる（lesson07〜10）
-- Flexbox（一次元）と Grid（二次元）でモダンなレイアウトを組める（lesson11〜12）
-- `position` で要素を通常の流れから切り離して配置し、`z-index` で前後関係を制御できる（lesson13）
-- `transition` と `transform` で動きを足し、`prefers-reduced-motion` で配慮できる（lesson14）
+- HTML の基本タグ（見出し・段落・リスト・リンク・画像・フォーム・セマンティックタグ）で文書を組み立てられる
+- CSS を外部ファイルで読み込み、セレクタ・擬似クラス・色や文字・余白を指定できる
+- Flexbox（一次元）と Grid（二次元）でモダンなレイアウトを組める
+- `position` で要素を通常の流れから切り離して配置し、`z-index` で前後関係を制御できる
+- `transition` と `transform` で動きを足し、`prefers-reduced-motion` で配慮できる
 - `@media` メディアクエリで画面幅やダークモード、動きの設定に応じてスタイルを変えられる
 
-章 1 で作った **自己紹介ページ** は、章 5 lesson59 で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。
+章 1 で作った **自己紹介ページ** は、章 5 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。
 
-次の章 2 lesson15 からは **JavaScript** に入ります。これまで作ったページには動きがありませんでしたが、JS を使うとボタンを押したときの反応や、データの表示・更新ができるようになります。章 2 の山場は lesson30 の **TODO アプリ** です。HTML + CSS + JavaScript だけで、1 つの小さなアプリを完成させます。
+次の章 2 の「最初の JavaScript」からは **JavaScript** に入ります。これまで作ったページには動きがありませんでしたが、JS を使うとボタンを押したときの反応や、データの表示・更新ができるようになります。章 2 の山場は「TODO アプリを作る」です。HTML + CSS + JavaScript だけで、1 つの小さなアプリを完成させます。

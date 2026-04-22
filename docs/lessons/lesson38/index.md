@@ -5,13 +5,13 @@
 - オブジェクトのユニオン型に「種類を表す文字列リテラルのプロパティ」を付ける形（**判別共用体**）を書ける。
 - `switch (state.kind)` で各ケースに分岐すると、TS が自動的に型を絞り込んでくれることを体験する。
 - 画面の状態（ローディング / 成功 / エラー）を判別共用体で表現し、1 つの型でまるごと扱えるようになる。
-- この形が章 4 lesson47 `useReducer` の `Action` 型で再登場する流れを理解する。
+- この形が章 4 の「useReducer で複雑な state」の `Action` 型で再登場する流れを理解する。
 
 ## 解説
 
 ### 判別共用体とは
 
-lesson35 でユニオン型 `A | B` を、lesson37 で `in` 演算子による絞り込みを学びました。これをさらに読み書きしやすくしたのが **判別共用体**（discriminated union、タグ付きユニオンとも呼ばれます）です。
+「配列・ユニオン・リテラル型・オプショナル」でユニオン型 `A | B` を、「型ガード」で `in` 演算子による絞り込みを学びました。これをさらに読み書きしやすくしたのが **判別共用体**（discriminated union、タグ付きユニオンとも呼ばれます）です。
 
 ポイントは **全ケースで共通の名前のプロパティ** を持ち、その値は **それぞれ別のリテラル型** にすることです。
 
@@ -53,7 +53,7 @@ function area(shape: Shape): number {
 
 ### 網羅性チェックとの組み合わせ
 
-lesson36 で学んだ `never` による網羅性チェックを組み合わせると、ケース追加時に漏れを検出できます。
+「`unknown` と `never`」で学んだ `never` による網羅性チェックを組み合わせると、ケース追加時に漏れを検出できます。
 
 ```ts
 function area(shape: Shape): number {
@@ -200,7 +200,7 @@ Property 'side' does not exist on type '{ kind: "circle"; radius: number; }'.
 
 ### 手順 3: `TodoState` を書く
 
-lesson35 で作った `src/types.ts` の `Todo` をそのまま使う。`src/main.ts` を次の内容に置き換える。
+「配列・ユニオン・リテラル型・オプショナル」で作った `src/types.ts` の `Todo` をそのまま使う。`src/main.ts` を次の内容に置き換える。
 
 ```ts
 import type { Todo } from "./types";
@@ -321,7 +321,7 @@ type FetchResult<T> =
   | { kind: "error"; message: string };
 ```
 
-- この `FetchResult` は lesson39 で学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
+- この `FetchResult` は次のレッスンで学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
 - `function render(r: FetchResult<string>): string` を書き、`"idle"` は `"待機中"`、`"loading"` は `"読み込み中"`、`"success"` は `data` をそのまま、`"error"` は `message` を返すようにする。
 - `default:` で `const _: never = r;` の網羅性チェックを付ける。
 
@@ -334,5 +334,5 @@ type FetchResult<T> =
 - 存在しないプロパティを触ろうとすると TS が止めてくれる。
 - `never` による網羅性チェックと組み合わせると、ケース追加時に処理漏れを検出できる。
 - 共通プロパティの名前は `kind` / `type` / `tag` のどれでもよい。本コースでは状態表現に `kind`、動作表現に `type` を使う。
-- **この判別共用体パターンは章 4 lesson47 の `useReducer` の `Action` 型で再登場します**。`{ type: "add"; text: string } | { type: "delete"; id: string } | { type: "toggle"; id: string }` の形で、ここで学んだ `switch` 分岐と網羅性チェックがそのまま効きます。
-- 次のレッスン（lesson39）では、`FetchResult<T>` のように「型を引数として受け取る」ジェネリクスを学ぶ。判別共用体とジェネリクスを組み合わせると、実用的なデータ構造が一気に書けるようになる。
+- **この判別共用体パターンは章 4 の「useReducer で複雑な state」の `Action` 型で再登場します**。`{ type: "add"; text: string } | { type: "delete"; id: string } | { type: "toggle"; id: string }` の形で、ここで学んだ `switch` 分岐と網羅性チェックがそのまま効きます。
+- 次のレッスンでは、`FetchResult<T>` のように「型を引数として受け取る」ジェネリクスを学ぶ。判別共用体とジェネリクスを組み合わせると、実用的なデータ構造が一気に書けるようになる。

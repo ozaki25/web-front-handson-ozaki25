@@ -6,7 +6,7 @@
 - 「この型 **または** あの型」を表す **ユニオン型**（`|`）を書ける。
 - 「特定の値のみ許す」 **リテラル型** を書ける。
 - 省略可能なプロパティ `?:` を書ける。
-- lesson33 の `Todo` 型に `status: "open" | "done"` と `memo?: string` を足して、育てた `Todo` 型で配列を扱える。
+- 「オブジェクトの型と type エイリアス」の `Todo` 型に `status: "open" | "done"` と `memo?: string` を足して、育てた `Todo` 型で配列を扱える。
 
 ## 解説
 
@@ -20,7 +20,7 @@ const names: Array<string> = ["Alice", "Bob"];
 ```
 
 - `number[]`: 「数値の配列」。短くて読みやすいので普段はこちら。
-- `Array<number>`: 「`Array` という型に `number` を流し込んだもの」。ジェネリクス（lesson39 で扱う）の書き方。
+- `Array<number>`: 「`Array` という型に `number` を流し込んだもの」。ジェネリクス（「ジェネリクス入門」で扱う）の書き方。
 
 どちらも、中身の型が合わないとエラーになる。
 
@@ -116,7 +116,7 @@ function printEmail(user: User): void {
 
 ### `Todo` 型を育てる
 
-lesson33 の `Todo` 型を次の形に育てます。
+「オブジェクトの型と type エイリアス」の `Todo` 型を次の形に育てます。
 
 ```ts
 export type Todo = {
@@ -371,5 +371,5 @@ TS には「列挙型」を作る `enum` や、値を型に格上げする `as c
 - ユニオン型 `A | B` で「どちらでも受け入れる」が書ける。
 - リテラル型とユニオン型を組み合わせると、`"open" | "done"` のように「決まった値だけ許す」型が書ける。
 - `?:` で省略可能なプロパティを書ける。使う側では `undefined` を意識した分岐が必要。
-- `Todo` 型を `status` と `memo?` まで育てた。この形のまま lesson39 / lesson40 でも使う。次章でも `import type` して再利用する。
+- `Todo` 型を `status` と `memo?` まで育てた。この形のまま「ジェネリクス入門」「Utility Types で仕上げる」でも使う。次章でも `import type` して再利用する。
 - `enum` / `as const` は本コースでは扱わない。

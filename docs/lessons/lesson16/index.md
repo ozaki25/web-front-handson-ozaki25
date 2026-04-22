@@ -57,7 +57,7 @@ console.log(message);
 
 ### 途中から始める場合
 
-lesson15 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson15 完成時点）</summary>
@@ -102,7 +102,7 @@ console.log(count);
 
 ### 手順
 
-1. lesson15 の `index.html` をそのまま使う（タイトルだけ `lesson16` に変える）
+1. 前のレッスンの `index.html` をそのまま使う（タイトルだけ `lesson16` に変える）
 2. `script.js` を以下の内容に書き換える
 3. プレビューの Console を開く
 

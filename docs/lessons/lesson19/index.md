@@ -64,7 +64,7 @@ todos.forEach((todo) => {
 });
 ```
 
-- `(todo) => { ... }` はアロー関数と呼ばれる記法（lesson20 で詳しく扱う）
+- `(todo) => { ... }` はアロー関数と呼ばれる記法（次のレッスンで詳しく扱う）
 - 配列の各要素に対して、カッコの中の処理が呼ばれる
 
 本コースでは `for...of` を主に使いますが、後のレッスンや実際のコードでは `forEach` もよく見かけます。「同じ意味の別の書き方」として覚えておきます。
@@ -80,7 +80,7 @@ todos.forEach((todo) => {
 
 ### 途中から始める場合
 
-lesson18 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson18 完成時点）</summary>

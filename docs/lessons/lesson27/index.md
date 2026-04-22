@@ -62,7 +62,7 @@ main();
 - `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
 - `error` にはエラー情報が入る
 
-`try` / `catch` は lesson30 の `JSON.parse` でも再利用します。
+`try` / `catch` は「TODO アプリを作る」の `JSON.parse` でも再利用します。
 
 ### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
 
@@ -92,7 +92,7 @@ if (!response.ok) {
 
 ### 途中から始める場合
 
-lesson26 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson26 完成時点）</summary>

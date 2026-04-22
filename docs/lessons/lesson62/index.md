@@ -132,7 +132,7 @@ You're importing a component that needs useState. This React Hook only works in 
 
 ### 前回のプロジェクトを開く
 
-lesson60 で作ったプロジェクトを開き直しましょう。
+章 5 の「共通レイアウトを作る」で作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: Client Component の `Counter` を作る
 
@@ -289,4 +289,4 @@ export default function Page() {
 - `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
 - Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
 - `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。
-- 次の lesson63 では Server Component で実際にデータを `fetch` します。Client では扱いにくかった「サーバー側取得」のうまみを体験しましょう。
+- 次のレッスンでは Server Component で実際にデータを `fetch` します。Client では扱いにくかった「サーバー側取得」のうまみを体験しましょう。

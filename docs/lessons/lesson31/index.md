@@ -10,7 +10,7 @@
 
 ### この章で使う環境
 
-この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。<https://stackblitz.com/> のトップページに並ぶテンプレートカードから **TypeScript** と書かれたもの（TS のロゴ）を選んでください（lesson01 で使った HTML / CSS / JS 版ではなく、TypeScript 版）。カードが見当たらないときは検索ボックスに `typescript` と入れるか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開きます。
+この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。<https://stackblitz.com/> のトップページに並ぶテンプレートカードから **TypeScript** と書かれたもの（TS のロゴ）を選んでください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。カードが見当たらないときは検索ボックスに `typescript` と入れるか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開きます。
 
 テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の章 3 のレッスンでは、この `main.ts` を書き換えていきます。
 

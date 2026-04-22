@@ -74,7 +74,7 @@ const filtered = useMemo(() => {
 
 1. まず **`useMemo` なし** で書く
 2. 「画面がカクつく」「数千〜数万件の配列を扱う」など、**実際に遅いと感じたときだけ** `useMemo` を検討する
-3. React DevTools Profiler（lesson56）で **本当に速くなったか計測** してから採用する
+3. React DevTools Profiler（「React DevTools」）で **本当に速くなったか計測** してから採用する
 
 「念のため」で書いた `useMemo` は、ほとんどの場合で邪魔になります。
 
@@ -107,7 +107,7 @@ export const TodoItem = memo(function TodoItem({ todo, onDelete }: Props) {
 
 `React.memo` で包んだ子コンポーネントに `useCallback` で関数 props を渡すと、親の再レンダリングで子がスキップされるようになります。
 
-**React Compiler（2025 以降、段階統合中）**: React チームが進めている自動最適化ツールで、Next.js 15 にも部分的に入り始めています。Compiler が有効な環境では、**`useMemo` / `useCallback` / `React.memo` の手動メモ化は原則不要** になる方向です。
+**React Compiler**（2025 以降、段階統合中）: React チームが進めている自動最適化ツールで、Next.js 15 にも部分的に入り始めています。Compiler が有効な環境では、**`useMemo` / `useCallback` / `React.memo` の手動メモ化は原則不要** になる方向です。
 
 本コースのスタンスは明確です。
 
@@ -224,9 +224,9 @@ export default App;
 - ヒント: `const evens = useMemo(() => BIG_NUMBERS.filter((n) => n % 2 === 0), []);`
 - `BIG_NUMBERS` は固定なので依存配列は `[]` で OK
 
-### lesson56 への前振り
+### 「React DevTools」への前振り
 
-「本当にスキップされているか」を React DevTools Profiler で計測する方法は、次の lesson56 で扱います。
+「本当にスキップされているか」を React DevTools Profiler で計測する方法は、「React DevTools」で扱います。
 
 ## まとめ
 

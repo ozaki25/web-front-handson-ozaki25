@@ -96,7 +96,7 @@ console.log(appended); // [1, 2, 100]
 
 ### 途中から始める場合
 
-lesson22 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson22 完成時点）</summary>
@@ -248,4 +248,4 @@ green
 - 分割代入は左辺で書く「取り出し」の構文
 - スプレッドは右辺で書く「まとめる・広げる」の構文
 - 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本
-- **この分割代入の書き方は lesson43 で `function Greeting({ name }: Props)` のように React の props として再登場する**
+- **この分割代入の書き方は「コンポーネントと props」で `function Greeting({ name }: Props)` のように React の props として再登場する**

@@ -23,7 +23,7 @@ export default async function Page() {
 - 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
 - `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
 
-ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（章 4 lesson53 末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
+ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（章 4 の「useEffect の基本」末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
 
 ### `loading.tsx` でローディング UI
 
@@ -69,7 +69,7 @@ await fetch(url, { next: { tags: ["posts"] } });
 
 ### 前回のプロジェクトを開く
 
-lesson62 で作ったプロジェクトを開き直しましょう。
+前のレッスンで作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: `/posts` ページを作る
 
@@ -102,7 +102,7 @@ export default async function PostsPage() {
 ```
 
 - `async function` で書いています（Server Component だから許されます）。
-- `fetch` も `response.json()` も `await` が必要です（章 2 lesson27 と同じ）。
+- `fetch` も `response.json()` も `await` が必要です（章 2 で学んだ fetch と同じです）。
 - `Post` 型を自前で `type` で定義しています。章 3 で学んだ `type` エイリアスそのままです。
 - `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
 
@@ -163,7 +163,7 @@ const res = await fetch(
 - `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
 - Next.js 15 では **fetch の既定はキャッシュしません**。必要に応じて `force-cache` / `revalidate` / `tags` を指定します。
 - ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
-- 次の lesson66 では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。章 2 で学んだ `find` が再登場します。
+- このあとの「動的ルート」では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。章 2 で学んだ `find` が再登場します。
 
 ### コラム: `loading.tsx` の裏で動く Suspense
 

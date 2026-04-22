@@ -142,7 +142,7 @@ import { add } from "./math";
 
 ### 途中から始める場合
 
-lesson24 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
 
 <details>
 <summary>出発点のコード（lesson24 完成時点）</summary>
@@ -239,10 +239,10 @@ console.log(missing);
 
 ### `storage.js`
 
-`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、lesson27 で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
+`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、後の「fetch で API から取得する」で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
 
 ```js
-const STORAGE_KEY = "lesson25-todos";
+const STORAGE_KEY = "module-todos";
 
 export function loadTodos() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -326,13 +326,13 @@ renderTodos(list, todos);
 掃除する
 ```
 
-- DevTools の Application（または Storage）タブ → Local Storage に `lesson25-todos` というキーで JSON 文字列が保存されている
-- Console で `localStorage.setItem("lesson25-todos", "{ broken")` と壊れた文字列をわざと入れてリロード → Console に「保存データの読み込みに失敗しました」と出て、サンプルデータで起動し直される（`try` / `catch` の効果）
+- DevTools の Application（または Storage）タブ → Local Storage に `module-todos` というキーで JSON 文字列が保存されている
+- Console で `localStorage.setItem("module-todos", "{ broken")` と壊れた文字列をわざと入れてリロード → Console に「保存データの読み込みに失敗しました」と出て、サンプルデータで起動し直される（`try` / `catch` の効果）
 - Console に `Uncaught SyntaxError: Cannot use import statement outside a module` が **出ない** ことを確認（出ていたら `<script type="module">` になっていない）
 
 ### 変える
 
-- `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `lesson25-todos` を削除してからリロードすると、新しいサンプルが表示される
+- `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `module-todos` を削除してからリロードすると、新しいサンプルが表示される
 - `renderTodos` の `textContent` を `textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
 - `main.js` で `renderTodos(list, todos)` を呼ばないようにコメントアウト → `<ul>` が空のまま
 
@@ -351,5 +351,5 @@ renderTodos(list, todos);
 - **デフォルト import** は `{ }` なしで、受け取り側で名前を自由に決められる
 - ブラウザで直接読み込む場合、import パスの末尾は **`.js` まで書く**
 - 本コースは **名前付き export を基本** とする
-- 次の **lesson26 〜 lesson29 で非同期・DOM・イベントを学び、lesson30 で今日作った 3 ファイル構成（`storage.js` / `render.js` / `main.js`）の TODO をそのまま出発点にして、追加・削除・永続化まで仕上げます**。今日作ったファイルは消さずに残しておいてください
-- **ここで体験した「役割ごとにファイルを分ける」発想は、章 4 lesson43（コンポーネントと props）で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります
+- 次の **数レッスンで非同期・DOM・イベントを学び、「TODO アプリを作る」で今日作った 3 ファイル構成（`storage.js` / `render.js` / `main.js`）の TODO をそのまま出発点にして、追加・削除・永続化まで仕上げます**。今日作ったファイルは消さずに残しておいてください
+- **ここで体験した「役割ごとにファイルを分ける」発想は、章 4 の「コンポーネントと props」で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります

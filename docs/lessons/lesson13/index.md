@@ -168,7 +168,7 @@ body { padding: 16px; }
 
 ### 途中から始める場合
 
-lesson12 までで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
+前のレッスンまでで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
 
 <details>
 <summary>出発点のコード（lesson12 完成時点）</summary>
@@ -439,7 +439,7 @@ form button:focus {
 
 ### やること
 
-lesson11〜12 で作った自己紹介ページに、次の 2 つを追加します。
+これまでのレッスンで作った自己紹介ページに、次の 2 つを追加します。
 
 1. 画面右下に **「ページトップに戻る」ボタン** を `position: fixed` で常時表示する。
 2. 「好きなもの」の最初のカードの右上に **「NEW」バッジ** を `position: absolute` で重ねる。
@@ -564,7 +564,7 @@ lesson11〜12 で作った自己紹介ページに、次の 2 つを追加しま
 - ヘッダーが固定されると `<main>` の一部が裏に隠れるので、`main` に `padding-top: 80px` などを足して、ヘッダーぶんの隙間を作る
 - `.site-header` には `z-index: 20`（`.to-top` より前）を足して、スクロール中に他の要素の前に出るようにする
 
-やってみて、動作を確認できたら、ヘッダー固定は **lesson14 で使わない** ので元に戻しておきます（`.site-header` から `position: fixed` 系の指定を削除、`main` の `padding-top` も元に戻す）。練習のため一度試すだけです。
+やってみて、動作を確認できたら、ヘッダー固定は **次のレッスンで使わない** ので元に戻しておきます（`.site-header` から `position: fixed` 系の指定を削除、`main` の `padding-top` も元に戻す）。練習のため一度試すだけです。
 
 ### よくあるつまずき
 
@@ -579,4 +579,4 @@ lesson11〜12 で作った自己紹介ページに、次の 2 つを追加しま
 - `absolute` は最も近い `relative` / `absolute` / `fixed` の祖先を基準に浮く。
 - `fixed` は画面（ビューポート）を基準に固定。スクロールしても動かない。
 - `z-index` で前後の重なりを制御できる（`position` が `static` 以外のときだけ効く）。
-- 次の lesson14 では、`:hover` で色や位置をなめらかに変化させる `transition` を学ぶ。章 1 の締めで、自己紹介ページに動きを足す。
+- 次のレッスンでは、`:hover` で色や位置をなめらかに変化させる `transition` を学ぶ。章 1 の締めで、自己紹介ページに動きを足す。

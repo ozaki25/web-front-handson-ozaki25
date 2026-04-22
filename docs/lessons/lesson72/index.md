@@ -76,7 +76,7 @@ Next.js には重要なルールがあります。
 
 - `.env.local` に 2 種類の変数を書く
 - Server Component と Client Component からそれぞれ読み、**プレフィックスなしの変数は Client では `undefined` になる** ことを体感する
-- 本番（Vercel）での設定は lesson75 でまとめて扱う
+- 本番（Vercel）での設定は「Vercel にデプロイする」でまとめて扱う
 
 ### 手順
 
@@ -171,7 +171,7 @@ export function ClientView() {
 
 ### 本番対比の予告
 
-ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **lesson75 Vercel デプロイ** でまとめて扱います。
+ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **「Vercel にデプロイする」** でまとめて扱います。
 
 本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
 
@@ -182,4 +182,4 @@ export function ClientView() {
 - **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
 - シークレットには絶対に `NEXT_PUBLIC_` を付けない
 - `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない
-- 本番（Vercel）での設定は lesson75 で扱う
+- 本番（Vercel）での設定は「Vercel にデプロイする」で扱う

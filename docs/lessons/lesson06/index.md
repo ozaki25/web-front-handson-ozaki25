@@ -147,7 +147,7 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 
 ### 途中から始める場合
 
-lesson05 までで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
+前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
 
 <details>
 <summary>出発点のコード（lesson05 完成時点）</summary>
@@ -234,7 +234,7 @@ lesson05 までで作った `index.html` を続けて使うのが理想ですが
 
 ### 前レッスンの状態から始める
 
-lesson05 のプロジェクトを開きます。`<main>` の中にセクションが 4 つ並び、`<header>` / `<footer>` が付いた状態です。
+前のレッスンのプロジェクトを開きます。`<main>` の中にセクションが 4 つ並び、`<header>` / `<footer>` が付いた状態です。
 
 ### コピペで動かす
 

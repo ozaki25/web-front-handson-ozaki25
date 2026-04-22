@@ -97,7 +97,7 @@ console.log(adults);
 
 ### `for...of` との違い
 
-lesson19 の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
+「繰り返し処理」の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
 
 - 「変換 / 絞り込み」という **意図が名前で伝わる**
 - 結果が新しい配列で返るので、元の配列を壊さない
@@ -140,7 +140,7 @@ const target = todos.find((todo) => todo.id === "a2");
 console.log(target); // { id: "a2", text: "本を返す" }
 ```
 
-章 5 lesson66 で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
+章 5 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
 
 ### チェーン（つなげて書く）
 
@@ -166,7 +166,7 @@ console.log(adultNames); // ["Alice", "Carol"]
 
 ### 途中から始める場合
 
-lesson23 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード（lesson23 完成時点）</summary>
@@ -327,5 +327,5 @@ undefined
 - `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
 - どれも元の配列は変えない
 - チェーンすると複数の処理を 1 行でつなげられる
-- **`find` は章 5 lesson66（動的ルートの詳細取得、URL の `id` から 1 件取り出す）で再登場する**
-- **`map` は章 4 lesson44 で JSX の配列を作る形で再登場する**
+- **`find` は章 5 の「動的ルート」（詳細取得、URL の `id` から 1 件取り出す）で再登場する**
+- **`map` は章 4 の「配列を描画する」で JSX の配列を作る形で再登場する**

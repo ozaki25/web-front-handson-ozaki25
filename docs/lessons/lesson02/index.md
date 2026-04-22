@@ -67,13 +67,13 @@
 
 ### このレッスンの共通題材
 
-章 1 全体を通して **「自己紹介ページ」** を少しずつ育てていきます。lesson01 で用意した HTML を土台に、このレッスンから中身を書き足していきます。lesson11 で Flexbox とメディアクエリを使って完成形にする予定です。
+章 1 全体を通して **「自己紹介ページ」** を少しずつ育てていきます。前のレッスンで用意した HTML を土台に、このレッスンから中身を書き足していきます。「Flexbox とレスポンシブ」で Flexbox とメディアクエリを使って完成形にする予定です。
 
 ## 演習
 
 ### 途中から始める場合
 
-lesson01 までで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
+前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
 
 <details>
 <summary>出発点のコード（lesson01 完成時点）</summary>
@@ -98,7 +98,7 @@ lesson01 までで作った `index.html` を続けて使うのが理想ですが
 
 ### 前レッスンの成果物を開き直す
 
-lesson01 で作った StackBlitz のプロジェクトを開きます。もし閉じてしまっていたら、同じように HTML / CSS / JS の Vanilla プロジェクトを作り、`index.html` を次の状態にしておきます。
+前のレッスンで作った StackBlitz のプロジェクトを開きます。もし閉じてしまっていたら、同じように HTML / CSS / JS の Vanilla プロジェクトを作り、`index.html` を次の状態にしておきます。
 
 ```html
 <!DOCTYPE html>

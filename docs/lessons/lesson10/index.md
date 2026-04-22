@@ -77,7 +77,7 @@ HTML の各要素は、画面上では四角い箱として配置されます。
 
 - 太さ: `1px` / `2px` など。
 - 種類: `solid`（実線）/ `dashed`（破線）/ `dotted`（点線）など。普段は `solid`。
-- 色: lesson07 で扱ったのと同じ色の書き方。
+- 色: 「CSS を当てる」で扱ったのと同じ色の書き方。
 
 1 方向だけ指定するなら `border-top` / `border-right` / `border-bottom` / `border-left` を使います。
 
@@ -165,7 +165,7 @@ body { padding: 16px; }
 
 ### 途中から始める場合
 
-lesson09 までで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`styles.css` は新規作成してください。
+前のレッスンまでで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`styles.css` は新規作成してください。
 
 <details>
 <summary>出発点のコード（lesson09 完成時点）</summary>
@@ -392,7 +392,7 @@ footer {
 
 ### 前レッスンの状態から始める
 
-lesson09 までで作った `index.html` と `styles.css` を開きます。HTML はフォーム含む自己紹介ページ、CSS には文字まわりと色のルールが入っている状態です。
+前のレッスンまでで作った `index.html` と `styles.css` を開きます。HTML はフォーム含む自己紹介ページ、CSS には文字まわりと色のルールが入っている状態です。
 
 ### HTML の変更: `<section>` にクラスを付ける
 
@@ -431,7 +431,7 @@ lesson09 までで作った `index.html` と `styles.css` を開きます。HTML
 </main>
 ```
 
-（lesson09 までで書いた各 `<section>` の中身をそのまま維持すれば OK です。上は中身の一例として掲載しています。）
+（前のレッスンまでで書いた各 `<section>` の中身をそのまま維持すれば OK です。上は中身の一例として掲載しています。）
 
 ### CSS の変更
 
@@ -459,7 +459,7 @@ body {
 }
 ```
 
-（lesson09 の `body` ルールは上で置き換えました。`margin: 0` と `padding: 24px` が追加されている点に注意。）
+（前のレッスンの `body` ルールは上で置き換えました。`margin: 0` と `padding: 24px` が追加されている点に注意。）
 
 そしてファイルの末尾に、`main` と `card` のルールを追加します。
 
@@ -509,7 +509,7 @@ footer {
 
 補足:
 
-- `max-width: 800px;`: 要素の幅の上限を 800px にする。画面が狭ければそれより小さくなる（伸縮する）。lesson11 のレスポンシブに繋がる考え方。
+- `max-width: 800px;`: 要素の幅の上限を 800px にする。画面が狭ければそれより小さくなる（伸縮する）。「Flexbox とレスポンシブ」のレスポンシブに繋がる考え方。
 - `margin: 0 auto;`: 上下 0、左右 auto。親の幅が要素より広ければ、左右の余白が均等に振り分けられて中央寄せになる。
 - `border-radius: 8px;`: 角を少し丸くする。カードらしさが出る。
 - `.card h2` は「`.card` の中にある `<h2>`」を指すセレクタ（**子孫セレクタ**）。セレクタをスペースで区切ると「この中の」の意味になる。
