@@ -206,6 +206,29 @@ footer {
   color: #666666;
   font-size: 0.875rem;
 }
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #dddddd;
+    background-color: #1a1a1a;
+  }
+  h1 {
+    color: #e0e0e0;
+  }
+  h2 {
+    color: #c0c0c0;
+  }
+  p {
+    color: #d0d0d0;
+  }
+  a {
+    color: #8ab4f8;
+  }
+  footer {
+    color: #999999;
+  }
+}
 ```
 
 追加・変更点の解説:

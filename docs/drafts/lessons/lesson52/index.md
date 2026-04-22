@@ -49,11 +49,13 @@ export const metadata = {
 URL ごとにタイトルを変えたいときは、静的な定数では足りない。その場合は **`generateMetadata` 関数** を `export` する。
 
 ```tsx
+import type { Metadata } from "next";
+
 type Props = {
   params: Promise<{ id: string }>;
 };
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   return { title: `Todo #${id}` };
 }
@@ -61,7 +63,8 @@ export async function generateMetadata({ params }: Props) {
 
 - 関数名は `generateMetadata` 固定。
 - 引数は `page.tsx` と同じ形。`params` は Promise なので `await` する。
-- 戻り値は `export const metadata` と同じ形のオブジェクト。
+- 戻り値は `export const metadata` と同じ形のオブジェクト。型は `Metadata`（`next` から `import type`）。
+- 戻り値を `Promise<Metadata>` と明示すると、誤字やプロパティ名の間違いを TS が拾ってくれる。
 
 ### `searchParams` も Promise
 
@@ -225,6 +228,7 @@ export default async function TodosPage({ searchParams }: Props) {
 `app/todos/[id]/page.tsx` を新規作成。
 
 ```tsx
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTodo } from "../../actions";
@@ -233,7 +237,7 @@ type Props = {
   params: Promise<{ id: string }>;
 };
 
-export async function generateMetadata({ params }: Props) {
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
   const { id } = await params;
   const todo = await getTodo(id);
   return {
@@ -344,7 +348,7 @@ TODO に「完了」のフラグを追加する演習。
 - 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出す。
 - 完了済みの項目はテキストに `text-decoration: line-through` を当てる（CSS に `.todo-item--done` を追加）。
 
-実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再描画」が共通パターン。lesson50-51 でやったことの応用。
+実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターン。lesson50-51 でやったことの応用。
 
 ## まとめ
 

@@ -77,6 +77,43 @@ lesson16 の `for...of` でも同じことは書けます。ただ、`map` / `fi
 
 特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
 
+### 「1 件だけ取り出す」`find`
+
+`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const found = users.find((user) => user.age >= 20);
+console.log(found); // { name: "Alice", age: 20 }
+
+const missing = users.find((user) => user.age >= 100);
+console.log(missing); // undefined
+```
+
+- `配列.find((要素) => 条件)`
+- 戻り値は **1 件の要素**（配列ではない）
+- 該当がなければ `undefined`
+- `filter` と違って、見つけた時点で走査を打ち切る
+
+ID で目的の 1 件を取り出すような場面でよく使います。
+
+```js
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+];
+
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target); // { id: "a2", text: "本を返す" }
+```
+
+章 5 lesson48 で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
+
 ### チェーン（つなげて書く）
 
 `map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
@@ -104,6 +141,7 @@ console.log(adultNames); // ["Alice", "Carol"]
 - ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
 - ユーザー配列から「名前だけ」の配列を作る
 - 2 つを組み合わせて「成人の名前だけ」の配列を作る
+- ID で TODO の 1 件を取り出す（`find`）
 
 ### 手順
 
@@ -154,6 +192,17 @@ const evens = numbers.filter((n) => n % 2 === 0);
 console.log(doubled);
 console.log(evens);
 console.log(numbers);
+
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target);
+
+const missing = todos.find((todo) => todo.id === "zzz");
+console.log(missing);
 ```
 
 ### 期待出力
@@ -165,6 +214,8 @@ console.log(numbers);
 [2, 4, 6, 8, 10]
 [2, 4]
 [1, 2, 3, 4, 5]
+{id: "a2", text: "本を返す"}
+undefined
 ```
 
 最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
@@ -185,7 +236,8 @@ console.log(numbers);
 
 - `map` は「同じ長さの新しい配列を作る」変換
 - `filter` は「条件で絞り込んだ新しい配列を作る」抽出
-- どちらも元の配列は変えない
+- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
+- どれも元の配列は変えない
 - チェーンすると複数の処理を 1 行でつなげられる
-- **配列から 1 件だけ取り出す `find` は章 5 lesson48（動的ルートの詳細取得）で再登場する**
+- **`find` は章 5 lesson48（動的ルートの詳細取得、URL の `id` から 1 件取り出す）で再登場する**
 - **`map` は章 4 lesson35 で JSX の配列を作る形で再登場する**

@@ -64,12 +64,16 @@ Server Action であることを示すには、次のどちらかの場所に `"
 
 - **必ず async 関数**。同期関数に `"use server"` は書けない。
 - **Client Component の中（`"use client"` のファイル内）には書けない**。Client から使いたいときは、別ファイルで `"use server"` を書いて `import` する。
+- `"use server"` を書いたファイルからの **`export` は async 関数だけ** にするのが安全。値（普通の `const`）や非 async 関数を `export` するとビルド時に警告やエラーが出ることがある。
+- 例外として **型の `export type`** は問題ない（TypeScript の型情報はビルド後の JS には残らないため）。
 
 本コースでは **(1) のファイル先頭パターン** を使う（分離が分かりやすいため）。
 
 ### データの保存先（本コースでの割り切り）
 
 本コースではデータベースは使わない。代わりに、`app/actions.ts` のモジュールトップレベルに **ただの配列** を置いて、擬似的な永続化とする。
+
+**開発時（dev）の注意**: StackBlitz や `next dev` では、`app/actions.ts` を編集するたびにモジュールが再評価され、`const todos: Todo[] = []` が初期化し直されて中身が消える。動作確認のコツは「**追加したら actions.ts を編集しない**」。本物の永続化が必要な場合は DB を使うのが正攻法。
 
 ```ts
 // app/actions.ts
@@ -86,7 +90,7 @@ const todos: Todo[] = [];
 
 Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッシュされる。Server Action が配列を変更しても、そのままではキャッシュされた古い画面が残る。
 
-`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** される。次にそのページに入る（またはアクション直後の自動再描画）タイミングで Server Component が再実行され、最新の `todos` が描画される。
+`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** される。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画される。
 
 ```mermaid
 sequenceDiagram
@@ -105,7 +109,7 @@ sequenceDiagram
   Action->>Page: revalidatePath('/todos')
   Note right of Page: キャッシュ無効化
   Action-->>Browser: 完了
-  Browser->>Page: 再描画(自動)
+  Browser->>Page: 再レンダリング(自動)
   Page->>Store: 配列を読む
   Store-->>Page: [new]
   Page-->>Browser: 更新された一覧

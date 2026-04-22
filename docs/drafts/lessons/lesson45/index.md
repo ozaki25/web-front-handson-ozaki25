@@ -172,7 +172,9 @@ export default function Page() {
 }
 ```
 
-`app/about/page.tsx` は lesson44 のままでよいが、`<main>` の重複を避けたい場合は外側の `<main>` を外して `<>...</>`（フラグメント）に変える（ルートレイアウトで既に `<main>` を書いているため）。
+`app/about/page.tsx` は lesson44 で書いたままだと **ヘッダー・フッター・メインが二重になる**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたため）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離する。
+
+lesson44 時点の `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにする（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始める）。
 
 ```tsx
 import "./about.css";
@@ -180,30 +182,56 @@ import "./about.css";
 export default function AboutPage() {
   return (
     <>
-      <header>
-        <h1>自己紹介</h1>
-      </header>
-      <section>
-        <h2>プロフィール</h2>
-        <img src="/avatar.png" alt="アイコン" className="avatar" />
-        <p className="lead">こんにちは、フロント学習中です。</p>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
       </section>
-      <section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
         <h2>問い合わせ</h2>
         <form>
-          <label htmlFor="name">名前</label>
-          <input id="name" name="name" type="text" required />
-          <br />
+          <div>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
+          </div>
           <button type="submit">送信</button>
         </form>
       </section>
-      <footer>
-        <p>&copy; 2026</p>
-      </footer>
     </>
   );
 }
 ```
+
+これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになる。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整える（手順 5 で片付ける）。
 
 `app/todos/page.tsx` も同様にページ固有の中身だけ残す。
 
@@ -221,7 +249,7 @@ export default function TodosPage() {
 ### 期待出力
 
 - どのページにアクセスしても、画面上部に「Home / About / Todos」のナビ、下部に「&copy; 2026 My Next App」のフッターが表示される。
-- ナビをクリックするとページ本体だけが差し替わる（ヘッダー・フッターは再描画されない）。
+- ナビをクリックするとページ本体だけが差し替わる（ヘッダー・フッターは再レンダリングされない）。
 - ブラウザタブのタイトルが「My Next App」になっている（`export const metadata` による）。
 
 ### 変えてみる

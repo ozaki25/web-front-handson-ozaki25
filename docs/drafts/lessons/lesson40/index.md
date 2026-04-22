@@ -50,6 +50,9 @@ function App() {
 子側:
 
 ```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+
 type TodoInputProps = {
   onAdd: (text: string) => void;
 };
@@ -57,7 +60,7 @@ type TodoInputProps = {
 function TodoInput({ onAdd }: TodoInputProps) {
   const [text, setText] = useState("");
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
@@ -76,7 +79,7 @@ function TodoInput({ onAdd }: TodoInputProps) {
 
 - 親は `onAdd` という関数を子に渡す
 - 子は入力欄の state（`text`）を自分で持つ
-- 送信時に `onAdd(text)` を呼ぶ → 親が state を更新 → 画面再描画
+- 送信時に `onAdd(text)` を呼ぶ → 親が state を更新 → 画面再レンダリング
 
 「関数を props として渡す」という発想に慣れるのがこのレッスンのコアです。
 
@@ -137,6 +140,7 @@ export type Todo = {
 
 ```tsx
 import { useState } from "react";
+import type { FormEvent } from "react";
 
 type TodoInputProps = {
   onAdd: (text: string) => void;
@@ -145,7 +149,7 @@ type TodoInputProps = {
 export function TodoInput({ onAdd }: TodoInputProps) {
   const [text, setText] = useState("");
 
-  function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const trimmed = text.trim();
     if (trimmed.length === 0) return;

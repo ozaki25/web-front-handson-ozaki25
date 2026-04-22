@@ -151,22 +151,37 @@ lesson09 までで作った `index.html` と `styles.css` を開きます。HTML
 ```html
 <main class="main">
   <section id="profile" class="card">
-    …
+    <h2>自己紹介</h2>
+    <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に進めています。</p>
   </section>
   <section id="likes" class="card">
-    …
+    <h2>好きなもの</h2>
+    <ul>
+      <li>コーヒー</li>
+      <li>本</li>
+      <li>散歩</li>
+    </ul>
   </section>
   <section id="goals" class="card">
-    …
+    <h2>目標</h2>
+    <p>小さな Next.js アプリを自分で作れるようになる。</p>
   </section>
   <section id="links" class="card">
-    …
+    <h2>リンク</h2>
+    <p><a href="https://example.com">お気に入りのサイト</a></p>
   </section>
   <section id="contact" class="card">
-    …
+    <h2>問い合わせ</h2>
+    <form>
+      <label for="name">お名前</label>
+      <input id="name" name="name" type="text" required />
+      <button type="submit">送信</button>
+    </form>
   </section>
 </main>
 ```
+
+（lesson09 までで書いた各 `<section>` の中身をそのまま維持すれば OK です。上は中身の一例として掲載しています。）
 
 ### CSS の変更
 
@@ -227,6 +242,18 @@ footer {
   color: #666666;
   font-size: 0.875rem;
   text-align: center;
+}
+
+/* ダークモード対応: カードの白背景・枠色を上書き */
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #202020;
+    border-color: #3a3a3a;
+    color: #e0e0e0;
+  }
+  footer {
+    color: #999999;
+  }
 }
 ```
 

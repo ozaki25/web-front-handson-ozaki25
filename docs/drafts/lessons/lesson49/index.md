@@ -80,7 +80,7 @@ export default function Error({ error, reset }: Props) {
 
 - 1 行目に `"use client"`。
 - `error` は `Error` オブジェクト。本番ビルドでは `message` は潰される（情報漏れ防止）。開発中は読める。
-- `reset()` を呼ぶとページを再描画しようとする。
+- `reset()` を呼ぶとページを再レンダリングしようとする。
 
 ### `error.tsx` の範囲は「レンダリング中」
 

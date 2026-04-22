@@ -63,10 +63,12 @@ function Greeting({ name }: GreetingProps) {
 
 ```ts
 // src/types.ts
+import type { ReactNode } from "react";
+
 export type GreetingProps = {
   name: string;
   age?: number;
-  children?: React.ReactNode;
+  children?: ReactNode;
 };
 ```
 
@@ -77,12 +79,13 @@ import type { GreetingProps } from "./types";
 
 - `import type { ... }` は「**型だけ** を持ってくる」という書き方
 - ビルド後の JS には残らない（実行時のコストはゼロ）
+- `ReactNode` は `react` パッケージから import する。`React.ReactNode` のように名前空間経由で書くこともできるが、新しい Vite テンプレート（自動 JSX ランタイム前提）では名前空間経由だと「`React` が見つからない」エラーが出やすいので、**個別に import する形に統一する**
 
 ### オプショナルプロパティ `?`
 
 `age?: number` は「`age` は省略しても OK」という意味です。書く側は `<Greeting name="Alice" />` でも `<Greeting name="Alice" age={20} />` でも動きます。省略された場合、`age` の値は `undefined` になります。
 
-### `children`（コピペで与える `React.ReactNode`）
+### `children`（コピペで与える `ReactNode`）
 
 コンポーネントのタグの**中身**を受け取りたいことがあります。例えばこう書きたい。
 
@@ -95,12 +98,14 @@ import type { GreetingProps } from "./types";
 
 `Card` の中身（`<h2>` と `<p>`）を、`Card` の中の好きな場所にはめ込みたい。この「中身」を受け取る特別な props の名前が **`children`** です。
 
-型は `React.ReactNode` を使います。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
+型は `ReactNode` を使います（`react` パッケージから `import type` する）。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
 
 ```tsx
+import type { ReactNode } from "react";
+
 type CardProps = {
   title: string;
-  children?: React.ReactNode;
+  children?: ReactNode;
 };
 
 function Card({ title, children }: CardProps) {
@@ -164,10 +169,12 @@ export function Greeting({ name, age, children }: GreetingProps) {
 ### `src/types.ts`
 
 ```ts
+import type { ReactNode } from "react";
+
 export type GreetingProps = {
   name: string;
   age?: number;
-  children?: React.ReactNode;
+  children?: ReactNode;
 };
 ```
 
@@ -252,7 +259,7 @@ export default App;
 
 ### 自分で書く
 
-- `types.ts` に `type CardProps = { title: string; children?: React.ReactNode }` を追加
+- `types.ts` に `type CardProps = { title: string; children?: ReactNode }` を追加（`ReactNode` は `react` から `import type`）
 - `src/Card.tsx` を作って、`title` を `<h2>` で、`children` を `<div>` で包んで表示する `Card` コンポーネントを実装
 - `App.tsx` で `Card` を 2 個使ってみる（中身は自由）
 
@@ -261,5 +268,5 @@ export default App;
 - props は「コンポーネントの引数」。オブジェクトの分割代入（lesson19）で受け取る
 - 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
 - オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
-- `children` はタグの中身を受け取る特別な props。型は `React.ReactNode`（コピペでよい）
+- `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
 - コンポーネント名は必ず大文字始まり

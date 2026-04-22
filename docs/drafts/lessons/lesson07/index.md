@@ -112,7 +112,22 @@ p {
 a {
   color: #1a73e8;
 }
+
+/* ダークモード対応: OS やブラウザがダーク指定のとき色を上書きする */
+@media (prefers-color-scheme: dark) {
+  h2 {
+    color: #cccccc;
+  }
+  p {
+    color: #dddddd;
+  }
+  a {
+    color: #8ab4f8;
+  }
+}
 ```
+
+`@media (prefers-color-scheme: dark)` のブロックは、OS やブラウザがダークテーマになっているときだけ適用されます。白背景前提で色を決めると、ダーク時に文字が見えなくなる事故を起こします。**色を指定するときは、必ずダーク時の対応もセットで書く** 習慣を付けておきましょう。
 
 次に `index.html` の `<head>` を次のように変更し、`<link>` で CSS を読み込みます。
 

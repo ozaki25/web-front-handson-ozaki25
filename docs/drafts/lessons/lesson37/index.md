@@ -27,7 +27,7 @@ setTodos((prev) => [...prev, newTodo]);
 
 これを「イミュータブル（immutable、書き換えない）更新」と呼びます。
 
-理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再描画されません。
+理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
 
 スプレッド構文 `...`（lesson19）は、このイミュータブル更新で頻出します。
 
@@ -62,27 +62,31 @@ setTodos((prev) => prev.filter((t) => t.id !== id));
 TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペで与える**ものとして覚えてください。意味は追い追い分かります。
 
 ```tsx
+import type { MouseEvent, ChangeEvent, FormEvent } from "react";
+
 // ボタンのクリック
-function handleClick(e: React.MouseEvent<HTMLButtonElement>) {
+function handleClick(e: MouseEvent<HTMLButtonElement>) {
   /* ... */
 }
 
 // input の変化
-function handleChange(e: React.ChangeEvent<HTMLInputElement>) {
+function handleChange(e: ChangeEvent<HTMLInputElement>) {
   /* ... */
 }
 
 // フォームの送信
-function handleSubmit(e: React.FormEvent<HTMLFormElement>) {
+function handleSubmit(e: FormEvent<HTMLFormElement>) {
   /* ... */
 }
 ```
+
+これらの型は `react` パッケージから `import type` で呼びます。`React.MouseEvent` のように名前空間経由で書くこともできますが、新しい JSX ランタイム（Vite の React + TS テンプレート）では名前空間経由だとエラーになる環境があるので、**個別に import する形に統一します**。
 
 とはいえ、**JSX の中にインラインで書くとき**は、型推論が効くので書かなくても OK です。
 
 ```tsx
 <button onClick={(e) => console.log(e)}>
-  {/* e は React.MouseEvent<HTMLButtonElement> 型と自動推論される */}
+  {/* e は MouseEvent<HTMLButtonElement> 型と自動推論される */}
 </button>
 ```
 
@@ -245,7 +249,7 @@ export default App;
     setTodos(todos); // React から見ると変化していない
   }
   ```
-  クリックしても削除されない（実際は配列が変わっているのに、React は「同じ配列」と見て再描画しない）
+  クリックしても削除されない（実際は配列が変わっているのに、React は「同じ配列」と見て再レンダリングしない）
 - `addToEnd` の `setTodos((prev) => [...prev, newTodo])` を `setTodos((prev) => [newTodo, ...prev])` に書き換えると、動作が `addToTop` と同じになる
 
 ### 自分で書く
@@ -259,5 +263,5 @@ export default App;
 
 - 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
 - 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
-- イベントハンドラの型（`React.MouseEvent<...>` 等）はコピペで OK。インラインなら書かなくても推論される
+- イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
 - **オブジェクトの state 更新は lesson42 で扱う**。このレッスンでは配列に集中
