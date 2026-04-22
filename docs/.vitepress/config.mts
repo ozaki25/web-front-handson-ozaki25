@@ -61,7 +61,7 @@ export default withPwa(withMermaid(
       // theme-color はモバイルブラウザの URL バー / タスクスイッチャー背景に反映される。
       // custom.css の --vp-c-bg と一致させ、ライト = クリーム、ダーク = ウォームチャコール。
       ['meta', { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#faf5e9' }],
-      ['meta', { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#1a1512' }],
+      ['meta', { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#26201a' }],
     ],
     themeConfig: {
       nav: [{ text: 'ホーム', link: '/' }],
