@@ -87,7 +87,7 @@ export default function Page() {
 ### 手順
 
 1. <https://stackblitz.com/> を開きます。
-2. 「Create new project」から **Next.js** の **TypeScript** テンプレートを選びます（Node を内部で動かす WebContainers 版）。
+2. トップページに並ぶテンプレートカードから **Next.js** を選びます（Node を内部で動かす WebContainers 版、Next.js のロゴ付き）。カードが見当たらないときは検索ボックスに `next` と入れるか、直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます。
 3. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
 4. 中身をすべて消し、次のコードに置き換えます。
 
