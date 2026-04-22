@@ -32,7 +32,7 @@ export default withPwa(withMermaid(
         short_name: 'Web 入門',
         description: 'Web フロントエンドをこれから学ぶ人向けの学習コンテンツ',
         theme_color: '#1e40af',
-        background_color: '#ffffff',
+        background_color: '#faf5e9',
         lang: 'ja',
         display: 'standalone',
         start_url: '/',
