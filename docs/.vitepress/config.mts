@@ -58,7 +58,10 @@ export default withPwa(withMermaid(
       ['link', { rel: 'icon', href: '/favicon.ico', sizes: '48x48' }],
       ['link', { rel: 'icon', href: '/logo.svg', type: 'image/svg+xml' }],
       ['link', { rel: 'apple-touch-icon', href: '/apple-touch-icon-180x180.png' }],
-      ['meta', { name: 'theme-color', content: '#1e40af' }],
+      // theme-color はモバイルブラウザの URL バー / タスクスイッチャー背景に反映される。
+      // custom.css の --vp-c-bg と一致させ、ライト = クリーム、ダーク = ウォームチャコール。
+      ['meta', { name: 'theme-color', media: '(prefers-color-scheme: light)', content: '#faf5e9' }],
+      ['meta', { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#1a1512' }],
     ],
     themeConfig: {
       nav: [{ text: 'ホーム', link: '/' }],
