@@ -42,6 +42,35 @@ HTML には、ページの「意味の塊」を表す **セマンティックタ
 </body>
 ```
 
+下のデモは、上記の骨格タグをそのまま表示した最小例です。背景色を少しだけ付けて、`<header>` / `<main>` / `<footer>` がどこからどこまでかを見えるようにしています。
+
+<LiveDemo
+  height="260px"
+  :html="`
+<header>
+  <h1>サイト名</h1>
+  <nav>
+    <a href='#'>ホーム</a>&nbsp;
+    <a href='#'>自己紹介</a>
+  </nav>
+</header>
+<main>
+  <p>ここにページの主要コンテンツを書きます。</p>
+</main>
+<footer>
+  <p>&copy; 2026 私の名前</p>
+</footer>
+  `"
+  :css="`
+body { margin: 0; }
+header, main, footer { padding: 12px 16px; }
+header { background: #e3f2fd; }
+main   { background: #f5f5f5; }
+footer { background: #eceff1; font-size: 0.85rem; color: #555; }
+  `"
+  :js="``"
+/>
+
 ### 見出し階層のおさらい
 
 lesson02 で見出しは「意味の階層」だと書きました。骨格タグと合わせるときも、同じルールで考えます。

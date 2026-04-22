@@ -116,6 +116,32 @@ console.log(counterB()); // 2
 
 `counterA` と `counterB` は、それぞれ自分専用の `count` を抱えています。これが「関数が状態を閉じ込める」しくみです。
 
+下のデモで、独立したカウンタ 2 つがそれぞれ別の `count` を持っている様子を体感できます。`counterA` を 3 回呼んでも `counterB` は影響を受けません。
+
+<LiveDemo
+  height="220px"
+  :html="`<p>独立した 2 つのカウンタを動かします。</p>`"
+  :css="``"
+  :js="`
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
+
+const counterA = makeCounter();
+const counterB = makeCounter();
+
+console.log('A:', counterA()); // 1
+console.log('A:', counterA()); // 2
+console.log('B:', counterB()); // 1
+console.log('A:', counterA()); // 3
+console.log('B:', counterB()); // 2
+  `"
+/>
+
 #### 関数を作って返す（`makeFilter`）
 
 同じパターンで、**設定を覚えた関数** を作ることもできます。lesson24 の `filter` と組み合わせる例を見てみます。

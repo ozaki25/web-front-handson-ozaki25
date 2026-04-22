@@ -67,6 +67,30 @@ console.log(adults);
 // [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
 ```
 
+下のデモで、同じ配列に対して `map` / `filter` / `find` がそれぞれどんな結果を返すかを並べて比較できます。元の配列は変わらない点にも注目してください。
+
+<LiveDemo
+  height="260px"
+  :html="`<p>同じ配列に対する map / filter / find の結果:</p>`"
+  :css="``"
+  :js="`
+const users = [
+  { name: 'Alice', age: 20 },
+  { name: 'Bob',   age: 15 },
+  { name: 'Carol', age: 30 },
+];
+
+const names  = users.map((u) => u.name);
+const adults = users.filter((u) => u.age >= 20);
+const first  = users.find((u) => u.age >= 20);
+
+console.log('map   (名前だけ):', names);
+console.log('filter(成人だけ):', adults);
+console.log('find  (最初の成人):', first);
+console.log('元の配列は変わらない:', users);
+  `"
+/>
+
 ### `for...of` との違い
 
 lesson19 の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：

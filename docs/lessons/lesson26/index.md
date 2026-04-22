@@ -73,6 +73,30 @@ function wait(ms) {
 
 この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
 
+下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
+
+<LiveDemo
+  height="240px"
+  :html="`<p>await が実際に時間を待つ様子:</p>`"
+  :css="``"
+  :js="`
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function main() {
+  console.log('start');
+  await wait(1000);
+  console.log('1 秒後');
+  await wait(1000);
+  console.log('さらに 1 秒後（計 2 秒）');
+  console.log('end');
+}
+
+main();
+  `"
+/>
+
 ### 次のレッスンへの橋渡し
 
 **戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば次のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。

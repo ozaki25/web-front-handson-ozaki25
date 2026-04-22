@@ -47,6 +47,23 @@ console.log(result); // 3
 
 `return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
 
+下のデモで、関数を複数回呼び出すと同じ処理が毎回動き、結果だけが引数に応じて変わるのを確認できます。
+
+<LiveDemo
+  height="180px"
+  :html="`<p>関数を複数回呼び出します。</p>`"
+  :css="``"
+  :js="`
+function add(a, b) {
+  return a + b;
+}
+
+console.log('add(1, 2) =', add(1, 2));
+console.log('add(10, 20) =', add(10, 20));
+console.log('add(-5, 5) =', add(-5, 5));
+  `"
+/>
+
 ### アロー関数
 
 もう 1 つの書き方がアロー関数です。lesson19 の `forEach` で一度出てきました。

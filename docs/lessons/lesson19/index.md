@@ -31,6 +31,23 @@ for (const todo of todos) {
 
 インデックスは使わず、「要素そのもの」を直接受け取ります。インデックスが必要なときは後の章で別の書き方を学びますが、まずはこの形で十分です。
 
+下のデモで、配列を 1 件ずつ取り出して `console.log` が順に並ぶ様子を確認できます。
+
+<LiveDemo
+  height="220px"
+  :html="`<p>配列を順に出力します。</p>`"
+  :css="``"
+  :js="`
+const todos = ['牛乳を買う', '本を読む', 'ジョギング'];
+
+for (const todo of todos) {
+  console.log('- ' + todo);
+}
+
+console.log('合計', todos.length, '件');
+  `"
+/>
+
 ### `forEach`（軽く触れる）
 
 配列には `forEach` というメソッドもあります。書き味が少し違うだけで、できることはほぼ同じです。
