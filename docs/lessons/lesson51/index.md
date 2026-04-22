@@ -332,7 +332,7 @@ export default App;
 
 ### 自分で書く
 
-- `useTheme` の戻り値に `isDark: boolean` を追加してみてください（`theme === "dark"` で計算する）。`ThemeToggle` で `isDark ? "☾" : "☀"` のようにアイコンを切り替えると、より実用的な見た目になります（絵文字は趣味で使ってください。本コース本体は絵文字なしです）。
+- `useTheme` の戻り値に `isDark: boolean` を追加してみてください（`theme === "dark"` で計算する）。`ThemeToggle` の文言を `isDark ? "Dark" : "Light"` のように切り替えると、より実用的な見た目になります（本コース本体は絵文字なしで統一しています。お好みで差し替えてください）。
 - 別の Context として `LangContext`（`"ja" | "en"` を持つ）を追加し、`Header` の見出しを言語で切り替える演習もおすすめです。Context を **複数使う** 形に慣れます。
 
 ## まとめ
