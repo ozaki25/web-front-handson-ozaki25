@@ -426,41 +426,42 @@ footer {
 
 PC 幅（600px より広い）:
 
-```
-┌──────────────────────────────────────────────┐
-│ ヘッダー: 私の名前 (左)     ナビゲーション (右) │
-└──────────────────────────────────────────────┘
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│ カード 1  │  │ カード 2  │  │ カード 3  │
-│ 画像     │  │ 画像     │  │ 画像     │
-│ 見出し    │  │ 見出し    │  │ 見出し    │
-│ 本文     │  │ 本文     │  │ 本文     │
-└─────────┘  └─────────┘  └─────────┘
-┌──────────────────────────────────────────────┐
-│ フッター: © 私の名前                          │
-└──────────────────────────────────────────────┘
-```
+<div style="font-family:system-ui, sans-serif; max-width:520px; margin:8px 0;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; display:flex; justify-content:space-between;">
+    <span>ヘッダー: 私の名前</span>
+    <span>ナビゲーション</span>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0;">
+    <div style="border:1px solid #64748b; padding:12px; background:#fff;">
+      <div style="font-size:0.85em; color:#475569;">カード 1</div>
+      <div>画像 / 見出し / 本文</div>
+    </div>
+    <div style="border:1px solid #64748b; padding:12px; background:#fff;">
+      <div style="font-size:0.85em; color:#475569;">カード 2</div>
+      <div>画像 / 見出し / 本文</div>
+    </div>
+    <div style="border:1px solid #64748b; padding:12px; background:#fff;">
+      <div style="font-size:0.85em; color:#475569;">カード 3</div>
+      <div>画像 / 見出し / 本文</div>
+    </div>
+  </div>
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9;">
+    フッター: © 私の名前
+  </div>
+</div>
 
 スマホ幅（600px 以下）:
 
-```
-┌──────────────┐
-│ 私の名前       │
-│ ナビゲーション  │
-└──────────────┘
-┌──────────────┐
-│ カード 1       │
-└──────────────┘
-┌──────────────┐
-│ カード 2       │
-└──────────────┘
-┌──────────────┐
-│ カード 3       │
-└──────────────┘
-┌──────────────┐
-│ © 私の名前     │
-└──────────────┘
-```
+<div style="font-family:system-ui, sans-serif; max-width:220px; margin:8px 0;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9;">
+    <div>私の名前</div>
+    <div>ナビゲーション</div>
+  </div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; margin-top:8px;">カード 1</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; margin-top:8px;">カード 2</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; margin-top:8px;">カード 3</div>
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; margin-top:8px;">© 私の名前</div>
+</div>
 
 ### ステップ 1: HTML の骨格を作る
 

@@ -304,17 +304,27 @@ export default function App() {
 
 ### 到達する完成形
 
-```
-私の TODO
-
-┌──────────────────────────────┬────────────┐
-│ 新しい TODO を入力            │ [追加]      │
-└──────────────────────────────┴────────────┘
-
-- 牛乳を買う              [削除]
-- 引き継ぎドキュメントを書く  [削除]
-- 本を返す                [削除]
-```
+<div style="font-family:system-ui, sans-serif; max-width:480px; margin:8px 0;">
+  <div style="font-weight:600; margin-bottom:12px;">私の TODO</div>
+  <div style="display:flex; gap:8px; margin-bottom:16px;">
+    <input style="flex:1; padding:8px 12px; border:1px solid #cbd5e1; background:#f8fafc;" placeholder="新しい TODO を入力" readonly />
+    <button style="padding:8px 16px; border:1px solid #1e40af; background:#1e40af; color:white;" disabled>追加</button>
+  </div>
+  <ul style="list-style:none; padding:0; margin:0;">
+    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #e2e8f0;">
+      <span>牛乳を買う</span>
+      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
+    </li>
+    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #e2e8f0;">
+      <span>引き継ぎドキュメントを書く</span>
+      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
+    </li>
+    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0;">
+      <span>本を返す</span>
+      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
+    </li>
+  </ul>
+</div>
 
 - 入力して「追加」を押すと一覧末尾に追加されます
 - 各項目の「削除」ボタンで、その 1 件だけが消えます

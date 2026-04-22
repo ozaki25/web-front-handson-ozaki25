@@ -13,17 +13,16 @@
 
 HTML の各要素は、画面上では四角い箱として配置されます。その箱には、内側から順に 4 つの層があります。これを **ボックスモデル** と呼びます。
 
-```
-┌───────────────────────── margin ─────────────────────────┐
-│ ┌─────────────────── border ───────────────────┐         │
-│ │ ┌───────────── padding ─────────────┐         │        │
-│ │ │                                   │         │        │
-│ │ │         コンテンツ                │         │        │
-│ │ │                                   │         │        │
-│ │ └───────────────────────────────────┘         │        │
-│ └───────────────────────────────────────────────┘        │
-└──────────────────────────────────────────────────────────┘
-```
+<div style="display:inline-block; padding:20px 28px; background:#fde68a; color:#7c2d12; border-radius:6px; font-family:system-ui, sans-serif; margin:8px 0;">
+  <div style="font-size:0.8em; margin-bottom:8px;">margin</div>
+  <div style="padding:20px 28px; background:#fff; border:4px solid #1f2937; border-radius:4px;">
+    <div style="font-size:0.8em; color:#1f2937; margin-bottom:8px;">border</div>
+    <div style="padding:20px 28px; background:#bbf7d0; color:#065f46; border-radius:4px;">
+      <div style="font-size:0.8em; margin-bottom:8px;">padding</div>
+      <div style="padding:16px 32px; background:#dbeafe; color:#1e3a8a; text-align:center; border-radius:4px;">コンテンツ</div>
+    </div>
+  </div>
+</div>
 
 - **コンテンツ**: 中身（文字や画像）そのもの。
 - **padding**: コンテンツと枠線（border）のあいだの余白。**内側の余白**。
