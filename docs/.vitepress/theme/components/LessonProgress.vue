@@ -24,36 +24,8 @@ function read(): Record<string, string> {
   }
 }
 
-function write(data: Record<string, string>) {
-  localStorage.setItem(storageKey, JSON.stringify(data))
-}
-
-function migrateLegacyKeys(data: Record<string, string>, list: FlatLesson[]): boolean {
-  // サイドバーの link と text を突き合わせ、旧キー（パス形式）を
-  // 現在のタイトル由来のトピック ID に移す。link と現行 ID の対応関係は
-  // サイドバー側が常に正なので、この単純移行で安全に引き継げる。
-  let changed = false
-  for (const l of list) {
-    if (!l.id) continue
-    if (data[l.link] && !data[l.id]) {
-      data[l.id] = data[l.link]
-      delete data[l.link]
-      changed = true
-    } else if (data[l.link] && data[l.id]) {
-      delete data[l.link]
-      changed = true
-    }
-  }
-  return changed
-}
-
 function sync() {
-  const data = read()
-  if (lessons.value.length > 0) {
-    const changed = migrateLegacyKeys(data, lessons.value)
-    if (changed) write(data)
-  }
-  completions.value = data
+  completions.value = read()
 }
 
 function flatten(items: SidebarItem[] | undefined, groupText = ''): FlatLesson[] {
