@@ -1,12 +1,15 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useData } from 'vitepress'
+import { lessonIdFromTitle } from '../lesson-id'
 
 type SidebarItem = {
   text?: string
   link?: string
   items?: SidebarItem[]
 }
+
+type FlatLesson = { text: string; link: string; group: string; id: string }
 
 const { theme } = useData()
 const storageKey = 'lesson-completions'
@@ -21,16 +24,45 @@ function read(): Record<string, string> {
   }
 }
 
-function sync() {
-  completions.value = read()
+function write(data: Record<string, string>) {
+  localStorage.setItem(storageKey, JSON.stringify(data))
 }
 
-function flatten(items: SidebarItem[] | undefined, groupText = ''): { text: string; link: string; group: string }[] {
+function migrateLegacyKeys(data: Record<string, string>, list: FlatLesson[]): boolean {
+  // サイドバーの link と text を突き合わせ、旧キー（パス形式）を
+  // 現在のタイトル由来のトピック ID に移す。link と現行 ID の対応関係は
+  // サイドバー側が常に正なので、この単純移行で安全に引き継げる。
+  let changed = false
+  for (const l of list) {
+    if (!l.id) continue
+    if (data[l.link] && !data[l.id]) {
+      data[l.id] = data[l.link]
+      delete data[l.link]
+      changed = true
+    } else if (data[l.link] && data[l.id]) {
+      delete data[l.link]
+      changed = true
+    }
+  }
+  return changed
+}
+
+function sync() {
+  const data = read()
+  if (lessons.value.length > 0) {
+    const changed = migrateLegacyKeys(data, lessons.value)
+    if (changed) write(data)
+  }
+  completions.value = data
+}
+
+function flatten(items: SidebarItem[] | undefined, groupText = ''): FlatLesson[] {
   if (!items) return []
-  const out: { text: string; link: string; group: string }[] = []
+  const out: FlatLesson[] = []
   for (const item of items) {
     if (item.link && item.link.startsWith('/lessons/')) {
-      out.push({ text: item.text ?? '', link: item.link, group: groupText })
+      const text = item.text ?? ''
+      out.push({ text, link: item.link, group: groupText, id: lessonIdFromTitle(text) })
     }
     if (item.items) {
       out.push(...flatten(item.items, item.text ?? groupText))
@@ -39,13 +71,13 @@ function flatten(items: SidebarItem[] | undefined, groupText = ''): { text: stri
   return out
 }
 
-const lessons = computed(() => {
+const lessons = computed<FlatLesson[]>(() => {
   const sidebar = theme.value.sidebar
   if (Array.isArray(sidebar)) return flatten(sidebar)
   return []
 })
 
-const doneCount = computed(() => lessons.value.filter((l) => completions.value[l.link]).length)
+const doneCount = computed(() => lessons.value.filter((l) => completions.value[l.id]).length)
 
 onMounted(() => {
   sync()
@@ -63,8 +95,8 @@ onUnmounted(() => {
   <div class="lesson-progress" v-if="lessons.length > 0">
     <div class="lesson-progress-summary">完了: {{ doneCount }} / {{ lessons.length }}</div>
     <ul class="lesson-progress-list">
-      <li v-for="l in lessons" :key="l.link" :class="{ done: completions[l.link] }">
-        <span class="mark" aria-hidden="true">{{ completions[l.link] ? '✓' : '・' }}</span>
+      <li v-for="l in lessons" :key="l.link" :class="{ done: completions[l.id] }">
+        <span class="mark" aria-hidden="true">{{ completions[l.id] ? '✓' : '・' }}</span>
         <a :href="l.link">{{ l.text }}</a>
         <span class="group" v-if="l.group">（{{ l.group }}）</span>
       </li>

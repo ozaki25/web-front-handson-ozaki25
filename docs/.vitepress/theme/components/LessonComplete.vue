@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vitepress'
+import { lessonIdFromH1 } from '../lesson-id'
 
 const route = useRoute()
 const completed = ref(false)
@@ -22,23 +23,61 @@ function write(data: Record<string, string>) {
   window.dispatchEvent(new CustomEvent('lesson-completion-changed'))
 }
 
+function currentId(): string {
+  // 最新の DOM から H1 を拾ってトピック ID を作る。
+  // ページ遷移直後の MutationObserver 等は使わず、onMounted / sync の呼び出しタイミングで取得する。
+  return lessonIdFromH1()
+}
+
+function migrate(data: Record<string, string>, id: string): boolean {
+  // 旧キー（パス形式）を保持している場合、現行のトピック ID に引き継ぐ。
+  // ユーザーが同じレッスンを再訪問したタイミングで自然に移行する。
+  if (!id) return false
+  const oldKey = route.path
+  if (data[oldKey] && !data[id]) {
+    data[id] = data[oldKey]
+    delete data[oldKey]
+    return true
+  }
+  // 旧キーと新キーが両方あれば、旧キーを掃除する（トピック ID 側を正とする）。
+  if (data[oldKey] && data[id]) {
+    delete data[oldKey]
+    return true
+  }
+  return false
+}
+
 function sync() {
-  completed.value = !!read()[route.path]
+  const id = currentId()
+  if (!id) {
+    completed.value = false
+    return
+  }
+  const data = read()
+  const migrated = migrate(data, id)
+  if (migrated) write(data)
+  completed.value = !!data[id]
 }
 
 function markComplete() {
+  const id = currentId()
+  if (!id) return
   const data = read()
-  data[route.path] = new Date().toISOString()
+  migrate(data, id)
+  data[id] = new Date().toISOString()
   write(data)
   sync()
 }
 
 function toggle() {
+  const id = currentId()
+  if (!id) return
   const data = read()
-  if (completed.value) {
-    delete data[route.path]
+  migrate(data, id)
+  if (data[id]) {
+    delete data[id]
   } else {
-    data[route.path] = new Date().toISOString()
+    data[id] = new Date().toISOString()
   }
   write(data)
   sync()
