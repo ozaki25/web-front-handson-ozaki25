@@ -102,7 +102,10 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
 
     # デッドリンクチェック
-    staged_md=$(echo "$STAGED" | grep '\.md$' || true)
+    # 内容チェックは docs/ 配下の公開コンテンツに限定する。
+  # .claude/ や .github/ のメタファイルは禁止パターンを教える目的で
+  # それらを含むことがあるため対象外。
+  staged_md=$(echo "$STAGED" | grep '^docs/.*\.md$' || true)
     if [ -n "$staged_md" ]; then
       dead_links=""
       for f in $staged_md; do
@@ -130,7 +133,10 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
   # 例: **目次（アウトライン）**を → アスタリスクがそのまま表示される
   # 注: LC_ALL=C.UTF-8 を指定しないと grep -P がバイト単位で動作し、
   # 日本語文字の末尾バイトが全角括弧の一部と誤マッチする
-  staged_md=$(echo "$STAGED" | grep '\.md$' || true)
+  # 内容チェックは docs/ 配下の公開コンテンツに限定する。
+  # .claude/ や .github/ のメタファイルは禁止パターンを教える目的で
+  # それらを含むことがあるため対象外。
+  staged_md=$(echo "$STAGED" | grep '^docs/.*\.md$' || true)
   if [ -n "$staged_md" ]; then
     broken_bold=""
     for f in $staged_md; do
@@ -141,6 +147,110 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     done
     if [ -n "$broken_bold" ]; then
       block "Markdown 太字の描画不具合: 全角閉じ括弧の直後の ** は太字として描画されません。太字の範囲を変更してください（例: **目次（アウトライン）** → **目次**（アウトライン））。\n${broken_bold}"
+    fi
+  fi
+
+  # --- Vue テンプレート補間との衝突チェック ---
+  # VitePress は Vue ベースで、本文内の {{ ... }} を補間として解釈する。
+  # inline code（バッククオート内）でも、行内で {{ が閉じられていない場合
+  # 「Interpolation end sign was not found」のビルドエラーになる。
+  # lesson25 の "{{ 壊れた JSON" で Vercel build が壊れた実績あり。
+  if [ -n "$staged_md" ]; then
+    unclosed_interp=""
+    for f in $staged_md; do
+      # 行ごとに {{ と }} の登場数をカウント。{{ の後に }} が同一行内に無ければ報告。
+      # コードフェンス内は Shiki が v-pre 相当で保護するので対象外。
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /^```/ { in_code = !in_code; next }
+        in_code { next }
+        {
+          line = $0
+          while (match(line, /\{\{/)) {
+            rest = substr(line, RSTART + 2)
+            if (!match(rest, /\}\}/)) {
+              print NR ": " $0
+              break
+            }
+            line = substr(rest, RSTART + 2)
+          }
+        }
+      ')
+      if [ -n "$issues" ]; then
+        unclosed_interp="${unclosed_interp}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$unclosed_interp" ]; then
+      block "Vue テンプレート補間との衝突: 行内で {{ が閉じられていません。VitePress のビルドが「Interpolation end sign was not found」で壊れます。文字列を書き換えるか、{{ を含む例は fenced code block で囲んでください。\n${unclosed_interp}"
+    fi
+  fi
+
+  # --- 絵文字・装飾記号の検出 ---
+  # CLAUDE.md 11 章「絵文字・過剰装飾を使わない」の自動適用。
+  # lesson51 の ☾☀ や lesson42 旧版の ❌✅ のようなケースを防ぐ。
+  if [ -n "$staged_md" ]; then
+    emoji_hits=""
+    for f in $staged_md; do
+      # Unicode 絵文字ブロック、装飾記号 ❌ ✅ ⭐ など、太陽月アイコンを検出
+      issues=$(git show ":$f" 2>/dev/null | LC_ALL=C.UTF-8 grep -Pn '[\x{1F300}-\x{1FAFF}\x{2600}-\x{27BF}]|❌|✅|⭐|☾|☀' || true)
+      if [ -n "$issues" ]; then
+        emoji_hits="${emoji_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$emoji_hits" ]; then
+      block "絵文字・装飾記号の混入: CLAUDE.md 11 章により本コースでは絵文字を使いません。NG/OK などの文字列ラベルに置き換えてください。\n${emoji_hits}"
+    fi
+  fi
+
+  # --- 省略コード（…(省略)… / ...(省略)...）の検出 ---
+  # CLAUDE.md 6 章 2「コードは省略しない」の違反を防ぐ。
+  if [ -n "$staged_md" ]; then
+    ellipsis_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | LC_ALL=C.UTF-8 grep -Pn '…\s*\(省略\)\s*…|\.\.\.\s*\(省略\)\s*\.\.\.' || true)
+      if [ -n "$issues" ]; then
+        ellipsis_hits="${ellipsis_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$ellipsis_hits" ]; then
+      block "省略コードの使用: CLAUDE.md 11 章により本コースでは …(省略)… を使いません。コードは全量掲載してください。\n${ellipsis_hits}"
+    fi
+  fi
+
+  # --- 用語統一チェック（実証済みの揺れのみ） ---
+  # 「プロップス」（カタカナ） → 英字 props に統一
+  # 「疑似クラス」 → 「擬似クラス」（MDN 日本語版主流）
+  if [ -n "$staged_md" ]; then
+    terminology_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | LC_ALL=C.UTF-8 grep -Pn 'プロップス|疑似クラス' || true)
+      if [ -n "$issues" ]; then
+        terminology_hits="${terminology_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$terminology_hits" ]; then
+      block "用語の揺れ: 「プロップス」→「props」、「疑似クラス」→「擬似クラス」に統一してください。\n${terminology_hits}"
+    fi
+  fi
+
+  # --- レッスンテンプレート 4 節チェック ---
+  # docs/lessons/lessonXX/index.md の新規/編集時、ゴール/解説/演習/まとめ の 4 節が揃っているか確認。
+  # CLAUDE.md 7 章「レッスン構成テンプレート」の自動適用。
+  lesson_md=$(echo "$STAGED" | grep -E '^docs/lessons/lesson[0-9]+/index\.md$' || true)
+  if [ -n "$lesson_md" ]; then
+    missing_sections=""
+    for f in $lesson_md; do
+      content=$(git show ":$f" 2>/dev/null)
+      missing=""
+      echo "$content" | grep -q '^## ゴール$' || missing="${missing}ゴール "
+      echo "$content" | grep -q '^## 解説$' || missing="${missing}解説 "
+      echo "$content" | grep -q '^## 演習$' || missing="${missing}演習 "
+      echo "$content" | grep -q '^## まとめ$' || missing="${missing}まとめ "
+      if [ -n "$missing" ]; then
+        missing_sections="${missing_sections}${f}: 欠落セクション = ${missing}\n"
+      fi
+    done
+    if [ -n "$missing_sections" ]; then
+      block "レッスンテンプレート違反: CLAUDE.md 7 章の 4 節構成（ゴール / 解説 / 演習 / まとめ）が揃っていません。\n${missing_sections}"
     fi
   fi
 
