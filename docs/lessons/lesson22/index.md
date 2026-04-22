@@ -1,5 +1,21 @@
 # lesson22: オブジェクト
 
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+const user = { name: 'Alice', age: 20, isStudent: true };
+console.log('name(ドット): ' + user.name);
+console.log('age(ブラケット): ' + user['age']);
+user.age = 21;
+console.log('書き換え後の age: ' + user.age);
+for (const key of Object.keys(user)) {
+  console.log(key + ' = ' + user[key]);
+}
+`
+</script>
+
 ## ゴール
 
 - `{ key: value }` の形でオブジェクトを作れる
@@ -79,6 +95,19 @@ for (const user of users) {
 ```
 
 この「配列にオブジェクトを並べる」形は、TODO アプリやユーザー一覧など、後のレッスンで頻繁に使います。
+
+### デモで確認する
+
+下のデモでは、オブジェクトをドット記法・ブラケット記法でアクセスし、値の書き換えとプロパティ一覧表示を体感できます。
+
+<LiveDemo
+  height="260px"
+  :html="`<p>オブジェクトの読み書きをまとめて確認するデモ</p>`"
+  :css="``"
+  :js="demoJs"
+/>
+
+`Object.keys(obj)` はオブジェクトのキー名を配列で返すメソッドです。ブラケット記法 `obj[key]` と組み合わせると、全プロパティを順に処理できます。
 
 ## 演習
 

@@ -1,5 +1,19 @@
 # lesson16: 値の種類
 
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+console.log(typeof 'Alice');
+console.log(typeof 42);
+console.log(typeof true);
+console.log(typeof null);
+console.log(typeof undefined);
+console.log(typeof { name: 'Alice' });
+`
+</script>
+
 ## ゴール
 
 - 文字列・数値・真偽値・`null` / `undefined` を区別できる
@@ -52,6 +66,19 @@ console.log(message);
 - `${ ... }` の中に変数や式を書く
 
 シングルクオート / ダブルクオートで囲んだ文字列では `${ ... }` は使えません。埋め込みたいときは必ずバッククオートを使います。
+
+### デモで確認する
+
+下のデモでは、`typeof` 演算子を使って 6 種類の値の型を順に表示します。Console タブを見ると、それぞれがどの型として扱われるかが分かります。
+
+<LiveDemo
+  height="220px"
+  :html="`<p>各値の型を typeof で確認するデモ</p>`"
+  :css="``"
+  :js="demoJs"
+/>
+
+`null` が `'object'` と表示されるのは JavaScript の歴史的な仕様です。当面は「そういうものだ」と覚えておけば大丈夫です。
 
 ## 演習
 

@@ -1,5 +1,21 @@
 # lesson18: 配列を扱う
 
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+const fruits = ['apple', 'banana'];
+fruits.push('cherry');
+console.log(fruits);
+console.log('length: ' + fruits.length);
+console.log('先頭: ' + fruits[0]);
+for (const f of fruits) {
+  console.log('- ' + f);
+}
+`
+</script>
+
 ## ゴール
 
 - 配列を作り、中の要素を取り出せる
@@ -64,6 +80,17 @@ console.log(fruits);  // ["apple", "banana"]
 ```
 
 `const` で宣言した配列に対しても `push` や `pop` は使えます。`const` は「変数に入っている配列そのものを別のものに差し替えない」という約束で、配列の中身の操作はできます。
+
+### デモで確認する
+
+下のデモでは、配列に `push` で要素を足し、`length` とインデックスアクセス、`for...of` でのループ表示を一気に体感できます。
+
+<LiveDemo
+  height="260px"
+  :html="`<p>配列の基本操作をまとめて確認するデモ</p>`"
+  :css="``"
+  :js="demoJs"
+/>
 
 ## 演習
 

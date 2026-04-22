@@ -1,5 +1,28 @@
 # lesson23: 分割代入とスプレッド
 
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+const user = { name: 'Alice', age: 20 };
+const { name, age } = user;
+console.log('取り出し: ' + name + ', ' + age);
+
+const colors = ['red', 'green', 'blue'];
+const [first, ...rest] = colors;
+console.log('first: ' + first);
+console.log('rest: ' + JSON.stringify(rest));
+
+const updated = { ...user, age: 21 };
+console.log('updated: ' + JSON.stringify(updated));
+console.log('元の user: ' + JSON.stringify(user));
+
+const merged = [...colors, 'yellow'];
+console.log('merged: ' + JSON.stringify(merged));
+`
+</script>
+
 ## ゴール
 
 - オブジェクトや配列から値を分割代入で取り出せる
@@ -91,6 +114,19 @@ console.log(appended); // [1, 2, 100]
 | 配列をコピー / 結合 / 末尾追加 | `[...arr, newValue]` | `[...todos, "新しい"]` |
 
 「左辺に書く `{ }` / `[ ]`」は取り出す。「右辺の中に書く `...`」はまとめる・広げる。この対比で覚えます。
+
+### デモで確認する
+
+下のデモでは、オブジェクトと配列の分割代入、レスト構文、スプレッドによるコピー・マージを一通り実行します。元の値が変わらないこともあわせて確認できます。
+
+<LiveDemo
+  height="300px"
+  :html="`<p>分割代入とスプレッドをまとめて確認するデモ</p>`"
+  :css="``"
+  :js="demoJs"
+/>
+
+`...rest` のように左辺で使うと「残り全部をまとめる」レスト構文になります。右辺で使うスプレッドと見た目は同じですが、役割は「取り出し」側である点に注意します。
 
 ## 演習
 

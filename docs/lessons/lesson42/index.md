@@ -1,5 +1,33 @@
 # lesson42: JSX を書く
 
+<script setup>
+const closeScript = '<' + '/script>'
+const demoHtml =
+  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
+  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
+  '<div id="root"></div>'
+
+const demoJs = `
+// 本来 JSX で書く <h1 className="title">Hello, React</h1> は
+// ビルド時に React.createElement(...) に変換されます。
+// このデモは CDN から React を読み込み、変換後の形を直接書いています。
+const h = React.createElement;
+
+function App() {
+  const name = 'Alice';
+  return h(
+    'div',
+    null,
+    h('h1', { className: 'title' }, 'Hello, React'),
+    h('p', null, 'こんにちは、' + name + ' さん')
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(h(App));
+`
+</script>
+
 ## ゴール
 
 - JSX の基本ルールを理解し、HTML との違いを説明できる
@@ -162,6 +190,16 @@ function WithComment() {
 ```
 
 JS のコメント `// ...` をそのまま書くと JSX として解釈されてしまうので、必ず `{/* ... */}` にします。
+
+### JSX は `React.createElement` に変換されている
+
+JSX はブラウザが直接理解できる文法ではありません。ビルド時に `React.createElement(...)` という関数呼び出しに変換されてから動きます。下のデモでは CDN から React を読み込み、**変換後の `React.createElement` を直接書いて** 同じ結果を出しています。`App` コンポーネントから返している「タグみたいに見えるもの」の正体はこの関数呼び出しだ、というイメージを掴んでください。
+
+<LiveDemo
+  height="240px"
+  :html="demoHtml"
+  :js="demoJs"
+/>
 
 ## 演習
 

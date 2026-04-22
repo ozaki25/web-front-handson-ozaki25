@@ -1,5 +1,18 @@
 # lesson04: リンクと画像
 
+<script setup>
+const demoHtml = `<p>下の画像とリンクは、どちらも HTML タグだけで作っています。</p>
+<img src="https://placehold.jp/88x88.png" alt="プロフィール画像(仮)" width="88" height="88" />
+<ul>
+  <li><a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs</a></li>
+  <li><a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式</a></li>
+</ul>`
+
+const demoCss = `img { border-radius: 8px; margin: 8px 0; }
+a { color: #1d4ed8; text-decoration: underline; }
+a:hover { color: #b91c1c; }`
+</script>
+
 ## ゴール
 
 - 他のページへのリンクを `<a href>` で作れる。
@@ -65,6 +78,14 @@
 ### 画像のサイズ
 
 画像は `width` と `height` の属性、または CSS で大きさを調整できます。後の「ボックスモデルで余白を作る」で CSS を使ったサイズ指定を扱うので、今回は大きな画像をそのまま貼るとレイアウトが崩れる点だけ頭に入れておきます。演習では小さめのプレースホルダ画像を使います。
+
+下のデモで、`<img>` で表示した画像と、`<a>` で作った 2 つのリンクが並んでいる様子を確認できます。リンクにカーソルを重ねると色が変わります。
+
+<LiveDemo
+  height="260px"
+  :html="demoHtml"
+  :css="demoCss"
+/>
 
 ## 演習
 

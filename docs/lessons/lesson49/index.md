@@ -1,5 +1,47 @@
 # lesson49: 条件で出し分ける
 
+<script setup>
+const closeScript = '<' + '/script>'
+const demoHtml =
+  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
+  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
+  '<div id="root"></div>'
+
+const demoJs = `
+const h = React.createElement;
+const { useState } = React;
+
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  return h(
+    'div',
+    null,
+    // (1) 三項演算子: 2 択の切り替え
+    isLoggedIn
+      ? h('p', null, 'ようこそ、Alice さん')
+      : h('p', null, 'ゲストさん、こんにちは'),
+    h(
+      'button',
+      { onClick: () => setIsLoggedIn(v => !v), style: { marginRight: '8px' } },
+      isLoggedIn ? 'ログアウト' : 'ログイン'
+    ),
+    h('hr'),
+    // (2) && で「あるときだけ出す」
+    h('p', null, '未読: ' + unread),
+    unread > 0 &&
+      h('p', { style: { color: '#b91c1c', fontWeight: 'bold' } }, unread + ' 件の未読があります'),
+    h('button', { onClick: () => setUnread(c => c + 1), style: { marginRight: '8px' } }, '+1'),
+    h('button', { onClick: () => setUnread(0) }, '既読にする')
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(h(App));
+`
+</script>
+
 ## ゴール
 
 - `&&` / 三項演算子 / 早期 return の 3 パターンを使い分けて、状態に応じた表示切り替えができる
@@ -104,6 +146,16 @@ function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
 ```
 
 1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは次のレッスン以降で使っていきます。
+
+### 動きを見てみる
+
+下のデモでボタンを押すと、三項演算子と `&&` の 2 パターンで表示が切り替わる様子を確認できます。「ログイン」を押すと挨拶文が差し替わり、`+1` を押して未読が 1 以上になったときだけ赤字の警告が現れます。
+
+<LiveDemo
+  height="320px"
+  :html="demoHtml"
+  :js="demoJs"
+/>
 
 ## 演習
 

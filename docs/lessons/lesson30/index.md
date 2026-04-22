@@ -1,5 +1,27 @@
 # lesson30: TODO アプリを作る（ミニ統合）
 
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+let items = ['牛乳を買う', '本を読む'];
+const list = document.getElementById('list');
+const btn = document.getElementById('add');
+
+function render() {
+  list.innerHTML = items.map((t) => '<li>' + t + '</li>').join('');
+}
+
+btn.addEventListener('click', () => {
+  items = [...items, '項目' + (items.length + 1)];
+  render();
+});
+
+render();
+`
+</script>
+
 ## ゴール
 
 - 章 2 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
@@ -59,6 +81,19 @@ const id = crypto.randomUUID();
 - 下部: TODO 一覧 `<ul>`（各行は `<li>` で、テキストと「削除」ボタンを含む）
 
 新しい TODO を追加すると一覧の末尾に `<li>` が 1 件増え、削除ボタンを押すとその行だけが消えます。リロードしてもデータが残ります。
+
+### デモで確認する
+
+下のデモは、TODO アプリの核となる「配列の state + `render` 関数 + イベントハンドラ」の最小形です。ボタンを押すと配列に要素が追加され、`map` で一覧を組み立て直して画面に描画します。
+
+<LiveDemo
+  height="260px"
+  :html="`<button id='add'>項目を追加</button><ul id='list'></ul>`"
+  :css="`button { padding: 6px 12px; margin-bottom: 8px; cursor: pointer; } ul { padding-left: 20px; }`"
+  :js="demoJs"
+/>
+
+本編ではこの土台に「入力欄からのテキスト追加」「削除ボタン」「`localStorage` による永続化」を重ねていきます。
 
 ## 演習
 

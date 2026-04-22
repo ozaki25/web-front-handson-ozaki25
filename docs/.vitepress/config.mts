@@ -104,6 +104,8 @@ export default withPwa(withMermaid(
             { text: 'lesson28: DOM を操作する', link: '/lessons/lesson28/' },
             { text: 'lesson29: イベントで画面を動かす', link: '/lessons/lesson29/' },
             { text: 'lesson30: TODO アプリを作る', link: '/lessons/lesson30/' },
+            { text: 'lesson76: try / catch でエラー処理', link: '/lessons/lesson76/' },
+            { text: 'lesson77: JSON を読み書きする', link: '/lessons/lesson77/' },
           ],
         },
         {
@@ -143,6 +145,7 @@ export default withPwa(withMermaid(
             { text: 'lesson55: カスタムフック', link: '/lessons/lesson55/' },
             { text: 'lesson56: React DevTools', link: '/lessons/lesson56/' },
             { text: 'lesson57: TODO アプリを React で作る', link: '/lessons/lesson57/' },
+            { text: 'lesson78: Error Boundary と Suspense', link: '/lessons/lesson78/' },
           ],
         },
         {
@@ -166,6 +169,8 @@ export default withPwa(withMermaid(
             { text: 'lesson72: 環境変数の基本', link: '/lessons/lesson72/' },
             { text: 'lesson73: 小さなアプリを仕上げる', link: '/lessons/lesson73/' },
             { text: 'lesson74: Tailwind CSS の紹介', link: '/lessons/lesson74/' },
+            { text: 'lesson79: Metadata API で SEO を整える', link: '/lessons/lesson79/' },
+            { text: 'lesson80: Loading UI と Streaming', link: '/lessons/lesson80/' },
             { text: 'lesson75: Vercel にデプロイする', link: '/lessons/lesson75/' },
           ],
         },
