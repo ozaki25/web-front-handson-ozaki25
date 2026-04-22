@@ -55,10 +55,11 @@ const srcdoc = computed(() => {
     '<meta name="viewport" content="width=device-width, initial-scale=1">',
     '<style>',
     'html, body { margin: 0; }',
+    // デモはライトキャンバスで統一する。prefers-color-scheme で自動ダーク化すると、
+    // 個別デモ CSS が background だけ指定して color を指定していないケース（ほぼ全部）で
+    // 「ライト文字 on ライト背景」になって読めなくなるため。
     'body { padding: 16px; font-family: system-ui, -apple-system, "Segoe UI", sans-serif; color: #1f2937; background: #ffffff; line-height: 1.6; }',
-    '@media (prefers-color-scheme: dark) { body { color: #e5e7eb; background: #0b1220; } }',
     '.__live-demo-error { color: #b91c1c; background: #fee2e2; padding: 8px 12px; border-radius: 4px; margin-top: 12px; white-space: pre-wrap; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; }',
-    '@media (prefers-color-scheme: dark) { .__live-demo-error { color: #fecaca; background: #4a1d1d; } }',
     '.__live-demo-console { margin-top: 12px; padding: 8px 12px; background: #1a1a1a; color: #e5e7eb; font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 13px; border-radius: 4px; white-space: pre-wrap; line-height: 1.5; }',
     '.__live-demo-console .__error { color: #fca5a5; }',
     '.__live-demo-console .__warn  { color: #fde68a; }',
@@ -198,12 +199,6 @@ async function ensureHighlighted() {
   border: 0;
   display: block;
   background: #ffffff;
-}
-
-@media (prefers-color-scheme: dark) {
-  .live-demo-frame {
-    background: #0b1220;
-  }
 }
 
 .live-demo-source {
