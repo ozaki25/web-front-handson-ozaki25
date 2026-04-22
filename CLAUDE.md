@@ -23,12 +23,11 @@
 
 以下の構成で進める。途中での再編はあり。
 
-1. Web の素材 (HTML / CSS)
-2. 動きをつける (JavaScript / DOM)
-3. 型と道具 (TypeScript / Vite / npm)
+1. HTML / CSS
+2. JavaScript
+3. TypeScript
 4. React
-5. Next.js (App Router)
-6. 仕上げ: 小さなアプリを作る
+5. Next.js
 
 - レッスン単位は `lessonXX`（`dayXX` は使わない）。
   - 毎日 1 レッスンに縛らない。1 日で一気に複数レッスン進める使い方も想定する。

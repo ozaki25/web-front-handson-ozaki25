@@ -26,17 +26,17 @@ export default withMermaid(
       sidebar: [
         { text: 'はじめに', link: '/introduction/' },
         {
-          text: '1. Web の素材（HTML / CSS）',
+          text: '1. HTML / CSS',
           collapsed: true,
           items: [{ text: '(準備中)' }],
         },
         {
-          text: '2. 動きをつける（JavaScript / DOM）',
+          text: '2. JavaScript',
           collapsed: true,
           items: [{ text: '(準備中)' }],
         },
         {
-          text: '3. 型と道具（TypeScript / Vite / npm）',
+          text: '3. TypeScript',
           collapsed: true,
           items: [{ text: '(準備中)' }],
         },
@@ -46,12 +46,7 @@ export default withMermaid(
           items: [{ text: '(準備中)' }],
         },
         {
-          text: '5. Next.js（App Router）',
-          collapsed: true,
-          items: [{ text: '(準備中)' }],
-        },
-        {
-          text: '6. 仕上げ: 小さなアプリを作る',
+          text: '5. Next.js',
           collapsed: true,
           items: [{ text: '(準備中)' }],
         },
