@@ -2,10 +2,10 @@
 
 ## ゴール
 
-- ここまでの知識を統合して「投稿できる TODO アプリ」を完成させる。
-- `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動く。
-- `export const metadata` でサイト共通タイトル、`generateMetadata` で詳細ページの動的タイトルを設定できる。
-- `searchParams`（Next.js 15 で Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられる。
+- ここまでの知識を統合して「投稿できる TODO アプリ」を完成させます。
+- `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
+- `export const metadata` でサイト共通タイトル、`generateMetadata` で詳細ページの動的タイトルを設定できます。
+- `searchParams`（Next.js 15 で Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
 
 ## 解説
 
@@ -13,7 +13,7 @@
 
 章 2 lesson25 で素の JS で作った TODO、章 4 lesson42 で React + localStorage に移植した TODO、そして lesson50 / 51 で Server Actions 化した TODO。
 
-ここまでで以下が揃っている:
+ここまでで以下が揃っています:
 
 - `app/layout.tsx`（lesson45）: ナビとフッターを含む共通レイアウト
 - `app/page.tsx`（lesson43-46）: トップページ
@@ -22,7 +22,7 @@
 - `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（lesson50-51）: 追加フォーム付き一覧
 - `app/actions.ts`（lesson50-51）: Server Actions
 
-このレッスンで足すもの:
+このレッスンで足すものは次のとおりです:
 
 1. TODO の **詳細ページ** `/todos/[id]`
 2. 一覧からの削除ボタン
@@ -32,7 +32,7 @@
 
 ### `export const metadata`（静的）
 
-ルートレイアウトや静的なページでは、`metadata` という名前の定数を `export` するとタイトル等が設定できる。
+ルートレイアウトや静的なページでは、`metadata` という名前の定数を `export` するとタイトル等が設定できます。
 
 ```tsx
 // app/layout.tsx
@@ -42,11 +42,11 @@ export const metadata = {
 };
 ```
 
-`title` `description` 以外にも OG 画像などを指定できるが、本コースでは 2 つに留める。
+`title` `description` 以外にも OG 画像などを指定できますが、本コースでは 2 つに留めます。
 
 ### `generateMetadata`（動的）
 
-URL ごとにタイトルを変えたいときは、静的な定数では足りない。その場合は **`generateMetadata` 関数** を `export` する。
+URL ごとにタイトルを変えたいときは、静的な定数では足りません。その場合は **`generateMetadata` 関数** を `export` します。
 
 ```tsx
 import type { Metadata } from "next";
@@ -61,14 +61,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 }
 ```
 
-- 関数名は `generateMetadata` 固定。
-- 引数は `page.tsx` と同じ形。`params` は Promise なので `await` する。
-- 戻り値は `export const metadata` と同じ形のオブジェクト。型は `Metadata`（`next` から `import type`）。
-- 戻り値を `Promise<Metadata>` と明示すると、誤字やプロパティ名の間違いを TS が拾ってくれる。
+- 関数名は `generateMetadata` 固定です。
+- 引数は `page.tsx` と同じ形です。`params` は Promise なので `await` します。
+- 戻り値は `export const metadata` と同じ形のオブジェクトです。型は `Metadata` です（`next` から `import type`）。
+- 戻り値を `Promise<Metadata>` と明示すると、誤字やプロパティ名の間違いを TS が拾ってくれます。
 
 ### `searchParams` も Promise
 
-クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams`。Next.js 15 では `params` と同様に **Promise** になっている。
+クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams` です。Next.js 15 では `params` と同様に **Promise** になっています。
 
 ```tsx
 type Props = {
@@ -81,19 +81,19 @@ export default async function TodosPage({ searchParams }: Props) {
 }
 ```
 
-- キーは省略可能（クエリがないこともある）なので `?` を付けた型にする。
-- `?highlight=abc&foo=bar` のように複数指定されていれば、それぞれのキーが文字列として届く。
-- 同じキーが複数個（`?foo=1&foo=2`）あると配列になるが、本レッスンでは扱わない。
+- キーは省略可能（クエリがないこともあります）なので `?` を付けた型にします。
+- `?highlight=abc&foo=bar` のように複数指定されていれば、それぞれのキーが文字列として届きます。
+- 同じキーが複数個（`?foo=1&foo=2`）あると配列になりますが、本レッスンでは扱いません。
 
 ## 演習
 
 ### 前回のプロジェクトを開く
 
-lesson51 で作ったプロジェクトを開き直す。
+lesson51 で作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: 削除アクションを追加する
 
-`app/actions.ts` に `deleteTodo` を追加。
+`app/actions.ts` に `deleteTodo` を追加します。
 
 ```ts
 "use server";
@@ -136,13 +136,13 @@ export async function deleteTodo(formData: FormData) {
 }
 ```
 
-- `getTodo(id)` は詳細ページで使う。
-- `deleteTodo` は `FormData` から `id` を取り出し、`splice` で削除。同じく Server Action。
-- 削除用フォームは `useActionState` を使わない（戻り値不要）ので `(formData) => void` のシンプルな形。
+- `getTodo(id)` は詳細ページで使います。
+- `deleteTodo` は `FormData` から `id` を取り出し、`splice` で削除します。同じく Server Action です。
+- 削除用フォームは `useActionState` を使わない（戻り値不要）ので `(formData) => void` のシンプルな形です。
 
 ### 手順 2: 一覧ページで削除ボタンを出す + ハイライト対応
 
-`app/todos/page.tsx` を書き換える。`searchParams` を受け取って、ハイライトする行に `className` を付ける。
+`app/todos/page.tsx` を書き換えます。`searchParams` を受け取って、ハイライトする行に `className` を付けます。
 
 ```tsx
 import { listTodos, deleteTodo } from "../actions";
@@ -183,14 +183,14 @@ export default async function TodosPage({ searchParams }: Props) {
 
 ポイント:
 
-- `searchParams: Promise<{ highlight?: string }>` と型を書いて `await` で取り出す。
-- `todo.id === highlight` のときだけ `todo-item--highlight` クラスを足す。
-- 削除ボタンは `<form action={deleteTodo}>` の中に `<input type="hidden" name="id" value={todo.id} />` を仕込む。ボタンを押すと `deleteTodo(formData)` が呼ばれる。
-- 詳細ページへのリンクも `<Link href={`/todos/${todo.id}`}>` で追加。
+- `searchParams: Promise<{ highlight?: string }>` と型を書いて `await` で取り出します。
+- `todo.id === highlight` のときだけ `todo-item--highlight` クラスを足します。
+- 削除ボタンは `<form action={deleteTodo}>` の中に `<input type="hidden" name="id" value={todo.id} />` を仕込みます。ボタンを押すと `deleteTodo(formData)` が呼ばれます。
+- 詳細ページへのリンクも `<Link href={`/todos/${todo.id}`}>` で追加します。
 
 ### 手順 3: CSS でハイライト
 
-`app/globals.css` に以下を追加。
+`app/globals.css` に以下を追加します。
 
 ```css
 .todo-list {
@@ -221,11 +221,11 @@ export default async function TodosPage({ searchParams }: Props) {
 }
 ```
 
-- 黄色背景 `#fff3a3` がハイライト（ダーク時は濃い黄土色 `#665c1e` + 白文字で視認性確保）。
+- 黄色背景 `#fff3a3` がハイライトです（ダーク時は濃い黄土色 `#665c1e` + 白文字で視認性を確保します）。
 
 ### 手順 4: 詳細ページ `/todos/[id]` を作る
 
-`app/todos/[id]/page.tsx` を新規作成。
+`app/todos/[id]/page.tsx` を新規作成します。
 
 ```tsx
 import type { Metadata } from "next";
@@ -271,9 +271,9 @@ export default async function TodoDetailPage({ params }: Props) {
 
 ポイント:
 
-- `generateMetadata` で動的タイトルを返す。`await params` と `getTodo(id)` を呼ぶ。
-- 見つからないときは `notFound()`（lesson49 と同じ）。
-- `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べる。
+- `generateMetadata` で動的タイトルを返します。`await params` と `getTodo(id)` を呼びます。
+- 見つからないときは `notFound()` を呼びます（lesson49 と同じです）。
+- `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
 
 ### 手順 5: 詳細ページの `not-found.tsx`
 
@@ -295,7 +295,7 @@ export default function TodoNotFound() {
 
 ### 手順 6: ルートレイアウトの `metadata`
 
-`app/layout.tsx` の `metadata` を書き換える。
+`app/layout.tsx` の `metadata` を書き換えます。
 
 ```tsx
 export const metadata = {
@@ -307,60 +307,60 @@ export const metadata = {
 };
 ```
 
-- `title.default`: 子ページで `title` を設定しない場合のデフォルト。
-- `title.template`: 子ページが自分のタイトルを持つ場合、`%s` の部分に埋め込む。例えば詳細ページの `generateMetadata` が `{ title: "Todo: 買い物" }` を返すと、実際のタブには **「Todo: 買い物 | TODO アプリ」** と表示される。
+- `title.default`: 子ページで `title` を設定しない場合のデフォルトです。
+- `title.template`: 子ページが自分のタイトルを持つ場合、`%s` の部分に埋め込みます。例えば詳細ページの `generateMetadata` が `{ title: "Todo: 買い物" }` を返すと、実際のタブには **「Todo: 買い物 | TODO アプリ」** と表示されます。
 
 ### 期待出力
 
-1. `/todos` を開く → TODO 一覧。0 件なら「まだ 1 件もない」のメッセージ。
-2. 「買い物」「課題」「運動」を順に追加 → 3 件の一覧が出る。各項目は詳細リンクと削除ボタン付き。
-3. タブのタイトル: 「TODO アプリ」。
-4. 「買い物」をクリック → `/todos/<id>` に遷移。タブのタイトルが「Todo: 買い物 | TODO アプリ」に変わる。
-5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になる。
-6. 一覧で「削除」ボタンを押す → その 1 件が消える。タブのタイトルは「TODO アプリ」のまま。
-7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示される。タブのタイトルは「Todo not found | TODO アプリ」。
-8. `/about` は章 1 の自己紹介ページ。タブのタイトルは「TODO アプリ」（ルートの `default` が適用される）。
-9. ナビから 3 ページを行き来できる。
+1. `/todos` を開く → TODO 一覧が表示されます。0 件なら「まだ 1 件もない」のメッセージが出ます。
+2. 「買い物」「課題」「運動」を順に追加 → 3 件の一覧が出ます。各項目は詳細リンクと削除ボタン付きです。
+3. タブのタイトル: 「TODO アプリ」です。
+4. 「買い物」をクリック → `/todos/<id>` に遷移します。タブのタイトルが「Todo: 買い物 | TODO アプリ」に変わります。
+5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になります。
+6. 一覧で「削除」ボタンを押す → その 1 件が消えます。タブのタイトルは「TODO アプリ」のままです。
+7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。タブのタイトルは「Todo not found | TODO アプリ」です。
+8. `/about` は章 1 の自己紹介ページです。タブのタイトルは「TODO アプリ」です（ルートの `default` が適用されます）。
+9. ナビから 3 ページを行き来できます。
 
 ### 動作確認チェックリスト
 
-- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（lesson51 の成果）。
-- [ ] 送信中はボタンが disabled になる（lesson51 の成果）。
-- [ ] 追加 → 一覧が自動で更新される（`revalidatePath` の成果）。
-- [ ] 削除 → 該当 1 件だけが消える。
-- [ ] `/todos?highlight=<id>` でその行だけ黄色背景。
-- [ ] `/todos/<id>` の詳細ページのタブタイトルが動的に変わる。
-- [ ] `/todos/not-a-real-id` で `not-found.tsx` が出る。
-- [ ] `/about` が章 1 の自己紹介と同じ見た目で出る。
+- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（lesson51 の成果）
+- [ ] 送信中はボタンが disabled になる（lesson51 の成果）
+- [ ] 追加 → 一覧が自動で更新される（`revalidatePath` の成果）
+- [ ] 削除 → 該当 1 件だけが消える
+- [ ] `/todos?highlight=<id>` でその行だけ黄色背景
+- [ ] `/todos/<id>` の詳細ページのタブタイトルが動的に変わる
+- [ ] `/todos/not-a-real-id` で `not-found.tsx` が出る
+- [ ] `/about` が章 1 の自己紹介と同じ見た目で出る
 
 ### 変えてみる
 
-1. `<input type="hidden" name="id">` の値を書き換えて送信してみる（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認。
-2. `generateMetadata` で `description` も返してみる: `return { title: ..., description: `ID ${id} の TODO` };`
-3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲む。
+1. `<input type="hidden" name="id">` の値を書き換えて送信してみましょう（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認します。
+2. `generateMetadata` で `description` も返してみましょう: `return { title: ..., description: `ID ${id} の TODO` };`
+3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習です。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲みます。
 
 ### 自分で書く（応用）
 
-TODO に「完了」のフラグを追加する演習。
+TODO に「完了」のフラグを追加する演習です。
 
-- `types.ts` の `Todo` 型に `done: boolean` を追加。
-- `actions.ts` に `toggleDone(formData: FormData)` を追加し、`id` を受け取って該当 Todo の `done` を反転させる。
-- 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出す。
-- 完了済みの項目はテキストに `text-decoration: line-through` を当てる（CSS に `.todo-item--done` を追加）。
+- `types.ts` の `Todo` 型に `done: boolean` を追加します。
+- `actions.ts` に `toggleDone(formData: FormData)` を追加し、`id` を受け取って該当 Todo の `done` を反転させます。
+- 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出します。
+- 完了済みの項目はテキストに `text-decoration: line-through` を当てます（CSS に `.todo-item--done` を追加）。
 
-実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターン。lesson50-51 でやったことの応用。
+実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターンです。lesson50-51 でやったことの応用です。
 
 ## まとめ
 
-- `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がった。
-- `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できる。`template` を使うと子ページのタイトルを共通で包める。
-- `searchParams: Promise<{ highlight?: string }>` で URL クエリを受け取り、条件付きスタイルに反映できる。
-- 章 2 lesson25（素の JS）→ 章 4 lesson42（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** した。
-- 次の lesson53 では、今作ったアプリを **Vercel で公開** する。StackBlitz → GitHub → Vercel の流れを踏む。
+- `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
+- `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できます。`template` を使うと子ページのタイトルを共通で包めます。
+- `searchParams: Promise<{ highlight?: string }>` で URL クエリを受け取り、条件付きスタイルに反映できます。
+- 章 2 lesson25（素の JS）→ 章 4 lesson42（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
+- 次の lesson53 では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。
 
 ### 補足: レイアウトのおさらい
 
-このレッスンまでの `app/` 以下は、おおよそ次の形になっているはず。
+このレッスンまでの `app/` 以下は、おおよそ次の形になっているはずです。
 
 ```
 app/
@@ -391,4 +391,4 @@ app/
         └── not-found.tsx
 ```
 
-不要になった練習用ページは消しても、残しても構わない。残すと Vercel 公開後も色々見られて面白い。
+不要になった練習用ページは消しても、残しても構いません。残すと Vercel 公開後も色々見られて面白いです。

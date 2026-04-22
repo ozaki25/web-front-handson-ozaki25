@@ -36,15 +36,15 @@ app/
     └── loading.tsx    ← 取得中に表示される
 ```
 
-`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれる。学習者側は特別な接続コードを書かない。
+`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
 
 ### Next.js 15 の fetch キャッシュ既定
 
-Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していた（何度呼んでも同じ値を返す）。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かった。
+Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました（何度呼んでも同じ値を返します）。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったです。
 
-**Next.js 15 からは fetch のデフォルトはキャッシュしない**。毎リクエストで取り直す動きになった。キャッシュしたい場合は明示的に指定する。
+**Next.js 15 からは fetch のデフォルトはキャッシュしません**。毎リクエストで取り直す動きになりました。キャッシュしたい場合は明示的に指定します。
 
-第 2 引数のオプションで挙動を切り替える。
+第 2 引数のオプションで挙動を切り替えます。
 
 ```tsx
 // (1) 強くキャッシュ: 一度取ったらずっと使い回す
@@ -57,19 +57,19 @@ await fetch(url, { next: { revalidate: 60 } });
 await fetch(url, { next: { tags: ["posts"] } });
 ```
 
-本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使う。3 パターンの存在は知っておくだけで良い。
+本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。3 パターンの存在は知っておくだけで良いです。
 
-ここで話しているキャッシュは **fetch（Data Cache）限定** の話。App Router にはこれ以外にも Router Cache 等があるが、本コースでは踏み込まない。
+ここで話しているキャッシュは **fetch（Data Cache）限定** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
 
 ## 演習
 
 ### 前回のプロジェクトを開く
 
-lesson46 で作ったプロジェクトを開き直す。
+lesson46 で作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: `/posts` ページを作る
 
-`app/posts/page.tsx` を新規作成する。
+`app/posts/page.tsx` を新規作成します。
 
 ```tsx
 type Post = {
@@ -97,14 +97,14 @@ export default async function PostsPage() {
 }
 ```
 
-- `async function` で書いている（Server Component だから許される）。
-- `fetch` も `response.json()` も `await` が必要（章 2 lesson22 と同じ）。
-- `Post` 型を自前で `type` で定義している。章 3 で学んだ `type` エイリアスそのまま。
-- `slice(0, 10)` で先頭 10 件だけ。JSONPlaceholder は 100 件返すので絞る。
+- `async function` で書いています（Server Component だから許されます）。
+- `fetch` も `response.json()` も `await` が必要です（章 2 lesson22 と同じ）。
+- `Post` 型を自前で `type` で定義しています。章 3 で学んだ `type` エイリアスそのままです。
+- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
 
 ### 手順 2: `loading.tsx` を置く
 
-`app/posts/loading.tsx` を新規作成する。
+`app/posts/loading.tsx` を新規作成します。
 
 ```tsx
 export default function Loading() {
@@ -112,12 +112,12 @@ export default function Loading() {
 }
 ```
 
-- 名前は `Loading` でなくてもよい（`export default` の関数名は自由）。
-- ファイル名は `loading.tsx` 固定。
+- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
+- ファイル名は `loading.tsx` 固定です。
 
 ### 手順 3: ヘッダーにリンクを追加
 
-`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足す。
+`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
 
 ```tsx
 <li>
@@ -127,20 +127,20 @@ export default function Loading() {
 
 ### 期待出力
 
-1. ブラウザで `/posts` を開く。
-2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並ぶ。
-3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込み。今度ははっきり見える。
-4. StackBlitz ターミナル側に fetch のログは出ないが、サーバー側で HTTP 通信が走っている。ブラウザ Console には fetch の形跡は出ない（サーバーで取ってきたから）。
+1. ブラウザで `/posts` を開きます。
+2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
+3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
+4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
 
 ### 変えてみる
 
-1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにする。
-2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示する。
-3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示する（型を書き直す練習）。
+1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
+2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
+3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
 
 ### キャッシュ指定を試す（任意）
 
-`fetch` の第 2 引数に以下を指定して挙動の違いを見る。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良い。
+`fetch` の第 2 引数に以下を指定して挙動の違いを見てみましょう。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良いです。
 
 ```tsx
 const res = await fetch(
@@ -151,18 +151,18 @@ const res = await fetch(
 
 ### 自分で書く
 
-`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみる。型は `type User = { id: number; name: string; email: string }` でよい。完了したらヘッダーに `/users` のリンクも足す。
+`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
 
 ## まとめ
 
-- Server Component は `async` にできる。`await fetch(...)` でデータを直接取得できる。
-- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟める。
-- Next.js 15 では **fetch の既定はキャッシュしない**。必要に応じて `force-cache` / `revalidate` / `tags` を指定する。
-- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強み。
-- 次の lesson48 では URL の一部をパラメータとして受け取る動的ルート `[id]` を作る。章 2 で学んだ `find` が再登場する。
+- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
+- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
+- Next.js 15 では **fetch の既定はキャッシュしません**。必要に応じて `force-cache` / `revalidate` / `tags` を指定します。
+- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
+- 次の lesson48 では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。章 2 で学んだ `find` が再登場します。
 
 ### コラム: `loading.tsx` の裏で動く Suspense
 
-`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いている。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能がある。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしている。
+`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
 
-本コースでは `<Suspense>` を単独で使う場面は出てこないが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がる。
+本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。
