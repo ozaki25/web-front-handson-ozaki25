@@ -108,6 +108,18 @@ export function SubmitButton() {
 
 lesson50 で作ったプロジェクトを開き直す。
 
+### 手順の進め方（重要）
+
+本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換える。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進める。
+
+順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短い。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すとよい:
+
+1. 新しいファイル `app/todos/TodoForm.tsx` を先に **作るだけ作る**（import する `addTodo` の型不一致でエラーが出るが、そのまま進める）
+2. `app/todos/page.tsx` で `<form>` ブロックを `<TodoForm />` に差し替え
+3. 最後に `app/actions.ts` の `addTodo` を `(prevState, formData) => newState` 形に書き換える
+
+このドキュメント上の掲載は **「どれを書けばいいか」を最初に見せる** ために 手順 1（actions.ts）から順に並べているが、手を動かす順番は上記の 1 → 2 → 3 でもよい。どちらでも最終的には同じ形になる。
+
 ### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
 
 `app/actions.ts` を書き換える。

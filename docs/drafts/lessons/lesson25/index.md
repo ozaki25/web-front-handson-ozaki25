@@ -164,6 +164,8 @@ button {
 
 #### `script.js`（ステップ 1）
 
+**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（lesson19 で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、章 4 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、章 2 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+
 ```js
 const form = document.querySelector("#form");
 const input = document.querySelector("#input");

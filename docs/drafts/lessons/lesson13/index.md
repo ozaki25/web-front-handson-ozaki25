@@ -41,10 +41,10 @@ const c = 1 + "2";     // "12" （文字列側に寄せられる）
 文字列の中に変数を埋め込みたいとき、バッククオート（`` ` ``）で囲む書き方が便利です。これをテンプレートリテラルと呼びます。
 
 ```js
-const name = "Alice";
+const userName = "Alice";
 const age = 20;
 
-const message = `あなたは ${name} さんで、${age} 歳です`;
+const message = `あなたは ${userName} さんで、${age} 歳です`;
 console.log(message);
 ```
 
@@ -57,7 +57,7 @@ console.log(message);
 
 ### ゴール
 
-- 変数 `name` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
+- 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
 
 ### 手順
 
@@ -85,22 +85,22 @@ console.log(message);
 ### `script.js`
 
 ```js
-const name = "Alice";
+const userName = "Alice";
 const age = 20;
 const isStudent = true;
 const nickname = null;
 let score;
 
-console.log(name);
+console.log(userName);
 console.log(age);
 console.log(isStudent);
 console.log(nickname);
 console.log(score);
 
-const message = `あなたは ${name} さんで、${age} 歳です`;
+const message = `あなたは ${userName} さんで、${age} 歳です`;
 console.log(message);
 
-const summary = `名前: ${name} / 学生: ${isStudent} / 点数: ${score}`;
+const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
 console.log(summary);
 ```
 

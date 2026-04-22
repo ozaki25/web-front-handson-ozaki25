@@ -105,13 +105,13 @@ if (!isStudent) {
 
 ```js
 const age = 20;
-const name = "Alice";
+const userName = "Alice";
 const isStudent = true;
 
 if (age >= 20) {
-  console.log(`${name} さんは成人です`);
+  console.log(`${userName} さんは成人です`);
 } else {
-  console.log(`${name} さんは未成年です`);
+  console.log(`${userName} さんは未成年です`);
 }
 
 if (age >= 13 && age <= 19) {

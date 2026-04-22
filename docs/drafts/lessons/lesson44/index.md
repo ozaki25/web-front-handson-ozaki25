@@ -91,110 +91,257 @@ export default function TodosPage() {
 
 ### 手順 2: 章 1 の自己紹介ページを `/about` に移植
 
-章 1 lesson11 で作った自己紹介ページの HTML をもう一度開く。保存してない場合は、以下のようなシンプルな HTML を使ってよい。
+章 1 lesson11 で作った自己紹介ページの HTML と CSS をもう一度開く。このレッスンでは **lesson11 の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進める。手元に無ければ、lesson11 を開いて HTML / CSS をコピーしてから戻ってくる。
 
-元の HTML（例）:
+元の HTML（lesson11 の完成形の抜粋）:
 
 ```html
 <!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>自己紹介</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>私の自己紹介</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <header>
-      <h1>自己紹介</h1>
+    <header class="site-header">
+      <h1>私の名前</h1>
+      <nav class="site-nav">
+        <a href="#about">自己紹介</a>
+        <a href="#likes">好きなもの</a>
+        <a href="#contact">問い合わせ</a>
+      </nav>
     </header>
+
     <main>
-      <section>
-        <h2>プロフィール</h2>
-        <img src="/avatar.png" alt="アイコン" class="avatar">
-        <p class="lead">こんにちは、フロント学習中です。</p>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
       </section>
-      <section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div class="cards">
+          <article class="card">
+            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像">
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像">
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像">
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
         <h2>問い合わせ</h2>
         <form>
-          <label for="name">名前</label>
-          <input id="name" name="name" type="text" required>
-          <br>
+          <div>
+            <label for="name">お名前</label>
+            <input id="name" name="name" type="text" required>
+          </div>
+          <div>
+            <label for="email">メール</label>
+            <input id="email" name="email" type="email" required>
+          </div>
+          <div>
+            <label for="message">メッセージ</label>
+            <textarea id="message" name="message" rows="4" required></textarea>
+          </div>
           <button type="submit">送信</button>
         </form>
       </section>
     </main>
-    <footer>
-      <p>&copy; 2026</p>
+
+    <footer class="site-footer">
+      <p>&copy; 私の名前</p>
     </footer>
   </body>
 </html>
 ```
 
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーする。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（lesson45 で扱う）が担当するので **コピーしない**。`<main>` 以下のコンテンツだけ移す。
+これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーする。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（lesson45 で扱う）が担当するので **コピーしない**。`<header>` 〜 `<footer>` の中身だけ移す。
 
 `app/about/page.tsx`:
 
 ```tsx
 export default function AboutPage() {
   return (
-    <main>
-      <header>
-        <h1>自己紹介</h1>
+    <>
+      <header className="site-header">
+        <h1>私の名前</h1>
+        <nav className="site-nav">
+          <a href="#about">自己紹介</a>
+          <a href="#likes">好きなもの</a>
+          <a href="#contact">問い合わせ</a>
+        </nav>
       </header>
-      <section>
-        <h2>プロフィール</h2>
-        <img src="/avatar.png" alt="アイコン" className="avatar" />
-        <p className="lead">こんにちは、フロント学習中です。</p>
-      </section>
-      <section>
-        <h2>問い合わせ</h2>
-        <form>
-          <label htmlFor="name">名前</label>
-          <input id="name" name="name" type="text" required />
-          <br />
-          <button type="submit">送信</button>
-        </form>
-      </section>
-      <footer>
-        <p>&copy; 2026</p>
+
+      <main>
+        <section id="about">
+          <h2>自己紹介</h2>
+          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+        </section>
+
+        <section id="likes">
+          <h2>好きなもの</h2>
+          <div className="cards">
+            <article className="card">
+              <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+              <h3>コーヒー</h3>
+              <p>朝の 1 杯が欠かせない。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+              <h3>本</h3>
+              <p>技術書からエッセイまで。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+              <h3>散歩</h3>
+              <p>行き先を決めずに歩く。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="contact">
+          <h2>問い合わせ</h2>
+          <form>
+            <div>
+              <label htmlFor="name">お名前</label>
+              <input id="name" name="name" type="text" required />
+            </div>
+            <div>
+              <label htmlFor="email">メール</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+            <div>
+              <label htmlFor="message">メッセージ</label>
+              <textarea id="message" name="message" rows={4} required></textarea>
+            </div>
+            <button type="submit">送信</button>
+          </form>
+        </section>
+      </main>
+
+      <footer className="site-footer">
+        <p>&copy; 私の名前</p>
       </footer>
-    </main>
+    </>
   );
 }
 ```
 
-書き換えたのは次の 4 箇所（3 点ルールに従って）:
+書き換えたのは **HTML → JSX の 3 点の違い** にほぼ収まる:
 
-- `class="avatar"` → `className="avatar"`
-- `class="lead"` → `className="lead"`
-- `for="name"` → `htmlFor="name"`
-- `<input ... required>` → `<input ... required />`、`<br>` → `<br />`
+- `class="..."` → `className="..."`（`.site-header` / `.site-nav` / `.cards` / `.card` / `.site-footer` すべて）
+- `<label for="...">` → `<label htmlFor="...">`（3 箇所）
+- `<input ...>` → `<input ... />`、`<img ...>` → `<img ... />` の自己閉じ
+- 追加で `<textarea rows="4">` の属性は **数値中括弧 `rows={4}`** に（JSX では数値属性は中括弧が慣例）
+
+ほぼ機械的な置換で済むのが JSX の嬉しいところ。章 1 で作った見た目・レイアウトがそのまま Next.js で動く。
 
 ### 手順 3: CSS を当てる
 
-章 1 の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` する。
+章 1 lesson11 の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` する。中身はそのまま流用できる（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効く）。
 
-`app/about/about.css`（章 1 の CSS をそのまま貼る）:
+`app/about/about.css`（lesson11 の CSS をそのまま貼る、抜粋）:
 
 ```css
-.avatar {
-  width: 120px;
-  border-radius: 50%;
+* {
+  box-sizing: border-box;
 }
 
-.lead {
-  font-size: 1.1rem;
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.6;
-  color: #333;
+  color: #1f2937;
+  background-color: #f9fafb;
 }
 
-/* ダークモード対応: ブラウザやシステムがダーク指定のときに色を上書き */
 @media (prefers-color-scheme: dark) {
-  .lead {
-    color: #eaeaea;
+  body {
+    color: #e5e7eb;
+    background-color: #0b1220;
+  }
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.site-header {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-nav a {
+  color: #f9fafb;
+  margin-right: 16px;
+}
+
+.cards {
+  display: flex;
+  gap: 16px;
+}
+
+.cards .card {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cards .card {
+    background-color: #111827;
+    border-color: #374151;
+  }
+}
+
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.site-footer {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .cards {
+    flex-direction: column;
   }
 }
 ```
+
+（フォームや hover など、lesson11 で書いた他のスタイルも一緒にコピーしてよい。）
 
 `app/about/page.tsx` の先頭に以下を追加する。
 
@@ -205,6 +352,8 @@ export default function AboutPage() {
   // 上と同じ
 }
 ```
+
+**期待出力**: `/about` を開くと、章 1 lesson11 で作ったページと **ほぼ同じ見た目** になる。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きる。
 
 ### 手順 4: ナビを `/` に置く
 
