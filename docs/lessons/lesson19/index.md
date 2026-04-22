@@ -1,5 +1,17 @@
 # lesson19: 繰り返し処理
 
+<script setup>
+const demoJs = `
+const todos = ['牛乳を買う', '本を読む', 'ジョギング'];
+
+for (const todo of todos) {
+  console.log('- ' + todo);
+}
+
+console.log('合計', todos.length, '件');
+`
+</script>
+
 ## ゴール
 
 - `for...of` で配列の全要素を順に処理できる
@@ -37,15 +49,7 @@ for (const todo of todos) {
   height="220px"
   :html="`<p>配列を順に出力します。</p>`"
   :css="``"
-  :js="`
-const todos = ['牛乳を買う', '本を読む', 'ジョギング'];
-
-for (const todo of todos) {
-  console.log('- ' + todo);
-}
-
-console.log('合計', todos.length, '件');
-  `"
+  :js="demoJs"
 />
 
 ### `forEach`（軽く触れる）

@@ -1,5 +1,24 @@
 # lesson24: 配列の変換
 
+<script setup>
+const demoJs = `
+const users = [
+  { name: 'Alice', age: 20 },
+  { name: 'Bob',   age: 15 },
+  { name: 'Carol', age: 30 },
+];
+
+const names  = users.map((u) => u.name);
+const adults = users.filter((u) => u.age >= 20);
+const first  = users.find((u) => u.age >= 20);
+
+console.log('map   (名前だけ):', names);
+console.log('filter(成人だけ):', adults);
+console.log('find  (最初の成人):', first);
+console.log('元の配列は変わらない:', users);
+`
+</script>
+
 ## ゴール
 
 - `map` で配列の各要素を変換した新しい配列を作れる
@@ -73,22 +92,7 @@ console.log(adults);
   height="260px"
   :html="`<p>同じ配列に対する map / filter / find の結果:</p>`"
   :css="``"
-  :js="`
-const users = [
-  { name: 'Alice', age: 20 },
-  { name: 'Bob',   age: 15 },
-  { name: 'Carol', age: 30 },
-];
-
-const names  = users.map((u) => u.name);
-const adults = users.filter((u) => u.age >= 20);
-const first  = users.find((u) => u.age >= 20);
-
-console.log('map   (名前だけ):', names);
-console.log('filter(成人だけ):', adults);
-console.log('find  (最初の成人):', first);
-console.log('元の配列は変わらない:', users);
-  `"
+  :js="demoJs"
 />
 
 ### `for...of` との違い

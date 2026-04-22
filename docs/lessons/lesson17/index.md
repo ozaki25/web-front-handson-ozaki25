@@ -1,5 +1,26 @@
 # lesson17: 条件で分岐する
 
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+const age = 20;
+
+if (age >= 20) {
+  console.log(age + ' 歳: 成人です');
+} else if (age >= 13) {
+  console.log(age + ' 歳: 10 代です');
+} else {
+  console.log(age + ' 歳: 子供です');
+}
+
+if (age >= 20 && age < 60) {
+  console.log('働き盛り');
+}
+`
+</script>
+
 ## ゴール
 
 - `if` / `else if` / `else` で処理を分けられる
@@ -77,21 +98,7 @@ if (!isStudent) {
   height="180px"
   :html="`<p>age の値を変えてデモのソースを書き換えて試してください。</p>`"
   :css="``"
-  :js="`
-const age = 20;
-
-if (age >= 20) {
-  console.log(age + ' 歳: 成人です');
-} else if (age >= 13) {
-  console.log(age + ' 歳: 10 代です');
-} else {
-  console.log(age + ' 歳: 子供です');
-}
-
-if (age >= 20 && age < 60) {
-  console.log('働き盛り');
-}
-  `"
+  :js="demoJs"
 />
 
 ## 演習

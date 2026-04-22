@@ -1,5 +1,17 @@
 # lesson20: 関数
 
+<script setup>
+const demoJs = `
+function add(a, b) {
+  return a + b;
+}
+
+console.log('add(1, 2) =', add(1, 2));
+console.log('add(10, 20) =', add(10, 20));
+console.log('add(-5, 5) =', add(-5, 5));
+`
+</script>
+
 ## ゴール
 
 - `function` 宣言で関数を定義できる
@@ -53,15 +65,7 @@ console.log(result); // 3
   height="180px"
   :html="`<p>関数を複数回呼び出します。</p>`"
   :css="``"
-  :js="`
-function add(a, b) {
-  return a + b;
-}
-
-console.log('add(1, 2) =', add(1, 2));
-console.log('add(10, 20) =', add(10, 20));
-console.log('add(-5, 5) =', add(-5, 5));
-  `"
+  :js="demoJs"
 />
 
 ### アロー関数

@@ -1,5 +1,21 @@
 # lesson28: DOM を操作する
 
+<script setup>
+const demoJs = `
+const title = document.querySelector('#title');
+
+setTimeout(() => {
+  title.textContent = '書き換えました';
+  console.log('textContent を変更');
+}, 2000);
+
+setTimeout(() => {
+  title.classList.add('active');
+  console.log("classList.add('active') でスタイル適用");
+}, 4000);
+`
+</script>
+
 ## ゴール
 
 - `document.querySelector` で HTML の要素を取得できる
@@ -74,19 +90,7 @@ CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `a
   border-radius: 4px;
 }
   `"
-  :js="`
-const title = document.querySelector('#title');
-
-setTimeout(() => {
-  title.textContent = '書き換えました';
-  console.log('textContent を変更');
-}, 2000);
-
-setTimeout(() => {
-  title.classList.add('active');
-  console.log('classList.add(\\'active\\') でスタイル適用');
-}, 4000);
-  `"
+  :js="demoJs"
 />
 
 ### 要素を作って追加: `createElement` / `appendChild`

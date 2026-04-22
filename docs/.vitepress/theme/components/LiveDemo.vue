@@ -44,8 +44,8 @@ const props = withDefaults(
 // - 見た目の下地（margin なし / 最低限の padding / システムフォント）を与える
 // - ダークモードの見栄えは親ページに任せず iframe 内で prefers-color-scheme を拾う
 // - ユーザー JS は IIFE + try/catch で包んで、グローバル汚染とエラーの画面暴走を抑える
-// - </script> と書くと Vue SFC の script ブロックが早期終了する罠を避けるため
-//   文字列内では `<${'/script'}>` にせず、閉じタグは配列 join で構築する
+// - script 終了タグを文字列として書くと Vue SFC の script ブロックが
+//   早期終了する罠を避けるため、'<' + '/script>' のように連結して生成する
 const srcdoc = computed(() => {
   const parts = [
     '<!DOCTYPE html>',

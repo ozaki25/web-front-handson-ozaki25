@@ -1,5 +1,26 @@
 # lesson21: スコープとクロージャ
 
+<script setup>
+const demoJs = `
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
+
+const counterA = makeCounter();
+const counterB = makeCounter();
+
+console.log('A:', counterA()); // 1
+console.log('A:', counterA()); // 2
+console.log('B:', counterB()); // 1
+console.log('A:', counterA()); // 3
+console.log('B:', counterB()); // 2
+`
+</script>
+
 ## ゴール
 
 - `let` / `const` のブロックスコープと関数スコープを区別できる
@@ -122,24 +143,7 @@ console.log(counterB()); // 2
   height="220px"
   :html="`<p>独立した 2 つのカウンタを動かします。</p>`"
   :css="``"
-  :js="`
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
-}
-
-const counterA = makeCounter();
-const counterB = makeCounter();
-
-console.log('A:', counterA()); // 1
-console.log('A:', counterA()); // 2
-console.log('B:', counterB()); // 1
-console.log('A:', counterA()); // 3
-console.log('B:', counterB()); // 2
-  `"
+  :js="demoJs"
 />
 
 #### 関数を作って返す（`makeFilter`）
