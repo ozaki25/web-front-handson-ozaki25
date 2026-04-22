@@ -1,0 +1,33 @@
+name: VitePress Build Check
+
+# commit 時のフックでは多行テンプレートリテラルの検出など限定的な検査しか行えないため、
+# VitePress の実ビルドで最終検証する CI を用意する。Vercel 本番デプロイと同じ
+# 内容のビルドを main / draft と PR で走らせて、公開前にビルドエラーを止める。
+
+on:
+  push:
+    branches:
+      - main
+      - draft
+  pull_request:
+    branches:
+      - main
+      - draft
+
+jobs:
+  build:
+    name: Build docs
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build VitePress site
+        run: npm run docs:build
