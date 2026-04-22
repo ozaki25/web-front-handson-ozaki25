@@ -107,6 +107,10 @@ function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+
 ### ゴール
 
 - ログイン / ログアウトの状態で表示を切り替える画面を作る

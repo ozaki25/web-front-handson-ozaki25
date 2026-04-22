@@ -80,6 +80,55 @@ ul.appendChild(li);
 
 ## 演習
 
+### 途中から始める場合
+
+lesson27 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `style.css` も加わります（ファイル作成がまだなら新規作成してください）。
+
+<details>
+<summary>出発点のコード（lesson27 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson27</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson27: fetch で API から取得する</h1>
+    <p>DevTools の Console を確認してください。</p>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+async function main() {
+  try {
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+    const posts = await response.json();
+    console.log("取得件数:", posts.length);
+    console.log("先頭:", posts[0]);
+
+    for (const post of posts.slice(0, 3)) {
+      console.log(`#${post.id} ${post.title}`);
+    }
+  } catch (error) {
+    console.log("エラーが発生しました");
+    console.log(error);
+  }
+}
+
+main();
+```
+
+</details>
+
 ### ゴール
 
 - ボタンっぽい見た目の要素のクラスを JS で付け替える

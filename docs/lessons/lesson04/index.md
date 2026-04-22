@@ -68,6 +68,47 @@
 
 ## 演習
 
+### 途中から始める場合
+
+lesson03 までで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
+
+<details>
+<summary>出発点のコード（lesson03 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>自己紹介</title>
+  </head>
+  <body>
+    <h1>オザキの自己紹介</h1>
+    <p>はじめまして。Web フロントエンドを勉強中です。</p>
+    <h2>ひとこと</h2>
+    <p>
+      いまは <strong>HTML の基礎</strong> を学んでいます。読むだけでなく、<em>自分でも手を動かして</em> 覚えていきたいです。
+    </p>
+    <h2>好きなもの</h2>
+    <ul>
+      <li>コーヒー</li>
+      <li>散歩</li>
+      <li>本</li>
+    </ul>
+    <h2>今年やりたいこと</h2>
+    <ol>
+      <li>Next.js で小さなアプリを作る</li>
+      <li>毎週 1 本ブログを書く</li>
+      <li>早起きする</li>
+    </ol>
+  </body>
+</html>
+```
+
+</details>
+
 ### 前レッスンの状態から始める
 
 lesson03 で作ったプロジェクトを開き直します。`index.html` は次の状態になっているはずです（やりたいことのリストまで書いてある形）。

@@ -88,6 +88,10 @@ Route Handlers と Middleware でデフォルトが違います。
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/types.ts` の `isTodo` 型ガードは章 3 lesson37 と揃えた形なので、章 3 を先に終えていなくてもそのまま貼って使えます。既に lesson68-69 で `app/types.ts` を作っている場合は、下記の型ガードを追記する形で構いません。
+
 ### ゴール
 
 - `/api/todos` に `GET` と `POST` を実装する

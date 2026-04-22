@@ -152,6 +152,24 @@ if (isTodo(raw)) {
 
 ## 演習
 
+### 途中から始める場合
+
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+
+<details>
+<summary>`src/types.ts`（lesson35 完成時点）</summary>
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+</details>
+
 ### 手順 1: `typeof` 型ガード
 
 `src/main.ts` を次の内容に置き換える。

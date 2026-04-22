@@ -119,6 +119,10 @@ export const TodoItem = memo(function TodoItem({ todo, onDelete }: Props) {
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+
 ### ゴール
 
 - 大きな配列の合計を `useMemo` でメモ化する

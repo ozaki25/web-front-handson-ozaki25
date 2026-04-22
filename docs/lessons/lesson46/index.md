@@ -98,6 +98,26 @@ function handleSubmit(e: FormEvent<HTMLFormElement>) {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson45 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+
+<details>
+<summary>出発点のファイル（lesson45 完成時点相当）</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+本レッスンで `Todo` 型と配列 state を扱うので、このファイルを先に用意しておきます。
+
+</details>
+
 ### ゴール
 
 - カウンターに「+1」「-1」「リセット」の 3 ボタンを実装

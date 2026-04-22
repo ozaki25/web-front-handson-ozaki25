@@ -87,6 +87,10 @@ Type 'string' is not assignable to type 'number'.
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+
 ### 手順 1: テンプレートを開く
 
 1. <https://stackblitz.com/> を開き、トップページのテンプレートカードから **TypeScript**（Vanilla TS、TS ロゴ付き）を選ぶ。見当たらないときは検索ボックスに `typescript` と入力するか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開く。

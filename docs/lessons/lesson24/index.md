@@ -136,6 +136,66 @@ console.log(adultNames); // ["Alice", "Carol"]
 
 ## 演習
 
+### 途中から始める場合
+
+lesson23 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson23 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson23</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson23: 分割代入とスプレッド</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+// 演習 A: 分割代入
+const user = { name: "Alice", age: 20, city: "Tokyo" };
+
+const { name, age } = user;
+console.log(name);
+console.log(age);
+
+const colors = ["red", "green", "blue"];
+const [first, second] = colors;
+console.log(first);
+console.log(second);
+
+// 演習 B: スプレッド
+const copy = { ...user };
+console.log(copy);
+
+const updated = { ...user, age: 21 };
+console.log(updated);
+console.log(user);
+
+const a = [1, 2];
+const b = [3, 4];
+const merged = [...a, ...b];
+console.log(merged);
+
+const todos = ["牛乳を買う", "本を読む"];
+const added = [...todos, "ジョギング"];
+console.log(added);
+console.log(todos);
+```
+
+</details>
+
 ### ゴール
 
 - ユーザー配列から「成人（20 歳以上）だけ」の配列を作る

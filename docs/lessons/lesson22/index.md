@@ -82,6 +82,72 @@ for (const user of users) {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson21 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson21 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson21</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson21: スコープとクロージャ</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
+
+const counterA = makeCounter();
+const counterB = makeCounter();
+
+console.log(counterA());
+console.log(counterA());
+console.log(counterB());
+console.log(counterA());
+console.log(counterB());
+
+function makeFilter(status) {
+  return function (todo) {
+    return todo.status === status;
+  };
+}
+
+const todos = [
+  { text: "牛乳を買う", status: "done" },
+  { text: "本を読む",   status: "todo" },
+  { text: "掃除する",   status: "done" },
+  { text: "ゴミを出す", status: "todo" },
+];
+
+const isDone = makeFilter("done");
+const isTodo = makeFilter("todo");
+
+console.log(todos.filter(isDone));
+console.log(todos.filter(isTodo));
+```
+
+</details>
+
 ### ゴール
 
 - `user` オブジェクトを作り、ドット記法で名前と年齢を読み書きする

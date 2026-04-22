@@ -157,6 +157,151 @@ setSettings((prev) => ({ ...prev, theme: "dark" }));
 
 ## 演習
 
+### 途中から始める場合
+
+lesson55 までで作ったプロジェクト（`useTodos` カスタムフックを含む）があればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンはステップ 1 から新規に組み直す前提でも進められるように書いていますが、`useTodos` を先に持っていると `App.tsx` をそのフックベースに差し替える形で学べます。
+
+<details>
+<summary>出発点のファイル（lesson55 完成時点の <code>useTodos</code> 版）</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+```
+
+**`src/useTodos.ts`**
+
+```ts
+import { useState } from "react";
+import type { Todo } from "./types";
+
+export function useTodos() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  const addTodo = (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    setTodos((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), text: trimmed, done: false },
+    ]);
+  };
+
+  const deleteTodo = (id: string) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const toggleTodo = (id: string) => {
+    setTodos((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+    );
+  };
+
+  return { todos, addTodo, deleteTodo, toggleTodo };
+}
+```
+
+**`src/TodoInput.tsx`**
+
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+
+type TodoInputProps = {
+  onAdd: (text: string) => void;
+};
+
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onAdd(text);
+    setText("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
+  );
+}
+```
+
+**`src/TodoList.tsx`**
+
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+  onToggle: (id: string) => void;
+};
+
+export function TodoList({ todos, onDelete, onToggle }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p>TODO はまだありません。</p>;
+  }
+
+  return (
+    <ul>
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          <label>
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => onToggle(todo.id)}
+            />
+            <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
+              {todo.text}
+            </span>
+          </label>
+          <button type="button" onClick={() => onDelete(todo.id)}>
+            削除
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { useTodos } from "./useTodos";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+
+export default function App() {
+  const { todos, addTodo, deleteTodo, toggleTodo } = useTodos();
+
+  return (
+    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
+      <h1>私の TODO（useTodos 版）</h1>
+      <TodoInput onAdd={addTodo} />
+      <TodoList todos={todos} onDelete={deleteTodo} onToggle={toggleTodo} />
+    </main>
+  );
+}
+```
+
+本レッスンでは、ステップ 6 〜 8 で `App.tsx` を localStorage 連携版に書き換えます。`TodoItem` コンポーネント（本レッスンで切り出すもの）と `TodoList` を入れ替える部分は本文の手順どおりに進めてください。`useTodos` を使わず `App.tsx` で直接 state を持つ構成で進める場合は、本文ステップ 1 からの指示に従って新規に組めば OK です。
+
+</details>
+
 ### 到達する完成形
 
 ```

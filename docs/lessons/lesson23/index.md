@@ -94,6 +94,65 @@ console.log(appended); // [1, 2, 100]
 
 ## 演習
 
+### 途中から始める場合
+
+lesson22 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson22 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson22</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson22: オブジェクト</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
+
+console.log(user);
+console.log(user.name);
+console.log(user.age);
+
+user.age = 21;
+console.log(user.age);
+
+user.city = "Tokyo";
+console.log(user.city);
+console.log(user);
+
+console.log(user.email);
+
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+  { name: "Carol", age: 30 },
+];
+
+for (const u of users) {
+  console.log(`${u.name} は ${u.age} 歳`);
+}
+```
+
+</details>
+
 ### ゴール
 
 - （A）`user` オブジェクトから `name` と `age` を分割代入で取り出して表示する

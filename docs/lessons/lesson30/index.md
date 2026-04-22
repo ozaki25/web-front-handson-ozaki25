@@ -62,6 +62,134 @@ const id = crypto.randomUUID();
 
 ## 演習
 
+### 途中から始める場合
+
+lesson29 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは章 2 のミニ統合で、ここまでの演習ファイルがあるとスムーズですが、下のコードで lesson29 完成時点を再現してから演習に入っても同じ状態から始められます。
+
+<details>
+<summary>出発点のコード（lesson29 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson29</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson29: カウンター</h1>
+
+    <section>
+      <p id="count-label">カウント: 0</p>
+      <button id="inc">+1</button>
+      <button id="dec">-1</button>
+      <button id="reset">リセット</button>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>フォーム送信</h2>
+      <form id="form">
+        <label for="name-input">名前:</label>
+        <input id="name-input" type="text" />
+        <button type="submit">送信</button>
+      </form>
+      <p id="form-result">（未入力）</p>
+    </section>
+  </body>
+</html>
+```
+
+**`style.css`**
+
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+  max-width: 480px;
+}
+
+button {
+  margin-right: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+hr {
+  margin: 24px 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
+
+  button {
+    background-color: #333;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+
+  input {
+    background-color: #222;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+}
+```
+
+**`script.js`**
+
+```js
+// カウンター
+let count = 0;
+const label = document.querySelector("#count-label");
+const incBtn = document.querySelector("#inc");
+const decBtn = document.querySelector("#dec");
+const resetBtn = document.querySelector("#reset");
+
+function render() {
+  label.textContent = `カウント: ${count}`;
+}
+
+incBtn.addEventListener("click", () => {
+  count = count + 1;
+  render();
+});
+
+decBtn.addEventListener("click", () => {
+  count = count - 1;
+  render();
+});
+
+resetBtn.addEventListener("click", () => {
+  count = 0;
+  render();
+});
+
+// フォーム
+const form = document.querySelector("#form");
+const nameInput = document.querySelector("#name-input");
+const result = document.querySelector("#form-result");
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = nameInput.value;
+  result.textContent = `こんにちは、${value} さん`;
+});
+```
+
+</details>
+
 本レッスンは **3 段構え** です。各段でコミット（ファイル保存）して、次の段に進みます。
 
 ### 共通: HTML と CSS

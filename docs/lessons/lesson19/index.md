@@ -57,6 +57,53 @@ todos.forEach((todo) => {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson18 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson18 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson18</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson18: 配列を扱う</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+
+console.log(todos);
+console.log(todos.length);
+console.log(todos[0]);
+console.log(todos[todos.length - 1]);
+
+todos.push("部屋を片付ける");
+console.log(todos);
+console.log(todos.length);
+
+const last = todos.pop();
+console.log(last);
+console.log(todos);
+
+console.log(todos[99]);
+```
+
+</details>
+
 ### ゴール
 
 - やることリストの配列を `for...of` で全件 Console に出す

@@ -77,6 +77,56 @@ console.log(add(1, 2)); // 3
 
 ## 演習
 
+### 途中から始める場合
+
+lesson19 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson19 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson19</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson19: 繰り返し処理</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+
+console.log("--- for...of ---");
+for (const todo of todos) {
+  console.log(todo);
+}
+
+console.log("--- forEach ---");
+todos.forEach((todo) => {
+  console.log(todo);
+});
+
+console.log("--- 合計 ---");
+const numbers = [1, 2, 3, 4, 5];
+let total = 0;
+for (const n of numbers) {
+  total = total + n;
+}
+console.log(total);
+```
+
+</details>
+
 ### ゴール
 
 - 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く

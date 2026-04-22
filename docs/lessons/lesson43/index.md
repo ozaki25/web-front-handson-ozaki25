@@ -153,6 +153,26 @@ export function Greeting({ name, age, children }: GreetingProps) {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson42 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。章 3 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
+
+<details>
+<summary>出発点のファイル（章 3 の <code>types.ts</code> を再掲）</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+このレッスン本体では `Todo` 型自体は使いませんが、以降のレッスンで再利用するのでここで用意しておいても構いません。
+
+</details>
+
 ### ゴール
 
 - `Greeting` コンポーネントを別ファイルに切り出し、`App` から 3 パターンで呼び出す

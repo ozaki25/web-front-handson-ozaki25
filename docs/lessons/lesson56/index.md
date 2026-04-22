@@ -63,6 +63,86 @@ Profiler のキーポイント:
 
 ## 演習
 
+### 途中から始める場合
+
+lesson54 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+
+<details>
+<summary>出発点のファイル（lesson54 完成時点）</summary>
+
+**`src/App.tsx`**
+
+```tsx
+import { useMemo, useState } from "react";
+import "./App.css";
+
+const BIG_NUMBERS = Array.from({ length: 10000 }, (_, i) => i + 1);
+
+function App() {
+  const [multiplier, setMultiplier] = useState(1);
+  const [color, setColor] = useState<"red" | "blue">("blue");
+
+  const total = useMemo(() => {
+    console.log("computing total...");
+    return BIG_NUMBERS.reduce((a, b) => a + b, 0) * multiplier;
+  }, [multiplier]);
+
+  return (
+    <>
+      <h1>useMemo のデモ</h1>
+
+      <section className="box">
+        <h2>合計</h2>
+        <p style={{ color }}>total = {total.toLocaleString()}</p>
+        <button onClick={() => setMultiplier((m) => m + 1)}>
+          multiplier +1（合計が再計算される）
+        </button>
+      </section>
+
+      <section className="box">
+        <h2>無関係な state</h2>
+        <p>現在の色: {color}</p>
+        <button onClick={() => setColor((c) => (c === "blue" ? "red" : "blue"))}>
+          色を切り替え（合計は再計算されないはず）
+        </button>
+      </section>
+    </>
+  );
+}
+
+export default App;
+```
+
+**`src/App.css`**
+
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
+
+.box button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+}
+```
+
+このコードをそのまま使って、Profiler で再計算スキップを観察します。
+
+</details>
+
 ### ゴール
 
 - lesson54 の `useMemo` を使った「1 万件の合計」アプリで、Profiler を使って再計算スキップを確認する

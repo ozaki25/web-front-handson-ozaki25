@@ -73,6 +73,51 @@ URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は *
 
 ## 演習
 
+### 途中から始める場合
+
+lesson65 までで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは lesson63 の記事一覧を前提にしています。
+
+<details>
+<summary>出発点のファイル（lesson63 完成時点の `/posts`）</summary>
+
+**`app/posts/page.tsx`**
+
+```tsx
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  return (
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+**`app/posts/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
+}
+```
+
+</details>
+
 ### 前回のプロジェクトを開く
 
 lesson63 で作ったプロジェクトを開き直しましょう。

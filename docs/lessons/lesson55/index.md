@@ -86,6 +86,120 @@ const counterB = makeCounter();
 
 ## 演習
 
+### 途中から始める場合
+
+lesson50 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` に `done` を追加し、`src/useTodos.ts` を新規作成してロジックを抽出します。
+
+<details>
+<summary>出発点のファイル（lesson50 完成時点、本レッスンで <code>done</code> を追加）</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+**`src/TodoInput.tsx`**
+
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+
+type TodoInputProps = {
+  onAdd: (text: string) => void;
+};
+
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed);
+    setText("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="todo-input">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
+  );
+}
+```
+
+**`src/TodoList.tsx`**
+
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+};
+
+export function TodoList({ todos, onDelete }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p className="empty">まだタスクがありません</p>;
+  }
+
+  return (
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          {todo.text}
+          <button onClick={() => onDelete(todo.id)}>削除</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { useState } from "react";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
+
+function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function handleDelete(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  return (
+    <>
+      <h1>TODO（親子連携版）</h1>
+      <TodoInput onAdd={handleAdd} />
+      <TodoList todos={todos} onDelete={handleDelete} />
+    </>
+  );
+}
+
+export default App;
+```
+
+本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props を `onToggle` も受け取る形に拡張します。演習本体のコードがそのまま上書きになります。
+
+</details>
+
 ### ゴール
 
 - lesson46-50 で作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する

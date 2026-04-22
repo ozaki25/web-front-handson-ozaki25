@@ -56,6 +56,31 @@
 
 ## 演習
 
+### 途中から始める場合
+
+lesson01 までで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
+
+<details>
+<summary>出発点のコード（lesson01 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>はじめての HTML</title>
+  </head>
+  <body>
+    <h1>Hello, HTML</h1>
+    <p>これは最初のページです。</p>
+  </body>
+</html>
+```
+
+</details>
+
 ### 前レッスンの成果物を開き直す
 
 lesson01 で作った StackBlitz のプロジェクトを開きます。もし閉じてしまっていたら、同じように HTML / CSS / JS の Vanilla プロジェクトを作り、`index.html` を次の状態にしておきます。

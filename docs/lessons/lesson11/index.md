@@ -126,6 +126,276 @@ Flexbox で迷ったら自分に 3 つ聞くとよい。
 
 ## 演習
 
+### 途中から始める場合
+
+lesson10 までで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」をそのまま貼って始めてください。なお、このレッスンはミニ統合で HTML と CSS を大きく書き直すため、ステップ 1 以降で示す新しいコードで上書きして進めます。手元が無い場合はこの出発点を貼った上でステップ 1 に進んでください。
+
+<details>
+<summary>出発点のコード（lesson10 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>自己紹介</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>オザキの自己紹介</h1>
+      <nav>
+        <ul class="nav-list">
+          <li><a class="nav-link" href="#profile">プロフィール</a></li>
+          <li><a class="nav-link" href="#likes">好きなもの</a></li>
+          <li><a class="nav-link" href="#goals">今年やりたいこと</a></li>
+          <li><a class="nav-link" href="#links">お気に入りサイト</a></li>
+          <li><a class="nav-link" href="#contact">お問い合わせ</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main class="main">
+      <section id="profile" class="card">
+        <h2>プロフィール</h2>
+        <img
+          src="https://placehold.jp/200x200.png"
+          alt="オザキのプロフィール画像(仮)"
+          width="200"
+          height="200"
+        />
+        <p>はじめまして。Web フロントエンドを勉強中です。</p>
+        <p>
+          いまは <strong>HTML の基礎</strong> を学んでいます。読むだけでなく、<em>自分でも手を動かして</em> 覚えていきたいです。
+        </p>
+      </section>
+
+      <section id="likes" class="card">
+        <h2>好きなもの</h2>
+        <ul>
+          <li>コーヒー</li>
+          <li>散歩</li>
+          <li>本</li>
+        </ul>
+      </section>
+
+      <section id="goals" class="card">
+        <h2>今年やりたいこと</h2>
+        <ol>
+          <li>Next.js で小さなアプリを作る</li>
+          <li>毎週 1 本ブログを書く</li>
+          <li>早起きする</li>
+        </ol>
+      </section>
+
+      <section id="links" class="card">
+        <h2>お気に入りサイト</h2>
+        <ul>
+          <li>
+            <a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs（日本語）</a>
+          </li>
+          <li>
+            <a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式（日本語）</a>
+          </li>
+          <li>
+            <a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js 公式</a>
+          </li>
+        </ul>
+      </section>
+
+      <section id="contact" class="card">
+        <h2>お問い合わせ</h2>
+        <p>ご連絡はこちらのフォームから。</p>
+        <form>
+          <p>
+            <label for="name">お名前</label>
+            <input type="text" id="name" name="name" required />
+          </p>
+          <p>
+            <label for="email">メールアドレス</label>
+            <input type="email" id="email" name="email" required />
+          </p>
+          <p>
+            <label for="message">メッセージ</label>
+            <textarea id="message" name="message" rows="5" required></textarea>
+          </p>
+          <p>
+            <button class="btn primary" type="submit">送信</button>
+          </p>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 オザキ</p>
+    </footer>
+  </body>
+</html>
+```
+
+**`styles.css`**
+
+```css
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Hiragino Sans",
+    "Yu Gothic",
+    sans-serif;
+  color: #333333;
+  line-height: 1.7;
+}
+
+h1 {
+  font-size: 2.25rem;
+  color: #0d47a1;
+}
+
+h2 {
+  font-size: 1.5rem;
+  color: #333333;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 4px;
+}
+
+p {
+  font-size: 1rem;
+}
+
+a {
+  color: #1a73e8;
+}
+
+li {
+  color: #555555;
+}
+
+.nav-list {
+  list-style: none;
+  padding: 0;
+}
+
+.nav-link {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  text-decoration: underline;
+  color: #0d47a1;
+}
+
+.nav-link:focus {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.nav-link.active {
+  font-weight: bold;
+  color: #0d47a1;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.primary {
+  color: #ffffff;
+  background-color: steelblue;
+}
+
+.primary:hover {
+  background-color: #3a6ea5;
+}
+
+.btn:focus {
+  outline: 2px solid #ffa726;
+  outline-offset: 2px;
+}
+
+footer {
+  color: #666666;
+  font-size: 0.875rem;
+}
+
+.main {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.card {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+header {
+  max-width: 800px;
+  margin: 0 auto 24px;
+}
+
+footer {
+  max-width: 800px;
+  margin: 24px auto 0;
+  color: #666666;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #dddddd;
+    background-color: #1a1a1a;
+  }
+  h1 {
+    color: #e0e0e0;
+  }
+  h2 {
+    color: #c0c0c0;
+  }
+  p {
+    color: #d0d0d0;
+  }
+  a {
+    color: #8ab4f8;
+  }
+  footer {
+    color: #999999;
+  }
+  .card {
+    background-color: #202020;
+    border-color: #3a3a3a;
+    color: #e0e0e0;
+  }
+}
+```
+
+</details>
+
 ### 到達する完成形のイメージ
 
 PC 幅（600px より広い）:

@@ -81,6 +81,96 @@ function wait(ms) {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson25 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「lesson25 まで作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
+
+<details>
+<summary>出発点のコード（lesson25 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson25</title>
+    <script type="module" src="./main.js"></script>
+  </head>
+  <body>
+    <h1>lesson25: import / export</h1>
+    <ul id="list"></ul>
+  </body>
+</html>
+```
+
+**`storage.js`**
+
+```js
+const STORAGE_KEY = "lesson25-todos";
+
+export function loadTodos() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (error) {
+    console.log("保存データの読み込みに失敗しました");
+    console.log(error);
+    return [];
+  }
+}
+
+export function saveTodos(todos) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+```
+
+**`render.js`**
+
+```js
+export function renderTodos(listElement, todos) {
+  listElement.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    listElement.appendChild(li);
+  }
+}
+```
+
+**`main.js`**
+
+```js
+import { loadTodos, saveTodos } from "./storage.js";
+import { renderTodos } from "./render.js";
+
+const list = document.querySelector("#list");
+
+let todos = loadTodos();
+
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "本を読む" },
+    { id: "a3", text: "掃除する" },
+  ];
+  saveTodos(todos);
+}
+
+renderTodos(list, todos);
+```
+
+</details>
+
 ### ゴール
 
 - `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る

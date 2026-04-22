@@ -73,6 +73,54 @@ if (!isStudent) {
 
 ## 演習
 
+### 途中から始める場合
+
+lesson16 までで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+
+<details>
+<summary>出発点のコード（lesson16 完成時点）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson16</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson16: 値の種類</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const userName = "Alice";
+const age = 20;
+const isStudent = true;
+const nickname = null;
+let score;
+
+console.log(userName);
+console.log(age);
+console.log(isStudent);
+console.log(nickname);
+console.log(score);
+
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
+
+const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
+console.log(summary);
+```
+
+</details>
+
 ### ゴール
 
 - 年齢を表す変数 `age` の値によって「成人 / 未成年」を分岐表示する

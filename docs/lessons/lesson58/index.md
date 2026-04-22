@@ -80,6 +80,10 @@ export default function Page() {
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。
+
 ### 使う環境
 
 本コース章 5 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。章 4 の React + Vite テンプレートとは別物なので、新しく作り直してください。

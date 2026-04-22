@@ -114,6 +114,102 @@ dispatch({ type: "toggle", id: "abc" });
 
 ## 演習
 
+### 途中から始める場合
+
+lesson46 までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` を新しい形（`done` 付き + `Action` 型）に書き換えて進めます。
+
+<details>
+<summary>出発点のファイル（lesson46 完成時点）</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { useState } from "react";
+import type { Todo } from "./types";
+import "./App.css";
+
+function App() {
+  const [count, setCount] = useState(0);
+  const [todos, setTodos] = useState<Todo[]>([
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "原稿を書く" },
+  ]);
+
+  function handlePlus() {
+    setCount((c) => c + 1);
+  }
+  function handleMinus() {
+    setCount((c) => c - 1);
+  }
+  function handleReset() {
+    setCount(0);
+  }
+
+  function addToEnd() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `末尾 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function addToTop() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `先頭 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [newTodo, ...prev]);
+  }
+
+  function removeById(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  return (
+    <>
+      <section className="box">
+        <h2>カウンター</h2>
+        <p>現在: {count}</p>
+        <button onClick={handlePlus}>+1</button>
+        <button onClick={handleMinus}>-1</button>
+        <button onClick={handleReset}>リセット</button>
+      </section>
+
+      <section className="box">
+        <h2>TODO</h2>
+        <div className="row">
+          <button onClick={addToEnd}>末尾に追加</button>
+          <button onClick={addToTop}>先頭に追加</button>
+        </div>
+        <ul>
+          {todos.map((todo) => (
+            <li key={todo.id}>
+              {todo.text}
+              <button onClick={() => removeById(todo.id)}>削除</button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
+  );
+}
+
+export default App;
+```
+
+本レッスンでは `types.ts` を書き換え、`src/todosReducer.ts` を新規作成し、`App.tsx` を `useReducer` 版に入れ替えて進めます。
+
+</details>
+
 ### ゴール
 
 - lesson46 の TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する

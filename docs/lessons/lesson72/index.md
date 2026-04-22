@@ -68,6 +68,10 @@ Next.js には重要なルールがあります。
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`.env.local` と `app/env-test/` 配下の 2 ファイルを新規作成するだけです。
+
 ### ゴール
 
 - `.env.local` に 2 種類の変数を書く
