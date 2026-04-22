@@ -1,9 +1,10 @@
 import { defineConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
+import { withPwa } from '@vite-pwa/vitepress'
 import { transformerTwoslash } from '@shikijs/vitepress-twoslash'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 
-export default withMermaid(
+export default withPwa(withMermaid(
   defineConfig({
     lang: 'ja-JP',
     title: 'Web フロントエンド入門',
@@ -21,6 +22,44 @@ export default withMermaid(
         },
       },
     },
+    // PWA 設定。@vite-pwa/vitepress でデスクトップ / モバイルに
+    // インストール可能にする（manifest + Service Worker + アイコン）。
+    // アイコンは `pwa-assets.config.ts` で docs/public/logo.svg から生成。
+    pwa: {
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'Web フロントエンド入門',
+        short_name: 'Web 入門',
+        description: 'Web フロントエンドをこれから学ぶ人向けの学習コンテンツ',
+        theme_color: '#1e40af',
+        background_color: '#ffffff',
+        lang: 'ja',
+        display: 'standalone',
+        start_url: '/',
+        icons: [
+          { src: 'pwa-64x64.png', sizes: '64x64', type: 'image/png' },
+          { src: 'pwa-192x192.png', sizes: '192x192', type: 'image/png' },
+          { src: 'pwa-512x512.png', sizes: '512x512', type: 'image/png' },
+          {
+            src: 'maskable-icon-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'maskable',
+          },
+        ],
+      },
+      workbox: {
+        // VitePress のビルド成果物は総量が大きいのでファイルサイズ上限を上げる。
+        maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico,webp,json}'],
+      },
+    },
+    head: [
+      ['link', { rel: 'icon', href: '/favicon.ico', sizes: '48x48' }],
+      ['link', { rel: 'icon', href: '/logo.svg', type: 'image/svg+xml' }],
+      ['link', { rel: 'apple-touch-icon', href: '/apple-touch-icon-180x180.png' }],
+      ['meta', { name: 'theme-color', content: '#1e40af' }],
+    ],
     themeConfig: {
       nav: [{ text: 'ホーム', link: '/' }],
       sidebar: [
@@ -152,4 +191,4 @@ export default withMermaid(
       },
     },
   })
-)
+))
