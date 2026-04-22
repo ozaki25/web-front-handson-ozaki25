@@ -1,5 +1,17 @@
 # lesson29: イベントで画面を動かす
 
+<script setup>
+const demoJs = `
+let count = 0;
+const btn = document.getElementById('btn');
+const label = document.getElementById('label');
+btn.addEventListener('click', () => {
+  count = count + 1;
+  label.textContent = 'カウント: ' + count;
+});
+`
+</script>
+
 ## ゴール
 
 - `addEventListener` でボタンのクリックに反応できる
@@ -56,15 +68,7 @@ button {
   cursor: pointer;
 }
   `"
-  :js="`
-let count = 0;
-const btn = document.getElementById('btn');
-const label = document.getElementById('label');
-btn.addEventListener('click', () => {
-  count = count + 1;
-  label.textContent = 'カウント: ' + count;
-});
-  `"
+  :js="demoJs"
 />
 
 ### `submit` イベントと `preventDefault`

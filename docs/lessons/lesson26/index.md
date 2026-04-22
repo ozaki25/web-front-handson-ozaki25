@@ -1,5 +1,24 @@
 # lesson26: 非同期処理の基本
 
+<script setup>
+const demoJs = `
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function main() {
+  console.log('start');
+  await wait(1000);
+  console.log('1 秒後');
+  await wait(1000);
+  console.log('さらに 1 秒後（計 2 秒）');
+  console.log('end');
+}
+
+main();
+`
+</script>
+
 ## ゴール
 
 - 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
@@ -79,22 +98,7 @@ function wait(ms) {
   height="240px"
   :html="`<p>await が実際に時間を待つ様子:</p>`"
   :css="``"
-  :js="`
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main() {
-  console.log('start');
-  await wait(1000);
-  console.log('1 秒後');
-  await wait(1000);
-  console.log('さらに 1 秒後（計 2 秒）');
-  console.log('end');
-}
-
-main();
-  `"
+  :js="demoJs"
 />
 
 ### 次のレッスンへの橋渡し
