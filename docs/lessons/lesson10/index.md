@@ -132,6 +132,29 @@ border: 1px
 
 `*` は全要素にマッチする特殊なセレクタです。`*::before` / `*::after` は CSS で生成する擬似要素を指します（詳しい使い方はコース外）。とりあえず「このおまじないは必ず入れる」と覚えておけば十分です。
 
+下のデモで、同じ `width: 200px` のカードが `box-sizing: content-box`（既定）と `border-box` でどう違うかを見比べてください。左は padding と border の分だけ実寸が膨らんでしまうのに対し、右は 200px ぴったりに収まります。
+
+<LiveDemo
+  height="200px"
+  :html="`
+<div class='card content-box'>content-box（既定）</div>
+<div class='card border-box'>border-box</div>
+  `"
+  :css="`
+body { padding: 16px; }
+.card {
+  width: 200px;
+  padding: 16px;
+  border: 4px solid #1f4e79;
+  background: #e3f2fd;
+  margin-bottom: 16px;
+}
+.content-box { box-sizing: content-box; }
+.border-box  { box-sizing: border-box; }
+  `"
+  :js="``"
+/>
+
 ### `margin` の重なり
 
 縦方向に並んだ要素の上下 `margin` は **重なって大きい方だけ** が有効になる、というクセがあります（マージン相殺）。たとえば `<p>` 同士を縦に並べて、両方に `margin-bottom: 16px` / `margin-top: 16px` を指定しても、合計 32px ではなく 16px 分しか空きません。

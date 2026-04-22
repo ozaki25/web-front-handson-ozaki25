@@ -79,6 +79,44 @@
 
 また、`absolute` の要素は通常の流れから抜けるため、**元の場所は詰められる**（他の兄弟要素が詰めて配置される）点が `relative` と違います。
 
+下のデモは、カードの右上に「NEW」バッジを `absolute` で重ねた例です。親に `position: relative` を入れてあるので、バッジはカードの角を基準にきれいに配置されます。CSS から `.card` の `position: relative` を外すと、バッジがページの角へ飛んでいく挙動も確認できます。
+
+<LiveDemo
+  height="200px"
+  :html="`
+<div class='card'>
+  <span class='badge'>NEW</span>
+  <h3>カードのタイトル</h3>
+  <p>本文のテキスト</p>
+</div>
+  `"
+  :css="`
+body { padding: 16px; }
+.card {
+  position: relative;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  max-width: 320px;
+}
+.card h3 { margin: 0 0 8px; }
+.card p { margin: 0; color: #555; }
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: crimson;
+  color: white;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: bold;
+}
+  `"
+  :js="``"
+/>
+
 ### `fixed`: 画面に固定
 
 ```css

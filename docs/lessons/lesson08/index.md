@@ -85,6 +85,32 @@ button:focus {
 - `:hover`: マウスカーソルが要素の上にあるときに適用。スマホなど hover の概念がない環境では効かない。
 - `:focus`: 要素にフォーカスが当たっているとき（クリック直後、Tab キーで移動してきた直後、入力欄にカーソルがあるとき）に適用。
 
+下のデモでマウスをボタンに乗せたり、Tab キーでボタンからリンクへフォーカスを移したりすると、見た目が変わるのを確認できます。
+
+<LiveDemo
+  height="180px"
+  :html="`
+<button class='primary'>ホバー / フォーカス</button>
+&nbsp;
+<a href='#'>リンク（Tab で移動）</a>
+  `"
+  :css="`
+body { padding: 24px; }
+.primary {
+  padding: 8px 16px;
+  border: 1px solid transparent;
+  background: #1f4e79;
+  color: white;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.primary:hover { background: #2b6cb0; }
+.primary:focus { outline: 3px solid #ffa726; outline-offset: 2px; }
+a:focus { outline: 3px solid #ffa726; outline-offset: 2px; }
+  `"
+  :js="``"
+/>
+
 ### フォーカスリングを消さない
 
 ブラウザは、`<button>` / `<a>` / `<input>` などにフォーカスが当たると、既定で青っぽい枠線（フォーカスリング）を表示します。これは **キーボードだけで操作する人** にとって「いまここが選ばれている」を示す大切な目印です。
