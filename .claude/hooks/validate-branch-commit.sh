@@ -248,7 +248,10 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
           # インラインコード `...` を除去してから検出する（教材上の言及を誤検出しないため）
           line = $0
           gsub(/`[^`]*`/, "", line)
-          if (line ~ /<script[> ]/ || line ~ /<style[> ]/) {
+          # <script setup ...> は VitePress が公式にサポートしている（LiveDemo に JS を渡す等）ので許容
+          if (line ~ /<script[> ]/ && line !~ /<script[[:space:]]+setup/) {
+            print NR ": " $0
+          } else if (line ~ /<style[> ]/) {
             print NR ": " $0
           }
         }
@@ -259,6 +262,61 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     done
     if [ -n "$raw_tag_hits" ]; then
       block "本文に素の <script> / <style> を書かないでください: VitePress は SPA なのでグローバル汚染が他レッスンに漏れます。インラインデモは <LiveDemo :html :css :js /> コンポーネント（iframe sandbox 隔離）を使ってください。詳細は CLAUDE.md 12 章を参照。\n${raw_tag_hits}"
+    fi
+  fi
+
+  # --- Vue 属性値の多行テンプレートリテラル検出 ---
+  # :xxx="`...`" を複数行にまたいで書くと、Vue の HTML パーサが JS 内の
+  # < / && / > / " を誤認してビルドエラー（Unterminated string constant 等）を起こす。
+  # 実例: LiveDemo の :js="`... age < 60 ...`" で Vercel ビルドが壊れた。
+  # 回避: <script setup> ブロックに変数として切り出し、:js="demoJs" のように参照する。
+  if [ -n "$staged_md" ]; then
+    multi_attr_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /^```/ { in_code = !in_code; next }
+        in_code { next }
+        # :attr=" の直後にバッククオートが来る行を検出
+        /:[a-zA-Z][a-zA-Z0-9-]*="`/ {
+          # 同じ行で `" で閉じているなら単一行テンプレートリテラル（許容）
+          if ($0 !~ /`"[[:space:]]*\/?[[:space:]]*>?[[:space:]]*$/) {
+            print NR ": " $0
+          }
+        }
+      ')
+      if [ -n "$issues" ]; then
+        multi_attr_hits="${multi_attr_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$multi_attr_hits" ]; then
+      block "Vue 属性値の多行テンプレートリテラル: :xxx=\"\`...\`\" を複数行にまたいで書くと、Vue の HTML パーサが内部の < や && を誤認してビルドが壊れます。<script setup> ブロックに const demoJs = \`...\` として切り出し、:js=\"demoJs\" のように変数参照にしてください。\n${multi_attr_hits}"
+    fi
+  fi
+
+  # --- Vue SFC の不正な </script> 検出 ---
+  # <script> ブロック内にコメントや文字列で </script> を含めると、SFC パーサが
+  # そこで script ブロック終了と判定して「Invalid end tag」ビルドエラーを起こす。
+  # 実例: LiveDemo.vue のコメント内の「</script> と書くと...」で Vercel ビルドが壊れた。
+  # 回避: 文字列分割（'<' + '/script>'）、コメント内でも script 終了タグという言い換えを使う。
+  staged_vue=$(echo "$STAGED" | grep '\.vue$' || true)
+  if [ -n "$staged_vue" ]; then
+    stray_close_hits=""
+    for f in $staged_vue; do
+      # </script> が行の先頭（空白可）にないもの = コメントか文字列内に含まれるもの
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /<\/script>/ {
+          # 行全体が空白 + </script> + 空白のみ の場合は正当な閉じタグ
+          if ($0 !~ /^[[:space:]]*<\/script>[[:space:]]*$/) {
+            print NR ": " $0
+          }
+        }
+      ')
+      if [ -n "$issues" ]; then
+        stray_close_hits="${stray_close_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$stray_close_hits" ]; then
+      block "Vue SFC 内で </script> が行の途中に含まれています: SFC パーサはコメントや文字列の中の </script> でも script ブロック終了と判定してしまい、ビルドが壊れます。'<' + '/script>' のように分割するか、コメントから除去してください。\n${stray_close_hits}"
     fi
   fi
 
