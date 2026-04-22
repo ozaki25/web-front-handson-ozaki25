@@ -232,6 +232,36 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
   fi
 
+  # --- 素の <script> / <style> の検出 ---
+  # VitePress は SPA なので、レッスン本文に直接 <script> / <style> を書くと
+  # 他のレッスンにグローバルスコープ / CSS の影響が漏れる。
+  # インラインデモは必ず <LiveDemo> コンポーネント（iframe sandbox 隔離）を使うこと。
+  # 検出対象: コードフェンス外、かつインラインコード（`...`）の外に現れる
+  # <script（属性含む）または <style（属性含む）
+  if [ -n "$staged_md" ]; then
+    raw_tag_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /^```/ { in_code = !in_code; next }
+        in_code { next }
+        {
+          # インラインコード `...` を除去してから検出する（教材上の言及を誤検出しないため）
+          line = $0
+          gsub(/`[^`]*`/, "", line)
+          if (line ~ /<script[> ]/ || line ~ /<style[> ]/) {
+            print NR ": " $0
+          }
+        }
+      ')
+      if [ -n "$issues" ]; then
+        raw_tag_hits="${raw_tag_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$raw_tag_hits" ]; then
+      block "本文に素の <script> / <style> を書かないでください: VitePress は SPA なのでグローバル汚染が他レッスンに漏れます。インラインデモは <LiveDemo :html :css :js /> コンポーネント（iframe sandbox 隔離）を使ってください。詳細は CLAUDE.md 12 章を参照。\n${raw_tag_hits}"
+    fi
+  fi
+
   # --- レッスンテンプレート 4 節チェック ---
   # docs/lessons/lessonXX/index.md の新規/編集時、ゴール/解説/演習/まとめ の 4 節が揃っているか確認。
   # CLAUDE.md 7 章「レッスン構成テンプレート」の自動適用。
