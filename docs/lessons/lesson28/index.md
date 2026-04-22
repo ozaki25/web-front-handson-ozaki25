@@ -58,6 +58,37 @@ box.classList.toggle("active");   // あれば消す、なければ付ける
 
 CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
 
+下のデモでは 2 秒後に JS が `textContent` を書き換え、さらに 2 秒後に `classList.toggle` で色が付きます。DOM を JS から触る流れが見えます。
+
+<LiveDemo
+  height="220px"
+  :html="`
+<h1 id='title'>最初の見出し</h1>
+<p>2 秒ごとに JS が DOM を書き換えます。</p>
+  `"
+  :css="`
+#title.active {
+  color: white;
+  background: steelblue;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+  `"
+  :js="`
+const title = document.querySelector('#title');
+
+setTimeout(() => {
+  title.textContent = '書き換えました';
+  console.log('textContent を変更');
+}, 2000);
+
+setTimeout(() => {
+  title.classList.add('active');
+  console.log('classList.add(\\'active\\') でスタイル適用');
+}, 4000);
+  `"
+/>
+
 ### 要素を作って追加: `createElement` / `appendChild`
 
 新しい要素を作って、既存の要素の子として追加します。

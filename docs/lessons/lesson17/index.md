@@ -71,6 +71,29 @@ if (!isStudent) {
 }
 ```
 
+下のデモで、`age` の値を変えると条件分岐の結果が Console にどう出るかを体感できます。`age` を `12` / `20` / `70` に書き換えると出力が変わります。
+
+<LiveDemo
+  height="180px"
+  :html="`<p>age の値を変えてデモのソースを書き換えて試してください。</p>`"
+  :css="``"
+  :js="`
+const age = 20;
+
+if (age >= 20) {
+  console.log(age + ' 歳: 成人です');
+} else if (age >= 13) {
+  console.log(age + ' 歳: 10 代です');
+} else {
+  console.log(age + ' 歳: 子供です');
+}
+
+if (age >= 20 && age < 60) {
+  console.log('働き盛り');
+}
+  `"
+/>
+
 ## 演習
 
 ### 途中から始める場合

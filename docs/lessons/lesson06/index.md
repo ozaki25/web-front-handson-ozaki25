@@ -112,6 +112,37 @@
 
 包む書き方でも紐付けは成立しますが、CSS でスタイルを付けるときに `<label>` と `<input>` が兄弟関係のほうが扱いやすいので、このコースでは `for` を使う形で統一します。
 
+下のデモは、`<label>` のテキストをクリックすると対応する入力欄にフォーカスが当たる挙動の確認です。`required` を付けた欄は、送信ボタンを押したときに空だとブラウザがエラーを出します。
+
+<LiveDemo
+  height="280px"
+  :html="`
+<form>
+  <p>
+    <label for='name'>お名前</label><br>
+    <input type='text' id='name' name='name' required>
+  </p>
+  <p>
+    <label for='email'>メール</label><br>
+    <input type='email' id='email' name='email' required>
+  </p>
+  <p>
+    <label for='message'>メッセージ</label><br>
+    <textarea id='message' name='message' rows='3'></textarea>
+  </p>
+  <p>
+    <button type='submit'>送信</button>
+  </p>
+</form>
+  `"
+  :css="`
+body { padding: 12px; }
+input, textarea { width: 260px; padding: 4px 6px; font: inherit; }
+button { padding: 6px 14px; font: inherit; cursor: pointer; }
+  `"
+  :js="``"
+/>
+
 ## 演習
 
 ### 途中から始める場合
