@@ -148,13 +148,17 @@ export async function listTodos(): Promise<Todo[]> {
   return todos;
 }
 
-export async function addTodo(formData: FormData) {
+// 戻り値の型（章 3 lesson38 の判別共用体そのもの）
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
+
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
   const text = String(formData.get("text") ?? "").trim();
   if (text.length === 0) {
-    return; // 空なら何もしない（エラー表示は lesson69 で追加）
+    return { ok: false, error: "空のままでは追加できません" };
   }
   todos.push({ id: crypto.randomUUID(), text });
   revalidatePath("/todos");
+  return { ok: true };
 }
 ```
 
@@ -165,6 +169,7 @@ export async function addTodo(formData: FormData) {
 - `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
 - `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
 - `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
+- **戻り値の型 `AddTodoResult`** は、章 3 lesson38 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は次の lesson69 で `useActionState` と結合するとき効きます。
 
 ### 手順 3: `/todos` を本物のページにする
 

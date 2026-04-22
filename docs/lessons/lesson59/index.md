@@ -470,3 +470,4 @@ export default function Page() {
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
 - 章 1 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
 - 次の lesson60 では、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
+- ここで使った `<img src="https://placehold.jp/...">` は、**章 5 lesson64 で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。
