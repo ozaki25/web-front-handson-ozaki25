@@ -6,6 +6,7 @@ import { enhanceAppWithTabs } from 'vitepress-plugin-tabs/client'
 import { useRoute, type EnhanceAppContext } from 'vitepress'
 import LessonComplete from './components/LessonComplete.vue'
 import LessonProgress from './components/LessonProgress.vue'
+import LiveDemo from './components/LiveDemo.vue'
 import './custom.css'
 
 export default {
@@ -20,5 +21,6 @@ export default {
     app.use(TwoslashFloatingVue)
     enhanceAppWithTabs(app)
     app.component('LessonProgress', LessonProgress)
+    app.component('LiveDemo', LiveDemo)
   },
 }

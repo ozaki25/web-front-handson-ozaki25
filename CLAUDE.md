@@ -107,3 +107,42 @@ docs/rejected/       ← 却下したレッスン案
 - 古い API / 非推奨のやり方（旧 `pages/` ルーター、クラスコンポーネント等）。
 - 1 レッスン内でのレベル跳ね上がり。
 - `…(省略)…` を使ったコード片。
+
+## 12. インラインデモ（`LiveDemo`）
+
+効果的な場面では、本文中で HTML / CSS / JS を動かして見せる **インラインデモ** を積極的に使ってよい。以下のルールを守る。
+
+### 必ず `<LiveDemo>` コンポーネントを使う
+
+本文に直接 `<script>` や `<style>` を書かない。理由は、VitePress は単一の SPA でありグローバルスコープが全レッスンで共有されるため、素の `<script>` / `<style>` は **他レッスンに影響を漏らす**。
+
+`<LiveDemo>` は iframe `srcdoc` + sandbox でデモを隔離し、以下を保証する。
+
+- CSS セレクタは iframe 内部に閉じる（他レッスンの `.card` 等と衝突しない）
+- JS グローバルは iframe 内に閉じる（親ページの `window` には出ない）
+- 親ページの `localStorage` / `cookie` / `document` にアクセス不可（`sandbox` に `allow-same-origin` を渡していない）
+- `alert` / `confirm` / `<form>` は許可（`allow-modals` / `allow-forms`）
+- ユーザー JS は `try`/`catch` で包まれ、エラー時は iframe 内に赤字で表示される
+
+### 使い方
+
+```md
+<LiveDemo
+  :html="`<button id='btn'>押してね</button>`"
+  :css="`button { padding: 8px 16px; font-size: 1rem; }`"
+  :js="`document.getElementById('btn').onclick = () => alert('押された')`"
+/>
+```
+
+複数行はテンプレートリテラルで改行する。ソースは自動で `<details>` で畳まれて表示される（`show-code="false"` で非表示にできる）。高さは `height="320px"` で調整可能。
+
+### 効果的な場面の目安
+
+- **使う**: CSS hover / フォーカス / Flexbox / Grid の見た目の変化、クリックで表示が変わる最小例、イベント動作の確認、transition の動き
+- **使わない**: ミニ統合レッスンのような長い演習（StackBlitz で手を動かすほうが学びが深い）、サーバー側 API が必要なもの、ローカルファイル読み込みが必要なもの
+
+### してはいけないこと
+
+- `<LiveDemo>` を介さずに本文に `<script>` / `<style>` を書くこと
+- 親ページの DOM や `window` を触るデモ（sandbox で遮断されるが、そもそも書かない）
+- `:js` に外部 URL の `fetch` を書くこと（CORS で失敗する。外部 API 連携は StackBlitz で扱う）
