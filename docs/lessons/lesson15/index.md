@@ -77,7 +77,7 @@ count = count + 1;
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）から始められます。前のレッスンのコードは引き継ぎません。
+このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）から始められます。前のレッスンのコードは引き継ぎません。
 
 ### ゴール
 
