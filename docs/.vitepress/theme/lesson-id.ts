@@ -30,7 +30,12 @@ export function lessonIdFromH1(): string {
   if (typeof document === 'undefined') return ''
   const h1 = document.querySelector('main h1, .vp-doc h1, h1')
   if (!h1) return ''
-  return lessonIdFromTitle(h1.textContent || '')
+  // VitePress は h1 内に <a class="header-anchor"> を挿入する。
+  // そのテキストノード（ゼロ幅スペース等）が混入すると保存キーがずれるため、
+  // クローンしてアンカー要素を除去してから textContent を使う。
+  const clone = h1.cloneNode(true) as HTMLElement
+  clone.querySelectorAll('a').forEach((el) => el.remove())
+  return lessonIdFromTitle(clone.textContent || '')
 }
 
 /**
