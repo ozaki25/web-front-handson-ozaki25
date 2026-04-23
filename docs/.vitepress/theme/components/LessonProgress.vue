@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useData } from 'vitepress'
-import { lessonIdFromTitle, migrateCompletions } from '../lesson-id'
+import { lessonIdFromTitle } from '../lesson-id'
 
 type SidebarItem = {
   text?: string
@@ -52,7 +52,6 @@ const lessons = computed<FlatLesson[]>(() => {
 const doneCount = computed(() => lessons.value.filter((l) => completions.value[l.id]).length)
 
 onMounted(() => {
-  migrateCompletions(storageKey)
   sync()
   window.addEventListener('lesson-completion-changed', sync)
 })

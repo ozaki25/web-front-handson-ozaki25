@@ -10,9 +10,6 @@
 //   "lesson37: 型ガード（`typeof` / `in` / カスタム）" → "型ガード"
 //
 // 全角・半角コロンの両方と、lesson 番号と : の間の空白にも対応。
-//
-// migrateCompletions() は、正規化ルールを追加したときに一度だけ呼ぶことで
-// 旧フォーマットで保存済みの localStorage キーを新フォーマットに変換する。
 
 const LESSON_PREFIX_RE = /^lesson\s*\d+\s*[:：]\s*/
 const INLINE_CODE_RE = /`([^`]+)`/g
@@ -36,30 +33,4 @@ export function lessonIdFromH1(): string {
   const clone = h1.cloneNode(true) as HTMLElement
   clone.querySelectorAll('a').forEach((el) => el.remove())
   return lessonIdFromTitle(clone.textContent || '')
-}
-
-/**
- * 旧フォーマット（バッククォート含む・末尾括弧含む）で保存された
- * localStorage キーを現在の正規化ルールに合わせて変換する。
- * 正規化ルールを追加したタイミングで一度だけ呼ぶことで既存データを維持できる。
- */
-export function migrateCompletions(storageKey: string): void {
-  if (typeof window === 'undefined') return
-  let raw: Record<string, string>
-  try {
-    raw = JSON.parse(localStorage.getItem(storageKey) || '{}')
-  } catch {
-    return
-  }
-  const migrated: Record<string, string> = {}
-  let changed = false
-  for (const [key, value] of Object.entries(raw)) {
-    const newKey = lessonIdFromTitle(key)
-    if (newKey !== key) changed = true
-    // 衝突時は古い値より新しい値を優先する
-    if (!(newKey in migrated)) migrated[newKey] = value
-  }
-  if (changed) {
-    localStorage.setItem(storageKey, JSON.stringify(migrated))
-  }
 }
