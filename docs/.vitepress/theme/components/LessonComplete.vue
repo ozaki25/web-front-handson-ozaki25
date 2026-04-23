@@ -1,12 +1,36 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useRoute } from 'vitepress'
+import { useRoute, useData } from 'vitepress'
+import { lessonIdFromTitle } from '../lesson-id'
+
+type SidebarItem = { text?: string; link?: string; items?: SidebarItem[] }
 
 const route = useRoute()
+const { theme } = useData()
 const completed = ref(false)
 const rootEl = ref<HTMLElement | null>(null)
 const storageKey = 'lesson-completions'
 let observer: IntersectionObserver | null = null
+
+function findSidebarText(items: SidebarItem[], path: string): string {
+  for (const item of items) {
+    if (item.link && item.link.replace(/\/$/, '') === path.replace(/\/$/, '')) {
+      return item.text ?? ''
+    }
+    if (item.items) {
+      const found = findSidebarText(item.items, path)
+      if (found) return found
+    }
+  }
+  return ''
+}
+
+function currentId(): string {
+  const sidebar = theme.value.sidebar
+  const items = Array.isArray(sidebar) ? sidebar : []
+  const text = findSidebarText(items, route.path)
+  return lessonIdFromTitle(text)
+}
 
 function read(): Record<string, string> {
   if (typeof window === 'undefined') return {}
@@ -23,22 +47,31 @@ function write(data: Record<string, string>) {
 }
 
 function sync() {
-  completed.value = !!read()[route.path]
+  const id = currentId()
+  if (!id) {
+    completed.value = false
+    return
+  }
+  completed.value = !!read()[id]
 }
 
 function markComplete() {
+  const id = currentId()
+  if (!id) return
   const data = read()
-  data[route.path] = new Date().toISOString()
+  data[id] = new Date().toISOString()
   write(data)
   sync()
 }
 
 function toggle() {
+  const id = currentId()
+  if (!id) return
   const data = read()
-  if (data[route.path]) {
-    delete data[route.path]
+  if (data[id]) {
+    delete data[id]
   } else {
-    data[route.path] = new Date().toISOString()
+    data[id] = new Date().toISOString()
   }
   write(data)
   sync()
