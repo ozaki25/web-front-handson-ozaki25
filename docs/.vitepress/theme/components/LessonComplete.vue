@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vitepress'
-import { lessonIdFromH1 } from '../lesson-id'
 
 const route = useRoute()
 const completed = ref(false)
@@ -24,31 +23,22 @@ function write(data: Record<string, string>) {
 }
 
 function sync() {
-  const id = lessonIdFromH1()
-  if (!id) {
-    completed.value = false
-    return
-  }
-  completed.value = !!read()[id]
+  completed.value = !!read()[route.path]
 }
 
 function markComplete() {
-  const id = lessonIdFromH1()
-  if (!id) return
   const data = read()
-  data[id] = new Date().toISOString()
+  data[route.path] = new Date().toISOString()
   write(data)
   sync()
 }
 
 function toggle() {
-  const id = lessonIdFromH1()
-  if (!id) return
   const data = read()
-  if (data[id]) {
-    delete data[id]
+  if (data[route.path]) {
+    delete data[route.path]
   } else {
-    data[id] = new Date().toISOString()
+    data[route.path] = new Date().toISOString()
   }
   write(data)
   sync()

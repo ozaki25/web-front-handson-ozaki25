@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useData } from 'vitepress'
-import { lessonIdFromTitle } from '../lesson-id'
 
 type SidebarItem = {
   text?: string
@@ -9,7 +8,7 @@ type SidebarItem = {
   items?: SidebarItem[]
 }
 
-type FlatLesson = { text: string; link: string; group: string; id: string }
+type FlatLesson = { text: string; link: string; group: string }
 
 const { theme } = useData()
 const storageKey = 'lesson-completions'
@@ -34,7 +33,7 @@ function flatten(items: SidebarItem[] | undefined, groupText = ''): FlatLesson[]
   for (const item of items) {
     if (item.link && item.link.startsWith('/lessons/')) {
       const text = item.text ?? ''
-      out.push({ text, link: item.link, group: groupText, id: lessonIdFromTitle(text) })
+      out.push({ text, link: item.link, group: groupText })
     }
     if (item.items) {
       out.push(...flatten(item.items, item.text ?? groupText))
@@ -49,7 +48,7 @@ const lessons = computed<FlatLesson[]>(() => {
   return []
 })
 
-const doneCount = computed(() => lessons.value.filter((l) => completions.value[l.id]).length)
+const doneCount = computed(() => lessons.value.filter((l) => completions.value[l.link]).length)
 
 onMounted(() => {
   sync()
@@ -67,8 +66,8 @@ onUnmounted(() => {
   <div class="lesson-progress" v-if="lessons.length > 0">
     <div class="lesson-progress-summary">完了: {{ doneCount }} / {{ lessons.length }}</div>
     <ul class="lesson-progress-list">
-      <li v-for="l in lessons" :key="l.link" :class="{ done: completions[l.id] }">
-        <span class="mark" aria-hidden="true">{{ completions[l.id] ? '✓' : '・' }}</span>
+      <li v-for="l in lessons" :key="l.link" :class="{ done: completions[l.link] }">
+        <span class="mark" aria-hidden="true">{{ completions[l.link] ? '✓' : '・' }}</span>
         <a :href="l.link">{{ l.text }}</a>
         <span class="group" v-if="l.group">（{{ l.group }}）</span>
       </li>
