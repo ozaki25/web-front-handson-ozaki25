@@ -114,7 +114,7 @@ function wait(ms) {
 前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「前のレッスンまで作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
 
 <details>
-<summary>出発点のコード（lesson25 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 

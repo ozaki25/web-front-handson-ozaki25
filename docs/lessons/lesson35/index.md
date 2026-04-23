@@ -12,7 +12,7 @@
 
 ### 配列の型
 
-章 2 で書いた配列に型を付けていきます。配列の型は 2 通りの書き方があります。どちらも意味は同じです。
+2 章 で書いた配列に型を付けていきます。配列の型は 2 通りの書き方があります。どちらも意味は同じです。
 
 ```ts
 const numbers: number[] = [1, 2, 3];
@@ -77,7 +77,7 @@ status = "todo";     // エラー
 Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
 ```
 
-「この変数には `"open"` か `"done"` か `"archived"` のどれかしか入らない」ということが型で書けます。章 2 で文字列リテラルを比較していた部分（`if (status === "done")` など）が、typo まで含めて TS が守ってくれるようになります。
+「この変数には `"open"` か `"done"` か `"archived"` のどれかしか入らない」ということが型で書けます。2 章 で文字列リテラルを比較していた部分（`if (status === "done")` など）が、typo まで含めて TS が守ってくれるようになります。
 
 ### オプショナルプロパティ `?:`
 
@@ -139,7 +139,7 @@ export type Todo = {
 新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
-<summary>`src/types.ts`（lesson33 完成時点）</summary>
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
 ```ts
 export type Todo = {
@@ -353,7 +353,7 @@ TODO: ゴミを出す
 1. `countOpen(todos: Todo[]): number` — `status === "open"` の件数を返す。
 2. `filterDone(todos: Todo[]): Todo[]` — `status === "done"` のものだけを新しい配列で返す。
 
-呼び出して結果を Console に出す。使える道具は章 2 で学んだ `for...of`、`filter`、`length` など。どれを使っても構わない。
+呼び出して結果を Console に出す。使える道具は2 章 で学んだ `for...of`、`filter`、`length` など。どれを使っても構わない。
 
 ### スコープ外の明記
 

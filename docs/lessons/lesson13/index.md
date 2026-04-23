@@ -171,7 +171,7 @@ body { padding: 16px; }
 前のレッスンまでで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
 
 <details>
-<summary>出発点のコード（lesson12 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -579,4 +579,4 @@ form button:focus {
 - `absolute` は最も近い `relative` / `absolute` / `fixed` の祖先を基準に浮く。
 - `fixed` は画面（ビューポート）を基準に固定。スクロールしても動かない。
 - `z-index` で前後の重なりを制御できる（`position` が `static` 以外のときだけ効く）。
-- 次のレッスンでは、`:hover` で色や位置をなめらかに変化させる `transition` を学ぶ。章 1 の締めで、自己紹介ページに動きを足す。
+- 次のレッスンでは、`:hover` で色や位置をなめらかに変化させる `transition` を学ぶ。1 章 の締めで、自己紹介ページに動きを足す。

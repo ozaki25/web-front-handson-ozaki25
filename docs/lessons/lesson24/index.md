@@ -140,7 +140,7 @@ const target = todos.find((todo) => todo.id === "a2");
 console.log(target); // { id: "a2", text: "本を返す" }
 ```
 
-章 5 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
+5 章 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
 
 ### チェーン（つなげて書く）
 
@@ -169,7 +169,7 @@ console.log(adultNames); // ["Alice", "Carol"]
 前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
-<summary>出発点のコード（lesson23 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -327,5 +327,5 @@ undefined
 - `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
 - どれも元の配列は変えない
 - チェーンすると複数の処理を 1 行でつなげられる
-- **`find` は章 5 の「動的ルート」（詳細取得、URL の `id` から 1 件取り出す）で再登場する**
-- **`map` は章 4 の「配列を描画する」で JSX の配列を作る形で再登場する**
+- **`find` は5 章 の「動的ルート」（詳細取得、URL の `id` から 1 件取り出す）で再登場する**
+- **`map` は4 章 の「配列を描画する」で JSX の配列を作る形で再登場する**

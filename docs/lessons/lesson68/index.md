@@ -11,14 +11,14 @@
 
 ### `preventDefault` が要らなくなる
 
-章 2 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（章 4）でも `onSubmit` の中で同じことをしていました。
+2 章 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（4 章）でも `onSubmit` の中で同じことをしていました。
 
 React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React が送信イベントを **自動で止めて** その関数を呼んでくれます。結果として、以下の対比になります。
 
 | 書き方 | 送信のデフォルトを止める |
 |---|---|
-| 章 2 の素の JS | `event.preventDefault()` を手書き |
-| 章 4 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
+| 2 章 の素の JS | `event.preventDefault()` を手書き |
+| 4 章 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
 | **本レッスンの `<form action={fn}>`** | **React が自動で止める** |
 
 `preventDefault` という呼び出しが消えることに注目しておきましょう。
@@ -147,7 +147,7 @@ export default function TodosPage() {
 
 ### 手順 1: `Todo` 型を用意
 
-章 3 で決めた `Todo` 型を、Next.js プロジェクトでも再利用します。`app/types.ts` を作ります。
+3 章 で決めた `Todo` 型を、Next.js プロジェクトでも再利用します。`app/types.ts` を作ります。
 
 ```ts
 export type Todo = {
@@ -172,7 +172,7 @@ export async function listTodos(): Promise<Todo[]> {
   return todos;
 }
 
-// 戻り値の型（章 3 lesson38 の判別共用体そのもの）
+// 戻り値の型（3 章 lesson38 の判別共用体そのもの）
 export type AddTodoResult = { ok: true } | { ok: false; error: string };
 
 export async function addTodo(formData: FormData): Promise<AddTodoResult> {
@@ -193,7 +193,7 @@ export async function addTodo(formData: FormData): Promise<AddTodoResult> {
 - `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
 - `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
 - `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
-- **戻り値の型 `AddTodoResult`** は、章 3 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は次のレッスンで `useActionState` と結合するとき効きます。
+- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は次のレッスンで `useActionState` と結合するとき効きます。
 
 ### 手順 3: `/todos` を本物のページにする
 
@@ -227,7 +227,7 @@ export default async function TodosPage() {
 - このファイルは Server Component です（`"use client"` を書きません）。
 - `<form action={addTodo}>` に関数を直接渡しています。
 - `event.preventDefault()` も `onSubmit` も書いていません。React が自動で止めます。
-- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（章 1 で学んだ `name` 属性がここで効いています）。
+- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（1 章 で学んだ `name` 属性がここで効いています）。
 
 ### 期待出力
 

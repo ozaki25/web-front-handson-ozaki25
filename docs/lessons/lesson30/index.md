@@ -1,4 +1,4 @@
-# lesson30: TODO アプリを作る（ミニ統合）
+# lesson30: TODO アプリを作る
 
 <script setup>
 // LiveDemo の :js に渡す JS コード。
@@ -24,7 +24,7 @@ render();
 
 ## ゴール
 
-- 章 2 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
+- 2 章 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
 - 入力・追加・削除できる TODO アプリを HTML + JS で完成させる
 - `localStorage` に保存して、リロードしても残るようにする
 - 後続章で進化させる共通題材として、最終形を StackBlitz に保存する
@@ -99,10 +99,10 @@ const id = crypto.randomUUID();
 
 ### 途中から始める場合
 
-前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは章 2 のミニ統合で、ここまでの演習ファイルがあるとスムーズですが、下のコードで前のレッスン完成時点を再現してから演習に入っても同じ状態から始められます。
+前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは2 章 のミニ統合で、ここまでの演習ファイルがあるとスムーズですが、下のコードで前のレッスン完成時点を再現してから演習に入っても同じ状態から始められます。
 
 <details>
-<summary>出発点のコード（lesson29 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -327,7 +327,7 @@ button {
 
 #### `script.js`（ステップ 1）
 
-**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（「分割代入とスプレッド」で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、章 4 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、章 2 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（「分割代入とスプレッド」で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、4 章 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、2 章 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
 
 ```js
 const form = document.querySelector("#form");
@@ -537,4 +537,4 @@ render();
 - 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
 - `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
 - `JSON.parse` は失敗しうるので `try` / `catch` で囲む
-- **この TODO アプリは章 4 の「TODO アプリを React で作る」で React 版に進化し、章 5 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく
+- **この TODO アプリは4 章 の「TODO アプリを React で作る」で React 版に進化し、5 章 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく

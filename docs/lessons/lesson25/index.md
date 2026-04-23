@@ -145,7 +145,7 @@ import { add } from "./math";
 前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
 
 <details>
-<summary>出発点のコード（lesson24 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -352,4 +352,4 @@ renderTodos(list, todos);
 - ブラウザで直接読み込む場合、import パスの末尾は **`.js` まで書く**
 - 本コースは **名前付き export を基本** とする
 - 次の **数レッスンで非同期・DOM・イベントを学び、「TODO アプリを作る」で今日作った 3 ファイル構成（`storage.js` / `render.js` / `main.js`）の TODO をそのまま出発点にして、追加・削除・永続化まで仕上げます**。今日作ったファイルは消さずに残しておいてください
-- **ここで体験した「役割ごとにファイルを分ける」発想は、章 4 の「コンポーネントと props」で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります
+- **ここで体験した「役割ごとにファイルを分ける」発想は、4 章 の「コンポーネントと props」で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります

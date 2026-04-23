@@ -19,11 +19,11 @@ App Router では、コンポーネントが 2 種類あります。
   - データベースアクセスや秘密情報を扱えます。
   - 送り出されたあとはブラウザでは再実行されません。
 - **Client Component**
-  - ブラウザで動きます。章 4 までの React と同じ感覚で書けます。
+  - ブラウザで動きます。4 章 までの React と同じ感覚で書けます。
   - `useState` / `useEffect` / `onClick` が使えます。
   - 先頭に `"use client"` を書いて明示します。
 
-章 4 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
+4 章 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
 
 ### `"use client"` のルール
 
@@ -132,7 +132,7 @@ You're importing a component that needs useState. This React Hook only works in 
 
 ### 前回のプロジェクトを開く
 
-章 5 の「共通レイアウトを作る」で作ったプロジェクトを開き直しましょう。
+5 章 の「共通レイアウトを作る」で作ったプロジェクトを開き直しましょう。
 
 ### 手順 1: Client Component の `Counter` を作る
 

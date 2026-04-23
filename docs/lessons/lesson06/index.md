@@ -21,7 +21,7 @@
 </form>
 ```
 
-`<form>` にはのちほど送信先（`action`）やメソッド（`method`）といった属性が付きますが、章 2 / 章 4 / 章 5 で段階的に使っていくので、このレッスンでは `<form>` の中に入力欄を並べる形だけ扱います。
+`<form>` にはのちほど送信先（`action`）やメソッド（`method`）といった属性が付きますが、2 章 / 4 章 / 5 章 で段階的に使っていくので、このレッスンでは `<form>` の中に入力欄を並べる形だけ扱います。
 
 ### 主な入力要素
 
@@ -67,7 +67,7 @@
 <input type="text" name="username" />
 ```
 
-この欄に「オザキ」と入力して送ると、`username=オザキ` という形のデータが送信されます。章 2 / 章 4 / 章 5 で JavaScript や React から値を扱うときも、基本はこの `name` をキーに取り出します。いまは「**`name` を付けないと、その値は外に出ていかない**」と覚えておきます。
+この欄に「オザキ」と入力して送ると、`username=オザキ` という形のデータが送信されます。2 章 / 4 章 / 5 章 で JavaScript や React から値を扱うときも、基本はこの `name` をキーに取り出します。いまは「**`name` を付けないと、その値は外に出ていかない**」と覚えておきます。
 
 ### `required` 属性
 
@@ -150,7 +150,7 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
 
 <details>
-<summary>出発点のコード（lesson05 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -375,5 +375,5 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 - フォームは `<form>` の中に `<input>` / `<textarea>` / `<button>` を並べて作る。
 - `name` 属性は送信のキー、`required` はブラウザに必須チェックを頼む合図。
 - `<label for>` を入力の `id` と合わせると、ラベルクリックで入力にフォーカスが移る。アクセシビリティにも効く。
-- 送信処理そのものはまだ書いていない。章 2 の JavaScript で `<form>` の送信を止めて値を取り出し、章 4 / 章 5 で React / Next.js の形に進化させる。
+- 送信処理そのものはまだ書いていない。2 章 の JavaScript で `<form>` の送信を止めて値を取り出し、4 章 / 5 章 で React / Next.js の形に進化させる。
 - 次のレッスンから、ついに CSS でページに見た目を付けていく。

@@ -94,7 +94,7 @@ a:hover { color: #b91c1c; }`
 前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
 
 <details>
-<summary>出発点のコード（lesson03 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -246,4 +246,4 @@ a:hover { color: #b91c1c; }`
 - 属性は `名前="値"` の形でタグに情報を足す仕組み。同じタグに複数書ける。
 - 次のレッスンでは、ページ全体の骨格を `<header>` / `<main>` / `<footer>` で整理する。
 
-本物のアプリでは `<img>` を **Next.js の `<Image>` コンポーネント** に置き換えるのが普通です。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）が効きます。章 5 の「next/image で画像最適化」で再訪します。
+本物のアプリでは `<img>` を **Next.js の `<Image>` コンポーネント** に置き換えるのが普通です。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）が効きます。5 章 の「next/image で画像最適化」で再訪します。

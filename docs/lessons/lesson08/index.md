@@ -139,7 +139,7 @@ button:focus {
 前のレッスンまでで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`styles.css` は新規作成してください。
 
 <details>
-<summary>出発点のコード（lesson07 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 

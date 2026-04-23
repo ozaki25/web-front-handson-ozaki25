@@ -48,7 +48,7 @@ export default function RootLayout({
 
 ### `children` の正体
 
-`children` はこれまで章 4 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
+`children` はこれまで4 章 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
 
 レイアウトの場合、Next.js が現在 URL に対応する `page.tsx` を自動で `children` に入れてくれます。学習者が直接 `<RootLayout>` を呼ぶことはありません。
 
@@ -73,7 +73,7 @@ export default function RootLayout({
 前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
-<summary>出発点のファイル（lesson59 完成時点）</summary>
+<summary>出発点のファイル</summary>
 
 **`app/page.tsx`**
 

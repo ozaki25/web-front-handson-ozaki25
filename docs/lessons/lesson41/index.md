@@ -10,7 +10,7 @@
 
 ### ここまでの立ち位置
 
-章 2 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。章 2 の仕上げの「TODO アプリを作る」では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
+2 章 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。2 章 の仕上げの「TODO アプリを作る」では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
 
 そこまでできるのなら、React はなぜ必要なのでしょうか。
 
@@ -174,7 +174,7 @@ Hello, React
 ### 自分で書く
 
 - 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
-- 変数の型は今は書かなくてよい（章 3 でやった型注釈は、次の lesson で必要に応じて使う）
+- 変数の型は今は書かなくてよい（3 章 でやった型注釈は、次の lesson で必要に応じて使う）
 
 ### `package.json` を覗く小タスク
 

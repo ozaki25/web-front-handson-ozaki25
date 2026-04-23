@@ -167,7 +167,7 @@ body { padding: 16px; }
 前のレッスンまでで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`styles.css` は新規作成してください。
 
 <details>
-<summary>出発点のコード（lesson09 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -570,4 +570,4 @@ header h1 {
 - `padding` は内側の余白、`margin` は外側の余白、`border` は枠線。ショートハンドで上下左右を一度に指定できる。
 - `width` の既定の計算方式は直感に反するので、`box-sizing: border-box` を全要素に適用する。
 - `margin: 0 auto;` と `max-width` の組み合わせで、要素を水平方向に中央寄せしつつ画面幅に合わせて縮められる。
-- 次のレッスンはいよいよ章 1 のミニ統合。Flexbox とメディアクエリを使い、自己紹介ページをカード 3 枚横並び・スマホで縦並びにして完成させる。
+- 次のレッスンはいよいよ1 章 のミニ統合。Flexbox とメディアクエリを使い、自己紹介ページをカード 3 枚横並び・スマホで縦並びにして完成させる。

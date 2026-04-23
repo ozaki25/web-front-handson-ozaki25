@@ -174,8 +174,8 @@ export default App;
 
 ### 末尾予告
 
-- **ブラウザ側で `fetch` を `useEffect` で呼ぶパターン** は、競合状態、ローディング、エラー管理など罠が多いので、本コースでは扱いません。データ取得は章 5（Next.js）の **Server Component** にサーバー側 `fetch` としてまとめます
-- **「TODO アプリを React で作る」** では、`useEffect` を **localStorage への保存** に使います（依存配列に `todos` を渡す形）。章 2 の「TODO アプリを作る」で作った「リロードしても消えない TODO」を、React 版でも取り戻します
+- **ブラウザ側で `fetch` を `useEffect` で呼ぶパターン** は、競合状態、ローディング、エラー管理など罠が多いので、本コースでは扱いません。データ取得は5 章（Next.js）の **Server Component** にサーバー側 `fetch` としてまとめます
+- **「TODO アプリを React で作る」** では、`useEffect` を **localStorage への保存** に使います（依存配列に `todos` を渡す形）。2 章 の「TODO アプリを作る」で作った「リロードしても消えない TODO」を、React 版でも取り戻します
 
 ## まとめ
 

@@ -136,7 +136,11 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
         in_code { next }
         {
           line = $0
+          # バッククォート / 単引用符 / 二重引用符で囲まれた文字列中の <script> は
+          # JS / HTML リテラルの一部（LiveDemo の iframe 用など）なので対象外にする
           gsub(/`[^`]*`/, "", line)
+          gsub(/"[^"]*"/, "", line)
+          gsub(/'"'"'[^'"'"']*'"'"'/, "", line)
           if (line ~ /<script[> ]/ && line !~ /<script[[:space:]]+setup/) {
             print NR ": " $0
           } else if (line ~ /<style[> ]/) {

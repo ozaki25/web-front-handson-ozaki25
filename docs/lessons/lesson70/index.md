@@ -4,14 +4,14 @@
 
 - Next.js で HTTP API エンドポイントを作れる（`GET` / `POST`）
 - Server Actions との使い分けの指針を持つ
-- 章 3 の「型ガード」の型ガードを **サーバー側の入力検証** と **クライアント側の受信検証** 両方に使える
+- 3 章 の「型ガード」の型ガードを **サーバー側の入力検証** と **クライアント側の受信検証** 両方に使える
 - Middleware との **ランタイムの違い**（Edge / Node.js）を理解する
 
 ## 解説
 
 ### Server Actions と Route Handlers の違い
 
-章 5 の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
+5 章 の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
 
 一方、もっと一般的な用途、例えば:
 
@@ -60,7 +60,7 @@ export async function POST(request: Request) {
 
 ### 入力検証と受信検証
 
-Route Handlers を作るときに **型ガード（章 3 の「型ガード」）** が活きます。
+Route Handlers を作るときに **型ガード（3 章 の「型ガード」）** が活きます。
 
 - **サーバー側**: `POST` の中で `await request.json()` した値は **型が `any`** になる（外部から何が来るか分からない）。そのまま `body.text` を使うと TS の型チェックは効くが、実行時は壊れうる
 - **クライアント側**: `fetch('/api/todos')` で受け取った JSON も **何が返るか TS からは見えない**。同じく検証が必要
@@ -90,7 +90,7 @@ Route Handlers と Middleware でデフォルトが違います。
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/types.ts` の `isTodo` 型ガードは章 3 の「型ガード」と揃えた形なので、章 3 を先に終えていなくてもそのまま貼って使えます。既に「Server Actions の最小形」「送信状態とエラー表示」で `app/types.ts` を作っている場合は、下記の型ガードを追記する形で構いません。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/types.ts` の `isTodo` 型ガードは3 章 の「型ガード」と揃えた形なので、3 章 を先に終えていなくてもそのまま貼って使えます。既に「Server Actions の最小形」「送信状態とエラー表示」で `app/types.ts` を作っている場合は、下記の型ガードを追記する形で構いません。
 
 ### ゴール
 
@@ -134,7 +134,7 @@ export function isTodoInput(value: unknown): value is { text: string } {
 }
 ```
 
-章 3 の「型ガード」で `isTodo` の骨格を書きました。ここで配列用と入力用の派生を追加しています。
+3 章 の「型ガード」で `isTodo` の骨格を書きました。ここで配列用と入力用の派生を追加しています。
 
 ### `app/api/todos/route.ts`
 
@@ -259,7 +259,7 @@ export function TodoFetcher() {
 
 - `data: unknown` で受ける。これで TS は型ガードなしでは `data.todos` に触らせない
 - `isTodoArray` で検証、失敗時はエラー state にする
-- 章 3 の「型ガード」で学んだ `unknown` → `Todo` の絞り込みを **そのまま実務で使う** 形
+- 3 章 の「型ガード」で学んだ `unknown` → `Todo` の絞り込みを **そのまま実務で使う** 形
 
 ### 期待出力
 
@@ -288,5 +288,5 @@ export function TodoFetcher() {
 - 戻り値は `NextResponse.json(...)` に統一
 - Server Actions と Route Handlers は棲み分け（表を参照）
 - サーバー側は **入力検証**、クライアント側は **受信検証** の両方で型ガードを使う
-- 章 3 の「型ガード」の `isTodo` がそのまま実務で使える
+- 3 章 の「型ガード」の `isTodo` がそのまま実務で使える
 - Middleware は既定 Edge、Route Handlers は既定 Node.js。ランタイムの違いを意識する

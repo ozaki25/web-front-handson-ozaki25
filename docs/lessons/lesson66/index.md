@@ -4,7 +4,7 @@
 
 - `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
 - Next.js 15 で `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
-- 章 2 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
+- 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
 
 ## 解説
 
@@ -49,7 +49,7 @@ export default async function PostPage({ params }: Props) {
 
 ### `find` で 1 件だけ取り出す
 
-章 2 の配列メソッド回の末尾で「`find` は章 5 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
+2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
 
 ```ts
 const target = posts.find((p) => p.id === id);
@@ -78,7 +78,7 @@ URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は *
 前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
 
 <details>
-<summary>出発点のファイル（lesson63 完成時点の `/posts`）</summary>
+<summary>出発点のファイル（`/posts` 部分）</summary>
 
 **`app/posts/page.tsx`**
 
@@ -232,6 +232,6 @@ export default async function PostPage({ params }: Props) {
 
 - `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
 - Next.js 15 では `params: Promise<{ id: string }>` の形です。`await params` で取り出します。
-- 配列から 1 件取り出すのは章 2 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
+- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
 - 見つからない場合の「正しい 404 ページ」は次のレッスンで扱います。
 - クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

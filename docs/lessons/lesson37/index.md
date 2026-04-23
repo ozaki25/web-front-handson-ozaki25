@@ -129,7 +129,7 @@ function isTodo(x: unknown): x is Todo {
 - 各プロパティを順に `typeof` で確認。全部通ったら `return true`。
 - `memo` は `?:` なので「あるなら `string`、ないなら `undefined`」を許す。
 
-この形の `isTodo` は **章 5 の「Route Handlers」で再び登場します**。サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのに、まさにこの関数を使い回せます。
+この形の `isTodo` は **5 章 の「Route Handlers」で再び登場します**。サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのに、まさにこの関数を使い回せます。
 
 ### 型ガードを通した `unknown` の扱い
 
@@ -157,7 +157,7 @@ if (isTodo(raw)) {
 新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
-<summary>`src/types.ts`（lesson35 完成時点）</summary>
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
 ```ts
 export type Todo = {
@@ -400,5 +400,5 @@ if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
 - `Array.isArray`: 配列かどうかの専用判定。
 - `in`: オブジェクトに特定のプロパティがあるかで判定。
 - **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。前のレッスンで受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
-- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、章 5 の「Route Handlers」で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
+- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、5 章 の「Route Handlers」で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
 - 次のレッスンでは、`kind` のような **「種類を表すプロパティ」で自動的に絞り込める** 書き方（判別共用体）を学ぶ。型ガード関数を書かなくても、`switch` だけで分岐できるようになる。

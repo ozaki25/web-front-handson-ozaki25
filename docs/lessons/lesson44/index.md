@@ -4,16 +4,16 @@
 
 - 配列を `.map` で JSX の配列に変換し、`<ul>` の中に並べられる
 - `key` prop に何を渡すべきかを説明できる
-- 素の JS での描画（章 2 の「繰り返し処理」「TODO アプリを作る」）との違いが書き出せる
+- 素の JS での描画（2 章 の「繰り返し処理」「TODO アプリを作る」）との違いが書き出せる
 
 ## 解説
 
-### 章 2 の「繰り返し処理」の `for...of` / 「TODO アプリを作る」の DOM 追加との対比
+### 2 章 の「繰り返し処理」の `for...of` / 「TODO アプリを作る」の DOM 追加との対比
 
-章 2 で、TODO アプリの一覧を描画したときは次のように書きました。
+2 章 で、TODO アプリの一覧を描画したときは次のように書きました。
 
 ```js
-// 素の JS での描画イメージ（章 2 の「繰り返し処理」+「TODO アプリを作る」）
+// 素の JS での描画イメージ（2 章 の「繰り返し処理」+「TODO アプリを作る」）
 const ul = document.querySelector("#list");
 for (const todo of todos) {
   const li = document.createElement("li");
@@ -36,9 +36,9 @@ React では、**配列を JSX の配列に変換するだけ**です。`return`
 
 `for` ループで `appendChild` を呼ぶ必要はありません。配列（`todos`）から配列（JSX の `<li>` の並び）への**変換**だけを書きます。
 
-### `map` は章 2 の「配列の変換」の続き
+### `map` は2 章 の「配列の変換」の続き
 
-章 2 の「配列の変換」で `map` / `filter` を学びました。`map` は配列の各要素を別の値に変換して、新しい配列を返すメソッドです。
+2 章 の「配列の変換」で `map` / `filter` を学びました。`map` は配列の各要素を別の値に変換して、新しい配列を返すメソッドです。
 
 ```ts
 const numbers = [1, 2, 3];
@@ -121,7 +121,7 @@ JSX の中の `{ ... }` には、式を 1 つだけ書きます。`for` 文や `
 前のレッスンまでで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
-<summary>出発点のファイル（lesson43 完成時点）</summary>
+<summary>出発点のファイル</summary>
 
 **`src/types.ts`**
 
@@ -139,13 +139,13 @@ export type Todo = {
 ### ゴール
 
 - ハードコードした `todos` 配列を `<ul>` で描画する
-- `Todo` 型を章 3 の `types.ts` から `import type` して再利用する
+- `Todo` 型を3 章 の `types.ts` から `import type` して再利用する
 - 各 `<li>` に `key={todo.id}` を付ける
 
 ### 手順
 
 1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/types.ts` を作成（章 3 の「オブジェクトの型と type エイリアス」「配列・ユニオン・リテラル型・オプショナル」で作ったものを持ってくる想定）
+2. `src/types.ts` を作成（3 章 の「オブジェクトの型と type エイリアス」「配列・ユニオン・リテラル型・オプショナル」で作ったものを持ってくる想定）
 3. `src/TodoList.tsx` を作成
 4. `src/App.tsx` を書き換える
 
@@ -158,7 +158,7 @@ export type Todo = {
 };
 ```
 
-章 3 で `status` や `memo` を足した版を書いた場合はそちらを使っても OK です。このレッスンは `id` と `text` しか使いません。
+3 章 で `status` や `memo` を足した版を書いた場合はそちらを使っても OK です。このレッスンは `id` と `text` しか使いません。
 
 ### `src/TodoList.tsx`
 
@@ -255,4 +255,4 @@ export default App;
 - 配列の描画は `配列.map((item) => <JSX />)` でおこなう
 - 各要素に **ユニークな `key`** を付ける（インデックスは避ける）
 - `for` / `appendChild` を書く素の JS と違い、React は「前のツリーとの差分」を自分で計算して DOM を更新する
-- 型（`Todo`）は章 3 の `types.ts` から `import type` で再利用できる
+- 型（`Todo`）は3 章 の `types.ts` から `import type` で再利用できる

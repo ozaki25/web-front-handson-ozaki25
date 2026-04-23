@@ -135,7 +135,7 @@ type AdminUser = User & {
 
 - **基本は `type`** に統一する
   - オブジェクト型・ユニオン・交差・Utility Types を **同じ書き方（`type ...=`）で書ける** ので、読者側の認知コストが低い。
-  - 章 3 で `status: "open" | "done"` のようなユニオン・リテラル型が多用されるため、`type` で書けない場面は実質ない。
+  - 3 章 で `status: "open" | "done"` のようなユニオン・リテラル型が多用されるため、`type` で書けない場面は実質ない。
 - `interface` は「存在を知っている」状態にする
   - 外部ライブラリの型定義（`@types/...`）では `interface` が多用される。読めるようにしておく必要がある。
   - 将来チームで書く際に `interface` を選ぶ流儀もある。読み書きの両方できるようにしておけば困らない。
@@ -167,7 +167,7 @@ interface User {
 新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
-<summary>`src/types.ts`（lesson33 完成時点）</summary>
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
 ```ts
 export type Todo = {
@@ -346,7 +346,7 @@ export type Todo = {
 };
 ```
 
-`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。章 3 の以降の演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば後続レッスンとズレない。
+`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。3 章 の以降の演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば後続レッスンとズレない。
 
 ### 自分で書く
 

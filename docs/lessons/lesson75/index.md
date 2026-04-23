@@ -43,7 +43,7 @@ StackBlitz → GitHub → Vercel → https://<project>.vercel.app
 「小さなアプリを仕上げる」で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために「小さなアプリを仕上げる」の完成品を推奨します）。
 
 <details>
-<summary>出発点のファイル（lesson73 完成時点の全量）</summary>
+<summary>出発点のファイル</summary>
 
 **`app/layout.tsx`**
 

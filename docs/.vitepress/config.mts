@@ -66,6 +66,7 @@ export default withPwa(withMermaid(
     themeConfig: {
       nav: [{ text: 'ホーム', link: '/' }],
       sidebar: [
+        { text: 'トップ', link: '/' },
         { text: 'はじめに', link: '/introduction/' },
         {
           text: '1. HTML / CSS',

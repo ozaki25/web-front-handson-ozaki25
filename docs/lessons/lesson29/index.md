@@ -108,7 +108,7 @@ function handleClick() { ... }
 前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
-<summary>出発点のコード（lesson28 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -353,4 +353,4 @@ form.addEventListener("submit", (event) => {
 - `要素.addEventListener("click", 関数)` でクリックに反応する
 - フォーム送信は `"submit"` イベント、`event.preventDefault()` で既定動作を止める
 - カウンターや入力フォームは、DOM 操作とイベントを組み合わせる定番の練習題
-- **`preventDefault` は章 5 の「Server Actions の最小形」で登場する Server Actions では、React が自動でやってくれるようになる（コードから消える）**
+- **`preventDefault` は5 章 の「Server Actions の最小形」で登場する Server Actions では、React が自動でやってくれるようになる（コードから消える）**

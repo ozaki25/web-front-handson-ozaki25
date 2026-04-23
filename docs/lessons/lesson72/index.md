@@ -80,7 +80,7 @@ Next.js には重要なルールがあります。
 
 ### 手順
 
-1. 章 5 の既存プロジェクトを開く（どれでも可）
+1. 5 章 の既存プロジェクトを開く（どれでも可）
 2. プロジェクトルートに `.env.local` を新規作成
 3. 新しいページ `app/env-test/page.tsx`（Server Component）と `app/env-test/ClientView.tsx`（Client Component）を作る
 4. プレビューで両方を比較

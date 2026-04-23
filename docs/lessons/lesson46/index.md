@@ -29,7 +29,7 @@ setTodos((prev) => [...prev, newTodo]);
 
 理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
 
-スプレッド構文 `...`（章 2 の「分割代入とスプレッド」）は、このイミュータブル更新で頻出します。
+スプレッド構文 `...`（2 章 の「分割代入とスプレッド」）は、このイミュータブル更新で頻出します。
 
 ### よく使う 3 パターン
 
@@ -55,7 +55,7 @@ setTodos((prev) => [newTodo, ...prev]);
 setTodos((prev) => prev.filter((t) => t.id !== id));
 ```
 
-`filter`（章 2 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
+`filter`（2 章 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
 
 ### イベントハンドラの型（コピペで与える）
 
@@ -103,7 +103,7 @@ function handleSubmit(e: FormEvent<HTMLFormElement>) {
 前のレッスンまでで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
-<summary>出発点のファイル（lesson45 完成時点相当）</summary>
+<summary>出発点のファイル</summary>
 
 **`src/types.ts`**
 
@@ -217,7 +217,7 @@ function App() {
 export default App;
 ```
 
-`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。章 2 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。
+`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。2 章 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。
 
 ### `src/App.css`
 

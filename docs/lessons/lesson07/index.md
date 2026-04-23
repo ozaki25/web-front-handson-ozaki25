@@ -111,7 +111,7 @@ p {
 前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。このレッスンから `styles.css` を作るため、`styles.css` の出発点はまだありません（このレッスン内で新規作成します）。
 
 <details>
-<summary>出発点のコード（lesson06 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 

@@ -5,7 +5,7 @@
 - `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できます。
 - `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を覚えます。
 - 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを押さえます。
-- 章 5 の「ページを増やしてリンクで移動する」で `/about` に貼った `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
+- 5 章 の「ページを増やしてリンクで移動する」で `/about` に貼った `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
 
 ## 解説
 
@@ -160,7 +160,7 @@ Route Groups を使っていない出発点なので、本文中で `app/(public
 
 ### 前回のプロジェクトを開く
 
-章 5 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
+5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
 
 ### 手順 1: `next.config.ts` に `remotePatterns` を追加
 

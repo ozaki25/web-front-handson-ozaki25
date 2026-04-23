@@ -153,10 +153,10 @@ body { padding: 16px; }
 
 ### 途中から始める場合
 
-前のレッスンまでで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスンから章 1 統合版では `style.css` というファイル名を使います）。
+前のレッスンまでで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスンから1 章 統合版では `style.css` というファイル名を使います）。
 
 <details>
-<summary>出発点のコード（lesson11 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 

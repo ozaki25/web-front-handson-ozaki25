@@ -1,6 +1,6 @@
 # lesson14: Transition と hover アニメーション
 
-章 1 の締めくくりです。ここまでで作ってきた自己紹介ページに、**マウスを乗せたとき（hover）になめらかに変化する動き** を足します。また、動きが苦手な人への配慮として **`prefers-reduced-motion`** で動きを抑える書き方も学びます。
+1 章 の締めくくりです。ここまでで作ってきた自己紹介ページに、**マウスを乗せたとき（hover）になめらかに変化する動き** を足します。また、動きが苦手な人への配慮として **`prefers-reduced-motion`** で動きを抑える書き方も学びます。
 
 ## ゴール
 
@@ -138,9 +138,9 @@ body { padding: 24px; background: #f5f7fa; }
 
 以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
 
-### 章 1 全体を通してのまとめ（先取り）
+### 1 章 全体を通してのまとめ（先取り）
 
-章 1 では HTML の基本タグ、CSS 基礎、Flexbox と統合、Grid、Position と進めてきました。今回の Transition を加えると、**静的なページに「動き」を足す** という現代的な CSS の基礎が一通り揃います。章 1 全体のまとめは、このレッスンの末尾の「まとめ」セクションに書いています。
+1 章 では HTML の基本タグ、CSS 基礎、Flexbox と統合、Grid、Position と進めてきました。今回の Transition を加えると、**静的なページに「動き」を足す** という現代的な CSS の基礎が一通り揃います。1 章 全体のまとめは、このレッスンの末尾の「まとめ」セクションに書いています。
 
 ## 演習
 
@@ -149,7 +149,7 @@ body { padding: 24px; background: #f5f7fa; }
 前のレッスンまでで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
 
 <details>
-<summary>出発点のコード（lesson13 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
@@ -582,9 +582,9 @@ form button:focus {
 - `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。動きが苦手な人への最低限の配慮として覚えておく。
 - DevTools の Rendering タブで `prefers-reduced-motion` をエミュレートして動作確認できる。
 
-### 章 1 全体のまとめ
+### 1 章 全体のまとめ
 
-ここまでの章 1 のレッスンで、次のことができるようになりました。
+ここまでの1 章 のレッスンで、次のことができるようになりました。
 
 - HTML の基本タグ（見出し・段落・リスト・リンク・画像・フォーム・セマンティックタグ）で文書を組み立てられる
 - CSS を外部ファイルで読み込み、セレクタ・擬似クラス・色や文字・余白を指定できる
@@ -593,6 +593,6 @@ form button:focus {
 - `transition` と `transform` で動きを足し、`prefers-reduced-motion` で配慮できる
 - `@media` メディアクエリで画面幅やダークモード、動きの設定に応じてスタイルを変えられる
 
-章 1 で作った **自己紹介ページ** は、章 5 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。
+1 章 で作った **自己紹介ページ** は、5 章 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。
 
-次の章 2 の「最初の JavaScript」からは **JavaScript** に入ります。これまで作ったページには動きがありませんでしたが、JS を使うとボタンを押したときの反応や、データの表示・更新ができるようになります。章 2 の山場は「TODO アプリを作る」です。HTML + CSS + JavaScript だけで、1 つの小さなアプリを完成させます。
+次の2 章 の「最初の JavaScript」からは **JavaScript** に入ります。これまで作ったページには動きがありませんでしたが、JS を使うとボタンを押したときの反応や、データの表示・更新ができるようになります。2 章 の山場は「TODO アプリを作る」です。HTML + CSS + JavaScript だけで、1 つの小さなアプリを完成させます。

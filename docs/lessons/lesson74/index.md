@@ -11,7 +11,7 @@
 
 ### 本コースのスタンス
 
-ここまで章 1 から章 5 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
+ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
 
 一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
 
@@ -89,7 +89,7 @@ CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た
 
 ### 途中から始める場合
 
-このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の章 5 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
 
 ### ゴール
 
@@ -175,7 +175,7 @@ export default function Page() {
 - `text-3xl`（フォントサイズ）、`font-bold`（太字）
 - `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
 
-章 1 で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが見えると思います。本コースで CSS の仕組みを先に押さえたのが効いてきます。
+1 章 で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが見えると思います。本コースで CSS の仕組みを先に押さえたのが効いてきます。
 
 ### 期待出力
 
@@ -201,7 +201,7 @@ export default function Page() {
 ### 自分で書く（挑戦）
 
 - Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
-- 書き終えたら、章 1 の素の CSS 版（`docs/lessons/lesson11`）と見比べて **同じ見た目をどう表現しているか** 対比する
+- 書き終えたら、1 章 の素の CSS 版（`docs/lessons/lesson11`）と見比べて **同じ見た目をどう表現しているか** 対比する
 
 ## まとめ
 

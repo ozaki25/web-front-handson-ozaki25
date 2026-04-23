@@ -4,7 +4,7 @@
 
 - `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
 - `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
-- 章 1 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられます。
+- 1 章 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられます。
 - HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
 
 ## 解説
@@ -33,7 +33,7 @@ app/
 
 ### HTML → JSX の違い 3 点
 
-章 1 で書いた HTML を Next.js に持ち込むと、そのままでは動きません。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要です。
+1 章 で書いた HTML を Next.js に持ち込むと、そのままでは動きません。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要です。
 
 1. `class` → `className`
    - JS の `class` 構文（クラス構文）と衝突するため、JSX では `className` を使います。
@@ -46,7 +46,7 @@ app/
    - 例: `<img src="..." alt="">` → `<img src="..." alt="" />`
    - 例: `<br>` → `<br />`
 
-他にも細かい違いはありますが、当面はこの 3 点を意識すれば章 1 の HTML を移植できます。
+他にも細かい違いはありますが、当面はこの 3 点を意識すれば1 章 の HTML を移植できます。
 
 ### `<Link>` でページ遷移する
 
@@ -74,7 +74,7 @@ export default function Home() {
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で章 1 の「Flexbox とレスポンシブ」の自己紹介ページの HTML と CSS を参照するため、先に「Flexbox とレスポンシブ」のコードを手元にコピーしておくとスムーズです。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で1 章 の「Flexbox とレスポンシブ」の自己紹介ページの HTML と CSS を参照するため、先に「Flexbox とレスポンシブ」のコードを手元にコピーしておくとスムーズです。
 
 ### 手順 1: `/todos` の空ページを作る
 
@@ -93,9 +93,9 @@ export default function TodosPage() {
 
 ブラウザのプレビュー URL に `/todos` を付けてアクセスし、この文言が出ることを確認しましょう。
 
-### 手順 2: 章 1 の自己紹介ページを `/about` に移植
+### 手順 2: 1 章 の自己紹介ページを `/about` に移植
 
-章 1 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **「Flexbox とレスポンシブ」の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、「Flexbox とレスポンシブ」を開いて HTML / CSS をコピーしてから戻ってきてください。
+1 章 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **「Flexbox とレスポンシブ」の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、「Flexbox とレスポンシブ」を開いて HTML / CSS をコピーしてから戻ってきてください。
 
 元の HTML（「Flexbox とレスポンシブ」の完成形の抜粋）:
 
@@ -251,11 +251,11 @@ export default function AboutPage() {
 - `<input ...>` → `<input ... />`、`<img ...>` → `<img ... />` の自己閉じ
 - 追加で `<textarea rows="4">` の属性は **数値中括弧 `rows={4}`** に（JSX では数値属性は中括弧が慣例）
 
-ほぼ機械的な置換で済むのが JSX の嬉しいところです。章 1 で作った見た目・レイアウトがそのまま Next.js で動きます。
+ほぼ機械的な置換で済むのが JSX の嬉しいところです。1 章 で作った見た目・レイアウトがそのまま Next.js で動きます。
 
 ### 手順 3: CSS を当てる
 
-章 1 の「Flexbox とレスポンシブ」の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
+1 章 の「Flexbox とレスポンシブ」の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
 
 `app/about/about.css`（「Flexbox とレスポンシブ」の CSS をそのまま貼る、抜粋）:
 
@@ -419,7 +419,7 @@ export default function AboutPage() {
 }
 ```
 
-**期待出力**: `/about` を開くと、章 1 の「Flexbox とレスポンシブ」で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
+**期待出力**: `/about` を開くと、1 章 の「Flexbox とレスポンシブ」で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
 
 ### 手順 4: ナビを `/` に置く
 
@@ -453,7 +453,7 @@ export default function Page() {
 ### 期待出力
 
 - `/` にアクセスすると「ようこそ」の見出しと 3 つのリンクが出ます。
-- 「About」をクリックすると章 1 と同じ見た目の自己紹介ページが表示されます（CSS が当たっています）。
+- 「About」をクリックすると1 章 と同じ見た目の自己紹介ページが表示されます（CSS が当たっています）。
 - 「Todos」をクリックすると「TODO 一覧はここに実装する。」が表示されます。
 - ブラウザのネットワークタブを開きながら遷移すると、ページ全体ではなくデータだけが追加で読み込まれます（フル再読み込みにはなりません）。
 - `class` や `for` をそのまま残すと、StackBlitz のターミナルやブラウザ Console に「Invalid DOM property `class`. Did you mean `className`?」のような警告が出ます。
@@ -472,6 +472,6 @@ export default function Page() {
 - `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになります。
 - ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
-- 章 1 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
+- 1 章 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
 - 次のレッスンでは、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
-- ここで使った `<img src="https://placehold.jp/...">` は、**章 5 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。
+- ここで使った `<img src="https://placehold.jp/...">` は、**5 章 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。

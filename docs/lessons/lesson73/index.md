@@ -11,13 +11,13 @@
 
 ### 今まで作ってきたものを並べる
 
-章 2 で素の JS で作った TODO、章 4 の「TODO アプリを React で作る」で React + localStorage に移植した TODO、そして「Server Actions の最小形」「送信状態とエラー表示」で Server Actions 化した TODO。
+2 章 で素の JS で作った TODO、4 章 の「TODO アプリを React で作る」で React + localStorage に移植した TODO、そして「Server Actions の最小形」「送信状態とエラー表示」で Server Actions 化した TODO。
 
 ここまでで以下が揃っています:
 
 - `app/layout.tsx`（「共通レイアウトを作る」）: ナビとフッターを含む共通レイアウト
 - `app/page.tsx`（「Next.js ってなに？」で作った形）: トップページ
-- `app/about/page.tsx`（「ページを増やしてリンクで移動する」）: 章 1 の自己紹介ページを移植
+- `app/about/page.tsx`（「ページを増やしてリンクで移動する」）: 1 章 の自己紹介ページを移植
 - `app/posts/page.tsx` / `app/posts/[id]/page.tsx`（「Server Component でデータを取得する」「動的ルート」）: 練習用の記事一覧
 - `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（「Server Actions の最小形」「送信状態とエラー表示」）: 追加フォーム付き一覧
 - `app/actions.ts`（「Server Actions の最小形」「送信状態とエラー表示」）: Server Actions
@@ -89,10 +89,10 @@ export default async function TodosPage({ searchParams }: Props) {
 
 ### 途中から始める場合
 
-前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは章 5 の総まとめなので、「共通レイアウトを作る」の共通レイアウト・「Server Actions の最小形」の Server Actions・「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
+前のレッスンまでで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは5 章 の総まとめなので、「共通レイアウトを作る」の共通レイアウト・「Server Actions の最小形」の Server Actions・「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
 
 <details>
-<summary>出発点のファイル（lesson69 完成時点の全量）</summary>
+<summary>出発点のファイル</summary>
 
 **`app/layout.tsx`**
 
@@ -530,7 +530,7 @@ export const metadata = {
 5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になります。
 6. 一覧で「削除」ボタンを押す → その 1 件が消えます。タブのタイトルは「TODO アプリ」のままです。
 7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。タブのタイトルは「Todo not found | TODO アプリ」です。
-8. `/about` は章 1 の自己紹介ページです。タブのタイトルは「TODO アプリ」です（ルートの `default` が適用されます）。
+8. `/about` は1 章 の自己紹介ページです。タブのタイトルは「TODO アプリ」です（ルートの `default` が適用されます）。
 9. ナビから 3 ページを行き来できます。
 
 ### 動作確認チェックリスト
@@ -542,7 +542,7 @@ export const metadata = {
 - [ ] `/todos?highlight=<id>` でその行だけ黄色背景
 - [ ] `/todos/<id>` の詳細ページのタブタイトルが動的に変わる
 - [ ] `/todos/not-a-real-id` で `not-found.tsx` が出る
-- [ ] `/about` が章 1 の自己紹介と同じ見た目で出る
+- [ ] `/about` が1 章 の自己紹介と同じ見た目で出る
 
 ### 変えてみる
 
@@ -566,7 +566,7 @@ TODO に「完了」のフラグを追加する演習です。
 - `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
 - `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できます。`template` を使うと子ページのタイトルを共通で包めます。
 - `searchParams: Promise<{ highlight?: string }>` で URL クエリを受け取り、条件付きスタイルに反映できます。
-- 章 2 の TODO（素の JS）→ 章 4 の「TODO アプリを React で作る」（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
+- 2 章 の TODO（素の JS）→ 4 章 の「TODO アプリを React で作る」（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
 - 「Vercel にデプロイする」では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。
 
 ### 補足: レイアウトのおさらい

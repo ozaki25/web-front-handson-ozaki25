@@ -12,11 +12,11 @@
 
 この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。<https://stackblitz.com/> のトップページに並ぶテンプレートカードから **TypeScript** と書かれたもの（TS のロゴ）を選んでください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。カードが見当たらないときは検索ボックスに `typescript` と入れるか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開きます。
 
-テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の章 3 のレッスンでは、この `main.ts` を書き換えていきます。
+テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の3 章 のレッスンでは、この `main.ts` を書き換えていきます。
 
 ### JS だけだと何が困るのか
 
-章 2 までに書いてきた JS では、変数にどんな値でも入れられました。
+2 章 までに書いてきた JS では、変数にどんな値でも入れられました。
 
 ```js
 let age = 20;
@@ -138,7 +138,7 @@ Type 'string' is not assignable to type 'number'.
 
 - StackBlitz 下部のターミナル（または Problems タブ）にも同じエラーが出る。
 
-これが **静的型付けが実行前にエラーを教えてくれる** 体験です。章 2 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
+これが **静的型付けが実行前にエラーを教えてくれる** 体験です。2 章 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
 
 ### 手順 4: 変えてみる
 
@@ -195,4 +195,4 @@ Type 'string' is not assignable to type 'number'.
 - 型注釈は `const 変数名: 型名 = 値` の形で書く。プリミティブ型は `string` / `number` / `boolean` の 3 つから。
 - 右辺から型が自動で決まる **型推論** もあるので、実務では型注釈を省略する場面も多い。
 - 型が合わないと、エディタの赤線と `tsc` の両方が `Type 'X' is not assignable to type 'Y'.` のような形で教えてくれる。
-- 次のレッスンでは、関数の引数と戻り値に型を付ける。章 2 で書いた関数を TS 化していく。
+- 次のレッスンでは、関数の引数と戻り値に型を付ける。2 章 で書いた関数を TS 化していく。

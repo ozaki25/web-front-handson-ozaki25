@@ -11,7 +11,7 @@
 
 ### React と Next.js の関係
 
-章 4 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
+4 章 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
 
 一方で、実際に Web アプリを作ろうとすると、React 単体では足りないものが出てきます。
 
@@ -50,7 +50,7 @@ app/
 
 App Router のもう 1 つの大きな特徴は、**コンポーネントが既定でサーバー側で実行される** ことです。これを **Server Component** と呼びます。
 
-今までの React（章 4）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
+今までの React（4 章）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
 
 - Server Component: サーバーで動きます。データベース接続やファイル読み込みなど、秘密情報を扱えます。`useState` や `onClick` は使えません。
 - Client Component: ブラウザで動きます。`useState` / イベント / ブラウザ API が使えます。先頭に `"use client"` と書いて明示します（詳しくは「Server Component と Client Component」で扱います）。
@@ -86,7 +86,7 @@ export default function Page() {
 
 ### 使う環境
 
-本コース章 5 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。章 4 の React + Vite テンプレートとは別物なので、新しく作り直してください。
+本コース5 章 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。4 章 の React + Vite テンプレートとは別物なので、新しく作り直してください。
 
 ### 手順
 
@@ -151,7 +151,7 @@ export default function Page() {
 - 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
 - `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
 - 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
-- 次のレッスンではページを増やして `<Link>` で行き来し、章 1 の自己紹介ページを `/about` として復活させます。
+- 次のレッスンではページを増やして `<Link>` で行き来し、1 章 の自己紹介ページを `/about` として復活させます。
 
 ### コラム: RSC ペイロードって何？
 

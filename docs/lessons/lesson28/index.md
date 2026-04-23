@@ -3,21 +3,31 @@
 <script setup>
 const demoJs = `
 const title = document.querySelector('#title');
+const textBtn = document.querySelector('#btn-text');
+const classBtn = document.querySelector('#btn-class');
+const resetBtn = document.querySelector('#btn-reset');
 
-setTimeout(() => {
+textBtn.addEventListener('click', () => {
   title.textContent = '書き換えました';
   console.log('textContent を変更');
-}, 2000);
+});
 
-setTimeout(() => {
-  title.classList.add('active');
-  console.log("classList.add('active') でスタイル適用");
-}, 4000);
+classBtn.addEventListener('click', () => {
+  title.classList.toggle('active');
+  console.log("classList.toggle('active') でスタイル切り替え");
+});
+
+resetBtn.addEventListener('click', () => {
+  title.textContent = '最初の見出し';
+  title.classList.remove('active');
+  console.log('元に戻しました');
+});
 `
 </script>
 
 ## ゴール
 
+- HTML が DOM という木構造（ツリー）として扱われることを絵で理解できる
 - `document.querySelector` で HTML の要素を取得できる
 - `textContent` で中身のテキストを読み書きできる
 - `classList` で CSS クラスを付け外しできる
@@ -25,11 +35,53 @@ setTimeout(() => {
 
 ## 解説
 
-### DOM とは
+### HTML は DOM という「木」になっている
 
-ブラウザは HTML を読み込むと、それを木構造のデータ（DOM = Document Object Model）として保持します。JS から DOM を操作することで、ページの内容を動的に変えられます。
+ブラウザは HTML を読み込むと、それを **木構造（ツリー構造）のデータ** として保持します。この内部表現が **DOM（Document Object Model）** です。JS から DOM を操作すると、画面の内容を動的に変えられます。
 
-これまでは Console に出すだけでしたが、本レッスンから「画面を書き換える」世界に入ります。
+「木」と呼ばれるのは、タグの入れ子関係が木の枝分かれのように表現されるためです。たとえば次の HTML を見てみましょう。
+
+```html
+<html>
+  <head>
+    <title>自己紹介</title>
+  </head>
+  <body>
+    <h1>こんにちは</h1>
+    <ul>
+      <li>コーヒー</li>
+      <li>散歩</li>
+    </ul>
+  </body>
+</html>
+```
+
+これは DOM としては、次のように枝分かれする 1 本の木になります。
+
+<div style="font-family:system-ui, sans-serif; font-size:0.9em; line-height:1.6; background:var(--vp-c-bg-mute); padding:16px 20px; border-radius:6px; margin:12px 0;">
+  <div><code>document</code></div>
+  <div style="padding-left:18px;">└─ <code>&lt;html&gt;</code></div>
+  <div style="padding-left:36px;">├─ <code>&lt;head&gt;</code></div>
+  <div style="padding-left:54px;">│&nbsp;&nbsp;└─ <code>&lt;title&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"自己紹介"</span></div>
+  <div style="padding-left:36px;">└─ <code>&lt;body&gt;</code></div>
+  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;├─ <code>&lt;h1&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"こんにちは"</span></div>
+  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;└─ <code>&lt;ul&gt;</code></div>
+  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"コーヒー"</span></div>
+  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"散歩"</span></div>
+</div>
+
+一番上に `document`（ページ全体を表すオブジェクト）があり、そこから `<html>` 要素が伸び、さらに `<head>` と `<body>` に枝分かれします。それぞれの要素の中身（子要素）も同じようにぶら下がります。
+
+この木を扱うときの呼び方を覚えておくと、あとのコードが読みやすくなります。
+
+- **親**（parent）: 1 段上の要素。`<li>` の親は `<ul>` です。
+- **子**（child）: 1 段下の要素。`<ul>` の子は `<li>` が 2 つです。
+- **兄弟**（sibling）: 同じ親を持つ隣の要素。2 つの `<li>` は互いに兄弟です。
+- **テキストノード**: タグの中身の文字列（例: `"コーヒー"`）。これも木の一部として、タグの下にぶら下がっています。
+
+ブラウザの DevTools の Elements（または「要素」）タブを開くと、まさにこのツリーが左端に展開されて表示されます。手元の Chrome で F12 を押して Elements タブを眺めてみてください。タグをクリックするたびに、ツリーの枝が開いたり閉じたりします。
+
+これまでは Console に出すだけでしたが、本レッスンからは **この木に JS で手を入れて、画面を書き換える** 世界に入ります。
 
 ### 要素を取得する: `document.querySelector`
 
@@ -74,15 +126,21 @@ box.classList.toggle("active");   // あれば消す、なければ付ける
 
 CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
 
-下のデモでは 2 秒後に JS が `textContent` を書き換え、さらに 2 秒後に `classList.toggle` で色が付きます。DOM を JS から触る流れが見えます。
+下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
 
 <LiveDemo
-  height="220px"
+  height="240px"
   :html="`
 <h1 id='title'>最初の見出し</h1>
-<p>2 秒ごとに JS が DOM を書き換えます。</p>
+<p>ボタンを押すと JS が DOM を書き換えます。</p>
+<div>
+  <button id='btn-text' type='button'>テキストを書き換える</button>
+  <button id='btn-class' type='button'>クラスを切り替える</button>
+  <button id='btn-reset' type='button'>元に戻す</button>
+</div>
   `"
   :css="`
+button { margin-right: 6px; padding: 6px 12px; }
 #title.active {
   color: white;
   background: steelblue;
@@ -120,7 +178,7 @@ ul.appendChild(li);
 前のレッスンまでで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `style.css` も加わります（ファイル作成がまだなら新規作成してください）。
 
 <details>
-<summary>出発点のコード（lesson27 完成時点）</summary>
+<summary>出発点のコード</summary>
 
 **`index.html`**
 
