@@ -12,9 +12,15 @@
 // 全角・半角コロンの両方と、lesson 番号と : の間の空白にも対応。
 
 const LESSON_PREFIX_RE = /^lesson\s*\d+\s*[:：]\s*/
+const INLINE_CODE_RE = /`([^`]+)`/g
+const TRAILING_PAREN_RE = /\s*[（(][^）)]*[）)]\s*$/
 
 export function lessonIdFromTitle(title: string): string {
-  return title.replace(LESSON_PREFIX_RE, '').trim()
+  return title
+    .replace(LESSON_PREFIX_RE, '')
+    .replace(INLINE_CODE_RE, '$1')
+    .replace(TRAILING_PAREN_RE, '')
+    .trim()
 }
 
 export function lessonIdFromH1(): string {
