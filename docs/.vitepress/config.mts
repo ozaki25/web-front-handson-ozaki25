@@ -141,7 +141,7 @@ export default withPwa(withMermaid(
             { text: 'lesson48: フォームと制御コンポーネント', link: '/lessons/lesson48/' },
             { text: 'lesson49: 条件で出し分ける', link: '/lessons/lesson49/' },
             { text: 'lesson50: 親子コンポーネントの連携', link: '/lessons/lesson50/' },
-            { text: 'lesson51: Context API', link: '/lessons/lesson51/' },
+            { text: 'lesson51: Context API で多層バケツリレー回避', link: '/lessons/lesson51/' },
             { text: 'lesson52: useRef', link: '/lessons/lesson52/' },
             { text: 'lesson53: useEffect の基本', link: '/lessons/lesson53/' },
             { text: 'lesson54: useMemo で計算のメモ化', link: '/lessons/lesson54/' },

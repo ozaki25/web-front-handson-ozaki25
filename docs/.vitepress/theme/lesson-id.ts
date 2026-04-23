@@ -7,19 +7,18 @@
 //
 // 例:
 //   "lesson12: CSS Grid で二次元レイアウト" → "CSS Grid で二次元レイアウト"
-//   "lesson37: 型ガード（`typeof` / `in` / カスタム）" → "型ガード（`typeof` / `in` / カスタム）"
+//   "lesson37: 型ガード（`typeof` / `in` / カスタム）" → "型ガード"
 //
 // 全角・半角コロンの両方と、lesson 番号と : の間の空白にも対応。
 
 const LESSON_PREFIX_RE = /^lesson\s*\d+\s*[:：]\s*/
+const INLINE_CODE_RE = /`([^`]+)`/g
+const TRAILING_PAREN_RE = /\s*[（(][^）)]*[）)]\s*$/
 
 export function lessonIdFromTitle(title: string): string {
-  return title.replace(LESSON_PREFIX_RE, '').trim()
-}
-
-export function lessonIdFromH1(): string {
-  if (typeof document === 'undefined') return ''
-  const h1 = document.querySelector('main h1, .vp-doc h1, h1')
-  if (!h1) return ''
-  return lessonIdFromTitle(h1.textContent || '')
+  return title
+    .replace(LESSON_PREFIX_RE, '')
+    .replace(INLINE_CODE_RE, '$1')
+    .replace(TRAILING_PAREN_RE, '')
+    .trim()
 }
