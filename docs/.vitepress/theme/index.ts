@@ -4,6 +4,8 @@ import TwoslashFloatingVue from '@shikijs/vitepress-twoslash/client'
 import '@shikijs/vitepress-twoslash/style.css'
 import { enhanceAppWithTabs } from 'vitepress-plugin-tabs/client'
 import { useRoute, type EnhanceAppContext } from 'vitepress'
+import { inject as injectVercelAnalytics } from '@vercel/analytics'
+import { injectSpeedInsights } from '@vercel/speed-insights'
 import LessonComplete from './components/LessonComplete.vue'
 import LessonProgress from './components/LessonProgress.vue'
 import LiveDemo from './components/LiveDemo.vue'
@@ -22,5 +24,9 @@ export default {
     enhanceAppWithTabs(app)
     app.component('LessonProgress', LessonProgress)
     app.component('LiveDemo', LiveDemo)
+    if (typeof window !== 'undefined') {
+      injectVercelAnalytics()
+      injectSpeedInsights()
+    }
   },
 }
