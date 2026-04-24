@@ -82,7 +82,7 @@ Next.js の「サーバー側で動くもの」には **2 つのランタイム*
 Route Handlers と Middleware でデフォルトが違います。
 
 - **Route Handlers の既定は Node.js**（`export const runtime = 'edge'` を書かない限り）
-- **Middleware の既定は Edge**（次のレッスンで扱う）
+- **Middleware の既定は Edge**（別のレッスンで扱う）
 
 この差は初学者が混乱しやすいので、1 度はっきり意識しておくと後が楽です。
 

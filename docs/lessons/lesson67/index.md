@@ -305,4 +305,4 @@ const res = await fetch("https://jsonplaceholder.typicodee.com/posts");
 - 「見つからない」ときは `notFound()` + `not-found.tsx` です。
 - 「レンダリング中の例外」は `error.tsx` です（`"use client"` 必須）。
 - 2 つは担当範囲が違います。フォーム送信エラーはどちらでもなく、「送信状態とエラー表示」で学ぶ `useActionState` の戻り値で扱います。
-- 次のレッスンでは、フォームをサーバー側の関数（Server Actions）で受け取る仕組みを作り始めます。
+- 別のレッスンで、フォームをサーバー側の関数（Server Actions）で受け取る仕組みを作り始めます。

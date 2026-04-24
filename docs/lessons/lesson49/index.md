@@ -145,7 +145,7 @@ function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
 <UserStatus isLoggedIn={isLoggedIn} />;
 ```
 
-1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは次のレッスン以降で使っていきます。
+1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは以降のレッスンで使っていきます。
 
 ### 動きを見てみる
 

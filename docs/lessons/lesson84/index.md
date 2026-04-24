@@ -127,7 +127,7 @@ Set-Cookie: session=abc123; HttpOnly
 
 Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページをリロード → 一覧から 1 行クリックすると、Headers / Payload / Preview / Response / Timing の各パネルで詳細が見られます。
 
-この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。次のレッスンで DevTools の各タブを詳しく扱うので、本レッスンの演習は DevTools の入り口までで十分です。
+この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。別のレッスンで DevTools の各タブを詳しく扱うので、本レッスンの演習は DevTools の入り口までで十分です。
 
 ## 演習
 
@@ -187,7 +187,7 @@ curl -v https://jsonplaceholder.typicode.com/posts/1
 ### 自分で書く
 
 - DevTools の Network タブで、最近よく見るサイト（自分のポートフォリオ・ブログ等）を開き、**1 つの HTML ページを開くときにいくつのリクエストが発生しているか** を数えてみる
-- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンスで、次のレッスンで仕組みを扱う
+- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンスで、別のレッスンで仕組みを扱う
 
 ## まとめ
 
@@ -197,4 +197,4 @@ curl -v https://jsonplaceholder.typicode.com/posts/1
 - メソッドは `GET` / `POST` / `PUT` / `DELETE` を基本に、冪等性を意識して使う
 - ステータスコードは 2xx / 3xx / 4xx / 5xx で大分類。細かい違い（401 vs 403 など）は都度覚える
 - ヘッダには `Host` / `User-Agent` / `Accept` / `Content-Type` / `Cache-Control` / `Set-Cookie` などがあり、DevTools の Network タブで実物を観察できる
-- 次のレッスンでは、その **DevTools の各タブ** を読み方から押さえる
+- 別のレッスンで、その **DevTools の各タブ** を読み方から押さえる

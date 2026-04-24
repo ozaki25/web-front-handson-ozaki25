@@ -372,4 +372,4 @@ export default async function PostPage({ params }: Props) {
 - `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
 - favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
 - `metadata` / `generateMetadata` は Server Component 側でだけ書く
-- 次のレッスンでは、ページの待ち時間をより良く見せる **Loading UI と Streaming** を扱う
+- 別のレッスンで、ページの待ち時間をより良く見せる **Loading UI と Streaming** を扱う

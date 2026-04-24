@@ -312,4 +312,4 @@ export default function AboutPage() {
 - `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
 - 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
 - 「ページを増やしてリンクで移動する」の `<img>` を `<Image>` に差し替えたことで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられるようになりました。
-- 次のレッスンでは、フォントの読み込みを `next/font` で最適化します。画像に続き「ブラウザがガタつかずに表示できる」状態を目指します。
+- 別のレッスンで、フォントの読み込みを `next/font` で最適化します。画像に続き「ブラウザがガタつかずに表示できる」状態を目指します。

@@ -271,7 +271,7 @@ btn.dataset.todoId = "99";                  // 書き換えも可能
 - `data-todo-id` → `dataset.todoId`（ケバブケース → キャメルケース変換）
 - **値は常に文字列** として扱われるため、数値として使いたい場合は `Number(btn.dataset.todoId)` で変換する
 
-ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。イベントと組み合わせる例は次のレッスンで扱います。
+ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。イベントと組み合わせる例は別のレッスンで扱います。
 
 下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
 
@@ -316,7 +316,7 @@ ul.appendChild(li);
 2. `li.textContent = "..."` で中身のテキストを入れる
 3. `ul.appendChild(li)` で実際にページに追加する
 
-この「作る → テキストを入れる → 追加する」の流れは、次のレッスン以降で繰り返し使います。
+この「作る → テキストを入れる → 追加する」の流れは、以降のレッスンで繰り返し使います。
 
 ### 要素を削除する: `element.remove()`
 
@@ -513,7 +513,7 @@ list.appendChild(newLi);
 ### 変える
 
 - `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
-- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（次レッスンでクリックに結び付ける）
+- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（別のレッスンでクリックに結び付ける）
 - `items` に要素を 2 つ足して、リストが 8 行になることを確認
 - `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
 - `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認
@@ -539,4 +539,4 @@ list.appendChild(newLi);
 - データ属性: `data-*` ↔ `dataset.キー`（ケバブ→キャメル変換）
 - 生成: `createElement` + `appendChild`、削除: `element.remove()`
 - たどる: `parentElement` / `children` / `nextElementSibling`
-- 次レッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る
+- 別のレッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る

@@ -28,7 +28,7 @@ React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React 
 `<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
 
 - クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
-- 戻り値はありません（あっても無視されます。戻り値を使いたいときは次のレッスンの `useActionState`）。
+- 戻り値はありません（あっても無視されます。戻り値を使いたいときは別のレッスンの `useActionState`）。
 - 関数は **必ず `async`** です。
 
 ### `"use server"` の配置ルール
@@ -193,7 +193,7 @@ export async function addTodo(formData: FormData): Promise<AddTodoResult> {
 - `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
 - `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
 - `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
-- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は次のレッスンで `useActionState` と結合するとき効きます。
+- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は別のレッスンで `useActionState` と結合するとき効きます。
 
 ### 手順 3: `/todos` を本物のページにする
 
@@ -245,7 +245,7 @@ export default async function TodosPage() {
 
 ### スコープ外
 
-- 送信中のボタン無効化、空入力エラー表示は **次のレッスン** で追加します。本レッスンでは最小形に集中します。
+- 送信中のボタン無効化、空入力エラー表示は 別のレッスン で追加します。本レッスンでは最小形に集中します。
 - `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
 
 ### 自分で書く
@@ -258,7 +258,7 @@ export default async function TodosPage() {
 - Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
 - データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
 - `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
-- 次のレッスンでは、送信中の状態表示とエラー表示を `useActionState` / `useFormStatus` で追加します。`addTodo` のシグネチャもそこで少し変えます。
+- 別のレッスンで、送信中の状態表示とエラー表示を `useActionState` / `useFormStatus` で追加します。`addTodo` のシグネチャもそこで少し変えます。
 
 ### コラム: `revalidateTag`
 

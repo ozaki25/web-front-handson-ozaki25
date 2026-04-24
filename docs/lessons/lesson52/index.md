@@ -279,7 +279,7 @@ export default App;
 ### 自分で書く
 
 - 「クリア」ボタンを追加して、押したら `todos` を空配列にすると同時に `inputRef.current?.focus()` で入力欄に focus を戻してください。
-- ページを開いた直後に入力欄に focus が当たっているようにします。`useEffect(() => { inputRef.current?.focus(); }, [])` で実現できます（次のレッスンで学ぶ `useEffect` の先取りです）。
+- ページを開いた直後に入力欄に focus が当たっているようにします。`useEffect(() => { inputRef.current?.focus(); }, [])` で実現できます（別のレッスンで学ぶ `useEffect` の先取りです）。
 
 ### 挑戦（折りたたみ）: 連打防止のデバウンスもどき
 
@@ -336,4 +336,4 @@ function App() {
 - `useState` は「画面に出す値」、`useRef` は「画面に出さない値」「DOM への参照」で使い分ける
 - React 19 以降、`ref` は普通の props として渡せる（`function MyInput({ ref }: { ref: Ref<HTMLInputElement> })` の形）
 - `forwardRef` の過去形は本コースでは扱わない
-- 次のレッスンでは副作用の扱い方（`useEffect`）を学ぶ
+- 別のレッスンで副作用の扱い方（`useEffect`）を学ぶ

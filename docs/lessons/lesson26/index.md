@@ -101,9 +101,9 @@ function wait(ms) {
   :js="demoJs"
 />
 
-### 次のレッスンへの橋渡し
+### 次への橋渡し
 
-**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば次のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば別のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
 
 「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 
@@ -284,4 +284,4 @@ end
 - 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
 - `async` 関数の中で `await Promise` すると、結果が返るまで待てる
 - `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
-- **戻り値が Promise の関数・メソッドには `await` が必要**。次のレッスンの `fetch` / `response.json()` で実例を扱う
+- **戻り値が Promise の関数・メソッドには `await` が必要**。別のレッスンの `fetch` / `response.json()` で実例を扱う

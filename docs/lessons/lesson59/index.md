@@ -172,7 +172,7 @@ export default function TodosPage() {
 </html>
 ```
 
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（次のレッスンで扱います）が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
+これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（別のレッスンで扱います）が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
 
 `app/about/page.tsx`:
 
@@ -473,5 +473,5 @@ export default function Page() {
 - ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
 - 1 章 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
-- 次のレッスンでは、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
+- 別のレッスンで、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
 - ここで使った `<img src="https://placehold.jp/...">` は、**5 章 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。

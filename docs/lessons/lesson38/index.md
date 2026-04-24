@@ -321,7 +321,7 @@ type FetchResult<T> =
   | { kind: "error"; message: string };
 ```
 
-- この `FetchResult` は次のレッスンで学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
+- この `FetchResult` は別のレッスンで学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
 - `function render(r: FetchResult<string>): string` を書き、`"idle"` は `"待機中"`、`"loading"` は `"読み込み中"`、`"success"` は `data` をそのまま、`"error"` は `message` を返すようにする。
 - `default:` で `const _: never = r;` の網羅性チェックを付ける。
 
@@ -335,4 +335,4 @@ type FetchResult<T> =
 - `never` による網羅性チェックと組み合わせると、ケース追加時に処理漏れを検出できる。
 - 共通プロパティの名前は `kind` / `type` / `tag` のどれでもよい。本コースでは状態表現に `kind`、動作表現に `type` を使う。
 - **この判別共用体パターンは4 章 の「useReducer で複雑な state」の `Action` 型で再登場します**。`{ type: "add"; text: string } | { type: "delete"; id: string } | { type: "toggle"; id: string }` の形で、ここで学んだ `switch` 分岐と網羅性チェックがそのまま効きます。
-- 次のレッスンでは、`FetchResult<T>` のように「型を引数として受け取る」ジェネリクスを学ぶ。判別共用体とジェネリクスを組み合わせると、実用的なデータ構造が一気に書けるようになる。
+- 別のレッスンで、`FetchResult<T>` のように「型を引数として受け取る」ジェネリクスを学ぶ。判別共用体とジェネリクスを組み合わせると、実用的なデータ構造が一気に書けるようになる。

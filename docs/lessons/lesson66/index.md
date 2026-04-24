@@ -63,9 +63,9 @@ const target = posts.find((p) => p.id === id);
 1. 一覧を `fetch` で全部取ってくる（Server Component）。
 2. `await params` で URL の `id` を取り出す。
 3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは後述の「存在しない ID」の処理に渡す（次のレッスン）。
+4. 見つからないときは後述の「存在しない ID」の処理に渡す（別のレッスン）。
 
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は次のレッスンで扱います。
+この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は別のレッスンで扱います。
 
 ### searchParams は今回扱わない
 
@@ -203,7 +203,7 @@ export default async function PostPage({ params }: Props) {
 - `type Props = { params: Promise<{ id: string }> }` の形で型を書きます。
 - `await params` してから `id` を取り出します。
 - `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは次のレッスンで扱います。
+- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは別のレッスンで扱います。
 
 ### 期待出力
 
@@ -233,5 +233,5 @@ export default async function PostPage({ params }: Props) {
 - `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
 - Next.js 15 では `params: Promise<{ id: string }>` の形です。`await params` で取り出します。
 - 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
-- 見つからない場合の「正しい 404 ページ」は次のレッスンで扱います。
+- 見つからない場合の「正しい 404 ページ」は別のレッスンで扱います。
 - クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

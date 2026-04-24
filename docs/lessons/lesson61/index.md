@@ -484,4 +484,4 @@ export default function AppLayout({
 - グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されます。
 - 典型的な使いどころは「公開ページ / アプリ側ページ」のような大きな 2 分割です。
 - 本コースで扱うのはここまで。並列ルート（`@slot`）やインターセプトルート（`(.)path`）は本コースでは扱いません。
-- 次のレッスンでは Server Component と Client Component の境界に踏み込みます（すでに済みの場合は「Server Component でデータを取得する」以降に進んでください）。
+- 別のレッスンで Server Component と Client Component の境界に踏み込みます（すでに済みの場合は「Server Component でデータを取得する」以降に進んでください）。
