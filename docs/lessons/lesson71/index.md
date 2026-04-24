@@ -203,4 +203,4 @@ Next.js 16 から proxy は Node.js ランタイムで動くので、`fs` / `pat
 - `NextResponse.next` / `redirect` / `rewrite` で分岐
 - `matcher` で適用パスを絞る
 - Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
-- 本格認証は本コース外。疑似ログインで流れだけ掴む
+- 本格認証は本コース外。擬似ログインで流れだけ掴む
