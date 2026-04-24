@@ -111,6 +111,7 @@ export default withPwa(withMermaid(
             { text: 'lesson76: try / catch でエラー処理', link: '/lessons/lesson76/' },
             { text: 'lesson77: JSON を読み書きする', link: '/lessons/lesson77/' },
             { text: 'lesson81: Web Storage で値をブラウザに保存する', link: '/lessons/lesson81/' },
+            { text: 'lesson82: URL と History API でページ遷移なしに URL を操作する', link: '/lessons/lesson82/' },
           ],
         },
         {
