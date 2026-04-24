@@ -10,7 +10,7 @@
 
 ### 同じ見た目を毎ページ書くのは大変
 
-前のレッスンでは 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
+「ページを増やしてリンクで移動する」で 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
 
 この「全ページで共通の外側」を 1 箇所に集めるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
 
@@ -41,7 +41,7 @@ export default function RootLayout({
 重要なのは次の点です。
 
 - **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
-- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（前のレッスンで「コピーしない」と言ったのはこのためです）。
+- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（「ページを増やしてリンクで移動する」で「コピーしない」と言ったのはこのためです）。
 - `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
 - `children` の型は `ReactNode` です。「React が画面に出せるもの全部」くらいの意味で、コピペで使えば良いです。
 - `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
@@ -279,7 +279,7 @@ export default function TodosPage() {
 
 ### 前回のプロジェクトを開く
 
-前のレッスンで作った StackBlitz プロジェクトを開き直しましょう。
+これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
 
 ### 手順 1: ヘッダーとフッターをルートレイアウトに集める
 
@@ -381,9 +381,9 @@ export default function Page() {
 }
 ```
 
-`app/about/page.tsx` は前のレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
+`app/about/page.tsx` はこれまでのレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
 
-前のレッスン時点の `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始めます）。
+これまでの `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始めます）。
 
 ```tsx
 import "./about.css";

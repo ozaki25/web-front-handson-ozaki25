@@ -129,7 +129,7 @@ console.log(count);
 
 ### 手順
 
-1. 前のレッスンの `index.html` をそのまま使う（タイトルだけ `lesson16` に変える）
+1. これまでの `index.html` をそのまま使う（タイトルだけ `lesson16` に変える）
 2. `script.js` を以下の内容に書き換える
 3. プレビューの Console を開く
 

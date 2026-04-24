@@ -181,7 +181,7 @@ export type Todo = {
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（前のレッスンのを使い回しても OK）
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
 2. `src/types.ts` を新規作成
 3. `src/Greeting.tsx` を新規作成
 4. `src/App.tsx` を書き換える

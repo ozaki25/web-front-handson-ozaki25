@@ -101,7 +101,7 @@ Route Handlers と Middleware でデフォルトが違います。
 
 ### 手順
 
-1. 前のレッスンのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
+1. これまでのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
 2. `app/types.ts` に `Todo` 型を置く（既にあるなら再利用）
 3. `app/api/todos/route.ts` を新規作成
 4. `app/todos/page.tsx`（Client 検証用の画面）を更新

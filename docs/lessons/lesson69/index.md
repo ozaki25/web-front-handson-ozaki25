@@ -11,7 +11,7 @@
 
 ### なぜエラー用の別フックが必要か
 
-前のレッスンの `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
+「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
 
 エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
@@ -67,7 +67,7 @@ export async function addTodo(
 - 第 2 引数が `FormData` です。
 - 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
 
-前のレッスンの `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
+「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
 
 ### `useFormStatus` は `<form>` の **子** で呼ぶ
 
@@ -106,7 +106,7 @@ export function SubmitButton() {
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは前のレッスンの `addTodo` を前提にしています。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Actions の最小形」の `addTodo` を前提にしています。
 
 <details>
 <summary>出発点のファイル</summary>
@@ -176,7 +176,7 @@ export default async function TodosPage() {
 
 ### 前回のプロジェクトを開く
 
-前のレッスンで作ったプロジェクトを開き直しましょう。
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
 ### 手順の進め方（重要）
 
@@ -342,7 +342,7 @@ export default async function TodosPage() {
 
 ### 自分で書く
 
-前のレッスンで自分で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
+「Server Actions の最小形」の「自分で書く」で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
 
 ## まとめ
 

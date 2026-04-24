@@ -193,7 +193,7 @@ export default App;
 
 ### 自分で書く（挑戦）
 
-- 前のレッスンで作った `useTodos` 版の TODO アプリに Profiler をかけ、TODO を 50 件ほど追加して削除ボタンを押したときに `TodoList` がどのくらい時間を使うかを観察する
+- これまでのレッスンで作った `useTodos` 版の TODO アプリに Profiler をかけ、TODO を 50 件ほど追加して削除ボタンを押したときに `TodoList` がどのくらい時間を使うかを観察する
 - 必要なら `TodoItem` を `React.memo` で包み、`useCallback` で `onDelete` / `onToggle` を安定化して、Profiler で再度計測する
 
 ### 環境トラブル時

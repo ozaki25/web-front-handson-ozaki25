@@ -11,7 +11,7 @@
 
 ### `interface` でオブジェクトの形に名前を付ける
 
-前のレッスンでは `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
+「オブジェクトの型と type エイリアス」では `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
 
 ```ts
 interface User {
@@ -180,7 +180,7 @@ export type Todo = {
 
 ### 手順 1: `interface Todo` で書き直す
 
-前のレッスンで作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
+これまでのレッスンで作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
 
 `src/types.ts` を次のように書き換える。
 
@@ -192,7 +192,7 @@ export interface Todo {
 }
 ```
 
-`src/main.ts` は前のレッスンと同じで動くことを確認する。
+`src/main.ts` はこれまでと同じで動くことを確認する。
 
 ```ts
 import type { Todo } from "./types";

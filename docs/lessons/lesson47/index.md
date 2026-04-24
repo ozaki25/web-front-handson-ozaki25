@@ -15,7 +15,7 @@
 
 ### なぜ useState だけだと辛くなるか
 
-前のレッスンの TODO は、`setTodos` を呼ぶパターンが 3 種類ありました。
+「イベントと配列のイミュータブル更新」で作った TODO は、`setTodos` を呼ぶパターンが 3 種類ありました。
 
 ```tsx
 // 追加
@@ -67,7 +67,7 @@ function reducer(state: State, action: Action): State {
 
 ポイントは 3 つです。
 
-1. **新しいオブジェクト / 配列を返す**（イミュータブル更新、前のレッスンと同じ原則）
+1. **新しいオブジェクト / 配列を返す**（イミュータブル更新、これまでと同じ原則）
 2. **副作用を起こさない**（ログ出力、`localStorage`、`fetch` などは書かない）
 3. **同じ入力には同じ出力**（乱数や `Date.now()` も使わない）
 
@@ -212,7 +212,7 @@ export default App;
 
 ### ゴール
 
-- 前のレッスンの TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する
+- これまでの TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する
 - 3 種類の action `add` / `delete` / `toggle` を実装する
 - 完了済みの TODO は見た目（取り消し線）で区別する
 

@@ -234,7 +234,7 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 
 ### 前レッスンの状態から始める
 
-前のレッスンのプロジェクトを開きます。`<main>` の中にセクションが 4 つ並び、`<header>` / `<footer>` が付いた状態です。
+これまでのプロジェクトを開きます。`<main>` の中にセクションが 4 つ並び、`<header>` / `<footer>` が付いた状態です。
 
 ### コピペで動かす
 

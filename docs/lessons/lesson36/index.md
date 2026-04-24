@@ -78,7 +78,7 @@ const raw: unknown = JSON.parse('{"name":"Alice"}');
 
 ### 網羅性チェック（`switch` + `never`）
 
-前のレッスンで学んだリテラル型のユニオンを `switch` で分岐するとき、**全ケースを処理したことを TS に検証させる** 書き方を紹介します。
+「配列・ユニオン・リテラル型・オプショナル」で学んだリテラル型のユニオンを `switch` で分岐するとき、**全ケースを処理したことを TS に検証させる** 書き方を紹介します。
 
 ```ts
 type Status = "open" | "done" | "archived";

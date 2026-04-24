@@ -502,7 +502,7 @@ form button:focus {
 
 ポイント:
 
-- 前のレッスンで追加した `position: relative`（バッジの基準用）はそのまま残す。
+- 先ほど追加した `position: relative`（バッジの基準用）はそのまま残す。
 - `box-shadow` で薄い影を付ける（ダークモードでは影を濃く）。
 - `transition: all 200ms ease` を書いておく。`all` にしておけば、`:hover` で変わる全プロパティに同じ補間が掛かる。
 
@@ -558,7 +558,7 @@ form button:focus {
 
 ### 自分で書く
 
-「ページトップに戻る」ボタン（前のレッスンで追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
+「ページトップに戻る」ボタン（先ほど追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
 
 - hover で背景色が濃い青（`#1d4ed8`）に変わる
 - hover で 1.05 倍に拡大する（`transform: scale(1.05)`）
