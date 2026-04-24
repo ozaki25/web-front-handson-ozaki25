@@ -28,10 +28,14 @@ resetBtn.addEventListener('click', () => {
 ## ゴール
 
 - HTML が DOM という木構造（ツリー）として扱われることを絵で理解できる
-- `document.querySelector` で HTML の要素を取得できる
-- `textContent` で中身のテキストを読み書きできる
+- `querySelector` / `getElementById` / `querySelectorAll` を使い分けて要素を取得できる
+- `textContent` と `innerHTML` の違いと、XSS の落とし穴を説明できる
 - `classList` で CSS クラスを付け外しできる
-- `createElement` と `appendChild` で要素を JS から作って追加できる
+- `getAttribute` / `setAttribute` / 要素のプロパティ（`link.href` など）で属性を読み書きできる
+- `.value` / `.checked` でフォームの値を読み書きできる
+- `element.style` と `dataset` でスタイルやデータ属性を扱える
+- `createElement` / `appendChild` で要素を作って追加、`remove()` で削除できる
+- `parentElement` / `children` / `nextElementSibling` でツリーをたどれる
 
 ## 解説
 
@@ -83,9 +87,13 @@ resetBtn.addEventListener('click', () => {
 
 これまでは Console に出すだけでしたが、本レッスンからは **この木に JS で手を入れて、画面を書き換える** 世界に入ります。
 
-### 要素を取得する: `document.querySelector`
+### 要素を取得する: `querySelector` / `getElementById` / `querySelectorAll`
 
-CSS セレクタで要素を 1 つ取り出します。
+DOM から要素を取り出す方法はいくつかあります。用途に応じて使い分けます。
+
+#### `document.querySelector`: CSS セレクタで 1 つ取る
+
+CSS セレクタで **最初に見つかった 1 つ** を取り出します。
 
 ```js
 const title = document.querySelector("h1");
@@ -96,8 +104,36 @@ const btn = document.querySelector(".btn");
 - `"h1"`: 要素セレクタ
 - `"#id名"`: id セレクタ
 - `".クラス名"`: クラスセレクタ
+- 複雑なセレクタもそのまま書けます（例: `"ul.menu > li:first-child"`）
 
 見つからない場合は `null` が返ります。
+
+#### `document.getElementById`: id 専用のショートカット
+
+id で取り出すときの専用 API です。`querySelector("#id名")` と同じ結果になりますが、より短く書けます。
+
+```js
+const title = document.getElementById("title");
+// 上と同じ: document.querySelector("#title")
+```
+
+引数は **`#` を付けない id 名そのもの** です。`querySelector` と違って CSS セレクタではないので、`#` や `.` を書くと動きません。
+
+見つからない場合はこちらも `null` が返ります。実務では、id 指定に限っては `getElementById` を好む人もいれば、`querySelector` で統一する人もいます。どちらでも動きますが、本コースの演習では **id 指定は `getElementById`、それ以外は `querySelector`** を使い分ける書き方で進めます。
+
+#### `document.querySelectorAll`: CSS セレクタで **全部** 取る
+
+同じセレクタに当てはまる要素をまとめて取り出します。戻り値は **NodeList** という配列っぽいオブジェクトで、`forEach` で 1 件ずつ処理できます。
+
+```js
+const items = document.querySelectorAll("li");
+
+items.forEach((li) => {
+  console.log(li.textContent);
+});
+```
+
+配列メソッド（`map` / `filter` など）は直接は使えません。使いたい場合は `Array.from(items)` で真の配列に変換してから扱います。
 
 > `<script defer>` を使っていれば、HTML の解析が終わってから JS が動くので、要素がまだ存在せず `null` になる事故を防げます。
 
@@ -112,6 +148,39 @@ console.log(title.textContent);    // 元のテキストを読む
 title.textContent = "書き換えました"; // 書き換える
 ```
 
+### HTML ごと読み書きする: `innerHTML`
+
+`textContent` は「ただの文字列」として扱いますが、**HTML タグとして解釈しながら** 中身を読み書きしたいときは `innerHTML` を使います。
+
+```js
+const box = document.querySelector("#box");
+
+console.log(box.innerHTML);
+// 書き込むと HTML として解釈される
+box.innerHTML = "<strong>重要</strong> なお知らせ";
+```
+
+この例では `<strong>` が **タグとして** 解釈され、画面には太字の「重要」と続く「なお知らせ」が表示されます。
+
+#### `innerHTML` の落とし穴（XSS）
+
+便利ですが、**ユーザー入力をそのまま `innerHTML` に入れるのは絶対に避けてください**。悪意ある HTML（例: `<script>` タグや `onerror` 属性付きの `<img>`）が入ってきた場合、ブラウザがそれを実行してしまい、**Cookie の盗難やなりすまし投稿** などの攻撃（XSS = Cross-Site Scripting）につながります。
+
+```js
+// NG: 入力をそのまま埋め込むのは危険
+const userInput = getFromUser();   // 例: '<img src=x onerror="alert(1)">'
+box.innerHTML = userInput;         // ブラウザがタグとして実行してしまう
+
+// OK: テキストとして埋め込む（タグは無害化される）
+box.textContent = userInput;
+```
+
+**指針:**
+
+- **ユーザーが入力した値** や **外部 API から来た値** を画面に出すときは、原則 `textContent` を使う
+- `innerHTML` は「自分で書いた安全な HTML 文字列」を流し込むときだけ使う
+- 迷ったら `textContent`
+
 ### クラスの操作: `classList`
 
 CSS クラスを付け外しするための専用 API です。
@@ -125,6 +194,84 @@ box.classList.toggle("active");   // あれば消す、なければ付ける
 ```
 
 CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
+
+### 属性の読み書き: `getAttribute` / `setAttribute` / `removeAttribute`
+
+HTML タグの **属性**（`href` / `src` / `alt` / `disabled` など）を読み書きします。
+
+```js
+const link = document.querySelector("a");
+
+console.log(link.getAttribute("href"));     // 現在の href を読む
+link.setAttribute("href", "https://example.com"); // 書き換える
+link.removeAttribute("target");             // 属性を消す
+```
+
+さらに、よく使う属性はプロパティとしても読み書きできます。たとえば `link.href` / `img.src` / `input.disabled` などです。
+
+```js
+const img = document.querySelector("img");
+img.src = "/photo.png";
+img.alt = "写真";
+```
+
+属性名と同じプロパティがあるときは **プロパティ経由（`img.src = ...`）の方が短く書けます**。使い分けは以下を目安にしてください。
+
+- 標準的な HTML 属性 → プロパティ経由で OK（`link.href` / `img.src` / `input.disabled`）
+- `data-*` など自作の属性 → `getAttribute` / `setAttribute`、または後述の `dataset`
+
+### フォームの値: `.value` / `.checked`
+
+`<input>` / `<textarea>` / `<select>` の値は `.value` で読み書きします。チェックボックスやラジオの入り切りは `.checked` です。
+
+```js
+const nameInput = document.querySelector("#name");
+const agreeCheckbox = document.querySelector("#agree");
+
+console.log(nameInput.value);         // 入力欄の現在の文字列
+nameInput.value = "初期値";            // 入力欄に値を入れる
+
+console.log(agreeCheckbox.checked);   // true / false
+agreeCheckbox.checked = true;         // プログラムからチェックを入れる
+```
+
+`<input type="number">` でも `.value` は **文字列** で返ります。数値として扱いたい場合は `Number(nameInput.value)` のように変換します。
+
+### インラインスタイルを当てる: `element.style`
+
+JS から直接スタイルを当てる場合は `element.style.プロパティ` を使います。CSS のプロパティ名は **キャメルケース** になります（`background-color` → `backgroundColor`）。
+
+```js
+const box = document.querySelector("#box");
+
+box.style.backgroundColor = "steelblue";
+box.style.color = "white";
+box.style.padding = "12px";
+```
+
+ただし、**見た目の切り替えは基本的に CSS 側でクラスを用意して `classList.toggle` する方が保守しやすい** です。`element.style` は、CSS では表現しにくい値（マウス位置に応じた座標や、ドラッグ中の一時的な幅など）を JS から直接計算して当てたいときに使うのが定番です。
+
+### データ属性: `dataset`
+
+HTML の `data-*` 属性は、DOM 要素に **任意のデータをぶら下げる** ための標準的な方法です。JS からは `dataset` 経由で読み書きできます。
+
+```html
+<button id="delete-btn" data-todo-id="42" data-confirm-required="true">削除</button>
+```
+
+```js
+const btn = document.querySelector("#delete-btn");
+
+console.log(btn.dataset.todoId);            // "42"
+console.log(btn.dataset.confirmRequired);   // "true"
+
+btn.dataset.todoId = "99";                  // 書き換えも可能
+```
+
+- `data-todo-id` → `dataset.todoId`（ケバブケース → キャメルケース変換）
+- **値は常に文字列** として扱われるため、数値として使いたい場合は `Number(btn.dataset.todoId)` で変換する
+
+ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。イベントと組み合わせる例は次のレッスンで扱います。
 
 下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
 
@@ -170,6 +317,43 @@ ul.appendChild(li);
 3. `ul.appendChild(li)` で実際にページに追加する
 
 この「作る → テキストを入れる → 追加する」の流れは、次のレッスン以降で繰り返し使います。
+
+### 要素を削除する: `element.remove()`
+
+取得した要素を DOM から消すには、その要素自身の `remove()` を呼びます。
+
+```js
+const item = document.querySelector("#old-item");
+item.remove();   // DOM ツリーから取り除く
+```
+
+昔は `parent.removeChild(child)` という書き方が主流でしたが、現代のブラウザでは **`element.remove()` の方が短く直感的** です。本コースでは `remove()` を使います。
+
+削除された要素はページから消えますが、JS の変数にまだ保持している場合は `appendChild` で再度ツリーに戻すこともできます。ただし、この使い方は混乱しやすいので、削除したら忘れる方が安全です。
+
+### ツリーをたどる: `parentElement` / `children` / `nextElementSibling`
+
+最初に紹介した「親 / 子 / 兄弟」の関係は、JS からも辿れます。
+
+```js
+const li = document.querySelector("li");
+
+console.log(li.parentElement);          // 親（例: <ul>）
+console.log(li.children);               // 子要素（HTMLCollection）
+console.log(li.nextElementSibling);     // 次の兄弟
+console.log(li.previousElementSibling); // 前の兄弟
+```
+
+- **`parentElement`**: 1 段上の要素
+- **`children`**: 直接の子要素一覧（配列っぽい `HTMLCollection`、`forEach` や `for...of` で回せます）
+- **`nextElementSibling` / `previousElementSibling`**: 同じ親の隣の要素。末端なら `null`
+
+似た名前で `parentNode` / `childNodes` / `nextSibling` もありますが、こちらはテキストノードや改行ノードまで含むので、**通常はタグだけを対象にする `parentElement` / `children` / `nextElementSibling` を使う** のが無難です。
+
+使いどころの例:
+
+- 「削除」ボタンを押されたら、そのボタンを含む `<li>` ごと消したい → `event.target.parentElement.remove()`
+- `<ul>` の中にある全部の `<li>` をループしたい → `ul.children` を `for...of` で回す
 
 ## 演習
 
@@ -332,16 +516,27 @@ list.appendChild(newLi);
 - `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（次レッスンでクリックに結び付ける）
 - `items` に要素を 2 つ足して、リストが 8 行になることを確認
 - `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
+- `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認
+- `document.querySelectorAll("li")` で全 `<li>` を取り、`forEach` で `console.log` して件数が合うか確認
 
 ### 自分で書く
 
 - 新しい段落要素 `<p>` を `createElement` で作り、好きな文章を入れて `document.body.appendChild` で本文末尾に追加する
 - `#title` の `textContent` を、JS 側で `const userName = "..."` と定義した名前を含むテンプレートリテラル（`` `ようこそ、${userName} さん` ``）に置き換える
+- `<a id="mdn" href="https://example.com">MDN</a>` を `index.html` に足し、JS から `setAttribute("href", "https://developer.mozilla.org/ja/")` で書き換える。リンクをクリックして飛び先が変わることを確認する
+- `<li>` の 1 つに `data-fruit="citrus"` を付け、`dataset.fruit` で値を読み取って `console.log` する
+- リストの **最初の `<li>`** を `querySelector("li")` で取り、`remove()` で消す。画面から 1 件減ることを確認する
 
 ## まとめ
 
-- `document.querySelector` は CSS セレクタで要素を 1 つ取る（見つからないと `null`）
-- `textContent` でテキストの読み書き
-- `classList.add` / `remove` / `toggle` でクラスの付け外し
-- `createElement` で要素を作り、`appendChild` で親に追加
+- DOM は HTML の入れ子を表現した木構造。親 / 子 / 兄弟 の関係で要素がつながる
+- 取得: `querySelector`（1 件）/ `querySelectorAll`（複数）/ `getElementById`（id 専用）
+- テキスト書き換え: `textContent`（安全）。HTML として解釈したい場合だけ `innerHTML`（XSS に注意）
+- クラス: `classList.add` / `remove` / `toggle` / `contains`
+- 属性: `getAttribute` / `setAttribute` / `removeAttribute`、標準属性は `element.プロパティ` でも可
+- フォーム値: `.value` / `.checked`（`.value` は常に文字列）
+- スタイル: 切り替えは CSS + `classList`。動的計算した値を当てるときだけ `element.style.プロパティ`
+- データ属性: `data-*` ↔ `dataset.キー`（ケバブ→キャメル変換）
+- 生成: `createElement` + `appendChild`、削除: `element.remove()`
+- たどる: `parentElement` / `children` / `nextElementSibling`
 - 次レッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る
