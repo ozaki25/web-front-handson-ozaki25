@@ -5,7 +5,7 @@
 - `async` な Server Component を書けるようになります。
 - 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
 - `loading.tsx` でローディング UI を挟めるようになります。
-- Next.js 15 で fetch のキャッシュ既定が「キャッシュしない」に変わったことを知り、3 パターン（`force-cache` / `revalidate` / `tags`）を見分けられます。
+- Next.js 16 の Server Component での fetch は **既定でキャッシュしない** ことを知り、キャッシュしたいときの書き方（`"use cache"` ディレクティブ / `fetch` オプション）を見分けられます。
 
 ## 解説
 
@@ -38,13 +38,15 @@ app/
 
 `loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
 
-### Next.js 15 の fetch キャッシュ既定
+### Next.js 16 のキャッシュは「明示的に opt-in」
 
-Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました（何度呼んでも同じ値を返します）。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったです。
+Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったため、Next.js 15 以降は **fetch のデフォルトがキャッシュしない** 動作に切り替わっています。毎リクエストで取り直します。
 
-**Next.js 15 からは fetch のデフォルトはキャッシュしません**。毎リクエストで取り直す動きになりました。キャッシュしたい場合は明示的に指定します。
+キャッシュしたい場合は明示的に指定します。書き方は 2 系統あります。
 
-第 2 引数のオプションで挙動を切り替えます。
+#### 従来の方法: `fetch` のオプション
+
+第 2 引数で挙動を切り替える、以前から使える書き方です。
 
 ```tsx
 // (1) 強くキャッシュ: 一度取ったらずっと使い回す
@@ -57,9 +59,48 @@ await fetch(url, { next: { revalidate: 60 } });
 await fetch(url, { next: { tags: ["posts"] } });
 ```
 
-本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。3 パターンの存在は知っておくだけで良いです。
+#### 新しい方法: `"use cache"` ディレクティブ（Cache Components）
 
-ここで話しているキャッシュは **fetch（Data Cache）限定** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
+Next.js 16 で導入された **Cache Components** のパターンです。コンポーネントや関数の先頭に `"use cache"` と書くと、その結果全体をキャッシュ対象にします。`next.config.ts` で `cacheComponents: true` を有効にしたときに使えます。
+
+```tsx
+// next.config.ts
+const nextConfig = {
+  cacheComponents: true, // Cache Components を有効化
+};
+export default nextConfig;
+```
+
+```tsx
+// 関数単位: fetch をまとめてキャッシュ
+import { cacheLife, cacheTag } from "next/cache";
+
+async function getPosts() {
+  "use cache";
+  cacheLife("hours"); // 1 時間単位でキャッシュ
+  cacheTag("posts");  // 'posts' タグで無効化対象にする
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  return res.json();
+}
+```
+
+```tsx
+// コンポーネント単位: 描画結果ごとキャッシュ
+async function PostList() {
+  "use cache";
+  const posts = await fetch("https://jsonplaceholder.typicode.com/posts").then((r) => r.json());
+  return <ul>{posts.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+}
+```
+
+- **`"use cache"` を書いた関数 / コンポーネント全体** がキャッシュされる
+- `cacheLife("minutes" | "hours" | "days" | "weeks" | ...)` でキャッシュ寿命を設定
+- `cacheTag("...")` で `revalidateTag` から無効化できるタグを付ける
+- 書く場所はファイル先頭（ファイル全体）/ 関数先頭 / コンポーネント先頭のいずれか
+
+本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。「キャッシュしたいときに 2 系統の選択肢がある」ことだけ頭に入れておけば十分です。本格的に使うのは実務に入ってからで構いません。
+
+ここで話しているキャッシュは **Server Component のデータ取得** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
 
 ## 演習
 
@@ -161,7 +202,7 @@ const res = await fetch(
 
 - Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
 - `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
-- Next.js 15 では **fetch の既定はキャッシュしません**。必要に応じて `force-cache` / `revalidate` / `tags` を指定します。
+- Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ（Cache Components）** を使います。
 - ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
 - このあとの「動的ルート」では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。2 章 で学んだ `find` が再登場します。
 
