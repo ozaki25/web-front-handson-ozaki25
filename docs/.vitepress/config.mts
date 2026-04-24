@@ -189,6 +189,7 @@ export default withPwa(withMermaid(
             { text: 'lesson85: DevTools の読み方', link: '/lessons/lesson85/' },
             { text: 'lesson86: HTTP キャッシュ', link: '/lessons/lesson86/' },
             { text: 'lesson87: 同時接続数と HTTP/2 / HTTP/3', link: '/lessons/lesson87/' },
+            { text: 'lesson88: Cookie と Web セキュリティ', link: '/lessons/lesson88/' },
           ],
         },
       ],
