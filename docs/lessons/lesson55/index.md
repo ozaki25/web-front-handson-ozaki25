@@ -205,7 +205,7 @@ export default App;
 - ここまでの React レッスンで作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する
 - 戻り値は `{ todos, addTodo, deleteTodo, toggleTodo }` の 4 つ
 - `App` から `useTodos()` を呼び出して使う
-- **localStorage 連携は今回は扱わない**（次の「TODO アプリを React で作る」ミニ統合で畳み込む）
+- **localStorage 連携は今回は扱わない**（次の「TODO アプリを React で作る」で畳み込む）
 
 ### 手順
 
