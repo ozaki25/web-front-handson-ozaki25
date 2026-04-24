@@ -181,6 +181,13 @@ export default withPwa(withMermaid(
             { text: 'lesson75: Vercel にデプロイする', link: '/lessons/lesson75/' },
           ],
         },
+        {
+          text: '6. ブラウザの仕組み',
+          collapsed: true,
+          items: [
+            { text: 'lesson84: ブラウザと HTTP の基本', link: '/lessons/lesson84/' },
+          ],
+        },
       ],
       outline: {
         label: '目次',
