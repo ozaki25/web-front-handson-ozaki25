@@ -108,7 +108,7 @@ p {
 
 ### 途中から始める場合
 
-前のレッスンまでで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。このレッスンから `styles.css` を作るため、`styles.css` の出発点はまだありません（このレッスン内で新規作成します）。
+これまでのレッスンで作った `index.html` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。このレッスンから `styles.css` を作るため、`styles.css` の出発点はまだありません（このレッスン内で新規作成します）。
 
 <details>
 <summary>出発点のコード</summary>
@@ -218,7 +218,7 @@ p {
 
 ### 前レッスンの状態から始める
 
-前のレッスンまでで作った HTML を開きます。`<header>` / `<main>` / `<footer>` があり、`<main>` の中にセクションと問い合わせフォームが並んでいる状態です。
+これまでのレッスンで作った HTML を開きます。`<header>` / `<main>` / `<footer>` があり、`<main>` の中にセクションと問い合わせフォームが並んでいる状態です。
 
 ### CSS ファイルを作る
 

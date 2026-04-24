@@ -155,7 +155,7 @@ export function Greeting({ name, age, children }: GreetingProps) {
 
 ### 途中から始める場合
 
-前のレッスンまでで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
 
 <details>
 <summary>出発点のファイル（3 章 の <code>types.ts</code> を再掲）</summary>
