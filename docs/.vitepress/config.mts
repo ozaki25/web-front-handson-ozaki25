@@ -110,6 +110,7 @@ export default withPwa(withMermaid(
             { text: 'lesson30: TODO アプリを作る', link: '/lessons/lesson30/' },
             { text: 'lesson76: try / catch でエラー処理', link: '/lessons/lesson76/' },
             { text: 'lesson77: JSON を読み書きする', link: '/lessons/lesson77/' },
+            { text: 'lesson81: Web Storage で値をブラウザに保存する', link: '/lessons/lesson81/' },
           ],
         },
         {
