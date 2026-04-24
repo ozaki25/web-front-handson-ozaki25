@@ -3,7 +3,7 @@
 ## ゴール
 
 - `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
-- Next.js 15 で `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
+- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
 - 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
 
 ## 解説
@@ -69,7 +69,7 @@ const target = posts.find((p) => p.id === id);
 
 ### searchParams は今回扱わない
 
-URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 で Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」の中で「指定された ID にハイライトを付ける」演習で初めて使います。
+URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 以降 Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」の中で「指定された ID にハイライトを付ける」演習で初めて使います。
 
 ## 演習
 
@@ -231,7 +231,7 @@ export default async function PostPage({ params }: Props) {
 ## まとめ
 
 - `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
-- Next.js 15 では `params: Promise<{ id: string }>` の形です。`await params` で取り出します。
+- Next.js 15 以降は `params: Promise<{ id: string }>` の形です。`await params` で取り出します。
 - 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
 - 見つからない場合の「正しい 404 ページ」は別のレッスンで扱います。
 - クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

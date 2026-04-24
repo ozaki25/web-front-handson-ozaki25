@@ -103,6 +103,29 @@ function Page() {
 
 つまり「タイトルを変えたいだけ」なら、`useEffect` で `document.title` を書き換える必要はありません。それでもこのレッスンでは **`useEffect` の素振り** として `document.title` を扱います。「タイトル書き換え」という用途に限れば `<title>` の方が簡単、という事実は頭の片隅に。
 
+### コラム: React 19.2 の `useEffectEvent`
+
+React 19.2 で **`useEffectEvent`** という新しいフックが追加されました。これは「effect の中で使っているが、その値が変わっても effect を再実行したくない」という場面に使います。
+
+```tsx
+import { useEffectEvent } from "react";
+
+function Chat({ roomId, theme }) {
+  const onConnected = useEffectEvent(() => {
+    // theme を参照しても、theme が変わっただけでは再接続しない
+    showNotification(theme, "接続しました");
+  });
+
+  useEffect(() => {
+    const connection = connectToRoom(roomId);
+    connection.on("connected", onConnected);
+    return () => connection.disconnect();
+  }, [roomId]); // theme は依存配列に入れなくて良い
+}
+```
+
+依存配列に入れたくないイベントハンドラ的な処理を `useEffectEvent` に切り出すと、**依存配列から除外しても ESLint に怒られません**。本レッスンでは踏み込みませんが、useEffect の複雑な依存配列に悩んだら思い出してください。
+
 ## 演習
 
 ### 途中から始める場合

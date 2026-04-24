@@ -5,7 +5,7 @@
 - ここまでの知識を統合して「投稿できる TODO アプリ」を完成させます。
 - `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
 - `export const metadata` でサイト共通タイトル、`generateMetadata` で詳細ページの動的タイトルを設定できます。
-- `searchParams`（Next.js 15 で Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
+- `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
 
 ## 解説
 
@@ -68,7 +68,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
 
 ### `searchParams` も Promise
 
-クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams` です。Next.js 15 では `params` と同様に **Promise** になっています。
+クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams` です。Next.js 15 以降は `params` と同様に **Promise** になっています。
 
 ```tsx
 type Props = {

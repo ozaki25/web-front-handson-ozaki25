@@ -5,7 +5,7 @@
 - `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
 - 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
 - `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
-- React 19 + Next.js 15 の Server Component でどう動くかを、1 つの演習を通して体感する
+- React 19.2 + Next.js 16 の Server Component でどう動くかを、1 つの演習を通して体感する
 
 ## 解説
 
@@ -63,7 +63,7 @@ export default async function PostPage() {
 - `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
 - 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
 
-これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19 と Next.js 15 ではこの Streaming が標準の挙動です。
+これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
 
 ### `loading.tsx` と `<Suspense>` の棲み分け
 
@@ -294,5 +294,5 @@ DevTools の Network タブで `/streaming` のレスポンスを見ると、最
 - 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
 - `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
 - fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
-- React 19 + Next.js 15 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
+- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
 - これでコースのコア内容は揃いました。あとはサイトを仕上げて Vercel にデプロイすれば、他の人に見せられるアプリになります

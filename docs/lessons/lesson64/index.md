@@ -96,7 +96,7 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-Next.js 15 では **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書いて 1 ファイルだけ許可することもできます。
+Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書いて 1 ファイルだけ許可することもできます。
 
 ### `sizes` でレスポンシブ対応
 

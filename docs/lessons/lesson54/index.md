@@ -107,7 +107,7 @@ export const TodoItem = memo(function TodoItem({ todo, onDelete }: Props) {
 
 `React.memo` で包んだ子コンポーネントに `useCallback` で関数 props を渡すと、親の再レンダリングで子がスキップされるようになります。
 
-**React Compiler**（2025 以降、段階統合中）: React チームが進めている自動最適化ツールで、Next.js 15 にも部分的に入り始めています。Compiler が有効な環境では、**`useMemo` / `useCallback` / `React.memo` の手動メモ化は原則不要** になる方向です。
+**React Compiler** は React チームが進めている自動最適化ツールで、Next.js 16 で **stable** として採用されました（experimental フラグが不要に）。Compiler が有効な環境では、**`useMemo` / `useCallback` / `React.memo` の手動メモ化は原則不要** になる方向です。
 
 本コースのスタンスは明確です。
 
