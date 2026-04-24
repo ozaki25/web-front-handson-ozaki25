@@ -1,38 +1,41 @@
-# lesson71: Middleware で認証前処理
+# lesson71: Proxy で認証前処理
 
 ## ゴール
 
-- `middleware.ts` を使ってリクエストに割り込める
+- `proxy.ts` を使ってリクエストに割り込める
 - 認証状態（Cookie）に応じてリダイレクトできる
-- Edge ランタイムの制約を理解する
+- Node.js ランタイムで動くことと、軽量処理に留めるべき理由を理解する
 - `matcher` で適用範囲を絞れる
 
 ## 解説
 
-### Middleware とは
+### Proxy とは
 
-**Middleware** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
+**Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
+
+> Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
 
 配置ルール:
 
-- ファイル名は **`middleware.ts`（または `.js`）** 固定
-- 配置は **プロジェクトルート直下**（`app/` の横）
+- ファイル名は **`proxy.ts`（または `.js`）** 固定
+- 配置は **プロジェクトルート直下** または `src/` 直下（`app/` や `pages/` の横に置く）
 - 1 つのプロジェクトに 1 ファイルのみ
 
-### 最小の middleware
+### 最小の proxy
 
 ```ts
-// middleware.ts
+// proxy.ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   // ここに前処理を書く
   return NextResponse.next(); // 通常通りページを表示
 }
 ```
 
 - 引数 `request` は `NextRequest`（通常の `Request` に Next.js 独自の機能を追加したもの）
+- export は **named `proxy` 関数** または **default export** のどちらかで書けます
 - 戻り値:
   - `NextResponse.next()` → そのままページへ
   - `NextResponse.redirect(url)` → リダイレクトする
@@ -40,7 +43,7 @@ export function middleware(request: NextRequest) {
 
 ### `matcher` で適用範囲を絞る
 
-デフォルトでは **すべてのリクエスト** で middleware が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
+デフォルトでは **すべてのリクエスト** で proxy が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
 
 ```ts
 export const config = {
@@ -51,17 +54,16 @@ export const config = {
 - `/todos/:path*` は `/todos` と `/todos/*` の全部にマッチ
 - 静的アセット（画像・CSS）など余計なものを避ける
 
-### Edge ランタイムの制約
+### Node.js ランタイムで動く
 
-Middleware は **既定で Edge ランタイム** で動きます。Node.js ランタイムとは違い、以下が使えません。
+Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
 
-- `fs`（ファイルシステム）
-- `path`（パスユーティリティのうち一部）
-- ネイティブモジュール全般
+重要な指針:
 
-Edge は「世界中のエッジサーバーで素早く動く」ことを目的にしているため、Node 依存の重い処理はできません。DB 接続や重い計算は Route Handlers や Server Component（どちらも既定 Node.js）に任せる、と役割分担します。
+- **重い処理は proxy に書かない**。ユーザー認証の JWT 署名検証や細かい権限チェックは Server Components / Server Actions に寄せる
+- proxy は「Cookie が無ければログインへ飛ばす」のような **トラフィック制御** に絞る
 
-「Route Handlers」は既定で Node.js、Middleware は既定で Edge。この違いは覚えておいてください。
+「Route Handlers」と同じ Node.js ランタイム上で動きますが、**ページ本体の前に毎回走る** ぶん、オーバーヘッドが気になりやすい点に注意してください。
 
 ### 本コースの範囲
 
@@ -76,7 +78,7 @@ Edge は「世界中のエッジサーバーで素早く動く」ことを目的
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`middleware.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`proxy.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
 
 ### ゴール
 
@@ -86,16 +88,16 @@ Edge は「世界中のエッジサーバーで素早く動く」ことを目的
 ### 手順
 
 1. これまでのプロジェクトを開く（5 章 のここまでの成果を引き継ぐ）
-2. `middleware.ts` をプロジェクトルート直下に新規作成
+2. `proxy.ts` をプロジェクトルート直下に新規作成
 3. `app/login/page.tsx` を新規作成
 
-### `middleware.ts`（プロジェクトルート直下）
+### `proxy.ts`（プロジェクトルート直下）
 
 ```ts
 import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const auth = request.cookies.get("auth");
 
   if (!auth) {
@@ -165,9 +167,10 @@ export default function LoginPage() {
 
 ### 変える
 
-- Cookie 名を `session` に変えて、`middleware.ts` と `login/page.tsx` の両方を追随する
+- Cookie 名を `session` に変えて、`proxy.ts` と `login/page.tsx` の両方を追随する
 - `matcher` を `["/todos/:path*", "/admin/:path*"]` に増やして、`/admin/page.tsx` を作り、そちらでもリダイレクトが効くことを確認
 - `NextResponse.redirect` を `NextResponse.rewrite` に変えて挙動の違いを見る（URL が書き換わらないで表示が変わる）
+- `export function proxy(...)` を `export default function(...)` に書き換えて、どちらでも動くことを確認
 
 ### 自分で書く
 
@@ -179,7 +182,7 @@ export default function LoginPage() {
 
 ### Route Handlers との組み合わせ（発展）
 
-これまでのレッスンで作った `/api/todos` も、middleware で認証必須にできます。
+これまでのレッスンで作った `/api/todos` も、proxy で認証必須にできます。
 
 ```ts
 export const config = {
@@ -187,22 +190,17 @@ export const config = {
 };
 ```
 
-これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「middleware で API も守れる」ことだけ押さえます。
+これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「proxy で API も守れる」ことだけ押さえます。
 
-### Edge の制約を体感
+### Node.js ランタイムでの注意
 
-`middleware.ts` で試しに以下を書くとエラーになります。
-
-```ts
-import fs from "fs"; // NG: Edge では使えない
-```
-
-ビルド時・実行時に「Module not supported」のようなエラーが出ます。Edge ランタイムの制約を体感するなら 1 度書いて、確認したら消してください。
+Next.js 16 から proxy は Node.js ランタイムで動くので、`fs` / `path` / ネイティブモジュールなどの Node API が使えます。ただし **proxy は毎リクエスト前に走る** ため、重い処理（DB 接続・大きな計算）は書かないでください。ファイル I/O や外部 API 呼び出しは Server Components / Server Actions / Route Handlers に寄せるのが原則です。
 
 ## まとめ
 
-- `middleware.ts` はルート直下に 1 ファイル、全リクエストに割り込む
+- `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
+- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
 - `NextResponse.next` / `redirect` / `rewrite` で分岐
 - `matcher` で適用パスを絞る
-- Edge ランタイムなので `fs` 等は使えない（Route Handlers の Node.js とは別物）
+- Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
 - 本格認証は本コース外。疑似ログインで流れだけ掴む

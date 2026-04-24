@@ -5,7 +5,7 @@
 - Next.js で HTTP API エンドポイントを作れる（`GET` / `POST`）
 - Server Actions との使い分けの指針を持つ
 - 3 章 の「型ガード」の型ガードを **サーバー側の入力検証** と **クライアント側の受信検証** 両方に使える
-- Middleware との **ランタイムの違い**（Edge / Node.js）を理解する
+- Proxy との **ランタイムと役割の違い**（どちらも Node.js 既定、Route Handlers はデータ / Proxy は前処理）を理解する
 
 ## 解説
 
@@ -79,12 +79,10 @@ Next.js の「サーバー側で動くもの」には **2 つのランタイム*
 - **Node.js ランタイム**: `fs` など Node API が使える
 - **Edge ランタイム**: `fs` などは使えない。起動が速く、世界中のエッジで動く
 
-Route Handlers と Middleware でデフォルトが違います。
+Next.js 16 では Route Handlers と Proxy の **どちらも既定が Node.js** になりました（以前の Middleware は Edge 既定でしたが、Proxy への改名にあわせて Node.js 既定に）。`export const runtime = "edge"` を明示すれば Edge で動かすこともできます。両者の違いは **役割** です。
 
-- **Route Handlers の既定は Node.js**（`export const runtime = 'edge'` を書かない限り）
-- **Middleware の既定は Edge**（別のレッスンで扱う）
-
-この差は初学者が混乱しやすいので、1 度はっきり意識しておくと後が楽です。
+- **Route Handlers**: データを返す / 受けるエンドポイント（REST / Webhook）
+- **Proxy**: リクエスト前の軽量な分岐（認証ガード / リダイレクト）
 
 ## 演習
 
@@ -289,4 +287,4 @@ export function TodoFetcher() {
 - Server Actions と Route Handlers は棲み分け（表を参照）
 - サーバー側は **入力検証**、クライアント側は **受信検証** の両方で型ガードを使う
 - 3 章 の「型ガード」の `isTodo` がそのまま実務で使える
-- Middleware は既定 Edge、Route Handlers は既定 Node.js。ランタイムの違いを意識する
+- Proxy / Route Handlers はどちらも Next.js 16 から既定 Node.js。役割（Route Handlers = データのやり取り / Proxy = 軽量な前処理）で分担する

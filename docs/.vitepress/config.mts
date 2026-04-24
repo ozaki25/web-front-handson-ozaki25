@@ -172,7 +172,7 @@ export default withPwa(withMermaid(
             { text: 'lesson68: Server Actions の最小形', link: '/lessons/lesson68/' },
             { text: 'lesson69: 送信状態とエラー表示', link: '/lessons/lesson69/' },
             { text: 'lesson70: Route Handlers', link: '/lessons/lesson70/' },
-            { text: 'lesson71: Middleware で認証前処理', link: '/lessons/lesson71/' },
+            { text: 'lesson71: Proxy で認証前処理', link: '/lessons/lesson71/' },
             { text: 'lesson72: 環境変数の基本', link: '/lessons/lesson72/' },
             { text: 'lesson73: 小さなアプリを仕上げる', link: '/lessons/lesson73/' },
             { text: 'lesson74: Tailwind CSS の紹介', link: '/lessons/lesson74/' },
