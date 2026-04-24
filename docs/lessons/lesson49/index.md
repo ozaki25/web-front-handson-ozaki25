@@ -8,6 +8,8 @@ const demoHtml =
   '<div id="root"></div>'
 
 const demoJs = `
+// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
+// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
 const h = React.createElement;
 const { useState } = React;
 

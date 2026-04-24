@@ -11,6 +11,8 @@ const demoJs = `
 // 本来 JSX で書く <h1 className="title">Hello, React</h1> は
 // ビルド時に React.createElement(...) に変換されます。
 // このデモは CDN から React を読み込み、変換後の形を直接書いています。
+// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
+// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
 const h = React.createElement;
 
 function App() {

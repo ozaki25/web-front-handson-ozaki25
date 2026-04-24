@@ -172,7 +172,7 @@ export async function listTodos(): Promise<Todo[]> {
   return todos;
 }
 
-// 戻り値の型（3 章 lesson38 の判別共用体そのもの）
+// 戻り値の型（3 章 「判別共用体」そのもの）
 export type AddTodoResult = { ok: true } | { ok: false; error: string };
 
 export async function addTodo(formData: FormData): Promise<AddTodoResult> {
