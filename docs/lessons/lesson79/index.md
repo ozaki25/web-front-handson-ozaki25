@@ -56,11 +56,9 @@ URL から情報を取ってタイトルを作るときに使います。
 // app/posts/[id]/page.tsx
 import type { Metadata } from "next";
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
   const { id } = await params;
   const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
   const post = await res.json();
@@ -70,13 +68,14 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PostPage({ params }: Props) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
   return <h1>記事 ID: {id}</h1>;
 }
 ```
 
 - `generateMetadata` は非同期関数にできます
+- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
 - `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
 - 戻り値は `Metadata` 型のオブジェクト
 
@@ -195,11 +194,7 @@ export default function About() {
 **`app/posts/[id]/page.tsx`**
 
 ```tsx
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PostPage({ params }: Props) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
   return <h1>記事 ID: {id}</h1>;
 }
@@ -305,11 +300,9 @@ type Post = {
   body: string;
 };
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
   const { id } = await params;
   const res = await fetch(
     `https://jsonplaceholder.typicode.com/posts/${id}`,
@@ -327,7 +320,7 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function PostPage({ params }: Props) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
   const res = await fetch(
     `https://jsonplaceholder.typicode.com/posts/${id}`,

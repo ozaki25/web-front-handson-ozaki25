@@ -19,17 +19,11 @@
 StackBlitz の Next.js テンプレートには最初から `app/layout.tsx` が用意されています。中身は概ね次の形になっています。
 
 ```tsx
-import type { ReactNode } from "react";
-
 export const metadata = {
   title: "My App",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja">
       <body>{children}</body>
@@ -43,7 +37,7 @@ export default function RootLayout({
 - **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
 - `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（「ページを増やしてリンクで移動する」で「コピーしない」と言ったのはこのためです）。
 - `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
-- `children` の型は `ReactNode` です。「React が画面に出せるもの全部」くらいの意味で、コピペで使えば良いです。
+- `LayoutProps<"/">` は Next.js 16 が自動生成する **グローバル型** です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` にルート別の型定義が生成されます。第 1 引数の `"/"` はこの `layout.tsx` が覆うルートのパスで、他のルート用レイアウトなら `LayoutProps<"/posts">` のように書きます。
 - `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
 
 ### `children` の正体
@@ -286,7 +280,6 @@ export default function TodosPage() {
 `app/layout.tsx` を以下に書き換えます。
 
 ```tsx
-import type { ReactNode } from "react";
 import Link from "next/link";
 import "./globals.css";
 
@@ -294,11 +287,7 @@ export const metadata = {
   title: "My Next App",
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html lang="ja">
       <body>

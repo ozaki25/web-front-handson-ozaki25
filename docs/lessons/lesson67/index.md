@@ -33,7 +33,7 @@ app/
 // app/posts/[id]/page.tsx
 import { notFound } from "next/navigation";
 
-export default async function PostPage({ params }: Props) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
   // ...探す
   const post = posts.find((p) => String(p.id) === id);
@@ -149,11 +149,7 @@ type Post = {
   body: string;
 };
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PostPage({ params }: Props) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
 
   const res = await fetch("https://jsonplaceholder.typicode.com/posts");
@@ -224,11 +220,7 @@ type Post = {
   body: string;
 };
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export default async function PostPage({ params }: Props) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
 
   const res = await fetch("https://jsonplaceholder.typicode.com/posts");

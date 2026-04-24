@@ -199,11 +199,9 @@ import { listTodos, deleteTodo } from "../actions";
 import { TodoForm } from "./TodoForm";
 import Link from "next/link";
 
-type Props = {
-  searchParams: Promise<{ highlight?: string }>;
-};
-
-export default async function TodosPage({ searchParams }: Props) {
+export default async function TodosPage({
+  searchParams,
+}: PageProps<"/todos">) {
   const { highlight } = await searchParams;
   const todos = await listTodos();
 
@@ -239,11 +237,9 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTodo } from "../../actions";
 
-type Props = {
-  params: Promise<{ id: string }>;
-};
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
+export async function generateMetadata({
+  params,
+}: PageProps<"/todos/[id]">): Promise<Metadata> {
   const { id } = await params;
   const todo = await getTodo(id);
   return {
@@ -251,7 +247,9 @@ export async function generateMetadata({ params }: Props): Promise<Metadata> {
   };
 }
 
-export default async function TodoDetailPage({ params }: Props) {
+export default async function TodoDetailPage({
+  params,
+}: PageProps<"/todos/[id]">) {
   const { id } = await params;
   const todo = await getTodo(id);
 
