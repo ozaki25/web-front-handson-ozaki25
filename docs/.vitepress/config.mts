@@ -187,6 +187,7 @@ export default withPwa(withMermaid(
           items: [
             { text: 'lesson84: ブラウザと HTTP の基本', link: '/lessons/lesson84/' },
             { text: 'lesson85: DevTools の読み方', link: '/lessons/lesson85/' },
+            { text: 'lesson86: HTTP キャッシュ', link: '/lessons/lesson86/' },
           ],
         },
       ],
