@@ -78,7 +78,12 @@ export function ContactForm() {
     <form onSubmit={handleSubmit(onSubmit)}>
       <div>
         <label htmlFor="name">お名前</label>
-        <input id="name" {...register("name", { required: "必須です" })} />
+        <input
+          id="name"
+          aria-required="true"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name", { required: "必須です" })}
+        />
         {errors.name && <p role="alert">{errors.name.message}</p>}
       </div>
 
@@ -87,6 +92,8 @@ export function ContactForm() {
         <input
           id="email"
           type="email"
+          aria-required="true"
+          aria-invalid={errors.email ? "true" : "false"}
           {...register("email", { required: "必須です" })}
         />
         {errors.email && <p role="alert">{errors.email.message}</p>}
@@ -250,6 +257,27 @@ return (
 
 これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
 
+### 補足: エラー表示は色だけに頼らない
+
+フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
+
+1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
+2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
+3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
+
+CSS 例:
+
+```css
+.form-error {
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .form-error {
+    color: #fca5a5;
+  }
+}
+```
+
 ## 演習
 
 ### ゴール
@@ -271,6 +299,8 @@ npm install react-hook-form
 ```
 
 ### `src/ContactForm.tsx`
+
+> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
 
 ```tsx
 import { useForm } from "react-hook-form";
@@ -316,7 +346,7 @@ export function ContactForm() {
           })}
         />
         {errors.name && (
-          <p id="name-error" role="alert" style={{ color: "red" }}>
+          <p id="name-error" role="alert" className="form-error">
             {errors.name.message}
           </p>
         )}
@@ -338,7 +368,7 @@ export function ContactForm() {
           })}
         />
         {errors.email && (
-          <p id="email-error" role="alert" style={{ color: "red" }}>
+          <p id="email-error" role="alert" className="form-error">
             {errors.email.message}
           </p>
         )}
@@ -357,7 +387,7 @@ export function ContactForm() {
           })}
         />
         {errors.message && (
-          <p id="message-error" role="alert" style={{ color: "red" }}>
+          <p id="message-error" role="alert" className="form-error">
             {errors.message.message}
           </p>
         )}

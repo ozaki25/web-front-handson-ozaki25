@@ -129,12 +129,19 @@ import AxeBuilder from "@axe-core/playwright";
 
 test("トップページに a11y 違反がない", async ({ page }) => {
   await page.goto("http://localhost:3000/");
-  const results = await new AxeBuilder({ page }).analyze();
+
+  const results = await new AxeBuilder({ page })
+    // 既知の現状割れているチェックは disable する（後で順次解消）
+    .disableRules(["color-contrast"])
+    // 最初は WCAG A / AA だけに絞ると現実的
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+
   expect(results.violations).toEqual([]);
 });
 ```
 
-「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。
+「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。`expect(results.violations).toEqual([])` をいきなり全ルールで通すと、新しいルールが追加されたときに **無関係の PR が落ちる** ので、`withTags` でスコープを絞り、`disableRules` で既知の課題を一旦よけてから順次解消するのが定石です。
 
 > React のユニットテストレベルなら `jest-axe` や `vitest-axe` が使えます。コンポーネント単体の違反チェックに向きます。
 
