@@ -117,6 +117,24 @@ function App() {
 - `ref` を普通の props として受け取って、中の `<input>` に渡すだけ
 - 型は `react` から `Ref<HTMLInputElement>` を `import type` で取る
 
+### 補足: `useRef` の型と `RefObject<T | null>`
+
+`useRef<HTMLInputElement>(null)` の戻り値の型は `RefObject<HTMLInputElement | null>` です（React 19 で型定義が整理されました）。`current` プロパティは `HTMLInputElement | null` 型なので、**読むときに必ず null チェックが要る** のはこのためです。
+
+```tsx
+const inputRef = useRef<HTMLInputElement>(null);
+// inputRef の型: RefObject<HTMLInputElement | null>
+// inputRef.current の型: HTMLInputElement | null
+
+if (inputRef.current) {
+  inputRef.current.focus();  // ここでは HTMLInputElement に絞られる
+}
+```
+
+Props として ref を受け取る側の型 `Ref<HTMLInputElement>` は、内部的にはこの `RefObject<HTMLInputElement | null>` または「ref をセットする関数」のユニオンです（callback ref と呼ばれる別形式があるため）。本コースでは **オブジェクト形式の ref のみ扱います**。
+
+> **TS strict 前提**: 本コースは `tsconfig.json` の `"strict": true` を前提にしています（3 章 「tsconfig.json を読む」参照）。strict が無効だと `current` の null チェックを忘れても型エラーが出ず、実行時に「`Cannot read property 'focus' of null`」で落ちます。strict を切らないでください。
+
 ### 過去形（`forwardRef`）は扱わない
 
 React 18 までは、自作コンポーネントで `ref` を受け取るために `React.forwardRef(...)` という特別な関数で包む必要がありました。
