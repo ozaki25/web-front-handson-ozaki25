@@ -133,6 +133,7 @@ export default withPwa(withMermaid(
             { text: 'lesson38: 判別共用体', link: '/lessons/lesson38/' },
             { text: 'lesson39: ジェネリクス入門', link: '/lessons/lesson39/' },
             { text: 'lesson40: Utility Types で仕上げる', link: '/lessons/lesson40/' },
+            { text: 'lesson111: tsconfig.json を読む', link: '/lessons/lesson111/' },
           ],
         },
         {
