@@ -146,9 +146,9 @@ export const metadata: Metadata = {
     canonical: "/",
   },
 
-  // (3) robots（インデックス制御）
+  // (3) robots（インデックス制御）: 既定は本番だけ index、それ以外は noindex
   robots: {
-    index: true,
+    index: process.env.VERCEL_ENV === "production",
     follow: true,
   },
 };
@@ -158,7 +158,7 @@ export const metadata: Metadata = {
 
 - **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
 - **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
-- **`robots`**: ステージング環境やプレビュー URL で `noindex` にして、間違って Google に拾われないようにする
+- **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
 
 実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。詳しくは別のレッスン「OGP と SEO 実践」で扱います。
 
@@ -331,6 +331,7 @@ export default function About() {
 **`app/posts/[id]/page.tsx`**
 
 ```tsx
+import { cache } from "react";
 import type { Metadata } from "next";
 
 type Post = {
@@ -339,20 +340,21 @@ type Post = {
   body: string;
 };
 
+// 同一リクエスト内での重複 fetch を 1 回にまとめる
+const getPost = cache(async (id: string): Promise<Post | null> => {
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  if (!res.ok) return null;
+  return res.json();
+});
+
 export async function generateMetadata({
   params,
 }: PageProps<"/posts/[id]">): Promise<Metadata> {
   const { id } = await params;
-  const res = await fetch(
-    `https://jsonplaceholder.typicode.com/posts/${id}`,
-    { cache: "force-cache" }
-  );
-  if (!res.ok) {
-    return {
-      title: "記事が見つかりません",
-    };
+  const post = await getPost(id);
+  if (!post) {
+    return { title: "記事が見つかりません" };
   }
-  const post: Post = await res.json();
   return {
     title: post.title,
     description: post.body.slice(0, 120),
@@ -361,11 +363,10 @@ export async function generateMetadata({
 
 export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
-  const res = await fetch(
-    `https://jsonplaceholder.typicode.com/posts/${id}`,
-    { cache: "force-cache" }
-  );
-  const post: Post = await res.json();
+  const post = await getPost(id);
+  if (!post) {
+    return <h1>記事が見つかりません</h1>;
+  }
 
   return (
     <>
@@ -375,6 +376,8 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   );
 }
 ```
+
+> **補足: `cache()` で同一リクエスト内の重複 fetch を 1 回にまとめる**: `generateMetadata` と `PostPage` は同じリクエストで両方走るため、素朴に書くと同じ URL に **2 回 fetch が飛びます**。`import { cache } from "react"` の `cache()` 関数で包むと、**同一リクエスト内** であれば 2 回目以降の呼び出しは 1 回目の結果を使い回します（メモ化）。`{ cache: "force-cache" }` のような fetch オプションはネットワークの再取得を防ぐ別の仕組みで、`cache()` と組み合わせなくても上記の重複呼び出し自体は走ってしまいます。
 
 ### 期待出力
 

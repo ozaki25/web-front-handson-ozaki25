@@ -413,7 +413,7 @@ app/
 
 #### Q: Edge Runtime と Node.js Runtime の違いは？
 
-→ **Edge** は軽量・高速だが API 制限あり、**Node.js**（デフォルト）は何でも動く。Next.js 16 から **Node.js デフォルト** に戻りました。
+→ **Edge** は軽量・高速だが利用できる API に制限がある、**Node.js** は Node API がまるごと使える。App Router は **Server Component / Route Handler とも Node.js Runtime がデフォルト** で、Edge を使いたいファイルだけ `export const runtime = "edge"` で opt-in する。Next.js 16 では **Middleware も Node.js Runtime を選べる** ようになり、Node API を必要とする処理を Middleware に書きやすくなった。
 
 ## 演習
 
