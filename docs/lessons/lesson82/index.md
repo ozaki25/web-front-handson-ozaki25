@@ -158,6 +158,31 @@ export default function LoginPage() {
 - ボタンクリックで `document.cookie` を直接書く
 - `useRouter().push("/todos")` で `/todos` に遷移
 
+### この演習の Cookie は「学習用」（本物のログインではない）
+
+上の `document.cookie = "auth=1; ..."` は **学習用の擬似ログイン** です。本物の認証では絶対にこの形にしません。理由は次の 3 点。
+
+1. **JavaScript から `document.cookie` で書ける Cookie は、ブラウザ側のすべての JS から読める**。XSS（任意の JS が走る攻撃）が成立すると即漏洩します。
+2. **`HttpOnly` フラグが付いていない**。本物の認証 Cookie には必ず `HttpOnly` を付けて、JS から読めないようにします。`HttpOnly` はサーバー側でしか付けられないため、`document.cookie` で立てた時点で「JS 可視」になっています。
+3. **`SameSite` / `Secure` が指定されていない**。CSRF / 中間者攻撃に対する基本防御が抜けています。
+
+実運用では、認証 Cookie はサーバー側（Server Action や Route Handler）で次のように発行します。
+
+```ts
+// Server Action / Route Handler 内で（例）
+import { cookies } from "next/headers";
+
+(await cookies()).set("session", token, {
+  httpOnly: true,        // JS から読めない
+  secure: true,          // HTTPS のみ送信
+  sameSite: "lax",       // 別オリジンからの送信を制限（CSRF 対策）
+  maxAge: 60 * 60 * 24,  // 1 日
+  path: "/",
+});
+```
+
+本コースでは認証フローには深入りしないため、この演習では学習用の擬似 Cookie を使いますが、**実装するときは「JS から `document.cookie` を書く」を絶対にしない** と覚えてください。本格的な認証は別レッスン（Auth.js / NextAuth 等）で扱います。
+
 ### 期待出力
 
 1. Cookie が何もない状態で `/todos` にアクセス → `/login` にリダイレクトされる

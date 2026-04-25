@@ -147,6 +147,8 @@ import { add } from "./math";
 <details>
 <summary>出発点のコード</summary>
 
+これは **新規 StackBlitz から始める方向け** の最小スターターです（直前レッスンの完成形を厳密に再現したものではないため、内容は import / export の題材練習用に絞っています）。
+
 **`index.html`**
 
 ```html
@@ -155,11 +157,11 @@ import { add } from "./math";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson26</title>
+    <title>lesson28</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson26: 配列の変換</h1>
+    <h1>lesson28: import / export の出発点</h1>
   </body>
 </html>
 ```

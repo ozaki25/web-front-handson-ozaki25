@@ -52,7 +52,7 @@ import { z } from "zod";
 const UserSchema = z.object({
   id: z.number(),
   name: z.string(),
-  email: z.string().email(),
+  email: z.email(),
   age: z.number().int().min(0).max(150),
   isAdmin: z.boolean(),
 });
@@ -67,8 +67,8 @@ type User = z.infer<typeof UserSchema>;
 
 ```ts
 z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
-z.string().email("メール形式で")                        // メール
-z.string().url("URL 形式で")                           // URL
+z.email("メール形式で")                                 // メール（v4 から top-level）
+z.url("URL 形式で")                                    // URL（v4 から top-level）
 z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
 z.number().int("整数で").positive("正の数で")           // 整数 + 正
 z.number().min(0).max(100)                             // 範囲
@@ -77,15 +77,17 @@ z.string().nullable()                                   // string | null
 z.string().default("デフォルト")                        // デフォルト値
 ```
 
+> **Zod v4（2025 リリース）の変更点**: `z.string().email()` / `.url()` / `.uuid()` / `.datetime()` は v4 で **top-level の `z.email()` / `z.url()` / `z.uuid()` / `z.iso.datetime()` に再編** されました。v3 系の書き方も互換のため動きますが、新規コードは v4 形式が推奨です。
+
 ### 配列とユニオン
 
 ```ts
 const TodoSchema = z.object({
-  id: z.string().uuid(),
+  id: z.uuid(),
   title: z.string().min(1),
   status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
   tags: z.array(z.string()),
-  createdAt: z.string().datetime(),           // ISO 8601
+  createdAt: z.iso.datetime(),                // ISO 8601
 });
 
 type Todo = z.infer<typeof TodoSchema>;
@@ -136,7 +138,7 @@ import { z } from "zod";
 
 const ContactSchema = z.object({
   name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
-  email: z.string().email("メールアドレスの形式が正しくありません"),
+  email: z.email("メールアドレスの形式が正しくありません"),
   age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
   message: z.string().min(10, "10 文字以上で入力してください"),
 });
@@ -418,7 +420,7 @@ export async function fetchPosts(): Promise<Post[]> {
 ### 変える
 
 - `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
-- `z.string().email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
+- `z.email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
 - `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
 
 ### 自分で書く
@@ -455,7 +457,7 @@ export async function fetchPosts(): Promise<Post[]> {
 
 3. `useActionState` で受けるエラー表示はそのまま動きます（型 `AddTodoResult` を変えていないため）。
 
-4. 削除 (`deleteTodo`) も同じ流れで Zod 化できます（`id: z.string().uuid()` などが書けます）。
+4. 削除 (`deleteTodo`) も同じ流れで Zod 化できます（`id: z.uuid()` などが書けます）。
 
 これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
 

@@ -198,7 +198,7 @@ npm install -D dprint
 「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
 
 - [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
-- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、2025 年発表）: 公式の **Go ベース TypeScript** が **2026 年に preview**
+- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、**2025 年に発表 + preview リリース**）: 公式の **Go ベース TypeScript**。型チェック / 言語サービスを Go で書き直し、`tsc` 比 10 倍級の高速化を目指す
 
 特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
 
@@ -347,7 +347,7 @@ time npx oxlint .
 - **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
 - **SWC / Turbopack**: Next.js / Vercel が独自路線
 - **dprint**: Prettier 代替の Rust 製フォーマッタ
-- **TypeScript 公式の Go 版**（tsgo）が 2026 年に preview
+- **TypeScript 公式の Go 版**（tsgo）が 2025 年に preview リリース、2026 年現在も成熟中
 - 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
 - 既存プロジェクトは「**速度に困ってから**」で良い
 - 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
