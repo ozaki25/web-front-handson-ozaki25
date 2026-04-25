@@ -238,6 +238,7 @@ export default withPwa(withMermaid(
             { text: 'lesson128: React Compiler', link: '/lessons/lesson128/' },
             { text: 'lesson129: Server Components の設計論', link: '/lessons/lesson129/' },
             { text: 'lesson130: 次世代ツールチェイン（Biome / Oxc / Turbopack）', link: '/lessons/lesson130/' },
+            { text: 'lesson131: AI を前提にした開発（Copilot / Cursor / Claude Code）', link: '/lessons/lesson131/' },
           ],
         },
       ],
