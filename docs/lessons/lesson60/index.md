@@ -194,13 +194,21 @@ export function TodoList({ todos, onDelete }: TodoListProps) {
       {todos.map((todo) => (
         <li key={todo.id}>
           {todo.text}
-          <button onClick={() => onDelete(todo.id)}>削除</button>
+          <button
+            type="button"
+            aria-label={`${todo.text} を削除`}
+            onClick={() => onDelete(todo.id)}
+          >
+            削除
+          </button>
         </li>
       ))}
     </ul>
   );
 }
 ```
+
+`aria-label={`${todo.text} を削除`}` を付けるのは、スクリーンリーダーで「削除ボタン」が連続して読み上げられたときに **どの TODO の削除か区別できる** ようにするためです。視覚的には「削除」のままで、読み上げ時だけ別の文字列が使われます。
 
 ### `src/App.tsx`
 

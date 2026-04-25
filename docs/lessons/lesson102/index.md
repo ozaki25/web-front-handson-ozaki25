@@ -105,7 +105,11 @@ function App() {
     <div>
       <button onClick={() => setShowChart(true)}>グラフを表示</button>
       {showChart && (
-        <Suspense fallback={<p>グラフ読み込み中...</p>}>
+        <Suspense
+          fallback={
+            <p role="status" aria-live="polite">グラフ読み込み中...</p>
+          }
+        >
           <HeavyChart />
         </Suspense>
       )}
@@ -114,7 +118,7 @@ function App() {
 }
 ```
 
-`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。
+`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。fallback 要素には `role="status"` と `aria-live="polite"` を付けるのがおすすめです。スクリーンリーダーが「読み込み中」を発話してくれるようになり、何も無いまま黙って待たせる事故を防げます。
 
 #### 3. Next.js でのコード分割
 
