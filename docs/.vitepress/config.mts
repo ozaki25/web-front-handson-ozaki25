@@ -220,6 +220,7 @@ export default withPwa(withMermaid(
             { text: 'lesson105: ESLint / Prettier / Biome', link: '/lessons/lesson105/' },
             { text: 'lesson109: Web Components 入門', link: '/lessons/lesson109/' },
             { text: 'lesson112: package.json と npm スクリプト', link: '/lessons/lesson112/' },
+            { text: 'lesson113: Vite の仕組みを軽く', link: '/lessons/lesson113/' },
           ],
         },
       ],
