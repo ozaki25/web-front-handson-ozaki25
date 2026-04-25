@@ -20,7 +20,7 @@ CI が崩れたまま開発を続けると、**「どの変更で壊れたか分
 
 ### GitHub Actions とは
 
-GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料で月 2,000 分**（執筆時点）使えます。
+GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料・無制限** で実行できます。Private リポジトリは Free プランで月 2,000 分まで（執筆時点）、Pro / Team / Enterprise で枠が増えます。
 
 主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
 
