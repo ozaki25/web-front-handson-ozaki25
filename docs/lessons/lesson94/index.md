@@ -228,7 +228,7 @@ OK（意味を持たせる）:
       <div class="sub">サブセクション</div>
       <div class="para">サブ本文です。</div>
 
-      <img src="https://placehold.jp/300x200.png" />
+      <img src="https://placehold.co/300x200.png" />
 
       <div class="form">
         <div>お名前</div>
@@ -300,7 +300,7 @@ body {
         <p>サブ本文です。</p>
 
         <img
-          src="https://placehold.jp/300x200.png"
+          src="https://placehold.co/300x200.png"
           alt="記事の挿絵（プレースホルダ画像）"
           width="300"
           height="200"

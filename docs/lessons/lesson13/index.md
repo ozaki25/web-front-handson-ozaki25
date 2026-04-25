@@ -204,32 +204,32 @@ body { padding: 16px; }
         <h2>好きなもの</h2>
         <div class="cards">
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
             <h3>本</h3>
             <p>技術書からエッセイまで。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="音楽のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="音楽のプレースホルダ画像" />
             <h3>音楽</h3>
             <p>作業中はインストゥルメンタル。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="写真のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="写真のプレースホルダ画像" />
             <h3>写真</h3>
             <p>スマホで散歩の途中に。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="料理のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="料理のプレースホルダ画像" />
             <h3>料理</h3>
             <p>凝らない、続ける。</p>
           </article>
@@ -258,10 +258,10 @@ body { padding: 16px; }
       <section id="gallery">
         <h2>ギャラリー</h2>
         <div class="gallery">
-          <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 1" />
-          <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 2" />
-          <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 3" />
-          <img src="https://placehold.jp/300x200.png" alt="ギャラリー画像 4" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 1" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 2" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 3" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 4" />
         </div>
       </section>
     </main>
@@ -498,7 +498,7 @@ form button:focus {
 ```html
 <article class="card card-new">
   <span class="badge">NEW</span>
-  <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+  <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
   <h3>コーヒー</h3>
   <p>朝の 1 杯が欠かせない。</p>
 </article>

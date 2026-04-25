@@ -378,9 +378,38 @@ export default function App() {
 
 ### 自分で書く
 
-- `useCounter(initial: number)` カスタムフックを作る
-- 戻り値は `{ count, increment, decrement, reset }`
-- ヒント: `const [count, setCount] = useState(initial);` と、`useState` の更新関数を使った 3 つの操作関数
+`useCounter(initial: number)` カスタムフックを作ります。戻り値は `{ count, increment, decrement, reset }` です。
+
+まずは何も見ずに自分で書いてみてください。詰まったら段階的にヒントを開きます。
+
+::: details ヒント A: 設計（最初に詰まったらここ）
+
+- `useTodos` と同じ「**フックを使う関数 = カスタムフック**」のパターン
+- フック内部で `useState` を 1 つ使い、戻り値のオブジェクトに 4 つのキーを並べる
+- 4 つのキーのうち 1 つは `count`、残り 3 つは「カウントを変える関数」
+
+:::
+
+::: details ヒント B: シグネチャ（さらに詰まったら）
+
+```ts
+function useCounter(initial: number): {
+  count: number;
+  increment: () => void;
+  decrement: () => void;
+  reset: () => void;
+} {
+  // ここに useState と 3 つの関数を書く
+}
+```
+
+:::
+
+::: details ヒント C: 実装イメージ（最終手段）
+
+`const [count, setCount] = useState(initial)` を作り、`setCount((c) => c + 1)` のように **関数形式の setter** で 3 つの操作関数を書きます。`reset` は `setCount(initial)` です。
+
+:::
 
 ### 「TODO アプリを React で作る」への前振り
 

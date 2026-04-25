@@ -128,17 +128,17 @@ export default function TodosPage() {
         <h2>好きなもの</h2>
         <div class="cards">
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像">
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像">
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像">
             <h3>本</h3>
             <p>技術書からエッセイまで。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像">
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>
@@ -199,17 +199,17 @@ export default function AboutPage() {
           <h2>好きなもの</h2>
           <div className="cards">
             <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
               <h3>コーヒー</h3>
               <p>朝の 1 杯が欠かせない。</p>
             </article>
             <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
               <h3>本</h3>
               <p>技術書からエッセイまで。</p>
             </article>
             <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
               <h3>散歩</h3>
               <p>行き先を決めずに歩く。</p>
             </article>
@@ -374,17 +374,17 @@ export default function AboutPage() {
           <h2>好きなもの</h2>
           <div className="cards">
             <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
               <h3>コーヒー</h3>
               <p>朝の 1 杯が欠かせない。</p>
             </article>
             <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
               <h3>本</h3>
               <p>技術書からエッセイまで。</p>
             </article>
             <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
               <h3>散歩</h3>
               <p>行き先を決めずに歩く。</p>
             </article>
@@ -474,4 +474,4 @@ export default function Page() {
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
 - 1 章 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
 - 別のレッスンで、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
-- ここで使った `<img src="https://placehold.jp/...">` は、**5 章 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。
+- ここで使った `<img src="https://placehold.co/...">` は、**5 章 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。

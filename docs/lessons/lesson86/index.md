@@ -124,6 +124,44 @@ export const metadata: Metadata = {
 
 最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
 
+### 補足: OG 画像 / canonical / robots（実務 SEO 三点セット）
+
+公開サイトでは次の 3 つを揃えるのがほぼ必須です。
+
+```ts
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: "My Site",
+  description: "...",
+
+  // (1) OG 画像（SNS シェア時の見栄え）
+  openGraph: {
+    images: [
+      { url: "/og-image.png", width: 1200, height: 630 },
+    ],
+  },
+
+  // (2) canonical URL（重複コンテンツ対策）
+  alternates: {
+    canonical: "/",
+  },
+
+  // (3) robots（インデックス制御）
+  robots: {
+    index: true,
+    follow: true,
+  },
+};
+```
+
+それぞれの「いつ使うか」:
+
+- **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
+- **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
+- **`robots`**: ステージング環境やプレビュー URL で `noindex` にして、間違って Google に拾われないようにする
+
+実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。詳しくは別のレッスン「OGP と SEO 実践」で扱います。
+
 ### favicon / apple-touch-icon は **ファイル配置だけで OK**
 
 Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。

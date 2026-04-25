@@ -2,7 +2,7 @@
 
 <script setup>
 const demoHtml = `<p>下の画像とリンクは、どちらも HTML タグだけで作っています。</p>
-<img src="https://placehold.jp/88x88.png" alt="プロフィール画像(仮)" width="88" height="88" />
+<img src="https://placehold.co/88x88.png" alt="プロフィール画像(仮)" width="88" height="88" />
 <ul>
   <li><a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs</a></li>
   <li><a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式</a></li>
@@ -56,7 +56,7 @@ a:hover { color: #b91c1c; }`
 - `alt`: 代替テキスト。画像の内容を説明する文字列。
 
 ```html
-<img src="https://placehold.jp/200x200.png" alt="仮のプロフィール画像" />
+<img src="https://placehold.co/200x200.png" alt="仮のプロフィール画像" />
 ```
 
 ### `alt` を書く理由
@@ -74,6 +74,21 @@ a:hover { color: #b91c1c; }`
 - `alt` 属性そのものを書かない: 本来は非推奨。ブラウザの挙動が統一されない。
 
 画像が意味を持つものなら、必ず `alt` に内容を書きます。
+
+### 補足: ネット非依存のダミー画像（SVG data URI）
+
+`placehold.co` のような外部サービスはたいてい安定していますが、教材を **オフラインで開く / 外部 CDN を遮断した環境** で動かしたい場合に備えて、`data:` スキームを使う書き方も知っておくと安心です。
+
+```html
+<img
+  src="data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='200' height='200'><rect width='100%25' height='100%25' fill='%23ddd'/><text x='50%25' y='50%25' text-anchor='middle' dy='.3em' font-family='sans-serif' fill='%23666'>200x200</text></svg>"
+  alt="ダミー画像"
+  width="200"
+  height="200"
+/>
+```
+
+長くて読みづらいので、本コースの本文ではプレースホルダ画像 CDN を使いますが、**ネット非依存にしたい場面** では SVG data URI が選択肢になります。
 
 ### 画像のサイズ
 
@@ -180,7 +195,7 @@ a:hover { color: #b91c1c; }`
   <body>
     <h1>オザキの自己紹介</h1>
     <img
-      src="https://placehold.jp/200x200.png"
+      src="https://placehold.co/200x200.png"
       alt="オザキのプロフィール画像(仮)"
       width="200"
       height="200"
@@ -227,7 +242,7 @@ a:hover { color: #b91c1c; }`
 
 ### 変えてみる
 
-1. `<img>` の `src` を別のプレースホルダ URL に変えてみる（例: `https://placehold.jp/300x150.png`）。画像のサイズが変わることを確認する。
+1. `<img>` の `src` を別のプレースホルダ URL に変えてみる（例: `https://placehold.co/300x150.png`）。画像のサイズが変わることを確認する。
 2. `alt` をわざと「xxxxx」のような内容と関係ない文字列に変えてみる。そのあと、`src` を存在しない URL（例: `https://example.com/nonexistent.png`）に変えて保存し、画像が読み込めなくなったとき、そこに `alt` の文字が表示されることを確認する。確認後は `src` と `alt` を元に戻す。
 3. 「お気に入りサイト」のリンク 1 つを、自分がよく使うサイトに書き換える。
 

@@ -187,7 +187,7 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
       <section id="profile" class="card">
         <h2>プロフィール</h2>
         <img
-          src="https://placehold.jp/200x200.png"
+          src="https://placehold.co/200x200.png"
           alt="オザキのプロフィール画像(仮)"
           width="200"
           height="200"
@@ -496,17 +496,17 @@ StackBlitz で新しい Vanilla プロジェクトを作ります（これまで
         <h2>好きなもの</h2>
         <div class="cards">
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
             <h3>本</h3>
             <p>技術書からエッセイまで。</p>
           </article>
           <article class="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>
@@ -545,7 +545,7 @@ StackBlitz で新しい Vanilla プロジェクトを作ります（これまで
 - `<section>` を `<main>` の中に 3 つ並べています（`about` / `likes` / `contact`）。
 - `<nav>` にはアンカー `#about` などで同一ページ内移動を入れています。
 - カード 3 枚は `<div class="cards">` で包み、各カードは `<article class="card">` にしています（意味的に「独立した記事のかたまり」なので `<article>` が向いています）。
-- 画像は [placehold.jp](https://placehold.jp) のプレースホルダを使っています。自分の好きな画像に差し替えても構いません。
+- 画像は [placehold.co](https://placehold.co) のプレースホルダを使っています。自分の好きな画像に差し替えても構いません。
 
 ### ステップ 2: ベースの CSS を書く
 

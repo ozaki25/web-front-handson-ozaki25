@@ -147,6 +147,8 @@ export default async function PostsPage() {
 - `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
 - `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
 
+> **補足: `Post[]` への型キャストは「信頼している」だけ**: `await res.json()` の戻り値は実際は `unknown` で、上のコードは「外部 API は約束通りの形を返してくる」と **信じている** 状態です。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように **実行時に形をチェック** します。Zod は別のレッスン「Zod でスキーマバリデーション」で扱います。
+
 ### 手順 2: `loading.tsx` を置く
 
 `app/posts/loading.tsx` を新規作成します。

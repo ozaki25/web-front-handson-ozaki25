@@ -75,8 +75,8 @@ export default function Page() {
 未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
 
 ```
-Invalid src prop (https://placehold.jp/...) on `next/image`,
-hostname "placehold.jp" is not configured under images in your `next.config.js`
+Invalid src prop (https://placehold.co/...) on `next/image`,
+hostname "placehold.co" is not configured under images in your `next.config.js`
 ```
 
 書き方は次の通りです。
@@ -88,7 +88,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "placehold.jp", pathname: "/**" },
+      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
     ],
   },
 };
@@ -133,17 +133,17 @@ export default function AboutPage() {
         <h2>好きなもの</h2>
         <div className="cards">
           <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
           </article>
           <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
             <h3>本</h3>
             <p>技術書からエッセイまで。</p>
           </article>
           <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>
@@ -173,7 +173,7 @@ import type { NextConfig } from "next";
 const nextConfig: NextConfig = {
   images: {
     remotePatterns: [
-      { protocol: "https", hostname: "placehold.jp", pathname: "/**" },
+      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
     ],
   },
 };
@@ -206,7 +206,7 @@ export default function AboutPage() {
         <div className="cards">
           <article className="card">
             <Image
-              src="https://placehold.jp/300x200.png"
+              src="https://placehold.co/300x200.png"
               alt="コーヒーのプレースホルダ画像"
               width={300}
               height={200}
@@ -216,7 +216,7 @@ export default function AboutPage() {
           </article>
           <article className="card">
             <Image
-              src="https://placehold.jp/300x200.png"
+              src="https://placehold.co/300x200.png"
               alt="本のプレースホルダ画像"
               width={300}
               height={200}
@@ -226,7 +226,7 @@ export default function AboutPage() {
           </article>
           <article className="card">
             <Image
-              src="https://placehold.jp/300x200.png"
+              src="https://placehold.co/300x200.png"
               alt="散歩のプレースホルダ画像"
               width={300}
               height={200}
@@ -286,7 +286,7 @@ export default function AboutPage() {
 
 1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
 2. **DevTools → Network タブ** を開いて再読み込みします。
-3. `placehold.jp/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
+3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
 4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
 5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
 
@@ -304,7 +304,7 @@ export default function AboutPage() {
 
 ### 自分で書く
 
-`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.jp/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
+`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.co/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
 
 ## まとめ
 

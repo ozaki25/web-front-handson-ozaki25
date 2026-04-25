@@ -153,17 +153,17 @@ export default function AboutPage() {
         <h2>好きなもの</h2>
         <div className="cards">
           <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
           </article>
           <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
             <h3>本</h3>
             <p>技術書からエッセイまで。</p>
           </article>
           <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>

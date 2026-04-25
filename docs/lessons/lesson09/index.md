@@ -170,7 +170,7 @@ body {
       <section id="profile">
         <h2>プロフィール</h2>
         <img
-          src="https://placehold.jp/200x200.png"
+          src="https://placehold.co/200x200.png"
           alt="オザキのプロフィール画像(仮)"
           width="200"
           height="200"
