@@ -114,9 +114,10 @@ node_modules/
 dist/
 build/
 
-# 環境変数（秘匿）
+# 環境変数（秘匿）。.env* で派生形（.env.local, .env.production.local など）も含めて除外
 .env
-.env.local
+.env.*
+!.env.example
 
 # OS のメタファイル
 .DS_Store
@@ -127,7 +128,9 @@ Thumbs.db
 .idea/
 ```
 
-`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。
+`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。`.env.example` はテンプレートとしてコミットしたいので `!.env.example` で除外を打ち消しています。
+
+> **補足: `.env` を間違えて push したら revert ではなく secret rotation が先**: `.env` を 1 度でも push してしまうと、`git revert` で履歴を取り消しても **過去のコミットには値が残ったまま**で、git history を遡れば誰でも読めます。**まずやるべきは「漏れた値を無効化（rotation）すること」**: API キーは新しいキーに発行し直す、DB のパスワードを変える、トークンを revoke する。GitHub には自動で漏洩を検出する **secret scanning** や、push の時点で止める **push protection** がありますが、自分の責任範囲で値を rotate することが最優先です。履歴自体を消すには `git filter-repo` / `BFG Repo-Cleaner` などのツールが必要で、共有リポジトリでは全員に強制 push の調整が要るため、**「キーは漏れたものとして扱い、すぐ rotate する」のが現実的な初手**です。
 
 ### ブランチ: 並行作業の単位
 

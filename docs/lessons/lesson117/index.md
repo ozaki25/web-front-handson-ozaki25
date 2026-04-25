@@ -40,22 +40,24 @@
 
 ### 最小実装: 環境変数で
 
-「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。
+「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。Server Component で評価する形がもっとも安全です。
 
 ```ts
 // .env.production
-NEXT_PUBLIC_NEW_CHECKOUT=false
+NEW_CHECKOUT=false
 ```
 
 ```tsx
-// app/checkout/page.tsx
+// app/checkout/page.tsx (Server Component)
 export default function CheckoutPage() {
-  if (process.env.NEXT_PUBLIC_NEW_CHECKOUT === "true") {
+  if (process.env.NEW_CHECKOUT === "true") {
     return <NewCheckout />;
   }
   return <LegacyCheckout />;
 }
 ```
+
+> **補足: `NEXT_PUBLIC_` プレフィックスはクライアントに丸見え**: `NEXT_PUBLIC_` で始まる環境変数は **ビルド時にクライアントバンドルに埋め込まれます**。ブラウザの DevTools で JS を眺めれば値も変数名もそのまま見えます。`NEXT_PUBLIC_NEW_CHECKOUT` のようにフラグ名を `NEXT_PUBLIC_` で出すと「未公開機能の存在」「フラグ名の命名規則」がエンドユーザーに漏れる事故になります。**Server Component で評価できる場合はプレフィックスなしの `process.env.NEW_CHECKOUT`** を使い、どうしても Client Component で参照したい場合だけ `NEXT_PUBLIC_` を付けます。
 
 メリット:
 
@@ -164,6 +166,8 @@ export default withLDProvider({
 ```
 
 管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
+
+> **補足: 環境ごとに SDK key を分ける**: フラグ SaaS では **Production / Preview / Development それぞれに別の SDK key を発行** できます。同じ key を全環境で使い回すと、Preview デプロイの動作確認が **本番フラグの評価ログを汚す**、A/B テストの母数に開発者の挙動が混ざる、本番フラグを誤って Preview から ON にしてしまう、といった事故になります。Vercel なら `Settings → Environment Variables` で `NEXT_PUBLIC_LD_CLIENT_ID` を **Production / Preview / Development の 3 つに分けて設定する** のが定石です。
 
 #### GrowthBook の最小例
 

@@ -189,14 +189,19 @@ const ALLOWED_ORIGINS = [
 
 function corsHeaders(origin: string | null): HeadersInit {
   const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
-  return {
-    "Access-Control-Allow-Origin": isAllowed ? origin! : "",
+  const headers: Record<string, string> = {
     "Access-Control-Allow-Credentials": "true",
     "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
     "Access-Control-Allow-Headers": "Content-Type, Authorization",
     "Access-Control-Max-Age": "3600",
     "Vary": "Origin",
   };
+  // 許可されていないオリジンには Allow-Origin ヘッダ自体を返さない
+  // （空文字を返すとブラウザは「許可なし」だがプロキシ / CDN のキャッシュ汚染源になる）
+  if (isAllowed) {
+    headers["Access-Control-Allow-Origin"] = origin!;
+  }
+  return headers;
 }
 
 export async function OPTIONS(req: Request) {
