@@ -179,11 +179,11 @@ export default withPwa(withMermaid(
             { text: 'lesson81: Route Handlers', link: '/lessons/lesson81/' },
             { text: 'lesson82: Proxy で認証前処理', link: '/lessons/lesson82/' },
             { text: 'lesson83: 環境変数の基本', link: '/lessons/lesson83/' },
-            { text: 'lesson84: 小さなアプリを仕上げる', link: '/lessons/lesson84/' },
+            { text: 'lesson84: 小さなアプリを統合する（中間まとめ）', link: '/lessons/lesson84/' },
             { text: 'lesson85: Tailwind CSS の紹介', link: '/lessons/lesson85/' },
             { text: 'lesson86: Metadata API で SEO を整える', link: '/lessons/lesson86/' },
             { text: 'lesson87: Loading UI と Streaming', link: '/lessons/lesson87/' },
-            { text: 'lesson88: Vercel にデプロイする', link: '/lessons/lesson88/' },
+            { text: 'lesson88: Vercel にデプロイする（5 章 の到達点）', link: '/lessons/lesson88/' },
           ],
         },
         {

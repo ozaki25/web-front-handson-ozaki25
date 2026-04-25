@@ -346,7 +346,7 @@ li {
 
 .primary {
   color: #ffffff;
-  background-color: steelblue;
+  background-color: #0d47a1;
 }
 
 .primary:hover {

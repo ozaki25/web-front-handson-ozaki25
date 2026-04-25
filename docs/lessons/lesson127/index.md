@@ -367,7 +367,7 @@ export default function Page() {
 
 ### `cache()` / `cacheSignal()`
 
-Next.js 16 / React 19.2 では **同一リクエスト内** のデータをメモ化する `cache()` / `cacheSignal()` が安定化。
+Next.js 16 / React 19 では **同一リクエスト内** のデータをメモ化する `cache()` が安定。`cacheSignal()` は React 19.2 時点で **experimental（実験的）** であり、安定 API になるまでは API が変わる可能性があります。
 
 ```ts
 import { cache } from "react";

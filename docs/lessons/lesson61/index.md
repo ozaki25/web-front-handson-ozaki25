@@ -57,9 +57,9 @@ const ThemeContext = createContext<Theme>("light");
 function App() {
   const [theme, setTheme] = useState<Theme>("light");
   return (
-    <ThemeContext.Provider value={theme}>
+    <ThemeContext value={theme}>
       <Child />
-    </ThemeContext.Provider>
+    </ThemeContext>
   );
 }
 
@@ -150,9 +150,9 @@ export function ThemeProvider({ children }: ThemeProviderProps) {
   }
 
   return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+    <ThemeContext value={{ theme, toggleTheme }}>
       {children}
-    </ThemeContext.Provider>
+    </ThemeContext>
   );
 }
 
@@ -168,6 +168,7 @@ export function useTheme() {
 - Context の初期値を `null` にしておき、`useTheme` で「`null` ならエラー」をチェックしています。これで「Provider で包み忘れた」ときに、はっきりエラーメッセージが出ます
 - Provider はよく使う形なので、`ThemeProvider` という関数コンポーネントとしてラップしています
 - `useTheme` という **カスタムフック** にしておくと、使う側が `useContext(ThemeContext)` と書かずに済みます（カスタムフックは「カスタムフック」で深掘りします）
+- React 19 から **`<ThemeContext value={...}>`** と直書きできるようになりました（`<ThemeContext.Provider>` も従来どおり動きますが、本コースでは新形式に統一します）
 
 ### `src/ThemeToggle.tsx`
 

@@ -125,7 +125,7 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 
 - **`package-lock.json` は必ず Git にコミット** する
 - 競合が起きたら片側を採用して `npm install` を再実行する（手動マージはしない）
-- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lockb` が同じ役割
+- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lock`（旧 `bun.lockb`）が同じ役割
 
 ### npm / pnpm / yarn / Bun
 

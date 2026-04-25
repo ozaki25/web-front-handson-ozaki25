@@ -495,4 +495,4 @@ npm run dev
 - **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
 - **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
 - Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない
-- 別のレッスンでは **CI/CD パイプライン** に進み、ビルド・テスト・デプロイの自動化を体系化する
+- 別のレッスンでは **AI を前提にした開発（Copilot / Cursor / Claude Code）** に進み、コース全体を締めくくる

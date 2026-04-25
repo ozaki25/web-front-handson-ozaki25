@@ -175,9 +175,6 @@ class MyToggle extends HTMLElement {
   connectedCallback() {
     this.attachShadow({ mode: "open" });
     this.render();
-    this.shadowRoot.querySelector("button").addEventListener("click", () => {
-      this.checked = !this.checked;
-    });
   }
 
   get checked() { return this.#checked; }
@@ -192,6 +189,8 @@ class MyToggle extends HTMLElement {
     this.shadowRoot.innerHTML = `
       <button>${this.#checked ? "ON" : "OFF"}</button>
     `;
+    // render() で innerHTML を書き換えるたびに古い button は消えるので、
+    // クリックリスナーは render() 内で「新しい button」に対してだけ付ける
     this.shadowRoot.querySelector("button").addEventListener("click", () => {
       this.checked = !this.checked;
     });
