@@ -1,438 +1,553 @@
-# lesson124: WebSocket と Server-Sent Events（SSE）
+# lesson124: Service Worker と PWA 深掘り
 
 ## ゴール
 
-- リアルタイム通信の **選択肢** を整理して語れる
-- WebSocket と SSE の **使い分け** を判断できる
-- WebSocket クライアントの最小実装が書ける
-- SSE クライアント（`EventSource`）の最小実装が書ける
-- Next.js / 各サービス（Pusher / Ably / Supabase Realtime）の位置付けを把握する
+- Service Worker の **ライフサイクル**（install / activate / fetch）を理解する
+- Workbox の **キャッシュ戦略**（CacheFirst / NetworkFirst / StaleWhileRevalidate）を選べる
+- オフライン対応（fallback ページ）の最小実装ができる
+- Web Push 通知の流れを大づかみに掴む
+- `manifest.webmanifest` の主要フィールドが分かる
 
 ## 解説
 
-### リアルタイム通信の選択肢
+### PWA とは
 
-「サーバーから **押し付けで** データを送りたい」場面の主な選択肢:
+「**Progressive Web App**」= Web を **アプリのように扱う** ための仕組みの総称。本講座のドキュメントサイト自体も `@vite-pwa/vitepress` で PWA 化済みで、デスクトップ / モバイルから **インストール** できます。
 
-| 方式 | 通信方向 | 用途 |
+PWA の柱:
+
+1. **Service Worker**（バックグラウンドのスクリプト）
+2. **Web App Manifest**（インストール時のメタデータ）
+3. **HTTPS**（必須）
+4. インストール可能 / オフライン対応 / 通知
+
+### Service Worker とは
+
+**ブラウザのバックグラウンドで動く、ネットワークプロキシ的な JavaScript**。ページから独立して動き、`fetch` イベントを **横取り** してキャッシュ応答 / カスタム応答ができます。
+
+特徴:
+
+- **DOM にアクセスできない**（ワーカー）
+- **HTTPS 必須**（localhost は例外）
+- **同一オリジン** に限定
+- **永続的** に動き、ページが閉じても残る（バックグラウンドで通知 / 同期）
+
+### ライフサイクル
+
+3 つの状態を順に行き来します。
+
+```
+[ install ] → [ activate ] → [ idle / fetch / message ]
+                                       ↑
+                                       │（更新時）新 SW が install
+```
+
+#### `install`
+
+「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
+
+```js
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((cache) =>
+      cache.addAll(["/", "/index.html", "/styles.css", "/app.js"]),
+    ),
+  );
+});
+```
+
+#### `activate`
+
+「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
+
+```js
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== "v1").map((k) => caches.delete(k))),
+    ),
+  );
+});
+```
+
+#### `fetch`
+
+「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
+
+```js
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((res) => res || fetch(event.request)),
+  );
+});
+```
+
+### キャッシュ戦略（Workbox 風）
+
+リソース別に **どんな順序でキャッシュ / ネットワークを使うか** を決める戦略。
+
+| 戦略 | 流れ | 適切なリソース |
 |---|---|---|
-| **ポーリング** | クライアント → サーバー（定期） | 単純だが効率悪い |
-| **ロングポーリング** | クライアント → サーバー（待機） | レガシー互換 |
-| **Server-Sent Events**（SSE） | サーバー → クライアントの **一方向** | 通知 / 株価 / AI ストリーム |
-| **WebSocket** | **双方向** | チャット / オンラインゲーム / 共同編集 |
-| **WebTransport** | UDP ベースの双方向（HTTP/3） | 低遅延が要る場面（実験的） |
+| **CacheFirst** | キャッシュ → なければネット | フォント / 画像 / 不変アセット |
+| **NetworkFirst** | ネット → 失敗したらキャッシュ | API レスポンス / HTML（最新優先） |
+| **StaleWhileRevalidate** | キャッシュ即返却 + 裏でネット更新 | 一覧 / プロフィール画像（やや古くて OK） |
+| **NetworkOnly** | ネットのみ | POST / 認証など |
+| **CacheOnly** | キャッシュのみ | 完全オフライン専用ページ |
 
-「**双方向か単方向か**」「**HTTP の上で済むか**」が選択の軸です。
+#### CacheFirst の例
 
-### Server-Sent Events（SSE）
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.destination === "image") {
+    event.respondWith(
+      caches.match(event.request).then((res) =>
+        res || fetch(event.request).then((networkRes) => {
+          const clone = networkRes.clone();
+          caches.open("images").then((c) => c.put(event.request, clone));
+          return networkRes;
+        }),
+      ),
+    );
+  }
+});
+```
 
-「サーバーから **テキストイベントをストリーム** で送る」HTTP ベースの仕組み。
+#### NetworkFirst の例
+
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open("api").then((c) => c.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+  }
+});
+```
+
+### Workbox
+
+Google が出している **キャッシュ戦略のヘルパー** ライブラリ。生で書くと冗長な処理を **数行で** 表現できます。
+
+```js
+// sw.js
+import { precacheAndRoute } from "workbox-precaching";
+import { registerRoute } from "workbox-routing";
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from "workbox-strategies";
+import { ExpirationPlugin } from "workbox-expiration";
+
+precacheAndRoute(self.__WB_MANIFEST);
+
+registerRoute(
+  ({ request }) => request.destination === "image",
+  new CacheFirst({
+    cacheName: "images",
+    plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 3600 })],
+  }),
+);
+
+registerRoute(
+  ({ url }) => url.pathname.startsWith("/api/"),
+  new NetworkFirst({ cacheName: "api", networkTimeoutSeconds: 3 }),
+);
+
+registerRoute(
+  ({ request }) => request.destination === "script" || request.destination === "style",
+  new StaleWhileRevalidate({ cacheName: "assets" }),
+);
+```
+
+### Vite / Next.js での導入
+
+#### Vite + `vite-plugin-pwa`
+
+```bash
+npm install -D vite-plugin-pwa
+```
+
+```ts
+// vite.config.ts
+import { VitePWA } from "vite-plugin-pwa";
+
+export default defineConfig({
+  plugins: [
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "My App",
+        short_name: "App",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+      },
+    }),
+  ],
+});
+```
+
+#### Next.js + `@ducanh2912/next-pwa` / `serwist`
+
+Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
+
+```bash
+npm install @serwist/next serwist
+```
+
+`next.config.ts`:
+
+```ts
+import withSerwistInit from "@serwist/next";
+
+const withSerwist = withSerwistInit({
+  swSrc: "src/sw.ts",
+  swDest: "public/sw.js",
+});
+
+export default withSerwist({});
+```
+
+`src/sw.ts`:
+
+```ts
+import { defaultCache } from "@serwist/next/worker";
+import { Serwist } from "serwist";
+
+declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
+
+new Serwist({
+  precacheEntries: self.__SW_MANIFEST,
+  skipWaiting: true,
+  clientsClaim: true,
+  navigationPreload: true,
+  runtimeCaching: defaultCache,
+}).addEventListeners();
+```
+
+### オフライン対応
+
+最小例: ネットが切れた時に「オフライン画面」を出す。
+
+```js
+const OFFLINE_URL = "/offline.html";
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((c) => c.add(OFFLINE_URL)),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
+    );
+  }
+});
+```
+
+`/offline.html` は静的に **「オフラインです」** と書かれた HTML を置きます。
+
+### Web Push 通知
+
+ブラウザを閉じている時でも **プッシュ通知** が届く仕組み。
+
+#### 仕組み
+
+1. **クライアント** が **VAPID 鍵** を使って通知を購読
+2. ブラウザが **Push Service**（Apple / Google / Mozilla）に **endpoint** を発行
+3. クライアントが **endpoint をサーバーに送る**
+4. サーバーが **endpoint に POST**（VAPID 秘密鍵で署名）
+5. Push Service が **ブラウザに配信**
+6. Service Worker の `push` イベントが発火 → `showNotification`
+
+#### クライアント側の最小例
+
+```js
+// 通知の許可
+const permission = await Notification.requestPermission();
+if (permission !== "granted") return;
+
+const reg = await navigator.serviceWorker.ready;
+const subscription = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+});
+
+// サーバーに endpoint を保存
+await fetch("/api/push/subscribe", {
+  method: "POST",
+  body: JSON.stringify(subscription),
+  headers: { "Content-Type": "application/json" },
+});
+```
+
+#### Service Worker 側
+
+```js
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "通知", {
+      body: data.body ?? "",
+      icon: "/icon-192.png",
+      badge: "/badge.png",
+      data: { url: data.url ?? "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data.url));
+});
+```
 
 #### サーバー側
 
-レスポンスのヘッダを `Content-Type: text/event-stream` にし、本文を **特別なフォーマット** で書き続けます。
-
-```
-HTTP/1.1 200 OK
-Content-Type: text/event-stream
-Cache-Control: no-cache
-Connection: keep-alive
-
-data: hello
-
-data: world
-
-event: chat
-data: {"user":"alice","msg":"こんにちは"}
-```
-
-各イベントは **空行** で区切る。`data:` 以外に `event:`（イベント名）/ `id:`（ID）/ `retry:`（再接続秒）が指定可能。
-
-#### クライアント側
-
-```js
-const es = new EventSource("/api/stream");
-
-es.onmessage = (e) => {
-  console.log("受信:", e.data);
-};
-
-es.addEventListener("chat", (e) => {
-  console.log("chat:", JSON.parse(e.data));
-});
-
-es.onerror = (err) => {
-  console.error("エラー or 切断:", err);
-};
-```
-
-`EventSource` は:
-
-- **自動再接続**（切れても勝手につなぎ直す）
-- `id:` を覚えていて再接続時に `Last-Event-ID` ヘッダで送る
-- ブラウザ標準（IE 以外）でライブラリ不要
-
-#### Next.js での実装（Route Handler + ReadableStream）
+`web-push` パッケージで送信:
 
 ```ts
-// app/api/stream/route.ts
-export async function GET() {
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-      let count = 0;
-      const id = setInterval(() => {
-        count++;
-        controller.enqueue(encoder.encode(`data: tick ${count}\n\n`));
-        if (count >= 10) {
-          clearInterval(id);
-          controller.close();
-        }
-      }, 1000);
-    },
-  });
+import webpush from "web-push";
 
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-    },
-  });
+webpush.setVapidDetails(
+  "mailto:admin@example.com",
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+);
+
+await webpush.sendNotification(subscription, JSON.stringify({
+  title: "新しい通知",
+  body: "メッセージが届きました",
+  url: "/inbox",
+}));
+```
+
+#### iOS Safari の状況
+
+iOS 16.4+ では **PWA をホーム画面に追加した時のみ** Push 通知が動くようになりました。要件:
+
+- ホーム画面に **インストール済み**
+- HTTPS
+- ユーザーの明示的な購読
+
+通常の Safari ブラウザではまだ Push が動かないので注意。
+
+### Background Sync
+
+「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組み。
+
+```js
+self.addEventListener("sync", (event) => {
+  if (event.tag === "send-message") {
+    event.waitUntil(sendQueuedMessages());
+  }
+});
+```
+
+クライアント側:
+
+```js
+const reg = await navigator.serviceWorker.ready;
+await reg.sync.register("send-message");
+```
+
+`Periodic Background Sync` は **定期的にバックグラウンドで実行** する仕組み（権限の関係で制限あり）。
+
+### `manifest.webmanifest` の詳細
+
+```json
+{
+  "name": "My PWA App",
+  "short_name": "PWA",
+  "description": "サンプル PWA アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "scope": "/",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshot1.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow" }
+  ],
+  "shortcuts": [
+    { "name": "新規作成", "url": "/new", "icons": [{ "src": "/new.png", "sizes": "96x96" }] }
+  ]
 }
 ```
 
-::: tip AI ストリーミングと SSE
-ChatGPT のような **トークン単位の応答** にも SSE / `Streaming Responses` が広く使われています。Vercel の AI SDK / Anthropic の Stream / OpenAI Stream など、SaaS の SDK が SSE を内部で扱っています。
-:::
-
-### WebSocket
-
-「**双方向**、**バイナリも送れる**、**HTTP からアップグレード** して始まる」プロトコル（`ws://` / `wss://`）。
-
-#### サーバー側（ws ライブラリ）
-
-```bash
-npm install ws
-```
-
-```js
-import { WebSocketServer } from "ws";
-
-const wss = new WebSocketServer({ port: 4000 });
-
-wss.on("connection", (socket) => {
-  console.log("接続");
-  socket.on("message", (data) => {
-    // 全クライアントにブロードキャスト
-    for (const client of wss.clients) {
-      if (client.readyState === client.OPEN) {
-        client.send(data.toString());
-      }
-    }
-  });
-});
-```
-
-#### クライアント側
-
-```js
-const ws = new WebSocket("ws://localhost:4000");
-
-ws.addEventListener("open", () => {
-  console.log("接続成功");
-  ws.send("hello");
-});
-
-ws.addEventListener("message", (e) => {
-  console.log("受信:", e.data);
-});
-
-ws.addEventListener("close", () => {
-  console.log("切断");
-});
-```
-
-#### バイナリも送れる
-
-```js
-const buffer = new Uint8Array([1, 2, 3, 4]);
-ws.binaryType = "arraybuffer";
-ws.send(buffer);
-```
-
-ゲーム / VoIP / ファイル転送など、テキストでは厳しい用途に向く。
-
-### 切断と再接続
-
-WebSocket は **自動再接続しない**。ネットワーク切断 / サーバー再起動で `close` イベントが飛びます。実装側で再接続を:
-
-```js
-function connect() {
-  const ws = new WebSocket(url);
-  ws.addEventListener("close", () => {
-    setTimeout(connect, 1000); // 1 秒後に再接続
-  });
-  return ws;
-}
-```
-
-実用では **指数バックオフ + 上限** にします（`socket.io` などのライブラリが内部で実装）。
-
-### SSE と WebSocket の使い分け
-
-| 観点 | SSE | WebSocket |
-|---|---|---|
-| 通信方向 | サーバー → クライアント（一方向） | 双方向 |
-| プロトコル | HTTP（追加設定不要） | 専用（プロキシ調整が必要） |
-| 自動再接続 | あり | なし（自前で実装） |
-| ブラウザサポート | 全主要 | 全主要 |
-| バイナリ | 不可 | 可 |
-| プッシュレート | 低〜中 | 低〜高 |
-
-#### 選び方の指針
-
-- **通知 / ストック価格 / AI ストリーム / ライブニュース**: SSE で十分
-- **チャット / 共同編集 / リアルタイムゲーム / カーソル位置共有**: WebSocket
-- **「通知だけ」+ 既存 HTTP インフラを活かしたい**: SSE が楽
-
-### React / Next.js で扱う
-
-#### React Hook で WebSocket
-
-```tsx
-import { useEffect, useState } from "react";
-
-export function useWebSocket(url: string) {
-  const [messages, setMessages] = useState<string[]>([]);
-  const [ws, setWs] = useState<WebSocket | null>(null);
-
-  useEffect(() => {
-    const socket = new WebSocket(url);
-    socket.addEventListener("message", (e) => {
-      setMessages((m) => [...m, e.data]);
-    });
-    setWs(socket);
-    return () => socket.close();
-  }, [url]);
-
-  const send = (msg: string) => ws?.send(msg);
-  return { messages, send };
-}
-```
-
-`useEffect` のクリーンアップで **必ず close** すること。React 19 / Strict Mode で **2 度マウント** されて接続が漏れる事故を防げます。
-
-#### Next.js の **Edge Runtime** は WebSocket を持てない
-
-Next.js の Route Handler / Edge Functions は、現状 **WebSocket サーバーをホストできない**（Vercel / Cloudflare Workers の制約による）。WebSocket が必要なら:
-
-- **専用の Node サーバー**（同じ Next.js プロジェクトの **`server.ts`** や別サービス）
-- **PartyKit / Cloudflare Durable Objects**（WebSocket 専用 Edge）
-- **Pusher / Ably / Supabase Realtime** の SaaS
-
-がよく選ばれます。SSE は Vercel の Route Handler でも動きます。
-
-### マネージドサービス
-
-「自前で WebSocket サーバーを書く」のは接続管理 / スケーリング / 切断検知が大変。次のサービスが定番:
-
-| サービス | 特徴 |
+| フィールド | 役割 |
 |---|---|
-| **Pusher** | リアルタイム通信の老舗。チャンネル / イベントが分かりやすい |
-| **Ably** | エンタープライズ。再生 / 履歴 / メッセージ TTL |
-| **Supabase Realtime** | DB 変更 → クライアント通知が標準。Postgres 連携 |
-| **PartyKit** | エッジでの WebSocket / Durable Objects ベース |
-| **Liveblocks** | Figma / Notion 風の共同編集 UI ライブラリ |
-| **Cloudflare Durable Objects** | エッジで状態を持つ WebSocket。1 部屋 = 1 オブジェクト |
-
-「自前で WebSocket を実装する前に、これらで済まないか確認」が現代の判断軸。
-
-### Socket.IO の現在地
-
-長らく WebSocket のデファクトだった `socket.io` は、**2026 年も使えます** が、ブラウザの素の WebSocket / SSE が成熟したので **新規プロジェクトでは選ばない** ケースが増えています。古い案件 / Node.js のサーバー起動が確実な場合 / 低レベルな再接続をライブラリに任せたい場合に。
+| `display: standalone` | ブラウザ UI を消してアプリ風に |
+| `theme_color` | 上部バーの色 |
+| `background_color` | スプラッシュ画面の背景 |
+| `icons` | ホーム画面のアイコン |
+| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
+| `screenshots` | インストール画面（form_factor で広 / 狭を区別） |
+| `shortcuts` | アプリ長押しでのクイックメニュー |
 
 ### よくある罠
 
-- **`new EventSource(url)` の URL に Cookie を付けたい** → `withCredentials: true` を渡す。サーバーは CORS を通す
-- **WebSocket がプロキシ越しに切れる** → リバースプロキシで `Upgrade` / `Connection` ヘッダのフォワード設定
-- **アイドルタイムアウト**（CDN や LB が 60 秒で切る）→ **ハートビート**（Ping）を 30 秒ごとに送る
-- **`wss://`（HTTPS）を使う**（HTTP/2 のメリット + Mixed Content 対策）
+- **HTTPS でないと動かない**（localhost 以外）
+- **Service Worker は更新が反映されない問題**（古い SW がキャッシュを返し続ける）→ `skipWaiting()` + `clientsClaim()` を使う / **更新確認 UI** を入れる
+- **キャッシュが暴走** → `ExpirationPlugin` で件数 / 期間を制限
+- **ローカルテストで Notification 権限が出ない** → ブラウザ設定でリセット
+- **iOS で通知が来ない** → ホーム画面追加が必要
+
+### 確認ツール
+
+- Chrome DevTools → **Application** タブ
+  - **Manifest**: マニフェストの内容
+  - **Service Workers**: 登録状態 / 更新ボタン
+  - **Cache Storage**: キャッシュの中身
+  - **Storage**: クォータと使用量
+- **Lighthouse** → PWA カテゴリ（インストール可能性 / オフライン動作のチェック）
+- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
 
 ## 演習
 
 ### ゴール
 
-- SSE と WebSocket をそれぞれ Next.js プロジェクトで触る
+- Vite プロジェクトに `vite-plugin-pwa` を入れて PWA 化
+- 自前の Service Worker を書いて **オフライン fallback** を実装
+- ホーム画面追加 / Lighthouse の PWA 診断を通す
 
-### 手順 1: 新規 Next.js
+### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest realtime-sample --ts --app
-cd realtime-sample
+npm create vite@latest pwa-sample -- --template react-ts
+cd pwa-sample
+npm install
+npm install -D vite-plugin-pwa
 ```
 
-### 手順 2: SSE のサーバーとクライアント
-
-`app/api/clock/route.ts`:
+### 手順 2: vite.config.ts
 
 ```ts
-export const dynamic = "force-dynamic";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
-export async function GET() {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      const id = setInterval(() => {
-        const time = new Date().toISOString();
-        controller.enqueue(encoder.encode(`data: ${time}\n\n`));
-      }, 1000);
-      // 30 秒で終了
-      setTimeout(() => {
-        clearInterval(id);
-        controller.close();
-      }, 30000);
-    },
-  });
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
-  });
-}
-```
-
-`app/clock/page.tsx`:
-
-```tsx
-"use client";
-import { useEffect, useState } from "react";
-
-export default function Clock() {
-  const [time, setTime] = useState("...");
-  useEffect(() => {
-    const es = new EventSource("/api/clock");
-    es.onmessage = (e) => setTime(e.data);
-    return () => es.close();
-  }, []);
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>SSE 時計</h1>
-      <p>{time}</p>
-    </main>
-  );
-}
-```
-
-`npm run dev` で `/clock` を開くと、毎秒時刻が更新されます。
-
-### 手順 3: WebSocket チャットの最小サーバー
-
-別ディレクトリで:
-
-```bash
-mkdir ws-server && cd ws-server
-npm init -y
-npm install ws
-```
-
-`server.js`:
-
-```js
-import { WebSocketServer } from "ws";
-
-const wss = new WebSocketServer({ port: 4000 });
-
-wss.on("connection", (socket) => {
-  socket.on("message", (data) => {
-    for (const c of wss.clients) {
-      if (c.readyState === c.OPEN) c.send(data.toString());
-    }
-  });
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "PWA Sample",
+        short_name: "PWA",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        background_color: "#ffffff",
+        icons: [
+          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png}"],
+        navigateFallback: "/offline.html",
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "google-fonts-stylesheets" },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+    }),
+  ],
 });
-
-console.log("ws://localhost:4000");
 ```
+
+### 手順 3: オフラインページ
+
+`public/offline.html`:
+
+```html
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8"><title>オフライン</title></head>
+  <body>
+    <h1>オフラインです</h1>
+    <p>ネットワークに接続してください</p>
+  </body>
+</html>
+```
+
+`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
+
+### 手順 4: ビルドとプレビュー
 
 ```bash
-node server.js
+npm run build
+npm run preview
 ```
 
-### 手順 4: チャットクライアント
+`http://localhost:4173` で開いて DevTools の Application タブを確認。
 
-Next.js の `app/chat/page.tsx`:
+1. **Service Workers**: SW が登録されている
+2. **Manifest**: フィールドが反映されている
+3. ネットを **Offline** に切り替えて再読込 → `offline.html` が表示される
 
-```tsx
-"use client";
-import { useEffect, useRef, useState } from "react";
+### 手順 5: Lighthouse で PWA 診断
 
-export default function Chat() {
-  const [messages, setMessages] = useState<string[]>([]);
-  const [text, setText] = useState("");
-  const wsRef = useRef<WebSocket | null>(null);
-
-  useEffect(() => {
-    const ws = new WebSocket("ws://localhost:4000");
-    ws.addEventListener("message", (e) => {
-      setMessages((m) => [...m, e.data]);
-    });
-    wsRef.current = ws;
-    return () => ws.close();
-  }, []);
-
-  const send = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!text.trim()) return;
-    wsRef.current?.send(text);
-    setText("");
-  };
-
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>WebSocket チャット</h1>
-      <ul>
-        {messages.map((m, i) => (
-          <li key={i}>{m}</li>
-        ))}
-      </ul>
-      <form onSubmit={send}>
-        <input value={text} onChange={(e) => setText(e.target.value)} />
-        <button>送信</button>
-      </form>
-    </main>
-  );
-}
-```
-
-ブラウザを 2 つ開いて `http://localhost:3000/chat` にアクセスし、片方で送信したメッセージがもう片方に届くことを確認。
+DevTools → Lighthouse → PWA カテゴリで実行。**インストール可能性** が緑になっていることを確認。
 
 ### 期待出力
 
-- `/clock` で 1 秒ごとに時刻が更新される
-- `/chat` で 2 つのブラウザの間でリアルタイムにメッセージが共有される
+- アドレスバーに **インストールアイコン** が出る
+- ホーム画面 / アプリ一覧から起動可能
+- オフラインで `/offline.html` が表示される
+- Lighthouse の PWA カテゴリが緑
 
 ### 変える
 
-- SSE で `event: tick` / `event: alert` の **イベント名付きメッセージ** を送って、クライアントの `addEventListener` で受け分ける
-- WebSocket チャットに **ユーザー名** を持たせ、JSON で送受信する
-- 切断検知 + 再接続のロジックを追加
+- `runtimeCaching` で API URL を `NetworkFirst` でキャッシュ
+- `manifest.shortcuts` を追加して **長押しメニュー** を作る
+- `purpose: "maskable"` のアイコンを追加して、Android で円形にトリミングされる挙動を確認
 
 ### 自分で書く（任意）
 
-- AI ストリーミング: SSE で 1 文字ずつ送るデモを作る
-- Pusher / Ably / Supabase Realtime のいずれかを使って **SaaS で同じチャット** を実装し、自前との比較
-- PartyKit を試して、エッジで WebSocket を動かす
+- `web-push` で Push 通知を送る最小サーバーを書く
+- iOS Safari で **ホーム画面追加 → 通知許可** の流れを試す
+- `IndexedDB` を使って、オフラインで作成したデータを再接続時に同期する
 
 ## まとめ
 
-- リアルタイム通信は **ポーリング / SSE / WebSocket / WebTransport** から選ぶ
-- **SSE** はサーバー → クライアントの一方向。HTTP の上で動き、`EventSource` で扱う
-- **WebSocket** は双方向。バイナリも送れるが、自動再接続は自前
-- AI ストリーミングは **SSE** が定番
-- Vercel の **Edge Runtime は WebSocket をホストできない**。SaaS / 別サーバーが必要
-- マネージド: **Pusher / Ably / Supabase Realtime / PartyKit / Liveblocks**
-- React の `useEffect` で **必ずクリーンアップ** で接続を閉じる
-- アイドル切断対策に **ハートビート**、`wss://` を使う
-- 別のレッスンでは **GraphQL / tRPC** に進み、API 設計の選択肢を広げる
+- **Service Worker** は **install / activate / fetch** のライフサイクルで動く
+- キャッシュ戦略は **CacheFirst / NetworkFirst / StaleWhileRevalidate / NetworkOnly / CacheOnly** から選ぶ
+- **Workbox** で戦略の記述が劇的に短くなる
+- Vite は `vite-plugin-pwa`、Next.js は `@serwist/next` が定番
+- **`navigateFallback`** で **オフラインページ** を出せる
+- **Web Push 通知** は VAPID 鍵 + Push Service の流れ。iOS は **インストール後限定**
+- **`manifest.webmanifest`** の `display` / `icons` / `shortcuts` でアプリ体験を整える
+- DevTools の Application タブと **Lighthouse PWA** で診断
+- 別のレッスンでは **IndexedDB** に進み、ブラウザでの本格的なデータ保存に進む

@@ -1,421 +1,377 @@
-# lesson121: CORS の詳細
+# lesson121: OAuth / OIDC / JWT の概念
 
 ## ゴール
 
-- 同一オリジンポリシーと CORS（Cross-Origin Resource Sharing）の関係を説明できる
-- **シンプルリクエスト** と **プリフライト**（OPTIONS）の違いを区別できる
-- `Access-Control-Allow-Origin` / `Allow-Credentials` / `Allow-Headers` の使い分けが分かる
-- `credentials: "include"` と Cookie の絡みを理解する
-- よくある CORS エラーを **メッセージから即座に原因に到達** できる
+- 「**認証**」と「**認可**」の違いを言える
+- OAuth 2.0 の **認可コードフロー** の流れを大づかみで説明できる
+- OpenID Connect（OIDC）が「OAuth に **認証** を載せた拡張」だと分かる
+- JWT の構造（Header / Payload / Signature）と **署名検証** の意味を理解する
+- セッション Cookie と JWT の使い分けを判断できる
+- Auth0 / Clerk / NextAuth / Supabase Auth の位置付けを把握する
+
+::: tip このレッスンの方針
+認証は「自前で実装すると事故りやすい」分野です。本講座では概念の地図 + 既存 SaaS / ライブラリの選び方に絞ります。実装は SaaS のドキュメントと併せて行うのが現実的。
+:::
 
 ## 解説
 
-### 同一オリジンポリシーの復習
+### 認証 と 認可
 
-ブラウザは「**異なるオリジン** からの応答を JS に渡さない」という規則（同一オリジンポリシー）を持っています。
+最初に区別すべき 2 つの言葉。
 
-オリジン = `スキーム + ホスト + ポート`。
+| 用語 | 意味 |
+|---|---|
+| **認証**（Authentication, AuthN） | **誰** か（あなたは本当に山田さんか？） |
+| **認可**（Authorization, AuthZ） | **何ができる** か（山田さんはこのファイルを編集できるか？） |
 
-| URL A | URL B | 同一オリジン？ |
-|---|---|---|
-| `https://example.com` | `https://example.com/api` | はい |
-| `https://example.com` | `http://example.com` | **いいえ**（スキームが違う） |
-| `https://example.com` | `https://api.example.com` | **いいえ**（ホストが違う） |
-| `https://example.com:443` | `https://example.com:8080` | **いいえ**（ポートが違う） |
+ID + パスワードでログインするのは認証。「管理者だけ /admin にアクセス可」は認可。**OAuth は本来 認可** で、**OIDC は 認証**。混乱の元なので、地図を頭に置いておきます。
 
-### CORS = 「異なるオリジンからの読み取りを **明示的に許可**」
+### OAuth 2.0
 
-API がブラウザから直接呼ばれる現代では、別オリジンから読みたい場面が多発します。CORS は「**サーバー側がレスポンスヘッダで許可を出した時** に限り、ブラウザが JS にレスポンスを渡す」仕組みです。
+「**ユーザーがパスワードを渡さずに、第三者アプリに自分のリソースへのアクセスを認可** する」プロトコル。
+
+例: 「**Spotify に Google フォトの写真を読ませる**」と言われた時、Spotify に Google パスワードを渡すのは危険。OAuth なら Google 上で認可するだけで、Spotify は **アクセストークン** を受け取って Google フォト API を叩けます。
+
+#### 主役（Role）
+
+| 役 | 例 |
+|---|---|
+| **Resource Owner** | エンドユーザー（あなた） |
+| **Client** | アクセスするアプリ（Spotify） |
+| **Authorization Server** | 認可するサーバー（Google） |
+| **Resource Server** | API サーバー（Google フォト API） |
+
+#### 認可コードフロー（推奨）
+
+OAuth 2.0 で最も使われ、安全とされるフロー:
+
+```
+[User]                         [Client]                       [Auth Server]
+  │   1. ログインボタン押下       │                                │
+  │ ───────────────────────────> │                                │
+  │                              │   2. /authorize にリダイレクト │
+  │                              │ ──────────────────────────────>│
+  │   3. ログイン + 認可画面     │                                │
+  │ <─────────────────────────────────────────────────────────── │
+  │   4. 認可                    │                                │
+  │ ────────────────────────────────────────────────────────── > │
+  │                              │   5. /redirect?code=XXX        │
+  │                              │ <──────────────────────────────│
+  │                              │   6. /token (code + secret)    │
+  │                              │ ──────────────────────────────>│
+  │                              │   7. access_token 取得         │
+  │                              │ <──────────────────────────────│
+  │                              │   8. API 呼び出し              │
+  │                              │ ──────────────────────────────>│
+```
 
 ポイント:
 
-- **送信は誰でもできる**（リクエスト自体はブラウザが送る）
-- **応答を JS が読めるかどうか** は CORS ヘッダ次第
-- だから **CSRF とは別問題**（CSRF は送信を防ぐ話）
+- **認可コード**（短命）→ アクセストークンに **サーバー側で交換** する
+- ブラウザに **直接トークン** を渡さない（漏洩リスクが下がる）
+- **PKCE**（後述）を組み合わせるのが必須
 
-### シンプルリクエスト
+#### Implicit Flow は非推奨
 
-GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエストは、ブラウザが直接送信します。
+ブラウザに直接トークンを返す **Implicit Flow** は古いやり方。**現代は使わない**。SPA であっても **Authorization Code Flow with PKCE** が推奨。
 
-条件（ざっくり）:
+#### PKCE（Proof Key for Code Exchange）
 
-- メソッドは GET / POST / HEAD
-- カスタムヘッダなし
-- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
+「**認可コードが盗まれてもトークンに交換できない**」を実現する仕組み。
 
-例:
+1. クライアントが **ランダムな verifier** を生成
+2. その **ハッシュ**（challenge） を `/authorize` に渡す
+3. 認可コードを **/token に送る時に verifier を一緒に送る**
+4. 認可サーバーが challenge と一致するかを検証
 
-```js
-fetch("https://api.example.com/posts");
+ネイティブアプリ / SPA で必須。Auth0 / Clerk などの SaaS は自動でやってくれます。
+
+### OpenID Connect（OIDC）
+
+OAuth 2.0 は **認可** のフレームワーク。**「誰がログインしたか」** を扱う仕組みが標準化されていなかった。OIDC は OAuth 2.0 の上に **認証情報の規格** を載せたものです。
+
+OIDC は次を追加:
+
+- **`openid` スコープ**: OIDC を有効化
+- **ID Token**: 「**この人がログインした**」を表す JWT
+- **`/userinfo` エンドポイント**: ユーザープロフィール取得
+
+#### ID Token の中身
+
+```json
+{
+  "iss": "https://accounts.google.com",   // 発行者
+  "sub": "user-123",                        // ユーザー ID
+  "aud": "my-client-id",                    // クライアント ID
+  "exp": 1714000000,                        // 有効期限
+  "iat": 1713999000,                        // 発行時刻
+  "email": "user@example.com",
+  "name": "山田太郎"
+}
 ```
 
-サーバーは応答に CORS ヘッダを返す:
+これに **署名** が付き、クライアントが **公開鍵で検証** することで「**確かに Google が発行した本物**」を確認できます。
 
-```http
-HTTP/1.1 200 OK
-Access-Control-Allow-Origin: https://my-site.example
-Content-Type: application/json
-```
+### JWT（JSON Web Token）
 
-`Access-Control-Allow-Origin` がリクエスト元オリジンと一致 / `*` ならブラウザが JS に応答を渡す。一致しなければ **JS から読めずエラー**。
+JWT は「**JSON データに署名を付けたトークン**」のフォーマット。OIDC の ID Token も JWT。アクセストークンも JWT 形式で返ってくることが多い。
 
-### プリフライト（OPTIONS）
-
-メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
+#### 構造: 3 つを `.` で繋ぐ
 
 ```
-OPTIONS /posts HTTP/1.1
-Origin: https://my-site.example
-Access-Control-Request-Method: PUT
-Access-Control-Request-Headers: Content-Type, Authorization
+eyJhbGciOiJIUzI1NiI...   ← Header（base64url）
+.
+eyJzdWIiOiJ1c2VyLTEyMyI...   ← Payload（base64url）
+.
+SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c   ← Signature
 ```
 
-サーバーが応答:
+Header の例:
 
+```json
+{
+  "alg": "RS256",
+  "typ": "JWT",
+  "kid": "key-id-1"
+}
 ```
-HTTP/1.1 204 No Content
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE
-Access-Control-Allow-Headers: Content-Type, Authorization
-Access-Control-Max-Age: 3600
+
+Payload の例:
+
+```json
+{
+  "sub": "user-123",
+  "name": "山田太郎",
+  "iat": 1713999000,
+  "exp": 1714002600
+}
 ```
 
-OPTIONS の応答が **OK + 適切なヘッダ** ならブラウザは本リクエストを送る。NG なら本リクエストは飛ばない。
+Signature は **Header + Payload を秘密鍵で署名** したもの。
 
-#### `Access-Control-Max-Age`
+#### 重要な事実
 
-OPTIONS の結果を **キャッシュする秒数**。これがないとリクエストごとに OPTIONS が走って遅くなります。`3600`（1 時間）程度が目安。
+- **Payload は base64 のエンコードされているだけ** で **暗号化されていない**。誰でも読める
+- **改ざんはできない**（署名検証で弾く）
+- **秘密情報を Payload に入れない**（パスワード / クレジットカードなど）
 
-### 主要ヘッダ
+### 署名アルゴリズム
 
-#### サーバー → ブラウザ（応答）
+| 種類 | 例 | 用途 |
+|---|---|---|
+| **HMAC**（共有鍵） | `HS256` | 自前で発行 + 検証する場合 |
+| **RSA**（公開鍵） | `RS256` | 発行は秘密鍵、検証は公開鍵。**OIDC で標準** |
+| **ECDSA**（楕円曲線） | `ES256` | RSA より短く速い |
 
-| ヘッダ | 内容 |
+OIDC は通常 `RS256` を使い、**JWKS**（公開鍵のセット）を `https://issuer.example.com/.well-known/jwks.json` で配布します。クライアントはこれを取得して **署名検証** します。
+
+#### `alg: none` の罠
+
+JWT 仕様には `alg: none`（署名なし）があり、**チェックなしの実装** だと攻撃者が任意の payload で偽造できます。**ライブラリで `alg: none` を許可しない** が必須。
+
+### セッション Cookie vs JWT
+
+ログイン後の状態維持で **どちらを使うか** がよく議論されます。
+
+| | セッション Cookie | JWT |
+|---|---|---|
+| 保存場所 | サーバー側（DB / Redis） | クライアント側（Cookie / localStorage） |
+| 取り消し | DB から消すだけ | 短命にする / Blacklist で対処 |
+| ステートレス性 | サーバー状態あり | サーバー状態なし |
+| サイズ | 小さい（ID だけ） | 大きい（ペイロード分） |
+| クロスドメイン | 工夫が必要 | 渡すだけ |
+| 攻撃面 | CSRF（Cookie） | XSS（localStorage） |
+
+#### 一般的な指針（2026 年）
+
+- **Web アプリ単独**: **セッション Cookie**（HttpOnly / Secure / SameSite）が最も安全
+- **マイクロサービス間 / SPA + 別ドメイン API**: JWT のアクセストークン
+- **モバイル / SPA で OIDC 利用**: ID Token を JWT で取得
+
+「**Cookie に JWT を入れる**」のもよくある折衷案（Cookie の保護 + JWT の検証性）。
+
+### Refresh Token
+
+アクセストークンは **短命**（15 分〜1 時間）にしておき、**Refresh Token** で更新します。
+
+- Access Token: API 呼び出し用、漏れても被害が短時間
+- Refresh Token: Access Token を更新するため、漏れると被害が長期
+
+Refresh Token は **HttpOnly + Secure な Cookie** に保存し、`/token` 経由で交換します。
+
+### 既存 SaaS / ライブラリの位置付け
+
+「**自前実装は避ける**」が現代の標準。代表的選択肢:
+
+| サービス / ライブラリ | 特徴 |
 |---|---|
-| `Access-Control-Allow-Origin` | 許可するオリジン（または `*`） |
-| `Access-Control-Allow-Methods` | 許可するメソッド |
-| `Access-Control-Allow-Headers` | 許可するリクエストヘッダ |
-| `Access-Control-Allow-Credentials` | Cookie / Authorization を含むリクエストを許可するか |
-| `Access-Control-Expose-Headers` | JS から読めるレスポンスヘッダの追加リスト |
-| `Access-Control-Max-Age` | プリフライトのキャッシュ秒 |
+| **Auth0** | エンタープライズ標準。フロー / IdP 連携 / カスタムが豊富 |
+| **Clerk** | React / Next.js 専用、UI コンポーネントが秀逸。スタートアップで人気 |
+| **NextAuth.js**（Auth.js） | Next.js 用 OSS。OAuth プロバイダ多数、自前で動かせる |
+| **Supabase Auth** | DB + 認証セット。Postgres ベース |
+| **Firebase Authentication** | Google エコシステム。設定が簡単 |
+| **AWS Cognito** | AWS 系インフラと統合 |
+| **WorkOS** | エンタープライズ向け SAML / SSO |
+| **Lucia / better-auth** | より軽量、自前で書きたい時の OSS |
 
-#### ブラウザ → サーバー（リクエスト）
+選び方:
 
-| ヘッダ | 内容 |
-|---|---|
-| `Origin` | リクエスト元オリジン（**ブラウザが自動付与、JS から偽装不能**） |
-| `Access-Control-Request-Method` | プリフライト時の本来のメソッド |
-| `Access-Control-Request-Headers` | プリフライト時の本来のヘッダ |
+- **すぐ使いたい**: Clerk / Supabase
+- **エンタープライズ要件**（SAML / SCIM）: Auth0 / WorkOS
+- **OSS / ホストせず手元で**: NextAuth / better-auth
+- **既存インフラに揃える**: Cognito / Firebase
 
-### Cookie / 認証ヘッダを含めるには
+### Passkeys（パスワードレス）
 
-デフォルトで `fetch` は **クロスオリジンで Cookie を送らない**。送る場合は **両側に追加設定** が必要です。
+2024 年以降、Apple / Google / Microsoft が **Passkeys**（FIDO2 / WebAuthn）の普及を進めています。**パスワードを使わず、デバイスの生体認証で OIDC ログイン** できる仕組み。
 
-#### クライアント側
-
-```js
-fetch("https://api.example.com/me", {
-  credentials: "include",   // Cookie / Authorization を送る
-});
+```html
+<!-- 簡略 -->
+<script>
+const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
+</script>
 ```
 
-`credentials` の値:
+主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
 
-- `"omit"`: 送らない（デフォルトのクロスオリジン）
-- `"same-origin"`: 同一オリジンの時だけ送る（デフォルトの同一オリジン）
-- `"include"`: 常に送る（クロスオリジンでも）
+### よくある事故
 
-#### サーバー側
+- **JWT の検証を skip** していて偽造を許す → **必ず署名検証**
+- **localStorage にトークン** を入れて XSS で持ち出される → **HttpOnly Cookie** に
+- **Refresh Token が無期限** → 短命 + ローテートを徹底
+- **CORS で `Allow-Origin: *` + `Allow-Credentials: true`** → 仕様違反、CORS エラー
+- **redirect_uri が緩い**（`*` 許可）→ open redirect で攻撃可能
+- **state パラメータを検証していない** → CSRF 成立
 
-```
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Credentials: true
-```
-
-**重要な制約**:
-
-- `Allow-Credentials: true` の時、`Allow-Origin: *` は **使えない**。**具体的なオリジン** を返す必要がある
-- `Access-Control-Allow-Origin` に複数のオリジンは並べられない（`*` か **1 つだけ**）
-
-複数許可したい場合は **リクエストの Origin を見て動的に返す**:
-
-```ts
-const allowed = [
-  "https://my-site.example",
-  "https://staging.example",
-  "http://localhost:3000",
-];
-
-export async function GET(req: Request) {
-  const origin = req.headers.get("Origin") ?? "";
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (allowed.includes(origin)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Vary", "Origin");
-  }
-  return new Response(JSON.stringify({ ok: true }), { headers });
-}
-```
-
-`Vary: Origin` を入れると **CDN がオリジン別にキャッシュ** してくれます。これがないと、別オリジンのキャッシュを別の人に返してしまう事故が起きます。
-
-### Cookie 側の `SameSite`
-
-「クロスオリジンで Cookie を送る」には Cookie 側の **`SameSite`** 属性も `None`（+ `Secure`）でないといけません。
-
-```
-Set-Cookie: session=abc; SameSite=None; Secure; HttpOnly; Path=/
-```
-
-- `SameSite=Strict`: クロスサイトには絶対送らない
-- `SameSite=Lax`: トップレベルナビゲーションでは送る（デフォルト）
-- `SameSite=None`（+ Secure）: クロスサイトでも送る（同意必要）
-
-これをセットで考えないと、CORS 設定だけ整えても **Cookie が飛ばずログイン状態が維持されない** 事故になります。
-
-### Next.js / Express での設定例
-
-#### Next.js（Route Handler）
-
-```ts
-// app/api/posts/route.ts
-import { NextResponse } from "next/server";
-
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "https://my-site.example",
-];
-
-function corsHeaders(origin: string | null): HeadersInit {
-  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
-  return {
-    "Access-Control-Allow-Origin": isAllowed ? origin! : "",
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "3600",
-    "Vary": "Origin",
-  };
-}
-
-export async function OPTIONS(req: Request) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
-
-export async function GET(req: Request) {
-  return NextResponse.json({ posts: [] }, {
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
-```
-
-#### Express の `cors` パッケージ
-
-```js
-import cors from "cors";
-
-app.use(
-  cors({
-    origin: ["https://my-site.example", "http://localhost:3000"],
-    credentials: true,
-    maxAge: 3600,
-  }),
-);
-```
-
-### よくある CORS エラーと原因
-
-ブラウザのコンソールに出るメッセージ別の対処。
-
-#### `No 'Access-Control-Allow-Origin' header is present on the requested resource`
-
-→ サーバーがそもそも CORS ヘッダを返していない / OPTIONS で 4xx を返している。サーバー側設定を見直す。
-
-#### `The 'Access-Control-Allow-Origin' header has a value 'X' that is not equal to the supplied origin`
-
-→ `Allow-Origin` が **間違ったオリジン** を返している。動的に Origin を見て一致するものを返す。
-
-#### `The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'`
-
-→ `credentials: "include"` の時は **`*` ではなく具体的オリジン** を返す。
-
-#### `Method PUT is not allowed by Access-Control-Allow-Methods`
-
-→ `Allow-Methods` に PUT を追加。OPTIONS の応答に必ず含める。
-
-#### `Request header 'X-Custom' is not allowed by Access-Control-Allow-Headers`
-
-→ `Allow-Headers` にカスタムヘッダを追加。
-
-#### `Cookie が送られない`
-
-→ クライアント側 `credentials: "include"`、サーバー側 `Allow-Credentials: true`、Cookie の `SameSite=None; Secure` の **3 点セット** を確認。
-
-### CORS が要らないケース
-
-- **同一オリジンへのリクエスト**（`/api/...` のような相対パス）
-- **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
-- **サーバー → サーバー**（fetch がブラウザを通らない）
-
-「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
-
-### CORB / CORP / COEP / COOP
-
-似た名前の仕組みが他にもあります。混同しないように整理:
-
-| 名前 | 役割 |
-|---|---|
-| **CORS** | クロスオリジンレスポンスを **JS に読ませるか** |
-| **CORB**（Cross-Origin Read Blocking） | ブラウザが Spectre 対策で内部的に行うレスポンス遮断 |
-| **CORP**（`Cross-Origin-Resource-Policy`） | リソース側が **誰に埋め込まれるか** を制限 |
-| **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
-| **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
-
-通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
+これらが起きやすいので、**SaaS の SDK** に従うのが安全です。
 
 ## 演習
 
 ### ゴール
 
-- 自前 API に対して CORS エラーを **出してから直す** 流れを体験する
-- プリフライトの OPTIONS が飛ぶことを観察する
+- OAuth / OIDC / JWT の **トークンの中身** を実物で確認する
+- NextAuth.js（Auth.js）で Google ログインを最小実装する
 
-### 手順 1: API サーバー（Hono）
-
-```bash
-mkdir cors-server
-cd cors-server
-npm init -y
-npm install hono @hono/node-server
-```
-
-`server.ts`:
-
-```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-
-const app = new Hono();
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-
-serve({ fetch: app.fetch, port: 4000 });
-console.log("API on http://localhost:4000");
-```
+### 手順 1: 新規 Next.js
 
 ```bash
-npx tsx server.ts
+npx create-next-app@latest auth-sample --ts --app
+cd auth-sample
+npm install next-auth
 ```
 
-### 手順 2: クライアント（別ポート）
+### 手順 2: Google OAuth クライアント作成
 
-別ターミナルで:
+[Google Cloud Console](https://console.cloud.google.com/) で:
 
-```bash
-npm create vite@latest cors-client -- --template vanilla-ts
-cd cors-client
-npm install
-npm run dev
+1. プロジェクトを作成
+2. APIs & Services → Credentials → OAuth 2.0 Client ID
+3. Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
+4. Client ID と Secret を控える
+
+### 手順 3: NextAuth の設定
+
+`.env.local`:
+
+```
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+NEXTAUTH_SECRET=（任意のランダム文字列）
+NEXTAUTH_URL=http://localhost:3000
 ```
 
-`src/main.ts`:
+`auth.ts`:
 
 ```ts
-async function load() {
-  const res = await fetch("http://localhost:4000/posts");
-  const data = await res.json();
-  document.body.textContent = JSON.stringify(data);
-}
-load();
-```
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
 
-ブラウザで `http://localhost:5173`（Vite のデフォルトポート）を開くと、コンソールに **CORS エラー** が出るはずです。
-
-```
-Access to fetch at 'http://localhost:4000/posts' from origin 'http://localhost:5173' has been blocked by CORS policy:
-No 'Access-Control-Allow-Origin' header is present on the requested resource.
-```
-
-### 手順 3: サーバーで CORS を許可
-
-`server.ts`:
-
-```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-import { cors } from "hono/cors";
-
-const app = new Hono();
-
-app.use(
-  "*",
-  cors({
-    origin: ["http://localhost:5173"],
-    credentials: true,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    maxAge: 3600,
-  }),
-);
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-app.put("/posts/:id", (c) => c.json({ ok: true }));
-
-serve({ fetch: app.fetch, port: 4000 });
-```
-
-再起動するとクライアントから読めるようになります。
-
-### 手順 4: プリフライトを観察
-
-PUT を呼ぶ:
-
-```ts
-await fetch("http://localhost:4000/posts/1", {
-  method: "PUT",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ title: "updated" }),
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
 });
 ```
 
-DevTools の Network タブで:
+`app/api/auth/[...nextauth]/route.ts`:
 
-1. まず **OPTIONS** が飛ぶ
-2. 200 / 204 が返る
-3. その後 **PUT** が飛ぶ
+```ts
+export { GET, POST } from "@/auth";
+```
 
-を確認します。
+`app/page.tsx`:
+
+```tsx
+import { signIn, signOut, auth } from "@/auth";
+
+export default async function Home() {
+  const session = await auth();
+
+  if (!session) {
+    return (
+      <main style={{ padding: 24 }}>
+        <form action={async () => { "use server"; await signIn("google"); }}>
+          <button>Google でログイン</button>
+        </form>
+      </main>
+    );
+  }
+
+  return (
+    <main style={{ padding: 24 }}>
+      <p>ようこそ {session.user?.name} さん</p>
+      <pre>{JSON.stringify(session, null, 2)}</pre>
+      <form action={async () => { "use server"; await signOut(); }}>
+        <button>ログアウト</button>
+      </form>
+    </main>
+  );
+}
+```
+
+### 手順 4: 起動
+
+```bash
+npm run dev
+```
+
+`http://localhost:3000` で Google ログインを試します。
+
+### 手順 5: JWT を覗く
+
+ブラウザの DevTools → Application → Cookies で `next-auth.session-token` を確認。**これが JWT**。値をコピーして [jwt.io](https://jwt.io/) に貼ると、Header / Payload / Signature が読めます（Payload は base64 で誰でも読める）。
 
 ### 期待出力
 
-- 最初は CORS エラー
-- サーバーで許可してから読める
-- PUT 時に **OPTIONS → PUT** の 2 段階のリクエストが見える
+- Google ログインが成立し、セッション情報が表示される
+- Cookie に JWT 形式のトークンが入っている
+- jwt.io で payload に `name` / `email` / `iat` / `exp` などが見える
 
 ### 変える
 
-- `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
-- `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
-- `allowOrigins` に `*` を入れると、`credentials` を使う場合だけエラー（仕様違反）
+- `Email` プロバイダ（マジックリンク）を追加
+- 複数プロバイダ（GitHub / Discord）を追加
+- ログイン後にしかアクセスできないルートを **Middleware で保護** する
 
 ### 自分で書く（任意）
 
-- Next.js の Route Handler で同じ CORS 設定を再現する
-- `SameSite=None; Secure` の Cookie を使ってログインを成立させる
-- バックエンドプロキシ（Next.js の `/api/proxy`）を立てて、CORS を消す構成にする
+- Clerk に置き換えて UI コンポーネントの体験を比較
+- Supabase Auth を試して DB / 認証統合の体験
+- Passkey 対応プロバイダ（WebAuthn）を有効にしてパスワードなしログイン
 
 ## まとめ
 
-- CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
-- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
-- 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
-- **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
-- **Cookie の `SameSite=None; Secure`** とセットで考える
-- 動的に Origin を見て返す時は **`Vary: Origin`** をつけて CDN を安全に
-- エラーメッセージから原因を特定できる定型パターンを覚える
-- 「バックエンドプロキシで CORS を消す」も実用解
-- 別のレッスンでは **依存性のセキュリティ管理** に進む
+- **認証**（誰か） と **認可**（何ができるか） を区別する。OAuth は認可、OIDC は認証
+- **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準
+- **Implicit Flow は非推奨**
+- **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
+- **JWT** は Header / Payload / Signature の 3 部構成。**Payload は誰でも読める**
+- 署名アルゴリズムは `RS256` などを使い、**`alg: none` を絶対許可しない**
+- セッション Cookie vs JWT: **Web 単独はセッション Cookie**、API 呼び出しは JWT が定石
+- **Refresh Token** で Access Token を短命に保つ
+- **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
+- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
+- 別のレッスンでは **WebSocket / SSE** に進み、リアルタイム通信の選択肢を広げる

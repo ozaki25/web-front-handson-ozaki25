@@ -1,377 +1,481 @@
-# lesson123: OAuth / OIDC / JWT の概念
+# lesson123: GraphQL と tRPC の地図
 
 ## ゴール
 
-- 「**認証**」と「**認可**」の違いを言える
-- OAuth 2.0 の **認可コードフロー** の流れを大づかみで説明できる
-- OpenID Connect（OIDC）が「OAuth に **認証** を載せた拡張」だと分かる
-- JWT の構造（Header / Payload / Signature）と **署名検証** の意味を理解する
-- セッション Cookie と JWT の使い分けを判断できる
-- Auth0 / Clerk / NextAuth / Supabase Auth の位置付けを把握する
-
-::: tip このレッスンの方針
-認証は「自前で実装すると事故りやすい」分野です。本講座では概念の地図 + 既存 SaaS / ライブラリの選び方に絞ります。実装は SaaS のドキュメントと併せて行うのが現実的。
-:::
+- REST と **GraphQL** と **tRPC** の違いを 3 行で言える
+- GraphQL のクエリ / ミューテーション / サブスクリプションの最小例を読める
+- tRPC の「型安全な RPC」の考え方を理解する
+- 自分のプロジェクトで **どれを選ぶか** の判断軸を持つ
+- 関連エコシステム（Apollo Client / urql / Relay / GraphQL Yoga）の位置付けが分かる
 
 ## 解説
 
-### 認証 と 認可
+### 3 つの選択肢
 
-最初に区別すべき 2 つの言葉。
+API の設計には主に 3 つの流派があります。
 
-| 用語 | 意味 |
-|---|---|
-| **認証**（Authentication, AuthN） | **誰** か（あなたは本当に山田さんか？） |
-| **認可**（Authorization, AuthZ） | **何ができる** か（山田さんはこのファイルを編集できるか？） |
+| | スタイル | 特徴 |
+|---|---|---|
+| **REST** | リソース指向 + HTTP メソッド | 標準的、CDN キャッシュが効く |
+| **GraphQL** | スキーマ + クエリ言語 | 必要なフィールドだけ取得、複数リソース 1 リクエスト |
+| **tRPC** | 関数呼び出し + TypeScript | 型がそのまま伝わる、クライアント自動生成不要 |
 
-ID + パスワードでログインするのは認証。「管理者だけ /admin にアクセス可」は認可。**OAuth は本来 認可** で、**OIDC は 認証**。混乱の元なので、地図を頭に置いておきます。
+「**どれが正解** 」ではなく、**プロジェクトとチームに合わせて** 選びます。
 
-### OAuth 2.0
-
-「**ユーザーがパスワードを渡さずに、第三者アプリに自分のリソースへのアクセスを認可** する」プロトコル。
-
-例: 「**Spotify に Google フォトの写真を読ませる**」と言われた時、Spotify に Google パスワードを渡すのは危険。OAuth なら Google 上で認可するだけで、Spotify は **アクセストークン** を受け取って Google フォト API を叩けます。
-
-#### 主役（Role）
-
-| 役 | 例 |
-|---|---|
-| **Resource Owner** | エンドユーザー（あなた） |
-| **Client** | アクセスするアプリ（Spotify） |
-| **Authorization Server** | 認可するサーバー（Google） |
-| **Resource Server** | API サーバー（Google フォト API） |
-
-#### 認可コードフロー（推奨）
-
-OAuth 2.0 で最も使われ、安全とされるフロー:
+### REST のおさらいと弱み
 
 ```
-[User]                         [Client]                       [Auth Server]
-  │   1. ログインボタン押下       │                                │
-  │ ───────────────────────────> │                                │
-  │                              │   2. /authorize にリダイレクト │
-  │                              │ ──────────────────────────────>│
-  │   3. ログイン + 認可画面     │                                │
-  │ <─────────────────────────────────────────────────────────── │
-  │   4. 認可                    │                                │
-  │ ────────────────────────────────────────────────────────── > │
-  │                              │   5. /redirect?code=XXX        │
-  │                              │ <──────────────────────────────│
-  │                              │   6. /token (code + secret)    │
-  │                              │ ──────────────────────────────>│
-  │                              │   7. access_token 取得         │
-  │                              │ <──────────────────────────────│
-  │                              │   8. API 呼び出し              │
-  │                              │ ──────────────────────────────>│
+GET    /users/123          ← 取得
+POST   /users              ← 作成
+PUT    /users/123          ← 更新（全部）
+PATCH  /users/123          ← 更新（一部）
+DELETE /users/123          ← 削除
+```
+
+長所:
+
+- HTTP メソッドとパスで読みやすい
+- **CDN / プロキシのキャッシュ** が効く
+- 標準なのでツールが豊富（Postman / OpenAPI）
+
+弱み:
+
+- **取得しすぎ / 取得不足**（Over/Under fetching）。`GET /users/123` で名前しか要らないのにフルプロフィールが返る
+- **複数リソースのために何回も呼ぶ**（N+1 問題）
+- **バージョニングが面倒**（v1 / v2 / v3 を共存させる）
+
+### GraphQL
+
+「**1 つのエンドポイント**（POST /graphql）に **クエリ言語** を送って、必要なフィールドだけ取得する」考え方。Facebook が 2015 年に公開。
+
+#### スキーマ
+
+```graphql
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  posts: [Post!]!
+}
+
+type Post {
+  id: ID!
+  title: String!
+  body: String!
+  author: User!
+}
+
+type Query {
+  user(id: ID!): User
+  posts(limit: Int = 10): [Post!]!
+}
+
+type Mutation {
+  createPost(title: String!, body: String!): Post!
+}
+
+type Subscription {
+  postAdded: Post!
+}
+```
+
+#### クエリ
+
+```graphql
+query {
+  user(id: "123") {
+    name
+    posts(limit: 5) {
+      title
+    }
+  }
+}
+```
+
+レスポンス:
+
+```json
+{
+  "data": {
+    "user": {
+      "name": "山田",
+      "posts": [{ "title": "Hello" }, { "title": "GraphQL 楽しい" }]
+    }
+  }
+}
 ```
 
 ポイント:
 
-- **認可コード**（短命）→ アクセストークンに **サーバー側で交換** する
-- ブラウザに **直接トークン** を渡さない（漏洩リスクが下がる）
-- **PKCE**（後述）を組み合わせるのが必須
+- **`name` と `posts.title` だけ** 要求 → サーバーはそれだけ返す（**Over fetch を防げる**）
+- **複数リソース**（user + posts） を 1 リクエストで取れる（**N+1 を防げる**）
 
-#### Implicit Flow は非推奨
+#### ミューテーション
 
-ブラウザに直接トークンを返す **Implicit Flow** は古いやり方。**現代は使わない**。SPA であっても **Authorization Code Flow with PKCE** が推奨。
-
-#### PKCE（Proof Key for Code Exchange）
-
-「**認可コードが盗まれてもトークンに交換できない**」を実現する仕組み。
-
-1. クライアントが **ランダムな verifier** を生成
-2. その **ハッシュ**（challenge） を `/authorize` に渡す
-3. 認可コードを **/token に送る時に verifier を一緒に送る**
-4. 認可サーバーが challenge と一致するかを検証
-
-ネイティブアプリ / SPA で必須。Auth0 / Clerk などの SaaS は自動でやってくれます。
-
-### OpenID Connect（OIDC）
-
-OAuth 2.0 は **認可** のフレームワーク。**「誰がログインしたか」** を扱う仕組みが標準化されていなかった。OIDC は OAuth 2.0 の上に **認証情報の規格** を載せたものです。
-
-OIDC は次を追加:
-
-- **`openid` スコープ**: OIDC を有効化
-- **ID Token**: 「**この人がログインした**」を表す JWT
-- **`/userinfo` エンドポイント**: ユーザープロフィール取得
-
-#### ID Token の中身
-
-```json
-{
-  "iss": "https://accounts.google.com",   // 発行者
-  "sub": "user-123",                        // ユーザー ID
-  "aud": "my-client-id",                    // クライアント ID
-  "exp": 1714000000,                        // 有効期限
-  "iat": 1713999000,                        // 発行時刻
-  "email": "user@example.com",
-  "name": "山田太郎"
+```graphql
+mutation {
+  createPost(title: "新記事", body: "本文") {
+    id
+    title
+  }
 }
 ```
 
-これに **署名** が付き、クライアントが **公開鍵で検証** することで「**確かに Google が発行した本物**」を確認できます。
+書き込みは `mutation` で書きます（query との明示的な区別）。
 
-### JWT（JSON Web Token）
+#### サブスクリプション
 
-JWT は「**JSON データに署名を付けたトークン**」のフォーマット。OIDC の ID Token も JWT。アクセストークンも JWT 形式で返ってくることが多い。
-
-#### 構造: 3 つを `.` で繋ぐ
-
-```
-eyJhbGciOiJIUzI1NiI...   ← Header（base64url）
-.
-eyJzdWIiOiJ1c2VyLTEyMyI...   ← Payload（base64url）
-.
-SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c   ← Signature
-```
-
-Header の例:
-
-```json
-{
-  "alg": "RS256",
-  "typ": "JWT",
-  "kid": "key-id-1"
+```graphql
+subscription {
+  postAdded {
+    id
+    title
+  }
 }
 ```
 
-Payload の例:
+WebSocket / SSE 上で **リアルタイムに新着を受信** できます。
 
-```json
-{
-  "sub": "user-123",
-  "name": "山田太郎",
-  "iat": 1713999000,
-  "exp": 1714002600
-}
-```
+#### サーバー側の実装
 
-Signature は **Header + Payload を秘密鍵で署名** したもの。
+人気の選択肢:
 
-#### 重要な事実
-
-- **Payload は base64 のエンコードされているだけ** で **暗号化されていない**。誰でも読める
-- **改ざんはできない**（署名検証で弾く）
-- **秘密情報を Payload に入れない**（パスワード / クレジットカードなど）
-
-### 署名アルゴリズム
-
-| 種類 | 例 | 用途 |
-|---|---|---|
-| **HMAC**（共有鍵） | `HS256` | 自前で発行 + 検証する場合 |
-| **RSA**（公開鍵） | `RS256` | 発行は秘密鍵、検証は公開鍵。**OIDC で標準** |
-| **ECDSA**（楕円曲線） | `ES256` | RSA より短く速い |
-
-OIDC は通常 `RS256` を使い、**JWKS**（公開鍵のセット）を `https://issuer.example.com/.well-known/jwks.json` で配布します。クライアントはこれを取得して **署名検証** します。
-
-#### `alg: none` の罠
-
-JWT 仕様には `alg: none`（署名なし）があり、**チェックなしの実装** だと攻撃者が任意の payload で偽造できます。**ライブラリで `alg: none` を許可しない** が必須。
-
-### セッション Cookie vs JWT
-
-ログイン後の状態維持で **どちらを使うか** がよく議論されます。
-
-| | セッション Cookie | JWT |
-|---|---|---|
-| 保存場所 | サーバー側（DB / Redis） | クライアント側（Cookie / localStorage） |
-| 取り消し | DB から消すだけ | 短命にする / Blacklist で対処 |
-| ステートレス性 | サーバー状態あり | サーバー状態なし |
-| サイズ | 小さい（ID だけ） | 大きい（ペイロード分） |
-| クロスドメイン | 工夫が必要 | 渡すだけ |
-| 攻撃面 | CSRF（Cookie） | XSS（localStorage） |
-
-#### 一般的な指針（2026 年）
-
-- **Web アプリ単独**: **セッション Cookie**（HttpOnly / Secure / SameSite）が最も安全
-- **マイクロサービス間 / SPA + 別ドメイン API**: JWT のアクセストークン
-- **モバイル / SPA で OIDC 利用**: ID Token を JWT で取得
-
-「**Cookie に JWT を入れる**」のもよくある折衷案（Cookie の保護 + JWT の検証性）。
-
-### Refresh Token
-
-アクセストークンは **短命**（15 分〜1 時間）にしておき、**Refresh Token** で更新します。
-
-- Access Token: API 呼び出し用、漏れても被害が短時間
-- Refresh Token: Access Token を更新するため、漏れると被害が長期
-
-Refresh Token は **HttpOnly + Secure な Cookie** に保存し、`/token` 経由で交換します。
-
-### 既存 SaaS / ライブラリの位置付け
-
-「**自前実装は避ける**」が現代の標準。代表的選択肢:
-
-| サービス / ライブラリ | 特徴 |
+| ライブラリ | 特徴 |
 |---|---|
-| **Auth0** | エンタープライズ標準。フロー / IdP 連携 / カスタムが豊富 |
-| **Clerk** | React / Next.js 専用、UI コンポーネントが秀逸。スタートアップで人気 |
-| **NextAuth.js**（Auth.js） | Next.js 用 OSS。OAuth プロバイダ多数、自前で動かせる |
-| **Supabase Auth** | DB + 認証セット。Postgres ベース |
-| **Firebase Authentication** | Google エコシステム。設定が簡単 |
-| **AWS Cognito** | AWS 系インフラと統合 |
-| **WorkOS** | エンタープライズ向け SAML / SSO |
-| **Lucia / better-auth** | より軽量、自前で書きたい時の OSS |
+| **Apollo Server** | フルスタック。エンタープライズ |
+| **GraphQL Yoga** | 軽量で速い。Next.js / Bun と相性 |
+| **Pothos / TypeGraphQL** | TypeScript 中心のスキーマ定義 |
+| **Hasura / PostGraphile** | DB から自動生成 |
 
-選び方:
+#### クライアント側の主な選択肢
 
-- **すぐ使いたい**: Clerk / Supabase
-- **エンタープライズ要件**（SAML / SCIM）: Auth0 / WorkOS
-- **OSS / ホストせず手元で**: NextAuth / better-auth
-- **既存インフラに揃える**: Cognito / Firebase
+| ライブラリ | 特徴 |
+|---|---|
+| **Apollo Client** | キャッシュ機能が強い。エコシステム最大 |
+| **urql** | 軽量、設定がシンプル |
+| **Relay** | Meta 製。ページネーション / フラグメントで強力 |
+| **GraphQL Request** | 最小、シンプルな fetch ラッパー |
+| **graphql-codegen** | スキーマ → 型 / Hooks 自動生成 |
 
-### Passkeys（パスワードレス）
+#### 例: Apollo Client + Next.js
 
-2024 年以降、Apple / Google / Microsoft が **Passkeys**（FIDO2 / WebAuthn）の普及を進めています。**パスワードを使わず、デバイスの生体認証で OIDC ログイン** できる仕組み。
-
-```html
-<!-- 簡略 -->
-<script>
-const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
-</script>
+```bash
+npm install @apollo/client graphql
 ```
 
-主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
+```tsx
+import { ApolloClient, InMemoryCache, gql } from "@apollo/client";
 
-### よくある事故
+const client = new ApolloClient({
+  uri: "/api/graphql",
+  cache: new InMemoryCache(),
+});
 
-- **JWT の検証を skip** していて偽造を許す → **必ず署名検証**
-- **localStorage にトークン** を入れて XSS で持ち出される → **HttpOnly Cookie** に
-- **Refresh Token が無期限** → 短命 + ローテートを徹底
-- **CORS で `Allow-Origin: *` + `Allow-Credentials: true`** → 仕様違反、CORS エラー
-- **redirect_uri が緩い**（`*` 許可）→ open redirect で攻撃可能
-- **state パラメータを検証していない** → CSRF 成立
+const data = await client.query({
+  query: gql`
+    query {
+      user(id: "123") { name }
+    }
+  `,
+});
+```
 
-これらが起きやすいので、**SaaS の SDK** に従うのが安全です。
+#### GraphQL の弱み
+
+- **CDN キャッシュが効きにくい**（POST 1 本のため）
+- **学習コスト**（スキーマ言語、N+1 解決の DataLoader、フラグメント）
+- **小規模では過剰**（モノリスな自社 API なら REST / tRPC で十分）
+- **ファイルアップロード** は専用拡張が必要
+
+### tRPC
+
+「**TypeScript の関数を、そのままクライアントから呼ぶ**」発想。Next.js / TypeScript 専用と言って良い構造。
+
+特徴:
+
+- **API スキーマを書かない**（TypeScript の型がスキーマ）
+- **クライアントが型を自動取得**（`import type` の延長）
+- **コード生成が要らない**
+
+#### サーバー側
+
+```ts
+// server/router.ts
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
+
+const t = initTRPC.create();
+
+export const appRouter = t.router({
+  hello: t.procedure
+    .input(z.object({ name: z.string() }))
+    .query(({ input }) => `Hello, ${input.name}`),
+
+  createPost: t.procedure
+    .input(z.object({ title: z.string(), body: z.string() }))
+    .mutation(async ({ input }) => {
+      // DB に保存
+      return { id: "p1", ...input };
+    }),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+#### Next.js の Route Handler に乗せる
+
+```ts
+// app/api/trpc/[trpc]/route.ts
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { appRouter } from "@/server/router";
+
+const handler = (req: Request) =>
+  fetchRequestHandler({
+    endpoint: "/api/trpc",
+    req,
+    router: appRouter,
+    createContext: () => ({}),
+  });
+
+export { handler as GET, handler as POST };
+```
+
+#### クライアント側
+
+```ts
+// utils/trpc.ts
+import { createTRPCReact } from "@trpc/react-query";
+import type { AppRouter } from "@/server/router";
+
+export const trpc = createTRPCReact<AppRouter>();
+```
+
+```tsx
+const { data } = trpc.hello.useQuery({ name: "world" });
+//        ^? string  ← サーバーから自動推論
+```
+
+ポイント:
+
+- 「**サーバーで関数を変えたら**、**クライアントの呼び出し側で即型エラー**」
+- IDE で **オートコンプリート** がそのまま効く
+- スキーマ言語を書かない / コード生成しない / **TypeScript ファースト**
+
+### REST / GraphQL / tRPC の選び方
+
+#### こういう時は **REST**
+
+- 公開 API（外部の開発者向け / SDK 配布）
+- CDN キャッシュを最大限活かしたい
+- HTTP の知識だけで読める「**普通**」が欲しい
+- 多言語クライアント（iOS / Android / Web）でも動く
+
+#### こういう時は **GraphQL**
+
+- フロントから **複数リソースを 1 回で** 取りたい
+- フィールド過不足の最適化が大事
+- 大規模 / 多チーム（バックエンドとフロントの **契約** をスキーマで明示）
+- リアルタイム要件（Subscription）
+
+#### こういう時は **tRPC**
+
+- フロント / バックが **同じ TypeScript リポジトリ**
+- 自社専用 API（外部公開しない）
+- 型の一貫性を **何より優先** したい
+- 小〜中規模で **手数を最小** にしたい（Next.js + tRPC が定番）
+
+### 共存もアリ
+
+「**REST + tRPC**」「**GraphQL + tRPC**」のような組合せもよく見ます:
+
+- 公開 API は REST / GraphQL
+- 自社の Next.js 内部は tRPC
+
+「**外向き / 内向きで分ける**」のは現実的な解。
+
+### Server Components 時代の API
+
+Next.js の App Router では **Server Component が直接 DB を叩ける**（`async function` の中で `prisma.user.findFirst({...})`）ようになりました。これは **「Web フロントが API を呼ぶ」発想を崩します**。
+
+- 初期表示は **Server Component が直接 DB / 外部 API**
+- 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
+
+「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代。Server Actions / Server Components は lesson73 / 63 / 68 や後続のレッスンで詳しく扱います。
+
+### よくある質問
+
+#### 「GraphQL は重い」は本当？
+
+DataLoader を使った **N+1 対策** をやれば、REST の何倍も軽くなることもあります。逆に **無対策だと重い**。エコシステムの知識が要る。
+
+#### 「tRPC は本番に強い？」
+
+Vercel / T3 Stack（Next.js + tRPC + Prisma）は実本番で多数事例あり。エンタープライズの大規模では **tRPC v11 + Server Actions** で十分。
+
+#### REST + Zod + OpenAPI で似たことができる？
+
+できます。`tsoa` / `zod-openapi` / `Hono + zod-openapi` で **REST に型** を載せた構成は最近人気。**「tRPC 風 REST」** と呼ばれます。
 
 ## 演習
 
 ### ゴール
 
-- OAuth / OIDC / JWT の **トークンの中身** を実物で確認する
-- NextAuth.js（Auth.js）で Google ログインを最小実装する
+- 同じ「**ユーザー一覧 + 詳細**」を REST / GraphQL / tRPC の **3 通り** で書いて比較する
+- それぞれの **コード量 / 型の通り方 / DX** を体感する
 
-### 手順 1: 新規 Next.js
+### 手順 1: ベースの Next.js
 
 ```bash
-npx create-next-app@latest auth-sample --ts --app
-cd auth-sample
-npm install next-auth
+npx create-next-app@latest api-styles --ts --app
+cd api-styles
 ```
 
-### 手順 2: Google OAuth クライアント作成
+### 手順 2: REST 版
 
-[Google Cloud Console](https://console.cloud.google.com/) で:
-
-1. プロジェクトを作成
-2. APIs & Services → Credentials → OAuth 2.0 Client ID
-3. Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
-4. Client ID と Secret を控える
-
-### 手順 3: NextAuth の設定
-
-`.env.local`:
-
-```
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-NEXTAUTH_SECRET=（任意のランダム文字列）
-NEXTAUTH_URL=http://localhost:3000
-```
-
-`auth.ts`:
+`app/api/users/route.ts`:
 
 ```ts
-import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-  ],
-});
+export async function GET() {
+  return Response.json(users);
+}
 ```
 
-`app/api/auth/[...nextauth]/route.ts`:
-
-```ts
-export { GET, POST } from "@/auth";
-```
-
-`app/page.tsx`:
+`app/users-rest/page.tsx`:
 
 ```tsx
-import { signIn, signOut, auth } from "@/auth";
+type User = { id: string; name: string; email: string };
 
-export default async function Home() {
-  const session = await auth();
-
-  if (!session) {
-    return (
-      <main style={{ padding: 24 }}>
-        <form action={async () => { "use server"; await signIn("google"); }}>
-          <button>Google でログイン</button>
-        </form>
-      </main>
-    );
-  }
-
+export default async function Page() {
+  const res = await fetch("http://localhost:3000/api/users", { cache: "no-store" });
+  const users: User[] = await res.json();
   return (
-    <main style={{ padding: 24 }}>
-      <p>ようこそ {session.user?.name} さん</p>
-      <pre>{JSON.stringify(session, null, 2)}</pre>
-      <form action={async () => { "use server"; await signOut(); }}>
-        <button>ログアウト</button>
-      </form>
-    </main>
+    <ul>
+      {users.map((u) => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
   );
 }
 ```
 
-### 手順 4: 起動
+REST は **クライアント側で型** を別途定義するのがネック（ずれると壊れる）。
+
+### 手順 3: tRPC 版
 
 ```bash
-npm run dev
+npm install @trpc/server @trpc/client @trpc/react-query @tanstack/react-query zod superjson
 ```
 
-`http://localhost:3000` で Google ログインを試します。
+`server/router.ts`:
 
-### 手順 5: JWT を覗く
+```ts
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
 
-ブラウザの DevTools → Application → Cookies で `next-auth.session-token` を確認。**これが JWT**。値をコピーして [jwt.io](https://jwt.io/) に貼ると、Header / Payload / Signature が読めます（Payload は base64 で誰でも読める）。
+const t = initTRPC.create();
+
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
+
+export const appRouter = t.router({
+  listUsers: t.procedure.query(() => users),
+  getUser: t.procedure.input(z.object({ id: z.string() })).query(({ input }) =>
+    users.find((u) => u.id === input.id),
+  ),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+`app/api/trpc/[trpc]/route.ts`:
+
+```ts
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { appRouter } from "@/server/router";
+
+const handler = (req: Request) =>
+  fetchRequestHandler({
+    endpoint: "/api/trpc",
+    req,
+    router: appRouter,
+    createContext: () => ({}),
+  });
+
+export { handler as GET, handler as POST };
+```
+
+`utils/trpc.ts` / Provider 設定 / Client での使用は tRPC 公式の Quickstart に従う。`trpc.listUsers.useQuery()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
+
+### 手順 4: GraphQL 版
+
+```bash
+npm install graphql graphql-yoga
+```
+
+`app/api/graphql/route.ts`:
+
+```ts
+import { createYoga, createSchema } from "graphql-yoga";
+
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
+
+const yoga = createYoga({
+  schema: createSchema({
+    typeDefs: `
+      type User { id: ID! name: String! email: String! }
+      type Query { users: [User!]! user(id: ID!): User }
+    `,
+    resolvers: {
+      Query: {
+        users: () => users,
+        user: (_: unknown, { id }: { id: string }) => users.find((u) => u.id === id),
+      },
+    },
+  }),
+  graphqlEndpoint: "/api/graphql",
+  fetchAPI: { Response },
+});
+
+export const GET = yoga;
+export const POST = yoga;
+```
+
+`http://localhost:3000/api/graphql` で GraphiQL が開いてクエリを試せます。
 
 ### 期待出力
 
-- Google ログインが成立し、セッション情報が表示される
-- Cookie に JWT 形式のトークンが入っている
-- jwt.io で payload に `name` / `email` / `iat` / `exp` などが見える
+- 3 通りで同じデータが取得できる
+- tRPC 版は **クライアント側に型を一切書かない** のに型が通る
+- GraphQL 版は **必要なフィールドだけ** 要求する記述ができる
 
 ### 変える
 
-- `Email` プロバイダ（マジックリンク）を追加
-- 複数プロバイダ（GitHub / Discord）を追加
-- ログイン後にしかアクセスできないルートを **Middleware で保護** する
+- tRPC で `getUser` を呼んでみる。`input` を間違えると **クライアントの型エラー** が出ることを確認
+- GraphQL で **複数リソース** を 1 リクエストで取得する（user + その投稿）
+- REST に Zod を入れて、レスポンスの型を保証する
 
 ### 自分で書く（任意）
 
-- Clerk に置き換えて UI コンポーネントの体験を比較
-- Supabase Auth を試して DB / 認証統合の体験
-- Passkey 対応プロバイダ（WebAuthn）を有効にしてパスワードなしログイン
+- T3 Stack（Next.js + tRPC + Prisma + Tailwind）の最小例を作る
+- 既存の REST API を GraphQL でラップする（Apollo / Yoga）
+- 公開 API を REST、内部 API を tRPC、で分ける構成を作る
 
 ## まとめ
 
-- **認証**（誰か） と **認可**（何ができるか） を区別する。OAuth は認可、OIDC は認証
-- **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準
-- **Implicit Flow は非推奨**
-- **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
-- **JWT** は Header / Payload / Signature の 3 部構成。**Payload は誰でも読める**
-- 署名アルゴリズムは `RS256` などを使い、**`alg: none` を絶対許可しない**
-- セッション Cookie vs JWT: **Web 単独はセッション Cookie**、API 呼び出しは JWT が定石
-- **Refresh Token** で Access Token を短命に保つ
-- **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
-- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
-- 別のレッスンでは **WebSocket / SSE** に進み、リアルタイム通信の選択肢を広げる
+- **REST** は標準で **CDN キャッシュが効く**。公開 API / 多言語クライアントに強い
+- **GraphQL** は **必要なフィールドだけ** / **複数リソース 1 回**。大規模・多チーム / リアルタイム
+- **tRPC** は **型がそのまま伝わる**。Next.js + TypeScript モノレポで圧倒的 DX
+- **どれが正解** ではなく、プロジェクトとチームに合わせて選ぶ
+- 共存（外向き REST + 内向き tRPC）も実用解
+- Next.js App Router の **Server Components / Server Actions** が「API すら不要」の選択肢として加わった
+- 別のレッスンでは **Service Worker / PWA 深掘り** に進み、オフライン対応を見る

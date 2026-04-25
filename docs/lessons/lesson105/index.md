@@ -1,330 +1,336 @@
-# lesson105: GitHub の PR とコードレビュー
+# lesson105: Vite の仕組みを軽く
 
 ## ゴール
 
-- GitHub と Git の関係を区別して説明できる
-- リモートリポジトリを作成し、ローカル → GitHub に push できる
-- ブランチで作業 → Pull Request（PR）作成 → レビュー → マージの流れを理解する
-- 良いコミットメッセージと PR タイトルの書き方を知る
-- マージ戦略（merge / squash / rebase）の違いを 1 行で言える
-- ブランチ保護ルールの目的を説明できる
-- セルフホストではなく GitHub を選ぶ理由を 1 つ挙げられる
+- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown 単独に統一** された経緯が分かる
+- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
+- 本番ビルドでチャンク分割が起きる理由が言える
+- `import.meta.env` で環境変数を読み込める
+- Vite プラグインの位置付けを把握する
 
 ## 解説
 
-### Git と GitHub は別物
+### Vite の立ち位置
 
-混同されがちですが:
+Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
 
-- **Git**: バージョン管理ツール（`git` コマンド本体）
-- **GitHub**: Git リポジトリをホスティングする SaaS。PR / Issue / Actions / Projects 等の協業機能付き
+特徴:
 
-似たサービスに **GitLab** / **Bitbucket** / **Codeberg** などがありますが、2026 年時点でデファクトは GitHub です。本コースも GitHub を前提にします。
+- **開発サーバーが速い**（数百 ms で起動）
+- **HMR が一瞬**（保存と同時にブラウザが追随）
+- **本番ビルドはツリーシェイク + 最適化** までやる
+- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
 
-### リモートリポジトリを作る
+### 2 段構成の歴史と Rolldown 統一
 
-#### 1. GitHub で空の repo を作成
+Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
 
-1. <https://github.com/new> にアクセス
-2. **Repository name** を入力（例: `my-todo-app`）
-3. **Public / Private** を選択
-4. **Initialize this repository** のチェックは **すべて外す**（後でローカルから push するため）
-5. **Create repository**
+| 局面 | 使うツール | 役割 |
+|---|---|---|
+| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
+| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
 
-#### 2. ローカルから push
+開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
 
-GitHub の repo 作成後の画面に表示される手順をそのまま実行:
+#### Vite 8（2026 年 3 月）で Rolldown に統一
+
+[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを採用し、**開発も本番も Rolldown 1 本** に統一しました。
+
+- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
+- **esbuild より速く、Rollup の機能を備える**
+- 結果として Vite はビルドが **最大 10〜30 倍速** になった
+- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
+
+「esbuild + Rollup の 2 段構成」から「Rolldown 1 段」に進化した、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
+
+### 開発サーバーの仕組み
+
+Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
+
+#### 古典的 webpack の流れ
+
+1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
+2. ブラウザに 1 つの大きな JS を渡す
+3. 一部修正されると **再バンドル**
+
+→ ファイル数が増えると線形に遅くなる。
+
+#### Vite の流れ
+
+1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
+2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
+3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
+
+→ ファイル数が増えても初回の起動が速い。
+
+#### 例: 何が起きているか
+
+ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
+
+ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
+
+### HMR（Hot Module Replacement）
+
+開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
+
+普通のブラウザリロードと違って:
+
+- フォームに入力した値が **保持** される
+- スクロール位置が保たれる
+- 状態（state）も保たれる（フレームワーク側が対応していれば）
+
+#### 仕組みを大づかみに
+
+1. Vite はファイル変更を **fs.watch** で監視
+2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
+3. **影響モジュールだけ** ブラウザに WebSocket で送る
+4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
+
+React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
+
+### 本番ビルドの仕組み
+
+`vite build` で行われること:
+
+1. **エントリポイント** から依存関係を辿る
+2. **ツリーシェイク** で使われない export を削除
+3. **チャンク分割** で複数ファイルに分ける
+4. **minify** でファイルサイズを削減
+5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
+
+#### チャンク分割（コード分割）
+
+すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
+
+- **ベンダー**（`node_modules`）を別チャンクに
+- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
+
+を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson102 のバンドルサイズ最適化と繋がる話）。
+
+```ts
+// クリック時に初めて読み込む
+const handleClick = async () => {
+  const { showModal } = await import("./modal");
+  showModal();
+};
+```
+
+#### ハッシュ付きファイル名
+
+`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
+
+### `import.meta.env` で環境変数
+
+Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
 
 ```bash
-git remote add origin https://github.com/your-name/my-todo-app.git
-git branch -M main
-git push -u origin main
+# .env
+VITE_API_URL=https://api.example.com
+SECRET_KEY=do_not_expose
 ```
 
-これでローカルのコミットが GitHub に上がります。`-u`（upstream）はそのブランチの追跡先を記録するので、次回からは `git push` だけで OK。
-
-### Pull Request（PR）の流れ
-
-PR は「**このブランチの変更を main に取り込みたい**、レビューしてください」という依頼書です。現代の開発フローでは **直接 main に push する代わりに** PR を経由するのが基本です。
-
-#### 典型的なフロー
-
-```
-1. ローカルでブランチ作成: git switch -c feature/add-login
-2. 変更してコミット (1 件 or 複数件)
-3. ブランチを GitHub に push: git push -u origin feature/add-login
-4. GitHub で PR を作成（main ← feature/add-login）
-5. レビュアーがコードをチェック、コメント、修正依頼
-6. 必要に応じて修正コミットを追加 push（PR は自動更新）
-7. レビュー承認（Approve）
-8. main にマージ
-9. ブランチを削除（GitHub の UI からワンクリック）
+```ts
+console.log(import.meta.env.VITE_API_URL); // OK
+console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
 ```
 
-#### PR の作り方
+ルール:
 
-`git push` 後に GitHub のリポジトリページを開くと、**「Compare & pull request」** ボタンが出ます。または:
+- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
+- それ以外は Vite が **読み捨てる**（漏洩対策）
+- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
 
-- リポジトリの **Pull requests** タブ → **New pull request**
-- ベースブランチ（マージ先）= `main`、比較ブランチ（変更元）= `feature/add-login`
-- タイトルと説明を書く → **Create pull request**
+組み込みで使える環境情報:
 
-### 良いコミットメッセージ・PR タイトル
-
-#### コミットメッセージ
-
-**Why**（なぜ）を中心に書きます。**What**（何）はコードを見れば分かるので最小限で。
-
-NG:
-
-```
-修正
-変更
-fix
+```ts
+import.meta.env.MODE        // "development" / "production"
+import.meta.env.DEV         // true / false
+import.meta.env.PROD        // true / false
+import.meta.env.BASE_URL    // "/" など
 ```
 
-OK:
+### プラグイン
 
-```
-Login ボタンの色をブランドカラーに統一
-useEffect のクリーンアップ漏れで起きていたメモリリークを修正
-ヘッダーのレスポンシブ対応（600px 以下で縦並び）
-```
+Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
 
-書式は **1 行目 50 文字以内** + **空行** + 詳細。最近は **Conventional Commits**（`feat:` / `fix:` / `docs:` などの prefix）も人気です。
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import svgr from "vite-plugin-svgr";
+import { VitePWA } from "vite-plugin-pwa";
 
-```
-feat(auth): magic link ログインを追加
-
-メール経由のワンタイム URL でログインできるようにする。
-パスワード認証は次のリリースで非推奨化する予定。
-```
-
-#### PR タイトル
-
-PR タイトルもコミットメッセージと同じ書き方が良いです。マージ後のコミット履歴に残るので、後から検索できる文言を選びます。
-
-PR 説明（本文）は **「何を変えたか」「なぜ」「どうテストしたか」** の 3 つを書くのが定番。テンプレート（`.github/pull_request_template.md`）を用意するチームも多いです。
-
-### コードレビュー
-
-#### レビュアーの観点
-
-- **動くか**: ローカルで動かして確認できれば理想
-- **読めるか**: 半年後の自分が読んで意味が通るか
-- **テストがあるか**: 重要なロジックに自動テストが付いているか
-- **影響範囲**: 既存機能を壊していないか
-- **セキュリティ**: 入力値検証 / シークレット漏洩 / XSS / SQL インジェクション
-- **パフォーマンス**: 明らかに遅くなる書き方をしていないか
-
-#### コメントの書き方
-
-GitHub の **Files changed** タブで、行ごとに `+` ボタンを押すとインラインコメントが書けます。
-
-良いコメント:
-
-```
-suggestion: ここは Array.from よりも展開構文の方が読みやすそうです
-question: なぜ条件を反転させているか教えてもらえますか？
-nit: 命名は `users` より `userList` の方がチームの規約に合いそうです
-blocking: ここで input をエスケープしないと XSS の余地があります
+export default defineConfig({
+  plugins: [
+    react(),
+    svgr(),
+    VitePWA({ registerType: "autoUpdate" }),
+  ],
+});
 ```
 
-`suggestion` / `question` / `nit`（nitpick = 些細な指摘）/ `blocking`（マージブロッカー）のような **接頭辞** を使うと、レビュアーの意図が明確で議論が早くなります。
+代表的なプラグイン:
 
-GitHub の **Suggested change** 機能を使うと、コードを直接書き換える提案も送れます。レビュイーは 1 クリックで取り込めます。
+- `@vitejs/plugin-react`: React の HMR + JSX 変換
+- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
+- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
+- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
+- `vitest`: テストランナー（lesson97）
 
-### マージ戦略の 3 種類
+Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
 
-PR の **Merge** ボタンには 3 つのオプションがあります（リポジトリ設定で許可されているものだけ表示）。
+### Vite と他ツールの関係
 
-#### 1. Merge commit（既定）
+Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
 
-```
-*   Merge pull request #42 from feature/login
-|\
-| * a (feature/login)
-| * b
-|/
-* c (main)
-```
+- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
+- **Remix v3 / React Router v7+**: 内部で Vite を採用
+- **Nuxt 3+**: 内部で Vite を採用
+- **Astro**: 内部で Vite を採用
+- **SvelteKit**: 内部で Vite を採用
 
-ブランチの履歴が残り、マージ用の追加コミット（`Merge pull request ...`）が作られます。
+つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
 
-- 利点: 履歴が完全に残る、PR と main の関係が分かりやすい
-- 欠点: 履歴グラフが複雑になりやすい
+### 「ハマる」パターン
 
-#### 2. Squash and merge
+#### `process.env` が `undefined`
 
-```
-* squashed (main) ← feature/login の全 commit を 1 つに圧縮
-* c (main)
-```
+→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
 
-PR の全コミットを **1 つに圧縮** して main に合流。
+#### 環境変数がクライアントに出てこない
 
-- 利点: main の履歴が線形 + クリーン、1 PR = 1 commit でリバートしやすい
-- 欠点: PR 内の細かい履歴が失われる
+→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
 
-最近のチームでは **Squash が既定** になることが多いです。本コースの教材サイトもこの方針です。
+#### CommonJS のパッケージで失敗
 
-#### 3. Rebase and merge
+→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
 
-PR のコミットを **そのまま順番に** main の上に積む。マージコミットなし。
+#### `node:fs` を import してエラー
 
-- 利点: 完全に線形な履歴
-- 欠点: PR 中のコミットが個別に main に並ぶので、ノイズが多い場合は読みづらい
-
-### ブランチ保護ルール
-
-GitHub の **Settings → Branches → Branch protection rules** で main ブランチに守りを入れます。
-
-典型的な設定:
-
-- **Require a pull request before merging**: main への直接 push を禁止
-- **Require approvals: 1 人以上**: 最低 1 人の Approve を必須化
-- **Require status checks to pass**: CI（Lint / Test / Build）が通らないとマージできない
-- **Require branches to be up to date**: main の最新を取り込んでから merge
-- **Require linear history**: Squash / Rebase 限定にする
-- **Restrict pushes that create matching branches**: 特定ブランチ名の作成を制限
-
-これでチームの誰かがうっかり main に push しても、ブロックしてくれます。
-
-### Issue / Discussions / Projects
-
-GitHub には PR 以外にも協業ツールがあります。
-
-- **Issues**: バグ報告 / 機能要望 / TODO の管理
-- **Discussions**: Q&A / アイデア共有（Issue より柔らかい場）
-- **Projects**: カンバン / ロードマップで Issue / PR を整理
-- **Milestones**: リリース単位で Issue / PR をまとめる
-
-本コースでも、機能追加要望や軽微な修正は Issue → PR の流れで管理しています（過去の issue 番号が commit メッセージに付いているのを見たことがあるかもしれません）。
-
-### `gh` CLI
-
-GitHub の操作をコマンドラインからやる公式ツールです。
-
-```bash
-# インストール（macOS）
-brew install gh
-
-# ログイン（1 回だけ）
-gh auth login
-
-# PR を作成
-gh pr create --title "feat: login を追加" --body "..."
-
-# PR 一覧
-gh pr list
-
-# PR をマージ
-gh pr merge --squash
-```
-
-ブラウザを開かずに操作できるので、慣れると圧倒的に速いです。
+→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
 
 ## 演習
 
 ### ゴール
 
-- ローカルの Git リポジトリを GitHub に push する
-- ブランチで作業 → PR 作成 → 自分でセルフレビュー → マージする
-- ブランチ保護ルールを 1 つ設定する
+- Vite の開発サーバーで **HMR を体感** する
+- ビルド出力のチャンク分割を眺める
+- `import.meta.env` で環境変数を読む
 
-### 手順 1: GitHub アカウント準備
-
-GitHub アカウントを持っていない場合は <https://github.com/> で作成。SSH キーや Personal Access Token も設定しておきます（公式ガイド: <https://docs.github.com/ja/authentication>）。
-
-### 手順 2: 「Git の基本操作」で作ったリポジトリを push
+### 手順 1: 新規プロジェクト
 
 ```bash
-cd git-practice    # 「Git の基本操作」で作ったディレクトリ
+npm create vite@latest vite-internals -- --template react-ts
+cd vite-internals
+npm install
 ```
 
-GitHub で空 repo（例: `git-practice`）を作成後:
+### 手順 2: HMR を試す
 
 ```bash
-git remote add origin https://github.com/your-name/git-practice.git
-git branch -M main
-git push -u origin main
+npm run dev
 ```
 
-### 手順 3: ブランチで変更 → PR
+ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
+
+### 手順 3: ネットワークタブで個別配信を観察
+
+DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
+
+### 手順 4: 環境変数
+
+`.env` を作成:
 
 ```bash
-git switch -c feature/colors
-echo "色を変える予定" >> README.md
-git add README.md
-git commit -m "docs: 色変更の予定をメモに追加"
-git push -u origin feature/colors
+# .env
+VITE_API_URL=https://api.example.com
+SECRET_TOKEN=xxxxx
 ```
 
-GitHub のリポジトリページに **「Compare & pull request」** ボタンが出るのでクリック → タイトルと説明を書いて **Create pull request**。
+`src/App.tsx` に追加:
 
-### 手順 4: セルフレビュー
+```tsx
+console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
+console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
+console.log("MODE:", import.meta.env.MODE);
+```
 
-自分で PR の **Files changed** タブを開き、変更を眺めます。気になった行に `+` ボタンでコメントを 1 つ書いてみる（例: `nit: 「予定」より「TODO」の方が一般的かも`）。
+ブラウザのコンソールで:
 
-### 手順 5: マージ
+- `VITE_API_URL` は表示される
+- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
+- `MODE` は `"development"`
 
-PR ページ下部の **Merge pull request** → **Squash and merge** を試します。マージ後、`feature/colors` ブランチを削除（**Delete branch** ボタン）。
-
-ローカルでも:
+### 手順 5: 本番ビルド
 
 ```bash
-git switch main
-git pull origin main
-git branch -d feature/colors    # ローカルブランチも削除
+npm run build
+ls -la dist/assets
+npm run preview
 ```
 
-### 手順 6: ブランチ保護を 1 つ設定
+`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
 
-リポジトリの **Settings** → **Branches** → **Add rule** で:
+### 手順 6: 動的 import でチャンクを分割
 
-- **Branch name pattern**: `main`
-- **Require a pull request before merging** にチェック
-- 保存
+`src/App.tsx`:
 
-これで、これ以降 `main` に直接 push できなくなります。試しに `git push origin main` を直接やろうとすると拒否されます（ブランチ保護を一時解除するか、PR 経由で取り込む必要がある）。
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [text, setText] = useState("");
+
+  const handleClick = async () => {
+    const mod = await import("./heavy");
+    setText(mod.heavyFunction());
+  };
+
+  return (
+    <div>
+      <button onClick={handleClick}>重い処理</button>
+      <p>{text}</p>
+    </div>
+  );
+}
+```
+
+`src/heavy.ts`:
+
+```ts
+export function heavyFunction() {
+  return "計算結果です";
+}
+```
+
+`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
 
 ### 期待出力
 
-- GitHub にローカルの履歴がそのまま反映される
-- PR 画面で行単位の差分とコメントが表示される
-- Squash でマージすると、main の履歴が線形になる（PR の複数 commit が 1 つに圧縮）
-- main への直接 push が「Branch protection rules: protected branch」のエラーで拒否される
+- HMR でファイル保存と同時に画面が更新（リロードなし）
+- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
+- `VITE_` プレフィックスの環境変数のみクライアントから読める
+- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
 
 ### 変える
 
-- マージ戦略を **Merge commit** に変えてみる（リポジトリ設定で許可）。グラフが分岐 + 合流の形になる
-- PR をマージせず **Close** してみる（後から消したい時の操作）
-- Issues タブで Issue を作り、コミットメッセージに `Closes #1` と書いて push してみる。マージ時に Issue が自動で閉じる
+- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
+- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
+- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
 
-### 自分で書く
+### 自分で書く（任意）
 
-- リポジトリに `.github/pull_request_template.md` を追加し、PR の説明テンプレートを作る:
-
-  ```md
-  ## 概要
-
-  ## 変更内容
-  -
-  -
-
-  ## テスト
-  - [ ] ローカルで動作確認
-  - [ ] 単体テスト追加 / 更新
-  ```
-
-- `gh` CLI をインストールして、`gh pr create` でブラウザを開かずに PR を作る
+- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
+- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
+- Vite 7 と Vite 8（Rolldown）でビルド時間を比較してみる（既存のプロジェクトで `npm install vite@7` ↔ `vite@8`）
 
 ## まとめ
 
-- **Git は道具、GitHub はホスティングサービス**
-- 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
-- コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
-- マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
-- ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
-- `gh` CLI でコマンドラインからほぼ全操作が可能
-- 別のレッスンでは **GitHub Actions で CI** を組み込み、PR の段階で Lint / テスト / ビルドを自動実行する
+- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
+- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
+- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
+- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
+- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
+- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
+- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
+- 別のレッスンでは **Sentry でエラートラッキング** に進む

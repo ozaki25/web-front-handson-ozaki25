@@ -1,426 +1,384 @@
-# lesson114: エラートラッキング（Sentry）
+# lesson114: 状態管理の地図（TanStack Query / Zustand / Jotai）
 
 ## ゴール
 
-- 本番のエラーを **見逃さず通知する** 仕組みの必要性を理解する
-- Sentry を React / Next.js プロジェクトに導入できる
-- Source Map で **minified コードを元のコードに復元** する流れが分かる
-- ユーザーコンテキスト / タグ / リリースで **エラーを絞り込む** 方法を知る
-- 代替サービス（Datadog / Bugsnag / Rollbar 等）の位置付けを把握する
+- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
+- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
+- **TanStack Query** が **サーバー state** に特化していることを理解する
+- **Zustand** が **グローバルクライアント state** の現代の定番であることを知る
+- **Jotai** の atom 思想と Zustand との使い分けを 1 行で言える
+- **Redux Toolkit** の現在地（特定用途に残る）を把握する
+- 「迷ったら何を選ぶか」の判断軸を持つ
 
 ## 解説
 
-### なぜエラートラッキングが必要か
+### state を 5 種類に分ける
 
-開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
+「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
 
-エラートラッキングサービスは:
+| 種類 | 例 | 最適なツール |
+|---|---|---|
+| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
+| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
+| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
+| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
+| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
 
-- ブラウザで起きたエラーを **自動収集** する
-- スタックトレース / OS / ブラウザ / URL / 直前の操作（breadcrumbs）を一緒に送る
-- **集約・重複排除** してダッシュボードに並べる
-- Slack / Email / PagerDuty に **通知** する
-- リリース単位で「**この版で増えたエラー**」を可視化する
+> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
 
-これがあるかないかで、本番運用の体感が大きく変わります。
+### 1. ローカル state: `useState` / `useReducer`
 
-### Sentry の位置付け
+特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
 
-[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
+```tsx
+const [isOpen, setIsOpen] = useState(false);
+```
+
+「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
+
+### 2. URL state: `useSearchParams`
+
+「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。
+
+```tsx
+"use client";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
+
+export function FilterBar() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const tag = searchParams.get("tag") ?? "all";
+
+  function setTag(newTag: string) {
+    const params = new URLSearchParams(searchParams);
+    params.set("tag", newTag);
+    router.push(`${pathname}?${params}`);
+  }
+
+  return (
+    <select value={tag} onChange={(e) => setTag(e.target.value)}>
+      <option value="all">すべて</option>
+      <option value="js">JavaScript</option>
+      <option value="css">CSS</option>
+    </select>
+  );
+}
+```
+
+URL に状態が入ると:
+
+- ブラウザの戻る / 進むで遷移できる
+- URL を共有すれば同じ画面が再現できる
+- ブックマークできる
+
+「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
+
+### 3. サーバー state: TanStack Query
+
+API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
+
+- **古くなる**（他のユーザーが書き換えるかもしれない）
+- **キャッシュしたい**（同じデータを何度も取りたくない）
+- **再取得したい**（ページに戻ってきた時など）
+- **楽観的更新したい**（UI を先に変えて、サーバー応答で確定）
+
+これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。
+
+**TanStack Query**（React Query から改名）はこの問題を **`useQuery` 1 行** で解決します。
+
+```bash
+npm install @tanstack/react-query
+```
+
+```tsx
+import { useQuery } from "@tanstack/react-query";
+
+function PostsList() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["posts"],
+    queryFn: async () => {
+      const res = await fetch("/api/posts");
+      return res.json();
+    },
+  });
+
+  if (isLoading) return <p>読み込み中...</p>;
+  if (error) return <p>エラー</p>;
+  return <ul>{data.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+}
+```
+
+`useQuery` がやってくれること:
+
+- **キャッシュ**: 同じ `queryKey` のデータは再利用
+- **重複排除**: 同じ key で複数コンポーネントから呼んでも 1 回だけ fetch
+- **再取得**: ウィンドウフォーカス時 / ネットワーク復帰時
+- **ステール管理**: `staleTime` を超えたら古い扱いに
+- **楽観的更新**: `useMutation` で送信中に UI を先に更新
+- **無限スクロール**: `useInfiniteQuery`
+
+2026 年の React アプリで **API 呼び出しがある** なら、TanStack Query 入れない理由はほぼないです。
+
+> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
+
+### 4. グローバルクライアント state: Zustand / Jotai / Context
+
+「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には:
+
+#### 軽量な定番: Zustand
+
+```bash
+npm install zustand
+```
+
+```tsx
+import { create } from "zustand";
+
+type AuthStore = {
+  user: { id: string; name: string } | null;
+  login: (user: { id: string; name: string }) => void;
+  logout: () => void;
+};
+
+export const useAuthStore = create<AuthStore>((set) => ({
+  user: null,
+  login: (user) => set({ user }),
+  logout: () => set({ user: null }),
+}));
+```
+
+```tsx
+function Header() {
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
+
+  return user ? (
+    <div>
+      ようこそ、{user.name} さん
+      <button onClick={logout}>ログアウト</button>
+    </div>
+  ) : (
+    <p>未ログイン</p>
+  );
+}
+```
+
+利点:
+
+- **Provider が要らない**: import するだけで使える
+- **boilerplate が少ない**: Redux に比べて 1/5 のコード
+- **TypeScript フレンドリー**
+- **React 外でも呼べる**: `useAuthStore.getState()` で外部からも参照可能
+
+2026 年の **グローバルクライアント state の第一候補**。Redux Toolkit の boilerplate に疲れた人が大量に乗り換えました。
+
+#### atom ベース: Jotai
+
+```bash
+npm install jotai
+```
+
+```tsx
+import { atom, useAtom } from "jotai";
+
+const countAtom = atom(0);
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom);
+  return <button onClick={() => setCount(count + 1)}>{count}</button>;
+}
+```
 
 特徴:
 
-- React / Next.js / Node.js / モバイルなど **多言語対応**
-- パフォーマンス監視 / セッションリプレイ / プロファイリングも統合
-- Source Map アップロードが整っていて、**minify されたコードでも元のコードで読める**
-- 月 5,000 イベントまで **無料枠**
+- 状態を **小さな atom** に分割。それぞれが独立に管理される
+- 「明確な store がない、散らばった state を組み合わせる」アプリ向け
+- 派生状態（derived atom）が綺麗に書ける
 
-### React に導入する最小手順
+Zustand の **明確な store** とは対照的に、Jotai は **粒度の細かい atom** を組み合わせる思想です。React の useState を「アプリ全体に拡張した版」と考えると分かりやすい。
 
-```bash
-npm install @sentry/react
-```
+#### React Context（組み込み）
 
-`src/main.tsx`（最初の方）:
+`useContext` も簡易な共有手段ですが、**頻繁に変わる state には向きません**（全消費者が再レンダリングされる）。テーマや言語設定のような「滅多に変わらない」共有値に使うのが定番です。
 
-```tsx
-import * as Sentry from "@sentry/react";
+「`Context` で済むなら Context、頻繁に変わるなら Zustand or Jotai、サーバー由来なら TanStack Query」が 2026 年の使い分けです。
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,        // パフォーマンス計測。本番は 0.1 程度に
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: import.meta.env.VITE_APP_VERSION,
-});
-```
+### Redux / Redux Toolkit の現在地
 
-`.env`:
+Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。
 
-```
-VITE_SENTRY_DSN=https://xxxxx@oXXX.ingest.sentry.io/12345
-VITE_APP_VERSION=1.0.0
-```
+Redux が今でも残るのは:
 
-DSN は Sentry の管理画面で「プロジェクトの設定」から取得します。
+- **既存プロジェクト**: 移行コストで残る
+- **大規模 + 複雑な action / reducer ロジック** が要る場合
+- **Redux DevTools の時間旅行デバッグ** が欲しい場合
+- **ミドルウェア（thunk / saga）の生態系** に依存
 
-### エラーを意図的に送る
+新規アプリなら **Zustand から始める** のが軽量で十分です。
 
-#### 自動的に拾われるもの
+### SWR（TanStack Query の代替）
 
-- 未捕捉の `throw`
-- 未処理の Promise rejection
-- React のレンダリング中エラー（後述の Error Boundary 経由）
+Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。
 
-#### 手動で送る
+- TanStack Query: 機能豊富、エコシステム大、複雑系も得意
+- SWR: シンプル、API が小さい、学習コスト低、Next.js との親和性
 
-```tsx
-try {
-  await someApi();
-} catch (e) {
-  Sentry.captureException(e);
-  throw e;  // 必要なら再 throw
-}
+「シンプルさを優先」なら SWR、「全部入りで困らない」なら TanStack Query、というイメージです。
 
-// メッセージだけ送る
-Sentry.captureMessage("ユーザーが何度もログインに失敗");
-```
+### 「迷ったらこう選ぶ」フローチャート
 
-### React の Error Boundary と統合
+1. **コンポーネント内だけで完結？** → `useState`
+2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
+3. **サーバーから取るデータ？** → **TanStack Query**
+4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
+5. **散らばった派生状態が多い？** → **Jotai**
+6. **滅多に変わらない設定値？** → **Context**
+7. **フォームの入力値？** → **React Hook Form**
 
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson68 と相性 ◎）。
-
-```tsx
-import * as Sentry from "@sentry/react";
-
-const App = () => (
-  <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-    <Routes />
-  </Sentry.ErrorBoundary>
-);
-```
-
-これだけで「**Error Boundary が捕まえた React レンダリングエラー** が Sentry に届く」状態になります。
-
-### Next.js に導入する最小手順
-
-[Sentry の Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/) は **ウィザード** で 1 コマンド導入できます。
-
-```bash
-npx @sentry/wizard@latest -i nextjs
-```
-
-ウィザードが行うこと:
-
-- プロジェクトの選択 / DSN の設定
-- `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
-- `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
-- `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
-- `next.config.ts` を `withSentryConfig` でラップ
-- ビルド時に **Source Map を自動アップロード** する設定を追加
-
-```ts
-// next.config.ts（生成例）
-import { withSentryConfig } from "@sentry/nextjs";
-
-const nextConfig = {
-  /* 既存の Next.js 設定 */
-};
-
-export default withSentryConfig(nextConfig, {
-  org: "your-org",
-  project: "your-project",
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
-});
-```
-
-**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
-
-### Source Map とは
-
-本番ビルドの JS は **minify** されて変数名が `a` / `b` になり、行も詰められています。これだとスタックトレースを見ても **どのコードか分からない**。
-
-Source Map は「minify 後の位置 → 元のソースの行・列」のマッピング情報です。これがあると:
-
-```
-TypeError: Cannot read property 'foo' of undefined
-  at a.b.c (index-Xj9k2.js:1:12345)
-```
-
-が:
-
-```
-TypeError: Cannot read property 'foo' of undefined
-  at UserProfile.fetchData (src/components/UserProfile.tsx:42:18)
-```
-
-に **復元** されます。
-
-#### Sentry の Source Map 運用
-
-- **ビルド時に Source Map を生成**（`vite build` / `next build`）
-- それを **Sentry にアップロード**（公開しない）
-- Sentry の管理画面で **元のソースで** スタックトレースが見られる
-
-`@sentry/nextjs` のウィザードがビルド時のアップロードまで設定してくれるので、最近は手動設定の必要が減りました。
-
-::: warning Source Map をブラウザに公開しない
-Source Map をそのまま `dist/` に置いてデプロイすると、**元のソースが誰でも読める** 状態になります。Sentry にアップロードして、ビルド成果物からは削除（または `.map` を CDN に出さない）するのが安全。
-:::
-
-### ユーザーコンテキスト
-
-「**誰の** エラーか」が分かると原因究明が圧倒的に早くなります。
-
-```ts
-Sentry.setUser({
-  id: user.id,
-  email: user.email,
-  username: user.name,
-});
-```
-
-ログアウト時:
-
-```ts
-Sentry.setUser(null);
-```
-
-::: tip 個人情報の扱い
-メールアドレスや氏名は **個人情報**。GDPR / 個人情報保護法的に、ユーザー同意やデータ最小化が必要です。本番では **ID だけ送る** / **ハッシュ化する** などの運用が無難。
-:::
-
-### タグとコンテキスト
-
-タグは「**フィルタ用** の短い key-value」、コンテキストは「**詳細データ**」です。
-
-```ts
-// タグ（ダッシュボードで絞り込みに使える）
-Sentry.setTag("page", "checkout");
-Sentry.setTag("payment-provider", "stripe");
-
-// コンテキスト（イベントに添付される詳細）
-Sentry.setContext("cart", {
-  items: 3,
-  total: 12000,
-  currency: "JPY",
-});
-```
-
-### リリース管理
-
-「この版で増えたエラー」を見るには、`release` と `environment` を設定します。
-
-```ts
-Sentry.init({
-  dsn: "...",
-  release: "my-app@1.2.3",       // package.json のバージョンや Git の SHA
-  environment: process.env.NODE_ENV,
-});
-```
-
-CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知すると、ダッシュボードで:
-
-- 「リリース 1.2.3 で **新規** に出たエラー」
-- 「リリース 1.2.2 では出ていなかったが 1.2.3 で **退行** したエラー」
-- 「修正済みリリース」
-
-がトラッキングできます。
-
-### Breadcrumbs
-
-エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
-
-- ボタンクリック / フォーム送信
-- ページ遷移
-- ネットワークリクエスト
-- console.log（任意）
-
-```ts
-Sentry.addBreadcrumb({
-  category: "checkout",
-  message: "クーポンコードを適用",
-  level: "info",
-});
-```
-
-「エラー発生 5 秒前にこのボタンを押している」が分かるので **再現が容易** になります。
-
-### セッションリプレイ
-
-Sentry の **Session Replay** を有効にすると、エラー発生時の **画面録画** が見られます（DOM の差分を記録するので画像ではなく軽い）。
-
-```ts
-Sentry.init({
-  // ...
-  integrations: [Sentry.replayIntegration()],
-  replaysSessionSampleRate: 0.1,   // 通常セッションの 10%
-  replaysOnErrorSampleRate: 1.0,   // エラーが起きたセッションは 100%
-});
-```
-
-「**ユーザーがどう操作してエラーに辿り着いたか**」が動画で分かるのは強烈です。ただし **個人情報の保護** が必要（パスワード入力欄などはマスクする設定）。
-
-### 代替サービス
-
-| サービス | 特徴 |
-|---|---|
-| **Sentry** | OSS / 自前ホスト可。フロント・バック両方 |
-| **Datadog** | 監視全部入り（メトリクス / ログ / APM / RUM）。運用の重心が APM 寄り |
-| **Bugsnag** | エラートラッキング特化。料金体系がシンプル |
-| **Rollbar** | 老舗のエラートラッキング。深い検索機能 |
-| **LogRocket** | セッションリプレイが強み |
-| **Honeybadger** | 開発者にやさしい価格 |
-
-「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
-
-### Edge / Worker 環境での扱い
-
-Cloudflare Workers / Vercel Edge Functions では従来の Sentry SDK が動きにくかったですが、2026 年現在は **`@sentry/cloudflare` / `@sentry/vercel-edge`** など環境別 SDK が整備されています。Next.js の Edge Middleware は `@sentry/nextjs` の `sentry.edge.config.ts` で対応します。
+これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
 
 ## 演習
 
 ### ゴール
 
-- React + Vite プロジェクトに Sentry を入れる
-- 意図的にエラーを起こして Sentry に届くことを確認する
-- ユーザーコンテキストとタグを付ける
+- 「TanStack Query で API データ取得」「Zustand でテーマ切替」「URL state でフィルタ」を 1 つのアプリで体験する
+- それぞれが **どの種類の state** を扱っているか意識する
 
-### 手順 1: Sentry アカウントとプロジェクト作成
+### 途中から始める場合
 
-[sentry.io](https://sentry.io/) で無料アカウントを作り、**新規プロジェクト**（platform = React）を作成。**DSN** を控えます。
-
-### 手順 2: 新規 React プロジェクト
+新規 Vite + React + TS プロジェクトを作成。
 
 ```bash
-npm create vite@latest sentry-sample -- --template react-ts
-cd sentry-sample
-npm install @sentry/react
+npm create vite@latest state-sample -- --template react-ts
+cd state-sample
 npm install
+npm install @tanstack/react-query zustand
 ```
 
-### 手順 3: 初期化
-
-`.env`:
-
-```
-VITE_SENTRY_DSN=（控えた DSN を貼る）
-VITE_APP_VERSION=0.1.0
-```
+### 手順 1: TanStack Query の Provider を入れる
 
 `src/main.tsx`:
 
 ```tsx
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import * as Sentry from "@sentry/react";
-import App from "./App.tsx";
-import "./index.css";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import App from "./App";
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [Sentry.browserTracingIntegration()],
-  tracesSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: `sentry-sample@${import.meta.env.VITE_APP_VERSION}`,
-});
+const queryClient = new QueryClient();
 
 createRoot(document.getElementById("root")!).render(
   <StrictMode>
-    <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
+    <QueryClientProvider client={queryClient}>
       <App />
-    </Sentry.ErrorBoundary>
-  </StrictMode>,
+    </QueryClientProvider>
+  </StrictMode>
 );
 ```
 
-### 手順 4: わざとエラーを起こす
+### 手順 2: Zustand store
+
+`src/themeStore.ts`:
+
+```ts
+import { create } from "zustand";
+
+type ThemeStore = {
+  theme: "light" | "dark";
+  toggle: () => void;
+};
+
+export const useThemeStore = create<ThemeStore>((set) => ({
+  theme: "light",
+  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+}));
+```
+
+### 手順 3: 統合した App
 
 `src/App.tsx`:
 
 ```tsx
-import * as Sentry from "@sentry/react";
 import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useThemeStore } from "./themeStore";
+
+type Post = { id: number; title: string };
 
 export default function App() {
-  const [crash, setCrash] = useState(false);
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggle);
+  const [filter, setFilter] = useState("all");  // 簡易版（本来は URL state）
 
-  if (crash) {
-    throw new Error("意図的にクラッシュさせた");
-  }
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["posts"],
+    queryFn: async () => {
+      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+      return (await res.json()) as Post[];
+    },
+  });
 
-  const sendCustom = () => {
-    Sentry.captureMessage("カスタムメッセージ from Sentry test");
-  };
-
-  const sendException = () => {
-    try {
-      // @ts-expect-error わざと
-      null.foo();
-    } catch (e) {
-      Sentry.captureException(e);
-    }
-  };
-
-  const setUser = () => {
-    Sentry.setUser({ id: "user-123", username: "テストユーザー" });
-    Sentry.setTag("test-run", "manual");
-  };
+  const filtered = filter === "all" ? data : data?.filter((p) => p.id <= 10);
 
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>Sentry Demo</h1>
-      <button onClick={() => setCrash(true)}>レンダリングエラー</button>
-      <button onClick={sendException}>例外を送信</button>
-      <button onClick={sendCustom}>メッセージを送信</button>
-      <button onClick={setUser}>ユーザーをセット</button>
-    </div>
+    <main
+      style={{
+        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
+        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
+        padding: 16,
+        minHeight: "100vh",
+      }}
+    >
+      <h1>状態管理の地図</h1>
+
+      <button onClick={toggleTheme}>
+        テーマ: {theme}（クリックで切替 — Zustand）
+      </button>
+
+      <div style={{ marginTop: 12 }}>
+        <button onClick={() => setFilter("all")}>すべて（ローカル state）</button>
+        <button onClick={() => setFilter("first10")}>最初の 10 件</button>
+      </div>
+
+      <h2>記事一覧（TanStack Query で fetch）</h2>
+      {isLoading && <p>読み込み中...</p>}
+      {error && <p>エラー</p>}
+      <ul>
+        {filtered?.slice(0, 20).map((p) => (
+          <li key={p.id}>#{p.id} {p.title}</li>
+        ))}
+      </ul>
+    </main>
   );
 }
 ```
 
-### 手順 5: 起動して確認
-
-```bash
-npm run dev
-```
-
-ボタンを押して、Sentry のダッシュボードでイベントが届くのを確認します（数秒〜数十秒の遅延あり）。
-
 ### 期待出力
 
-- 「レンダリングエラー」を押すと Error Boundary の fallback が表示され、Sentry にイベントが届く
-- 「例外を送信」で `TypeError` が届く
-- 「メッセージを送信」で文字列イベントが届く
-- 「ユーザーをセット」した後のイベントは **ユーザー情報付き** で届く
-- ダッシュボードで `release: sentry-sample@0.1.0` 付きとして表示される
+- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示
+- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
+- 「最初の 10 件」を押すと表示が絞り込まれる（ローカル state）
+- ブラウザを **リロードしても fetch は走らない**（TanStack Query のキャッシュ）→ DevTools の Network で 2 回目以降は出ない
 
 ### 変える
 
-- `tracesSampleRate` を `0.1` にして、パフォーマンス計測のサンプリング率を下げる
-- `Sentry.replayIntegration()` を追加し、セッションリプレイを有効にする
-- `setTag("page", "home")` などタグを増やしてダッシュボードで絞り込みを試す
+- `useQuery` の `staleTime: 1000 * 60` を渡してみる。1 分間は再取得されないキャッシュ
+- Zustand の `theme` をブラウザリロード後も保持するために `zustand/middleware` の `persist` を使ってみる
+- `filter` を URL state に変更（`useSearchParams` で `?filter=...`）
 
-### 自分で書く（任意）
+### 自分で書く
 
-- Next.js プロジェクトに `npx @sentry/wizard@latest -i nextjs` で Sentry を入れる
-- API Route の中で意図的にエラーを起こし、Sentry に届くことを確認する
-- ビルド時に Source Map をアップロードして、minify 後のコードが元のソースで表示されることを確認
+- TanStack Query の `useMutation` で「記事を作成」ボタンを足す（POST）。送信中の UI を表示
+- Jotai を入れて、`countAtom` でカウンターを実装し、Zustand 版と書き味を比較
 
 ## まとめ
 
-- **エラートラッキング** は「ユーザーが言わなければ気づけないバグ」を救うインフラ
-- Sentry は React / Next.js / Node.js を 1 つの SDK でカバー
-- React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
-- **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
-- `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
-- `release` / `environment` で **退行**（regression） を可視化
-- **Breadcrumbs** と **Session Replay** で再現が容易になる
-- 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
-- 別のレッスンでは **Vercel Analytics と GA4** に進み、ユーザー行動とパフォーマンスの計測へ
+- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
+- 2026 年は **役割ごとに使い分ける** のが定番
+- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
+- **Jotai** は atom ベース、散らばった派生状態に向く
+- **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
+- **SWR** は TanStack Query のシンプル代替
+- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ
+- 別のレッスンでは **モダン CSS**（:has / Container Queries / View Transitions） に進む

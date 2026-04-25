@@ -1,553 +1,480 @@
-# lesson126: Service Worker と PWA 深掘り
+# lesson126: React Compiler
 
 ## ゴール
 
-- Service Worker の **ライフサイクル**（install / activate / fetch）を理解する
-- Workbox の **キャッシュ戦略**（CacheFirst / NetworkFirst / StaleWhileRevalidate）を選べる
-- オフライン対応（fallback ページ）の最小実装ができる
-- Web Push 通知の流れを大づかみに掴む
-- `manifest.webmanifest` の主要フィールドが分かる
+- React Compiler が **何を自動化** するかを言える
+- 「手動メモ化（`useMemo` / `useCallback` / `React.memo`）が要らなくなる」境界を理解する
+- React Compiler 1.0（2025 年 10 月安定版）の **現在地** を知る
+- Next.js / Vite で React Compiler を **有効化** できる
+- 既存コードでハマらないための注意点（Rules of React）を押さえる
+
+::: tip 前提
+このレッスンは lesson64「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson64 / 55 を確認してください。
+:::
 
 ## 解説
 
-### PWA とは
+### 「手動メモ化」の苦しみ
 
-「**Progressive Web App**」= Web を **アプリのように扱う** ための仕組みの総称。本講座のドキュメントサイト自体も `@vite-pwa/vitepress` で PWA 化済みで、デスクトップ / モバイルから **インストール** できます。
+React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなる。そのために導入されたのが:
 
-PWA の柱:
+- `useMemo`: 値の **再計算を抑える**
+- `useCallback`: 関数の **再生成を抑える**
+- `React.memo`: コンポーネントの **再レンダリングを抑える**
 
-1. **Service Worker**（バックグラウンドのスクリプト）
-2. **Web App Manifest**（インストール時のメタデータ）
-3. **HTTPS**（必須）
-4. インストール可能 / オフライン対応 / 通知
+```tsx
+const filtered = useMemo(
+  () => items.filter((i) => i.active),
+  [items],
+);
 
-### Service Worker とは
+const onClick = useCallback(
+  () => handler(value),
+  [value],
+);
 
-**ブラウザのバックグラウンドで動く、ネットワークプロキシ的な JavaScript**。ページから独立して動き、`fetch` イベントを **横取り** してキャッシュ応答 / カスタム応答ができます。
-
-特徴:
-
-- **DOM にアクセスできない**（ワーカー）
-- **HTTPS 必須**（localhost は例外）
-- **同一オリジン** に限定
-- **永続的** に動き、ページが閉じても残る（バックグラウンドで通知 / 同期）
-
-### ライフサイクル
-
-3 つの状態を順に行き来します。
-
-```
-[ install ] → [ activate ] → [ idle / fetch / message ]
-                                       ↑
-                                       │（更新時）新 SW が install
+const Memoed = React.memo(Child);
 ```
 
-#### `install`
+3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
 
-「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
+- **書き忘れ**でパフォーマンス劣化
+- **依存配列のミス**でバグ
+- **過度なメモ化**で逆に遅くなる
+- 読みづらいコード
 
-```js
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open("v1").then((cache) =>
-      cache.addAll(["/", "/index.html", "/styles.css", "/app.js"]),
-    ),
-  );
-});
-```
+これを **コンパイラが自動でやる** のが React Compiler の役割です。
 
-#### `activate`
+### React Compiler とは
 
-「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
+[React Compiler](https://react.dev/learn/react-compiler/introduction) は、**Babel ベースのコンパイラ** で、ソースコードを **解析してメモ化を自動挿入** します。
 
-```js
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== "v1").map((k) => caches.delete(k))),
-    ),
-  );
-});
-```
+```tsx
+// あなたが書くコード
+function Cart({ items }: { items: Item[] }) {
+  const total = items.reduce((sum, i) => sum + i.price, 0);
+  return <p>合計: {total}</p>;
+}
 
-#### `fetch`
-
-「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
-
-```js
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((res) => res || fetch(event.request)),
-  );
-});
-```
-
-### キャッシュ戦略（Workbox 風）
-
-リソース別に **どんな順序でキャッシュ / ネットワークを使うか** を決める戦略。
-
-| 戦略 | 流れ | 適切なリソース |
-|---|---|---|
-| **CacheFirst** | キャッシュ → なければネット | フォント / 画像 / 不変アセット |
-| **NetworkFirst** | ネット → 失敗したらキャッシュ | API レスポンス / HTML（最新優先） |
-| **StaleWhileRevalidate** | キャッシュ即返却 + 裏でネット更新 | 一覧 / プロフィール画像（やや古くて OK） |
-| **NetworkOnly** | ネットのみ | POST / 認証など |
-| **CacheOnly** | キャッシュのみ | 完全オフライン専用ページ |
-
-#### CacheFirst の例
-
-```js
-self.addEventListener("fetch", (event) => {
-  if (event.request.destination === "image") {
-    event.respondWith(
-      caches.match(event.request).then((res) =>
-        res || fetch(event.request).then((networkRes) => {
-          const clone = networkRes.clone();
-          caches.open("images").then((c) => c.put(event.request, clone));
-          return networkRes;
-        }),
-      ),
-    );
+// Compiler が変換した結果（イメージ）
+function Cart({ items }: { items: Item[] }) {
+  const $ = useMemoCache(2);
+  let total;
+  if ($[0] !== items) {
+    total = items.reduce((sum, i) => sum + i.price, 0);
+    $[0] = items;
+    $[1] = total;
+  } else {
+    total = $[1];
   }
-});
+  return <p>合計: {total}</p>;
+}
 ```
 
-#### NetworkFirst の例
+実際の出力は人間が読まなくて良い形式ですが、要は **手動の useMemo を全部書いた状態** に近づけてくれます。
 
-```js
-self.addEventListener("fetch", (event) => {
-  if (event.request.url.includes("/api/")) {
-    event.respondWith(
-      fetch(event.request)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open("api").then((c) => c.put(event.request, clone));
-          return res;
-        })
-        .catch(() => caches.match(event.request)),
-    );
-  }
-});
+### 1.0 安定版（2025 年 10 月）
+
+[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、**プロダクション ready** 扱い。
+
+主な仕様:
+
+- React 17 / 18 / 19 と互換（19 推奨）
+- TypeScript 完全対応
+- Next.js / Remix / Expo / Vite すべてでサポート
+- ビルド時間は **やや増える**（軽量化が継続中）
+
+### Next.js 16 で有効化
+
+[Next.js 16](https://nextjs.org/blog/next-16)（2025 年 10 月）以降、React Compiler は **stable** な設定オプションになりました（experimental から昇格）。
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactCompiler: true,
+};
+
+export default nextConfig;
 ```
 
-### Workbox
+これだけで OK。デフォルトでは ON ではないので、**明示的に有効化** します。
 
-Google が出している **キャッシュ戦略のヘルパー** ライブラリ。生で書くと冗長な処理を **数行で** 表現できます。
+#### 細かい設定
 
-```js
-// sw.js
-import { precacheAndRoute } from "workbox-precaching";
-import { registerRoute } from "workbox-routing";
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from "workbox-strategies";
-import { ExpirationPlugin } from "workbox-expiration";
-
-precacheAndRoute(self.__WB_MANIFEST);
-
-registerRoute(
-  ({ request }) => request.destination === "image",
-  new CacheFirst({
-    cacheName: "images",
-    plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 3600 })],
-  }),
-);
-
-registerRoute(
-  ({ url }) => url.pathname.startsWith("/api/"),
-  new NetworkFirst({ cacheName: "api", networkTimeoutSeconds: 3 }),
-);
-
-registerRoute(
-  ({ request }) => request.destination === "script" || request.destination === "style",
-  new StaleWhileRevalidate({ cacheName: "assets" }),
-);
+```ts
+const nextConfig: NextConfig = {
+  reactCompiler: {
+    compilationMode: "annotation",  // "all" | "annotation" | "infer"
+  },
+};
 ```
 
-### Vite / Next.js での導入
+| `compilationMode` | 説明 |
+|---|---|
+| `"all"`（デフォルト） | すべてのコンポーネントを変換 |
+| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ |
+| `"infer"` | use の前提を満たす関数のみ |
 
-#### Vite + `vite-plugin-pwa`
+「徐々に試したい」場合は `"annotation"` から始めて、確認後に `"all"` に切り替えるのが安全。
+
+### Vite で有効化
 
 ```bash
-npm install -D vite-plugin-pwa
+npm install -D babel-plugin-react-compiler
 ```
 
 ```ts
 // vite.config.ts
-import { VitePWA } from "vite-plugin-pwa";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+const ReactCompilerConfig = {};
 
 export default defineConfig({
   plugins: [
-    VitePWA({
-      registerType: "autoUpdate",
-      manifest: {
-        name: "My App",
-        short_name: "App",
-        start_url: "/",
-        display: "standalone",
-        theme_color: "#1e40af",
-        icons: [
-          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+    react({
+      babel: {
+        plugins: [
+          ["babel-plugin-react-compiler", ReactCompilerConfig],
         ],
       },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-      },
     }),
   ],
 });
 ```
 
-#### Next.js + `@ducanh2912/next-pwa` / `serwist`
+### 「メモ化が要らなくなる」とは
 
-Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
+#### Before
 
-```bash
-npm install @serwist/next serwist
-```
-
-`next.config.ts`:
-
-```ts
-import withSerwistInit from "@serwist/next";
-
-const withSerwist = withSerwistInit({
-  swSrc: "src/sw.ts",
-  swDest: "public/sw.js",
-});
-
-export default withSerwist({});
-```
-
-`src/sw.ts`:
-
-```ts
-import { defaultCache } from "@serwist/next/worker";
-import { Serwist } from "serwist";
-
-declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
-
-new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
-  clientsClaim: true,
-  navigationPreload: true,
-  runtimeCaching: defaultCache,
-}).addEventListeners();
-```
-
-### オフライン対応
-
-最小例: ネットが切れた時に「オフライン画面」を出す。
-
-```js
-const OFFLINE_URL = "/offline.html";
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open("v1").then((c) => c.add(OFFLINE_URL)),
+```tsx
+function ProductList({ products, query }: Props) {
+  const filtered = useMemo(
+    () => products.filter((p) => p.name.includes(query)),
+    [products, query],
   );
-});
 
-self.addEventListener("fetch", (event) => {
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
-    );
-  }
-});
-```
-
-`/offline.html` は静的に **「オフラインです」** と書かれた HTML を置きます。
-
-### Web Push 通知
-
-ブラウザを閉じている時でも **プッシュ通知** が届く仕組み。
-
-#### 仕組み
-
-1. **クライアント** が **VAPID 鍵** を使って通知を購読
-2. ブラウザが **Push Service**（Apple / Google / Mozilla）に **endpoint** を発行
-3. クライアントが **endpoint をサーバーに送る**
-4. サーバーが **endpoint に POST**（VAPID 秘密鍵で署名）
-5. Push Service が **ブラウザに配信**
-6. Service Worker の `push` イベントが発火 → `showNotification`
-
-#### クライアント側の最小例
-
-```js
-// 通知の許可
-const permission = await Notification.requestPermission();
-if (permission !== "granted") return;
-
-const reg = await navigator.serviceWorker.ready;
-const subscription = await reg.pushManager.subscribe({
-  userVisibleOnly: true,
-  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
-});
-
-// サーバーに endpoint を保存
-await fetch("/api/push/subscribe", {
-  method: "POST",
-  body: JSON.stringify(subscription),
-  headers: { "Content-Type": "application/json" },
-});
-```
-
-#### Service Worker 側
-
-```js
-self.addEventListener("push", (event) => {
-  const data = event.data?.json() ?? {};
-  event.waitUntil(
-    self.registration.showNotification(data.title ?? "通知", {
-      body: data.body ?? "",
-      icon: "/icon-192.png",
-      badge: "/badge.png",
-      data: { url: data.url ?? "/" },
-    }),
+  const handleClick = useCallback(
+    (id: string) => navigate(`/product/${id}`),
+    [navigate],
   );
-});
 
-self.addEventListener("notificationclick", (event) => {
-  event.notification.close();
-  event.waitUntil(self.clients.openWindow(event.notification.data.url));
-});
+  return (
+    <ul>
+      {filtered.map((p) => (
+        <ProductCard key={p.id} product={p} onClick={handleClick} />
+      ))}
+    </ul>
+  );
+}
+
+const ProductCard = React.memo(({ product, onClick }: CardProps) => (
+  <li onClick={() => onClick(product.id)}>{product.name}</li>
+));
 ```
 
-#### サーバー側
+#### After（Compiler 有効）
 
-`web-push` パッケージで送信:
+```tsx
+function ProductList({ products, query }: Props) {
+  const filtered = products.filter((p) => p.name.includes(query));
+  const handleClick = (id: string) => navigate(`/product/${id}`);
 
-```ts
-import webpush from "web-push";
+  return (
+    <ul>
+      {filtered.map((p) => (
+        <ProductCard key={p.id} product={p} onClick={handleClick} />
+      ))}
+    </ul>
+  );
+}
 
-webpush.setVapidDetails(
-  "mailto:admin@example.com",
-  VAPID_PUBLIC_KEY,
-  VAPID_PRIVATE_KEY,
-);
-
-await webpush.sendNotification(subscription, JSON.stringify({
-  title: "新しい通知",
-  body: "メッセージが届きました",
-  url: "/inbox",
-}));
-```
-
-#### iOS Safari の状況
-
-iOS 16.4+ では **PWA をホーム画面に追加した時のみ** Push 通知が動くようになりました。要件:
-
-- ホーム画面に **インストール済み**
-- HTTPS
-- ユーザーの明示的な購読
-
-通常の Safari ブラウザではまだ Push が動かないので注意。
-
-### Background Sync
-
-「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組み。
-
-```js
-self.addEventListener("sync", (event) => {
-  if (event.tag === "send-message") {
-    event.waitUntil(sendQueuedMessages());
-  }
-});
-```
-
-クライアント側:
-
-```js
-const reg = await navigator.serviceWorker.ready;
-await reg.sync.register("send-message");
-```
-
-`Periodic Background Sync` は **定期的にバックグラウンドで実行** する仕組み（権限の関係で制限あり）。
-
-### `manifest.webmanifest` の詳細
-
-```json
-{
-  "name": "My PWA App",
-  "short_name": "PWA",
-  "description": "サンプル PWA アプリ",
-  "start_url": "/",
-  "display": "standalone",
-  "orientation": "portrait",
-  "theme_color": "#1e40af",
-  "background_color": "#ffffff",
-  "lang": "ja",
-  "scope": "/",
-  "categories": ["productivity"],
-  "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ],
-  "screenshots": [
-    { "src": "/screenshot1.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow" }
-  ],
-  "shortcuts": [
-    { "name": "新規作成", "url": "/new", "icons": [{ "src": "/new.png", "sizes": "96x96" }] }
-  ]
+function ProductCard({ product, onClick }: CardProps) {
+  return <li onClick={() => onClick(product.id)}>{product.name}</li>;
 }
 ```
 
-| フィールド | 役割 |
-|---|---|
-| `display: standalone` | ブラウザ UI を消してアプリ風に |
-| `theme_color` | 上部バーの色 |
-| `background_color` | スプラッシュ画面の背景 |
-| `icons` | ホーム画面のアイコン |
-| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
-| `screenshots` | インストール画面（form_factor で広 / 狭を区別） |
-| `shortcuts` | アプリ長押しでのクイックメニュー |
+「**普通に書いた JSX** が、コンパイル後は **十分にメモ化された** コードに変換される」のが Compiler の価値。
 
-### よくある罠
+### 何が変わるか / 変わらないか
 
-- **HTTPS でないと動かない**（localhost 以外）
-- **Service Worker は更新が反映されない問題**（古い SW がキャッシュを返し続ける）→ `skipWaiting()` + `clientsClaim()` を使う / **更新確認 UI** を入れる
-- **キャッシュが暴走** → `ExpirationPlugin` で件数 / 期間を制限
-- **ローカルテストで Notification 権限が出ない** → ブラウザ設定でリセット
-- **iOS で通知が来ない** → ホーム画面追加が必要
+#### 変わるもの
 
-### 確認ツール
+- **`useMemo` / `useCallback` の手動記述が不要** に
+- **`React.memo` で囲う必要がない**（依存があれば自動でメモ化される）
+- 依存配列の書き間違いミスが消える
 
-- Chrome DevTools → **Application** タブ
-  - **Manifest**: マニフェストの内容
-  - **Service Workers**: 登録状態 / 更新ボタン
-  - **Cache Storage**: キャッシュの中身
-  - **Storage**: クォータと使用量
-- **Lighthouse** → PWA カテゴリ（インストール可能性 / オフライン動作のチェック）
-- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
+#### 変わらないもの
+
+- `useEffect` / `useState` / `useRef` などの Hook は **そのまま** 使う
+- **データ取得** や **副作用** の責務は変わらない
+- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題
+
+### Rules of React
+
+Compiler が動くには **コードが React のルールに従っている** ことが前提です。
+
+#### Components / Hooks は **純粋**
+
+- レンダリング中に副作用を起こさない（DOM 直接操作 / API 呼び出し / setState）
+- 同じ入力からは同じ出力を返す（**ピュア**）
+
+```tsx
+// NG: レンダリング中に外部状態を変更
+function Bad() {
+  globalCounter++;        // 副作用
+  return <p>{globalCounter}</p>;
+}
+
+// OK: 副作用は useEffect 内で
+function Good() {
+  useEffect(() => { globalCounter++; }, []);
+  return <p>{globalCounter}</p>;
+}
+```
+
+#### イベントハンドラは外部状態を変えても OK
+
+```tsx
+function Counter() {
+  const [n, setN] = useState(0);
+  return <button onClick={() => setN(n + 1)}>{n}</button>;
+}
+```
+
+イベントハンドラはレンダリング中ではないので **副作用 OK**。Compiler はこれを区別します。
+
+#### `eslint-plugin-react-compiler` で違反を検出
+
+```bash
+npm install -D eslint-plugin-react-compiler
+```
+
+```js
+// eslint.config.js
+import reactCompiler from "eslint-plugin-react-compiler";
+
+export default [
+  {
+    plugins: { "react-compiler": reactCompiler },
+    rules: {
+      "react-compiler/react-compiler": "error",
+    },
+  },
+];
+```
+
+このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint で **コードを浄化** するのが安全。
+
+### 「Compile されない」コードへの対処
+
+Compiler が「危険」と判断したコンポーネントは **そのまま** にします（壊れない）。
+
+警告メッセージ:
+
+```
+[ReactCompiler] Function `MyComponent` could not be compiled.
+Reason: Mutation of value passed as argument
+```
+
+対応:
+
+1. ESLint の指摘を素直に直す（**ピュア化**）
+2. 直せない事情があれば **`"use no memo"`** ディレクティブで対象外に
+3. **`"use memo"`** で「変換して欲しい」と明示
+
+```tsx
+"use no memo";
+
+function LegacyComponent() {
+  // Compiler 対象外
+}
+```
+
+### 既存プロジェクトに導入する流れ
+
+1. **`eslint-plugin-react-compiler` を入れて警告を見る**
+2. 警告を直せる範囲で直す
+3. **`compilationMode: "annotation"`** で **限定的に試す**
+4. 動作確認 → 問題なければ **`"all"`** に切り替え
+5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
+
+「全部一気に」ではなく **段階導入** が事故を減らします。
+
+### パフォーマンス効果は？
+
+[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などで:
+
+- **手動メモ化が完璧でないコードベース** には大きな改善
+- **既に十分メモ化済みのコード** にはほぼ同等
+- **小規模アプリ** には変化なし
+
+「**すべての React アプリが速くなる魔法** ではない」けれど、コードの **保守性** は確実に上がります。
+
+### `useMemo` を残すべき場面
+
+- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替え。Compiler が判断しても明示する方が読みやすい
+- **deep compare** が必要な場合: lodash の `isEqual` で比較したい時など
+- **API 互換**: 公開ライブラリ（コンパイラ前提に強制できない）
+
+### React 19 / Next.js 16 / React Compiler の関係
+
+整理すると:
+
+- **React 19**: Hooks 中心の API（`useEffectEvent` / `cacheSignal` / `<Activity />`）
+- **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
+- **Next.js 16**: Turbopack 標準、Cache Components、`reactCompiler` 設定が stable
+
+3 つは **独立に進化** していて、組み合わせは選択可能。
+
+### よくある誤解
+
+- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけ。本質的なボトルネックは別
+- 「**全 useMemo を消すべき**」→ Compiler 任せでも動くが、**読みやすさのために残す** のはアリ
+- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要
 
 ## 演習
 
 ### ゴール
 
-- Vite プロジェクトに `vite-plugin-pwa` を入れて PWA 化
-- 自前の Service Worker を書いて **オフライン fallback** を実装
-- ホーム画面追加 / Lighthouse の PWA 診断を通す
+- Next.js 16 で React Compiler を有効化する
+- `useMemo` / `useCallback` を消しても動くことを確認
+- ESLint プラグインで違反を検出する
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest pwa-sample -- --template react-ts
-cd pwa-sample
-npm install
-npm install -D vite-plugin-pwa
+npx create-next-app@latest compiler-sample --ts --app
+cd compiler-sample
 ```
 
-### 手順 2: vite.config.ts
+### 手順 2: React Compiler を有効化
+
+`next.config.ts`:
 
 ```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { VitePWA } from "vite-plugin-pwa";
+import type { NextConfig } from "next";
 
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: "autoUpdate",
-      manifest: {
-        name: "PWA Sample",
-        short_name: "PWA",
-        start_url: "/",
-        display: "standalone",
-        theme_color: "#1e40af",
-        background_color: "#ffffff",
-        icons: [
-          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
-        ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png}"],
-        navigateFallback: "/offline.html",
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "google-fonts-stylesheets" },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-webfonts",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-        ],
-      },
-    }),
-  ],
-});
+const nextConfig: NextConfig = {
+  reactCompiler: true,
+};
+
+export default nextConfig;
 ```
 
-### 手順 3: オフラインページ
-
-`public/offline.html`:
-
-```html
-<!doctype html>
-<html lang="ja">
-  <head><meta charset="UTF-8"><title>オフライン</title></head>
-  <body>
-    <h1>オフラインです</h1>
-    <p>ネットワークに接続してください</p>
-  </body>
-</html>
-```
-
-`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
-
-### 手順 4: ビルドとプレビュー
+### 手順 3: ESLint プラグインを導入
 
 ```bash
-npm run build
-npm run preview
+npm install -D eslint-plugin-react-compiler
 ```
 
-`http://localhost:4173` で開いて DevTools の Application タブを確認。
+`eslint.config.mjs`（Next.js 16 デフォルト）に追加:
 
-1. **Service Workers**: SW が登録されている
-2. **Manifest**: フィールドが反映されている
-3. ネットを **Offline** に切り替えて再読込 → `offline.html` が表示される
+```js
+import reactCompiler from "eslint-plugin-react-compiler";
 
-### 手順 5: Lighthouse で PWA 診断
+const config = [
+  // ...既存
+  {
+    plugins: { "react-compiler": reactCompiler },
+    rules: { "react-compiler/react-compiler": "error" },
+  },
+];
 
-DevTools → Lighthouse → PWA カテゴリで実行。**インストール可能性** が緑になっていることを確認。
+export default config;
+```
+
+### 手順 4: メモ化なしのコンポーネント
+
+`app/page.tsx`:
+
+```tsx
+"use client";
+import { useState } from "react";
+
+export default function Page() {
+  const [items, setItems] = useState([1, 2, 3, 4, 5]);
+  const [filter, setFilter] = useState("");
+
+  // useMemo を書かない
+  const filtered = items.filter((n) => String(n).includes(filter));
+
+  return (
+    <main style={{ padding: 24 }}>
+      <input value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <ul>
+        {filtered.map((n) => (
+          <li key={n}>{n}</li>
+        ))}
+      </ul>
+      <button onClick={() => setItems((x) => [...x, x.length + 1])}>追加</button>
+    </main>
+  );
+}
+```
+
+`npm run dev` で動作。filter 入力 / 追加ボタンが快適に動くことを確認。
+
+### 手順 5: わざとルール違反
+
+```tsx
+let counter = 0;
+
+export default function BadCounter() {
+  counter++;  // レンダリング中の副作用
+  return <p>{counter}</p>;
+}
+```
+
+ESLint がエラーを出します。**修正方法**: state に置き換える / `useEffect` に移す。
+
+### 手順 6: 段階導入を試す
+
+`next.config.ts`:
+
+```ts
+const nextConfig: NextConfig = {
+  reactCompiler: { compilationMode: "annotation" },
+};
+```
+
+このモードで `"use memo"` を書いたコンポーネントだけ変換されます:
+
+```tsx
+"use memo";
+
+export default function CompiledComponent() { /* ... */ }
+```
 
 ### 期待出力
 
-- アドレスバーに **インストールアイコン** が出る
-- ホーム画面 / アプリ一覧から起動可能
-- オフラインで `/offline.html` が表示される
-- Lighthouse の PWA カテゴリが緑
+- React Compiler が有効化されたメッセージがビルド時に出る
+- ESLint プラグインがルール違反を **エラー / warning** で出す
+- 動作は手動メモ化版と同じか **わずかに速い**
 
 ### 変える
 
-- `runtimeCaching` で API URL を `NetworkFirst` でキャッシュ
-- `manifest.shortcuts` を追加して **長押しメニュー** を作る
-- `purpose: "maskable"` のアイコンを追加して、Android で円形にトリミングされる挙動を確認
+- 既存コード（lesson64 / lesson67 の React アプリなど）に Compiler を入れる
+- React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
+- 大量レンダリング（1000 行のリスト）で差を観察
 
 ### 自分で書く（任意）
 
-- `web-push` で Push 通知を送る最小サーバーを書く
-- iOS Safari で **ホーム画面追加 → 通知許可** の流れを試す
-- `IndexedDB` を使って、オフラインで作成したデータを再接続時に同期する
+- 既存プロジェクトで `useMemo` / `useCallback` を **すべて削除** して動作する範囲を試す
+- `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
+- ベンチマーク（lesson101 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 
 ## まとめ
 
-- **Service Worker** は **install / activate / fetch** のライフサイクルで動く
-- キャッシュ戦略は **CacheFirst / NetworkFirst / StaleWhileRevalidate / NetworkOnly / CacheOnly** から選ぶ
-- **Workbox** で戦略の記述が劇的に短くなる
-- Vite は `vite-plugin-pwa`、Next.js は `@serwist/next` が定番
-- **`navigateFallback`** で **オフラインページ** を出せる
-- **Web Push 通知** は VAPID 鍵 + Push Service の流れ。iOS は **インストール後限定**
-- **`manifest.webmanifest`** の `display` / `icons` / `shortcuts` でアプリ体験を整える
-- DevTools の Application タブと **Lighthouse PWA** で診断
-- 別のレッスンでは **IndexedDB** に進み、ブラウザでの本格的なデータ保存に進む
+- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラ
+- **2025 年 10 月に 1.0 安定版** がリリース、Meta 大規模で実戦投入済み
+- **Next.js 16** で `reactCompiler: true` の設定が stable に
+- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加
+- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提
+- **`eslint-plugin-react-compiler`** で違反を検出 → 直すか `"use no memo"` で対象外に
+- 段階導入は **`compilationMode: "annotation"`** から
+- 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
+- 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい
+- 別のレッスンでは **Server Components の設計** に進む

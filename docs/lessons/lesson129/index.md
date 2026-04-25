@@ -1,575 +1,427 @@
-# lesson129: Server Components の設計論
+# lesson129: Web Analytics（Vercel Analytics / GA4）
 
 ## ゴール
 
-- 「**どこまでサーバー、どこから Client**」の判断軸を持てる
-- データ取得とインタラクションの **分離** が説明できる
-- Server Actions と Client Component の **協調パターン** を書ける
-- よくある設計ミス（巨大 Client Component / 不要なシリアライズ）を避けられる
-- 5 章「Next.js」全体の **総合演習** として、自分の設計を整理できる
-
-::: tip 前提
-このレッスンは lesson73「Server Component と Client Component」、lesson74「Server Component でデータ取得」、lesson79「Server Actions の最小形」の発展編です。基本概念は先のレッスンで確認してください。
-:::
+- 「サイトを公開したら見るべき指標」が何かを理解する
+- Vercel Analytics と Speed Insights を Next.js に入れられる
+- Google Analytics 4（GA4）の最小設定とカスタムイベント送信が分かる
+- プライバシー（Cookie 同意 / ITP / iOS の制限）配慮の基本を押さえる
+- 解析結果から **何を改善するか** を判断する手順を持つ
 
 ## 解説
 
-### Server / Client の境界判断
+### 「サイトを公開したら見るべきもの」
 
-Next.js App Router では **すべてのコンポーネントがデフォルトで Server Component**。Client Component にしたい時に **`"use client"`** を明示します。
+公開後に最低限見たい指標は次の 3 軸です。
 
-判断の **基本原則**:
-
-1. **デフォルトは Server**（バンドルから外せて速い）
-2. **状態 / イベントが必要な葉だけ Client**（最小限）
-3. **Client は子に Client / Server を持てるが、Server を import するなら children prop 経由**
-
-### Client Component が必要な合図
-
-次のいずれかが要るなら Client Component:
-
-- `useState` / `useReducer` で **state を持つ**
-- `useEffect` で **副作用** を行う
-- `onClick` / `onChange` などの **イベントハンドラ**
-- `useRef` / `useContext` などの Hook
-- ブラウザ API（`window` / `localStorage` / `navigator`）
-
-それ以外は **Server Component に置いた方が良い**:
-
-- データ取得（DB / 外部 API）
-- マークダウンや HTML のレンダリング
-- 認証情報を使う処理（Cookie 読み取り）
-- フォントやレイアウト
-
-### 「Client Component が大きすぎる」アンチパターン
-
-**よくある失敗**: ページ全体を Client Component にしてしまう。
-
-```tsx
-// app/page.tsx
-"use client";  // 危険信号
-
-export default function HomePage() {
-  // すべての処理がブラウザに送られる
-  return (
-    <div>
-      <Header />
-      <Hero />
-      <FeatureList />     {/* 静的でも Client */}
-      <Counter />          {/* これだけ state が必要 */}
-      <Footer />
-    </div>
-  );
-}
-```
-
-**バンドルサイズが膨らむ**、**SEO に悪い**、**ハイドレーション** が遅い。
-
-### 改善: Client は **葉に閉じ込める**
-
-```tsx
-// app/page.tsx（Server Component）
-import Header from "@/components/Header";
-import Hero from "@/components/Hero";
-import FeatureList from "@/components/FeatureList";
-import Counter from "@/components/Counter";  // Client
-import Footer from "@/components/Footer";
-
-export default function HomePage() {
-  return (
-    <div>
-      <Header />
-      <Hero />
-      <FeatureList />
-      <Counter />
-      <Footer />
-    </div>
-  );
-}
-```
-
-```tsx
-// components/Counter.tsx
-"use client";
-import { useState } from "react";
-
-export default function Counter() {
-  const [n, setN] = useState(0);
-  return <button onClick={() => setN(n + 1)}>{n}</button>;
-}
-```
-
-**Counter だけ** がブラウザに送られ、他は Server で解決される。
-
-### Server Component から Client Component に **データを渡す**
-
-これは普通に **props で渡す** だけです。**渡せるのは serializable な値のみ**:
-
-| 渡せる | 渡せない |
+| 軸 | 例 |
 |---|---|
-| 文字列 / 数値 / boolean / null / undefined | 関数 |
-| 配列 / プレーンオブジェクト | クラスインスタンス |
-| Date / Map / Set | Symbol（一部例外） |
-| Promise（React 19 以降） | DOM ノード |
+| 来訪数 | PV（ページビュー）/ UU（ユニークユーザー）/ 流入元 |
+| 体験 | 表示速度（Core Web Vitals）/ エラー率（→ Sentry） |
+| 行動 | クリック / スクロール / フォーム送信 / コンバージョン |
 
-```tsx
-// Server Component
-export default async function Page() {
-  const user = await db.user.findFirst();
-  return <UserCard user={user} />; // user はプレーンオブジェクトなら OK
-}
+エラー率は Sentry のレッスンで扱いました。**残り 2 軸を埋めるのが Web Analytics** の役割です。
+
+### サービスの組み合わせ
+
+| ツール | カバーする軸 | 特徴 |
+|---|---|---|
+| **Vercel Analytics** | PV / 流入元 | Cookieless、Next.js 統合が秒で済む |
+| **Vercel Speed Insights** | Core Web Vitals | 実ユーザーの LCP / INP / CLS を集める |
+| **Google Analytics 4**（GA4） | PV / イベント / コンバージョン | 機能多 / 学習コスト高 / Cookie 必要 |
+| **Plausible / Fathom / Simple Analytics** | PV / 流入元 | プライバシー重視、料金固定 |
+| **PostHog / Mixpanel / Amplitude** | プロダクト分析（イベント深掘り） | 機能フラグ / セッション再生も統合 |
+
+「Vercel Analytics + Sentry」だけで小規模サイトは十分。**ユーザー行動の深掘り** が要るなら GA4 / PostHog などを追加します。
+
+### Vercel Analytics（Next.js）
+
+Vercel に Next.js をデプロイしているなら **管理画面で ON にして 1 行 import するだけ** で導入できます。
+
+```bash
+npm install @vercel/analytics
 ```
 
-### Client Component から Server Component を **使う**
-
-直接 import はできません。代わりに **`children` prop** で受け取ります。
+`app/layout.tsx`:
 
 ```tsx
-// app/layout.tsx（Server Component）
-import Sidebar from "@/components/Sidebar";          // Client
-import RecentPosts from "@/components/RecentPosts";  // Server
+import { Analytics } from "@vercel/analytics/next";
 
-export default function Layout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <Sidebar>           {/* Client */}
-      <RecentPosts />   {/* Sidebar は中身を知らずに描画 */}
-      {children}
-    </Sidebar>
+    <html lang="ja">
+      <body>
+        {children}
+        <Analytics />
+      </body>
+    </html>
   );
 }
 ```
 
-```tsx
-// components/Sidebar.tsx
-"use client";
+ポイント:
 
-export default function Sidebar({ children }: { children: React.ReactNode }) {
+- **Cookie を使わない** プライバシー設計（ファーストパーティ集計）
+- 個人情報を保存しない
+- ヨーロッパでも同意バナーなしで使える
+- Vercel ダッシュボードに **PV / 流入経路 / リファラー / 国別** が出る
+
+### Vercel Speed Insights
+
+実ユーザーの **Core Web Vitals**（lesson101）を集めるツールです。
+
+```bash
+npm install @vercel/speed-insights
+```
+
+```tsx
+import { SpeedInsights } from "@vercel/speed-insights/next";
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <aside>
-      <h2>サイドバー</h2>
-      {children}
-    </aside>
+    <html lang="ja">
+      <body>
+        {children}
+        <SpeedInsights />
+      </body>
+    </html>
   );
 }
 ```
 
-「Client Component の中身に Server Component を **slot で挿入する**」発想。Sidebar は中身がServer か Client かを知らず、ただ描画する。
+これで Lighthouse の合成指標ではなく **本物のユーザー体験** が記録されます。「LCP が悪化したのは○月○日のリリース後」のような診断ができる。
 
-### Server Actions との協調
+### Google Analytics 4（GA4）
 
-Server Actions（lesson79）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
+#### 設定の流れ
+
+1. [Google アナリティクス](https://analytics.google.com/) にログイン
+2. プロパティを作成（**GA4 を選ぶ**。**Universal Analytics は 2023 年に終了**しているので新規はもう作れない）
+3. **測定 ID**（`G-XXXXXXXXXX`）を取得
+
+#### Next.js に追加（最小）
 
 ```tsx
-// app/posts/page.tsx
-import { createPost } from "./actions";
+// app/layout.tsx
+import Script from "next/script";
 
-export default function NewPostPage() {
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  const gaId = process.env.NEXT_PUBLIC_GA_ID;
+
   return (
-    <form action={createPost}>
-      <input name="title" />
-      <textarea name="body" />
-      <button>投稿</button>
-    </form>
+    <html lang="ja">
+      <head>
+        {gaId && (
+          <>
+            <Script
+              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
+              strategy="afterInteractive"
+            />
+            <Script id="ga4-init" strategy="afterInteractive">
+              {`
+                window.dataLayer = window.dataLayer || [];
+                function gtag(){dataLayer.push(arguments);}
+                gtag('js', new Date());
+                gtag('config', '${gaId}');
+              `}
+            </Script>
+          </>
+        )}
+      </head>
+      <body>{children}</body>
+    </html>
   );
 }
 ```
+
+`.env`:
+
+```
+NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+```
+
+#### カスタムイベントを送る
+
+GA4 は **イベントベース**。「ページが読まれた」も `page_view` イベントです。任意のイベントを送れます。
 
 ```ts
-// app/posts/actions.ts
-"use server";
-import { revalidatePath } from "next/cache";
-
-export async function createPost(formData: FormData) {
-  const title = formData.get("title") as string;
-  const body = formData.get("body") as string;
-  await db.post.create({ data: { title, body } });
-  revalidatePath("/posts");
-}
-```
-
-#### Client Component から呼ぶ
-
-```tsx
-"use client";
-import { useTransition } from "react";
-import { createPost } from "./actions";
-
-export default function NewPostForm() {
-  const [pending, startTransition] = useTransition();
-
-  return (
-    <form
-      action={(formData) => {
-        startTransition(async () => {
-          await createPost(formData);
-        });
-      }}
-    >
-      <input name="title" disabled={pending} />
-      <button disabled={pending}>{pending ? "送信中..." : "投稿"}</button>
-    </form>
-  );
-}
-```
-
-`useTransition` で **送信中** の UI を切り替え。Server Component に **戻り値** を返すこともできます。
-
-### `useActionState`（旧 `useFormState`）
-
-React 19 / Next.js 16 では `useActionState` で **action の結果を state として** 受け取れます。
-
-```tsx
-"use client";
-import { useActionState } from "react";
-import { createPost } from "./actions";
-
-const initialState = { ok: false, error: "" };
-
-export default function NewPostForm() {
-  const [state, formAction, pending] = useActionState(createPost, initialState);
-
-  return (
-    <form action={formAction}>
-      <input name="title" />
-      <button disabled={pending}>投稿</button>
-      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
-      {state.ok && <p>投稿しました</p>}
-    </form>
-  );
-}
-```
-
-```ts
-"use server";
-export async function createPost(prev: any, formData: FormData) {
-  try {
-    await db.post.create({ data: {/* ... */} });
-    return { ok: true, error: "" };
-  } catch (e) {
-    return { ok: false, error: "保存失敗" };
+declare global {
+  interface Window {
+    gtag?: (
+      command: "event",
+      action: string,
+      params?: Record<string, unknown>,
+    ) => void;
   }
 }
+
+function trackEvent(name: string, params?: Record<string, unknown>) {
+  if (typeof window !== "undefined" && window.gtag) {
+    window.gtag("event", name, params);
+  }
+}
+
+// 使う側
+trackEvent("signup_completed", { method: "email" });
+trackEvent("add_to_cart", { item_id: "ABC", value: 1200, currency: "JPY" });
 ```
 
-「Server Action から **エラーメッセージを返す**」が型安全に書けます。
+GA4 の管理画面で **「主要イベント（旧コンバージョン）」** にチェックを入れると、その回数が KPI として追えるようになります。
 
-### よくある設計ミス
+#### App Router の SPA 遷移を補足する
 
-#### 1. データを Server Component で取って **JSON に詰めて Client Component に丸投げ**
+App Router は Server Components で初回はネイティブ遷移ですが、`next/link` で **クライアント遷移** すると `page_view` が自動では飛びません。`usePathname` の変化で送ります。
 
 ```tsx
-// NG パターン
-export default async function Page() {
-  const posts = await db.post.findMany();  // Server で取得
-  return <PostListClient posts={posts} />; // 全部 Client にバンドル
+"use client";
+import { useEffect } from "react";
+import { usePathname, useSearchParams } from "next/navigation";
+
+export function GAPageView({ gaId }: { gaId: string }) {
+  const pathname = usePathname();
+  const search = useSearchParams();
+
+  useEffect(() => {
+    if (!window.gtag) return;
+    const url = pathname + (search?.toString() ? `?${search}` : "");
+    window.gtag("event", "page_view", {
+      page_path: url,
+      send_to: gaId,
+    });
+  }, [pathname, search, gaId]);
+
+  return null;
 }
 ```
 
-→ 結局すべて JS にシリアライズされて送られる。**せっかくの Server Component の意味が薄れる**。
+`<GAPageView gaId={gaId} />` を `app/layout.tsx` に置くだけ。
 
-改善: **表示は Server で**、操作だけ Client に切り出す。
+### プライバシー（重要）
+
+#### GDPR / Cookie 同意
+
+**ヨーロッパ** からアクセスがある場合、Cookie を使う Analytics は **同意バナー** が必要です。日本の個人情報保護法も「クッキー類による行動データの第三者提供」に同意取得を要求するケースが増えています。
+
+実装の選択肢:
+
+- **Cookieless な Vercel Analytics / Plausible / Fathom** に切り替える
+- GA4 を使うなら **同意管理プラットフォーム**（CMP） を入れる：CookieYes、Cookiebot、Osano、Iubenda
+- GA4 の **Consent Mode v2** を使うと、同意がない場合でも「集計値だけ」を匿名で送れる
+
+#### ITP（Intelligent Tracking Prevention）
+
+Safari の ITP は **3rd-party cookie を実質ブロック**、1st-party cookie も **7 日で失効** させます。Chrome の 3rd-party cookie 廃止は 2025 年に改めて延期されましたが、長期的には **「3rd-party cookie に依存しない設計」** が必要です。
+
+#### 個人情報を送らない
+
+URL に `?email=xxx@example.com` のようなクエリが入った場合、それが **そのまま Analytics に送られる** 事故が起きます。**送信前にサニタイズ** する習慣を。
+
+```ts
+function trackPageView(path: string) {
+  // メールアドレスっぽい文字列を匿名化
+  const safe = path.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]");
+  window.gtag?.("event", "page_view", { page_path: safe });
+}
+```
+
+### 解析結果の読み方
+
+#### PV だけ見ない
+
+PV が増えても **すぐ離脱** していたら意味がありません。次の指標を組み合わせて見ます。
+
+- **エンゲージメント時間**: 1 セッションあたりの滞在
+- **直帰率**（Bounce Rate）: 1 ページだけ見て離脱した割合
+- **コンバージョン率**: 目的のアクション（購入 / 登録）に至った割合
+
+#### 集約より分解
+
+「全体の PV」より「**流入元別の PV**」「**国別の PV**」を見ると、何を改善するかが見えやすいです。「Twitter からの流入は直帰率が高い」「日本以外は読まれていない」など。
+
+#### Speed Insights は「**75 パーセンタイル**」を見る
+
+平均値ではなく **75th percentile** が指標になります。「**75% のユーザーがこの値より良い体験**」という意味。Core Web Vitals の合格基準も 75th percentile で判定されます。
+
+### 自分の Vercel デプロイ以外（Vite SPA など）
+
+Vercel Analytics は **Vercel 以外でも動く** ようになりました。`@vercel/analytics/react` をインポートするだけ。
 
 ```tsx
-// 改善
-export default async function Page() {
-  const posts = await db.post.findMany();
+import { Analytics } from "@vercel/analytics/react";
+
+createRoot(document.getElementById("root")!).render(
+  <>
+    <App />
+    <Analytics />
+  </>,
+);
+```
+
+GA4 / Plausible / PostHog などはホスティング先を問わず動きます。
+
+### 最低限の Cookie 同意ダイアログ（参考）
+
+外部 CMP を使わず、**同意があるまで GA4 を読み込まない** 簡易実装。
+
+```tsx
+"use client";
+import { useState, useEffect } from "react";
+import Script from "next/script";
+
+export function ConsentBanner({ gaId }: { gaId: string }) {
+  const [accepted, setAccepted] = useState(false);
+
+  useEffect(() => {
+    setAccepted(localStorage.getItem("ga-consent") === "yes");
+  }, []);
+
+  const accept = () => {
+    localStorage.setItem("ga-consent", "yes");
+    setAccepted(true);
+  };
+
   return (
-    <ul>
-      {posts.map((p) => (
-        <li key={p.id}>
-          <h2>{p.title}</h2>
-          <p>{p.body}</p>
-          <DeleteButton postId={p.id} />  {/* Client は削除ボタンだけ */}
-        </li>
-      ))}
-    </ul>
+    <>
+      {accepted && (
+        <>
+          <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
+          <Script id="ga4">
+            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaId}');`}
+          </Script>
+        </>
+      )}
+      {!accepted && (
+        <div role="dialog" aria-label="Cookie 同意">
+          <p>このサイトは GA4 で利用状況を計測しています。</p>
+          <button onClick={accept}>同意する</button>
+        </div>
+      )}
+    </>
   );
 }
 ```
 
-#### 2. Server Component の中で Client Component を再描画させたい
-
-Server Component の **再実行はナビゲーション / 再検証** がトリガー。「state が変わったので再取得」したい時は:
-
-- **Server Action + `revalidatePath()`**（推薦）
-- **Client 側で fetch**（やむを得ない時）
-
-```ts
-"use server";
-export async function deletePost(id: string) {
-  await db.post.delete({ where: { id } });
-  revalidatePath("/posts");  // Server Component を再実行
-}
-```
-
-#### 3. Server / Client を混ぜてシリアライズ不能なものを渡す
-
-```tsx
-// NG: 関数を渡す
-<ClientComponent onClick={() => doSomething()} />
-```
-
-→ Server Component から関数は **渡せない**。`onClick` を持つロジックは **Client Component の中** で完結させる。
-
-#### 4. `"use client"` の場所を間違える
-
-```tsx
-// app/page.tsx（Server Component）
-"use client";   // ファイルの先頭でないと無効
-```
-
-`"use client"` は **ファイルの先頭** に書く必要があります。途中に書いても効きません。
-
-### `server-only` と `client-only`
-
-「**意図しない場所で import される事故**」を防ぐ仕組み。
-
-```ts
-// db.ts
-import "server-only";
-
-export const db = /* DB クライアント */;
-```
-
-これを誤って Client Component から import するとビルド時にエラー。**シークレットの漏洩防止** に有効（lesson119）。
-
-```ts
-// browser-utils.ts
-import "client-only";
-
-export function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
-}
-```
-
-逆も同様。
-
-### Suspense と Loading
-
-データ取得中の UI を **Suspense + Loading UI** で書きます（lesson68 / lesson87 と関連）。
-
-```tsx
-// app/posts/page.tsx
-import { Suspense } from "react";
-import PostList from "./PostList";
-import PostListSkeleton from "./PostListSkeleton";
-
-export default function Page() {
-  return (
-    <Suspense fallback={<PostListSkeleton />}>
-      <PostList />
-    </Suspense>
-  );
-}
-```
-
-`PostList` が `await` を含む Server Component なら、待ち時間に **Skeleton が表示** される。**ストリーミング SSR** で各部分が **独立に到着** します。
-
-### `cache()` / `cacheSignal()`
-
-Next.js 16 / React 19.2 では **同一リクエスト内** のデータをメモ化する `cache()` / `cacheSignal()` が安定化。
-
-```ts
-import { cache } from "react";
-
-export const getUser = cache(async (id: string) => {
-  return db.user.findUnique({ where: { id } });
-});
-```
-
-複数の Server Component が `getUser("1")` を呼んでも **DB は 1 回しかヒット** しない。リクエストスコープのメモ化。
-
-### 「全体構造」のテンプレート
-
-経験則で次のように分割します:
-
-```
-app/
-├── layout.tsx                    ← Server（フォント / Provider 設置）
-├── page.tsx                       ← Server
-├── components/
-│   ├── Header.tsx                 ← Server
-│   ├── ThemeToggle.tsx            ← Client（state 必要）
-│   ├── PostList.tsx               ← Server（DB 取得）
-│   ├── PostCard.tsx               ← Server（表示のみ）
-│   ├── DeleteButton.tsx           ← Client（onClick → Action）
-│   └── CommentForm.tsx            ← Client（form + useActionState）
-├── posts/
-│   ├── actions.ts                 ← Server Actions
-│   └── [id]/page.tsx              ← Server
-└── api/
-    └── webhook/route.ts           ← Route Handler
-```
-
-### よくある質問
-
-#### Q: 全部 Client にしてもいいか？
-
-→ **動くけど遅い**。バンドルが膨らみ、ハイドレーションも遅い。最低限「データ取得は Server」を守る。
-
-#### Q: 古い React パターン（Pages Router / `getServerSideProps`）から移行するには？
-
-→ Pages Router の `getServerSideProps` は App Router の **Server Component** に置き換わる。**そのまま Server で `await fetch()`** を書けば良い。
-
-#### Q: Edge Runtime と Node.js Runtime の違いは？
-
-→ **Edge** は軽量・高速だが API 制限あり、**Node.js**（デフォルト）は何でも動く。Next.js 16 から **Node.js デフォルト** に戻りました。
+実運用では地域判定 / 拒否時の挙動 / 設定リンクなど追加要件があるので、**プロダクションでは CMP を使う** のが現実的。
 
 ## 演習
 
 ### ゴール
 
-- 「ブログ記事一覧 + 投稿フォーム + 削除」を Server / Client の境界を意識して設計する
-- 既存の Client Component を **Server に格上げ** する練習
+- Next.js プロジェクトに **Vercel Analytics + Speed Insights** を入れる
+- GA4 のカスタムイベントを 1 つ送れるようにする
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 新規 Next.js プロジェクト
 
 ```bash
-npx create-next-app@latest rsc-design --ts --app
-cd rsc-design
+npx create-next-app@latest analytics-sample --ts --app
+cd analytics-sample
 ```
 
-### 手順 2: Server Component で一覧
+質問にはデフォルトで答えます（Tailwind: yes / src directory: no / App Router: yes）。
+
+### 手順 2: Vercel Analytics と Speed Insights
+
+```bash
+npm install @vercel/analytics @vercel/speed-insights
+```
+
+`app/layout.tsx`:
+
+```tsx
+import type { Metadata } from "next";
+import { Analytics } from "@vercel/analytics/next";
+import { SpeedInsights } from "@vercel/speed-insights/next";
+import "./globals.css";
+
+export const metadata: Metadata = {
+  title: "Analytics Sample",
+  description: "Vercel Analytics と GA4 のテスト",
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html lang="ja">
+      <body>
+        {children}
+        <Analytics />
+        <SpeedInsights />
+      </body>
+    </html>
+  );
+}
+```
+
+### 手順 3: GA4 を追加
+
+`.env.local`:
+
+```
+NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+```
+
+`app/layout.tsx` に Script を追加（前述の最小例の通り）。
+
+### 手順 4: カスタムイベントを送るボタン
 
 `app/page.tsx`:
 
 ```tsx
-import DeleteButton from "./DeleteButton";
-import { posts } from "@/data/posts";
+"use client";
 
-export default async function Home() {
+declare global {
+  interface Window {
+    gtag?: (cmd: "event", name: string, params?: Record<string, unknown>) => void;
+  }
+}
+
+export default function Home() {
+  const handleClick = () => {
+    window.gtag?.("event", "demo_click", { label: "hero-cta", value: 1 });
+    alert("送信しました（DevTools の Network で確認）");
+  };
+
   return (
     <main style={{ padding: 24 }}>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.map((p) => (
-          <li key={p.id}>
-            <h2>{p.title}</h2>
-            <p>{p.body}</p>
-            <DeleteButton id={p.id} />
-          </li>
-        ))}
-      </ul>
+      <h1>Analytics 演習</h1>
+      <button onClick={handleClick}>イベントを送信</button>
     </main>
   );
 }
 ```
 
-`data/posts.ts`（仮データ）:
+### 手順 5: 確認
 
-```ts
-export const posts = [
-  { id: "1", title: "Hello", body: "本文 1" },
-  { id: "2", title: "World", body: "本文 2" },
-];
+```bash
+npm run dev
 ```
 
-### 手順 3: Server Action と Client Component
-
-`app/actions.ts`:
-
-```ts
-"use server";
-import { revalidatePath } from "next/cache";
-
-export async function deletePost(id: string) {
-  // 実際には DB から削除
-  console.log("Deleting:", id);
-  revalidatePath("/");
-}
-```
-
-`app/DeleteButton.tsx`:
-
-```tsx
-"use client";
-import { useTransition } from "react";
-import { deletePost } from "./actions";
-
-export default function DeleteButton({ id }: { id: string }) {
-  const [pending, startTransition] = useTransition();
-  return (
-    <button
-      disabled={pending}
-      onClick={() => startTransition(() => deletePost(id))}
-    >
-      {pending ? "..." : "削除"}
-    </button>
-  );
-}
-```
-
-### 手順 4: 投稿フォーム（useActionState）
-
-`app/PostForm.tsx`:
-
-```tsx
-"use client";
-import { useActionState } from "react";
-import { createPost } from "./actions";
-
-export default function PostForm() {
-  const [state, action, pending] = useActionState(createPost, { ok: false, error: "" });
-
-  return (
-    <form action={action}>
-      <input name="title" placeholder="タイトル" required />
-      <textarea name="body" placeholder="本文" />
-      <button disabled={pending}>{pending ? "送信中" : "投稿"}</button>
-      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
-      {state.ok && <p>投稿完了</p>}
-    </form>
-  );
-}
-```
-
-`actions.ts` に `createPost` を追加:
-
-```ts
-export async function createPost(prev: any, formData: FormData) {
-  const title = String(formData.get("title") ?? "");
-  if (!title.trim()) return { ok: false, error: "タイトル必須" };
-  console.log("Created:", title);
-  revalidatePath("/");
-  return { ok: true, error: "" };
-}
-```
-
-### 手順 5: 動作確認
-
-`npm run dev` で:
-
-- 記事一覧は **Server で描画**（ソース表示で HTML に文字列が含まれる）
-- 削除ボタンの onClick 部分だけ **Client にハイドレーション**
-- 投稿フォームでバリデーションエラーをサーバーから返却
+ブラウザの DevTools で **Network** タブを開き、`google-analytics.com/g/collect` へのリクエストが飛ぶことを確認します（GA4 のイベント送信）。`vitals.vercel-insights.com` への送信も Speed Insights のもの。
 
 ### 期待出力
 
-- ページの初回 HTML には **記事タイトルと本文がそのまま** 含まれている（Server で描画）
-- 削除 / 投稿のロジックはサーバーで実行
-- バリデーションエラーが Client Component の state に反映
+- ボタンクリックで `collect?...&en=demo_click` 形式のリクエストが出る
+- `vitals.vercel-insights.com/v1/vitals` に LCP / INP / CLS のメトリクスが送られる
+- Vercel にデプロイすると、ダッシュボードで PV と Speed Insights が見られる
 
 ### 変える
 
-- `Suspense` + `loading.tsx` でストリーミング表示にする
-- `cache()` で同じデータの取得を 1 回に集約する
-- `server-only` パッケージを入れて、誤って Client から import されないように守る
+- ConsentBanner を実装し、同意があるまで GA4 を読まない構成に変える
+- イベント名を `add_to_cart` / `view_item` のような **GA4 推奨イベント名** にすると、レポートで自動分類される
+- `gtag('config', gaId, { send_page_view: false })` にして `page_view` を自分で送る形にする
 
 ### 自分で書く（任意）
 
-- 既存の Client Component を 1 つ取り上げ、**最小の Client + Server へ分割**
-- DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
-- React Compiler（lesson128）と組み合わせて、`useMemo` を消した状態で動かす
+- Plausible / Fathom / PostHog のうち 1 つを試して、Vercel Analytics との UI 差を比較する
+- ページ遷移ごとに `page_view` を送る `<GAPageView />` を作って `app/layout.tsx` に組み込む
+- `Speed Insights` のデータと `Lighthouse` のスコアを比較し、合成 vs 実ユーザーの差を観察
 
 ## まとめ
 
-- **デフォルトは Server Component**、必要な葉だけ `"use client"`
-- データ取得は Server、インタラクションは Client、書き込みは **Server Actions**
-- Client から Server を使うには **children prop** で挿入
-- props は **serializable な値だけ**（関数 / クラスは渡らない）
-- `useActionState` で Server Action の結果を Client の state に
-- 巨大 Client Component / 不要シリアライズ / 関数受け渡しは **アンチパターン**
-- `server-only` / `client-only` で誤 import を防ぐ
-- `Suspense` + Loading UI で **ストリーミング表示**、`cache()` で同一リクエストのメモ化
-- 「全体構造」を Server / Client で **ファイル単位で分割** すると見通しが良い
-- 別のレッスンでは **Biome / Oxc** に進み、Lint / Format ツールの新世代を扱う
+- 「公開後に見るもの」は **来訪 / 体験 / 行動** の 3 軸。エラーは Sentry、残り 2 軸が Analytics の役割
+- **Vercel Analytics** は Cookieless で導入が秒。Vercel 以外でも `@vercel/analytics/react` で動く
+- **Speed Insights** は実ユーザーの Core Web Vitals を **75 パーセンタイル** で集める
+- **GA4** はイベントベースで強力だが、**Cookie 同意 / Consent Mode v2** を意識する必要がある
+- 個人情報（メールアドレスなど）が **URL から漏れて Analytics に送られる事故** を避ける
+- ITP / 3rd-party cookie 廃止の流れで、**1st-party / Cookieless 設計** が主流
+- 「PV だけを見ない」。**エンゲージメント / 流入元 / 国 / コンバージョン** を分解して見る
+- 別のレッスンでは **OGP と SEO** に進み、サイトの「読まれ方」を整える

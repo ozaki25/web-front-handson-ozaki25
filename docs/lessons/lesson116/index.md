@@ -1,498 +1,419 @@
-# lesson116: OGP と SEO 実践
+# lesson116: 環境変数とシークレット管理
 
 ## ゴール
 
-- OGP（Open Graph）タグと Twitter Card で **シェアされた時の見栄え** を制御できる
-- Next.js の Metadata API（lesson86 の発展）で OGP を動的に生成できる
-- `sitemap.xml` と `robots.txt` の役割と Next.js での生成方法を知る
-- JSON-LD（構造化データ）でリッチリザルトを狙える
-- Google Search Console の使い方が分かる
+- `.env` / `.env.local` / `.env.production` などのファイルの **使い分け** が分かる
+- Next.js / Vite の **`NEXT_PUBLIC_` / `VITE_`** プレフィックスの意味と公開範囲を説明できる
+- Vercel / GitHub / Doppler / 1Password などの **シークレット管理サービス** の役割を理解する
+- シークレットを **誤って Git にコミットしない** 仕組みを作れる
+- 漏洩した時の対応の流れを知る
 
 ## 解説
 
-### OGP（Open Graph Protocol）
+### 環境変数とは
 
-Twitter（X）/ Facebook / LINE / Slack / Discord などで URL を共有した時、**タイトル + 説明 + 画像** がカード形式で表示されます。これを制御するのが OGP です。
+「**コードから見える値だが、コードと一緒に管理したくない**」値を入れる仕組みです。代表例:
 
-```html
-<head>
-  <title>記事のタイトル</title>
-  <meta property="og:title" content="記事のタイトル" />
-  <meta property="og:description" content="この記事は OGP の使い方について書きます" />
-  <meta property="og:image" content="https://example.com/og.png" />
-  <meta property="og:url" content="https://example.com/post/1" />
-  <meta property="og:type" content="article" />
-  <meta property="og:site_name" content="My Blog" />
+- API のベース URL（環境ごとに違う）
+- データベース接続文字列
+- API キー / アクセストークン
+- フィーチャーフラグの ON / OFF
 
-  <meta name="twitter:card" content="summary_large_image" />
-  <meta name="twitter:site" content="@my_handle" />
-</head>
+これらを **コードに直書き** すると:
+
+- 開発 / 本番の切り替えが面倒
+- **シークレットが Git に残る**（git history に永久保存）
+
+ので、環境変数で外に出します。
+
+### `.env` ファイルの種類
+
+Node.js / Next.js / Vite が読み込む慣習的なファイル名:
+
+| ファイル | 読み込まれる場面 | コミット |
+|---|---|---|
+| `.env` | すべての環境で読まれる（あれば） | 場合による |
+| `.env.local` | **ローカル開発時のみ**。同名キーを上書き | **NG**（gitignore） |
+| `.env.development` | `NODE_ENV=development` 時 | OK（ただし秘密は書かない） |
+| `.env.production` | `NODE_ENV=production` 時 | OK（ただし秘密は書かない） |
+| `.env.test` | テスト時 | OK |
+| `.env.example` | サンプル / テンプレート | **OK**（コミットする） |
+
+#### `.gitignore`
+
+```
+.env*.local
+.env
 ```
 
-ポイント:
+`.env.local` と `.env` は **絶対にコミットしない**。一方 `.env.example` は **必ずコミット** する（チームメンバーが何を設定すべきかの目安になる）。
 
-- `og:image` は **絶対 URL** を渡す（相対パスは効かない）
-- 画像サイズは **1200 x 630px** が推奨（Twitter / Facebook 共通）
-- `og:type` は `website` / `article` / `book` / `profile` などから選ぶ
-- Twitter Card は OGP を補完する。`summary_large_image` で大きく表示
+#### `.env.example`
 
-### Next.js の Metadata API（おさらい + 発展）
+```
+# データベース
+DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
 
-lesson86 で `metadata` を export する書き方を扱いました。OGP も同じ仕組みで書けます。
+# API キー（実値ではなくダミー）
+SENTRY_DSN=https://example@sentry.io/1234
 
-```ts
-// app/blog/[slug]/page.tsx
-import type { Metadata } from "next";
-
-type Props = { params: Promise<{ slug: string }> };
-
-export async function generateMetadata({ params }: Props): Promise<Metadata> {
-  const { slug } = await params;
-  const post = await getPost(slug);
-  return {
-    title: post.title,
-    description: post.excerpt,
-    openGraph: {
-      title: post.title,
-      description: post.excerpt,
-      url: `https://example.com/blog/${slug}`,
-      siteName: "My Blog",
-      images: [
-        {
-          url: post.coverImage,
-          width: 1200,
-          height: 630,
-          alt: post.title,
-        },
-      ],
-      type: "article",
-      publishedTime: post.publishedAt,
-    },
-    twitter: {
-      card: "summary_large_image",
-      title: post.title,
-      description: post.excerpt,
-      images: [post.coverImage],
-      creator: "@my_handle",
-    },
-  };
-}
+# 公開して問題ない値
+NEXT_PUBLIC_API_BASE=http://localhost:3000/api
 ```
 
-### `metadataBase` を必ず指定
+### Next.js の `NEXT_PUBLIC_` プレフィックス
 
-OGP の画像 URL を相対パスで書きたい時は、**ルートで `metadataBase`** を指定します。
+Next.js（および Vite の `VITE_`）には **「クライアントに公開する値」を明示するルール** があります。
 
-```ts
-// app/layout.tsx
-export const metadata: Metadata = {
-  metadataBase: new URL("https://example.com"),
-};
+```
+DATABASE_URL=postgres://...               ← サーバーのみ（漏れない）
+SENTRY_AUTH_TOKEN=xxx                      ← サーバーのみ（漏れない）
+NEXT_PUBLIC_API_URL=https://api.example.com ← クライアントにも露出
+NEXT_PUBLIC_GA_ID=G-XXXX                    ← クライアントにも露出
 ```
 
-これがないと相対パスが効かず、開発時のローカル URL（`http://localhost:3000`）が混入する事故が起きます。
+ルール:
 
-### 動的 OGP 画像（`opengraph-image.tsx`）
+- **`NEXT_PUBLIC_` で始まる値だけ** がクライアントの JS バンドルに **インライン** される
+- それ以外は **サーバー（API Route / Server Component / Middleware）でしか読めない**
+- ビルド時に **値が文字列として埋め込まれる**（実行時のフェッチではない）
 
-Next.js 13.3+ から、**ファイルベースで OGP 画像を生成** できます。
+#### 露出する 例
 
 ```tsx
-// app/blog/[slug]/opengraph-image.tsx
-import { ImageResponse } from "next/og";
-
-export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
-
-export default async function OG({ params }: { params: { slug: string } }) {
-  const post = await getPost(params.slug);
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          padding: 60,
-          background: "linear-gradient(135deg, #1e3a8a, #06b6d4)",
-          color: "white",
-        }}
-      >
-        <div style={{ fontSize: 64, fontWeight: 700 }}>{post.title}</div>
-        <div style={{ fontSize: 32, marginTop: 24, opacity: 0.85 }}>
-          {post.excerpt}
-        </div>
-      </div>
-    ),
-    { ...size },
-  );
-}
+// app/page.tsx（Server Component でも Client Component でも）
+const apiBase = process.env.NEXT_PUBLIC_API_URL; // ブラウザでも読める
 ```
 
-これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動き、軽量。
+ビルド後の JS には **値そのもの** が入ります。**シークレットを `NEXT_PUBLIC_` に置くのは事故** の元。
 
-### `sitemap.xml`
-
-検索エンジンに「**このサイトにこういう URL があるよ**」と教えるファイル。Google は基本クロールで見つけてくれますが、**サイトが大きい / 内部リンクが少ない** 場合は sitemap が大事です。
-
-#### Next.js の `app/sitemap.ts`
+#### 露出しない 例
 
 ```ts
-import type { MetadataRoute } from "next";
-
-export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
-  const posts = await getAllPosts();
-  return [
-    {
-      url: "https://example.com",
-      lastModified: new Date(),
-      changeFrequency: "daily",
-      priority: 1,
-    },
-    {
-      url: "https://example.com/about",
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.5,
-    },
-    ...posts.map((p) => ({
-      url: `https://example.com/blog/${p.slug}`,
-      lastModified: p.updatedAt,
-      changeFrequency: "weekly" as const,
-      priority: 0.7,
-    })),
-  ];
+// app/api/users/route.ts（Route Handler）
+export async function GET() {
+  const dbUrl = process.env.DATABASE_URL; // サーバーのみ
+  // ...
 }
 ```
 
-ビルド時に `/sitemap.xml` が自動生成されます。
+サーバー専用コードでは **プレフィックスなしの値** が読めます。クライアント側で同じコードを書くと `undefined` になる。
 
-#### 巨大サイトでは分割
-
-URL が 50,000 件 / 50MB を超える場合は **sitemap index** に分割します。Next.js では `app/sitemap.ts` を `[id]/sitemap.ts` 配列で複数 export することで対応できます。
-
-### `robots.txt`
-
-クローラーへの指示。`/admin` などをクロールから除外します。
-
-#### Next.js の `app/robots.ts`
+::: warning Server Component / Server Action の罠
+Server Component / Server Action のソースを **Client Component に間接的に import** すると、Next.js のバンドラがコードをクライアント側に持ち込んでしまうことがあります。シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import して **誤って client にバンドルされたら build 時に失敗させる** のが安全です。
 
 ```ts
-import type { MetadataRoute } from "next";
-
-export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: [
-      {
-        userAgent: "*",
-        allow: "/",
-        disallow: ["/admin/", "/api/"],
-      },
-    ],
-    sitemap: "https://example.com/sitemap.xml",
-  };
-}
+import "server-only"; // クライアントから import するとエラー
+const dbUrl = process.env.DATABASE_URL;
 ```
-
-ビルドで `/robots.txt` が自動生成されます。
-
-::: warning robots.txt は「お願い」
-robots.txt は **善意のクローラーが従う** だけで、強制力はありません。本当に隠したい URL は **認証で守る** / **`X-Robots-Tag: noindex` ヘッダ** / **`<meta name="robots" content="noindex">`** を使います。
 :::
 
-### 構造化データ（JSON-LD）
+### Vite の `VITE_` プレフィックス
 
-検索結果に **リッチリザルト**（評価星 / レシピ写真 / FAQ アコーディオンなど）を出すための仕組み。Schema.org のスキーマを **JSON-LD** で埋め込みます。
+Vite は同じ仕組みで **`VITE_`** プレフィックス。
 
-#### 記事（Article）
+```
+VITE_API_URL=https://api.example.com   ← import.meta.env.VITE_API_URL で読める
+SECRET_KEY=do_not_expose                ← undefined（読めない）
+```
 
-```tsx
-// app/blog/[slug]/page.tsx
-export default async function Page({ params }: Props) {
-  const { slug } = await params;
-  const post = await getPost(slug);
+```ts
+console.log(import.meta.env.VITE_API_URL);  // OK
+console.log(import.meta.env.SECRET_KEY);    // undefined
+```
 
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "Article",
-    headline: post.title,
-    description: post.excerpt,
-    image: post.coverImage,
-    datePublished: post.publishedAt,
-    dateModified: post.updatedAt,
-    author: { "@type": "Person", name: post.author },
-  };
+詳細は lesson105 でも触れた通り。
 
-  return (
-    <article>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <h1>{post.title}</h1>
-      {/* ... */}
-    </article>
-  );
+### 環境ごとの設定
+
+Vercel に Next.js をデプロイする場合、`.env.production` などのファイルは使わず **Vercel 管理画面で設定** するのが普通です。
+
+| 設定箇所 | 主な役割 |
+|---|---|
+| Vercel Dashboard → Settings → Environment Variables | Production / Preview / Development それぞれに値を設定 |
+| `.env.local` | ローカル開発の上書き |
+
+`vercel env pull .env.local` で **Vercel の値をローカルに引っ張ってくる** こともできます（同じ設定で動かしたい時に便利）。
+
+### GitHub Secrets と Actions
+
+GitHub Actions の workflow で使う API キーは **GitHub Settings → Secrets and variables → Actions** に登録。workflow からは `secrets.NAME` 構文（`$` と `{{ }}` の組合せ）で参照します。
+
+**ファイルにベタ書きしない、ログに出さない、Pull Request の workflow で使わない** が三原則。
+
+### シークレット管理の選択肢
+
+#### サービス別
+
+| サービス | 役割 |
+|---|---|
+| **Vercel Environment Variables** | Vercel デプロイのシークレット |
+| **GitHub Actions Secrets** | CI のシークレット |
+| **AWS Secrets Manager / Parameter Store** | AWS インフラ全体 |
+| **Doppler** | 複数環境のシークレットを一元管理する SaaS |
+| **1Password Connect / Secrets Automation** | 人と CI で同じシークレットを使う |
+| **HashiCorp Vault** | エンタープライズ標準。OSS |
+| **Infisical** | OSS のシークレット管理 |
+
+「**ローカル開発 + CI + 本番** で同じ値を 1 箇所から配信したい」場合に Doppler / 1Password / Vault が役立ちます。
+
+#### Doppler の最小例
+
+```bash
+doppler login
+doppler setup
+doppler run -- npm run dev   # .env を読まずに Doppler から値を流し込む
+```
+
+CI でも `doppler run --` 経由でビルドすれば、**GitHub Secrets を一切登録せずに** 動かせます。
+
+### 「シークレットをコミットしない」仕組み
+
+#### 1. `.gitignore` を整える
+
+```
+.env
+.env.local
+.env.*.local
+```
+
+#### 2. `git-secrets` / `gitleaks` で push 前にスキャン
+
+```bash
+# gitleaks（OSS、Go 製）
+brew install gitleaks
+gitleaks detect
+
+# pre-commit フックで自動化
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit`:
+
+```sh
+#!/bin/sh
+gitleaks protect --staged --no-banner || exit 1
+```
+
+#### 3. GitHub の Secret Scanning
+
+GitHub は **public リポジトリの push を自動でスキャン** し、AWS / Stripe / GitHub トークンなど主要な型を検出するとメールで通知します。**private リポジトリでも有効化** すると、組織のセキュリティが上がる（GitHub Advanced Security の機能）。
+
+#### 4. Husky + lint-staged で運用に組み込む
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks protect --staged --no-banner"]
+  }
 }
 ```
 
-#### よく使うスキーマ
+### 漏洩した時の対応
 
-| `@type` | 用途 |
+「`.env` を間違って push してしまった」を想定:
+
+1. **すぐにそのキーを無効化**（rotate）
+   - クラウドサービス（AWS / Stripe / Sentry）の管理画面で **キーを再生成**
+   - GitHub に残った時点で **公開済み** とみなす（git history を消しても遅い）
+2. **新しいキーを Vercel / GitHub Secrets に登録**
+3. **チームに共有 + 監査ログをチェック**（不正利用がないか）
+4. **任意で git history から削除**（`git filter-repo`）
+   - **キーを無効化したあと** にやる。順番を逆にすると無意味
+
+::: warning git history からの削除は事後処置
+リポジトリが public なら、push した瞬間に **bot がスキャンして既にコピー** している可能性があります。**「消したから安全」ではなく、必ずキーを rotate** すること。
+:::
+
+### 設計の指針
+
+#### 1. シークレットはサーバーで使う
+
+ブラウザに渡す API キーは「**それが漏れても大丈夫な値**」だけ。本当の認証はバックエンド経由で。
+
+#### 2. `NEXT_PUBLIC_` には機密を入れない
+
+「Sentry DSN は公開しても良いと書いてあるからクライアントに置く」のは OK。けれど **DB 接続文字列 / OAuth クライアントシークレット** を `NEXT_PUBLIC_` に置くのは事故の温床。
+
+#### 3. 必須値は起動時に検証
+
+```ts
+// utils/env.ts
+import { z } from "zod";
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  NEXT_PUBLIC_API_URL: z.string().url(),
+  SENTRY_DSN: z.string().optional(),
+});
+
+export const env = envSchema.parse(process.env);
+```
+
+これで「**環境変数の設定漏れ** で本番が落ちる」を防げます。Zod / `t3-env` などのライブラリで型安全に。
+
+#### 4. 個人別の値 / 共通の値を分離
+
+| 値 | 置き場 |
 |---|---|
-| `Article` / `BlogPosting` / `NewsArticle` | 記事 |
-| `Product` | EC 商品（価格 / 在庫） |
-| `Recipe` | レシピ |
-| `FAQPage` | よくある質問（手風琴 UI で出る） |
-| `Organization` | 会社情報 |
-| `BreadcrumbList` | パンくず |
-
-#### 検証
-
-[Google リッチリザルトテスト](https://search.google.com/test/rich-results) で URL を入れると、認識される構造化データが見られます。
-
-### Google Search Console
-
-「Google の目線で自分のサイトがどう見えているか」を見るツール。
-
-#### できること
-
-- どの検索クエリで何位に出ているか
-- どのページがインデックスされているか / エラーがあるか
-- Core Web Vitals の実フィールドデータ
-- `sitemap.xml` の登録 / クロール状況確認
-- モバイルユーザビリティの問題検出
-
-#### 設定
-
-1. Search Console にプロパティを追加（ドメインまたは URL プレフィックス）
-2. 所有権の確認（DNS TXT レコード / HTML タグ / Google Analytics アカウント連携）
-3. **`sitemap.xml` を登録**
-4. 数日待つとデータが集まり始める
-
-### canonical URL
-
-「同じ内容のページが複数 URL で見える」場合、検索エンジンに **正規 URL** を伝えるのが `<link rel="canonical">`。
-
-```ts
-export const metadata: Metadata = {
-  alternates: {
-    canonical: "https://example.com/blog/post-1",
-  },
-};
-```
-
-クエリパラメータ違い / 大文字小文字違いで重複インデックスされないように。
-
-### hreflang（多言語サイト）
-
-同じコンテンツを複数言語で出す場合の指定。
-
-```ts
-export const metadata: Metadata = {
-  alternates: {
-    canonical: "https://example.com/en/about",
-    languages: {
-      "en": "https://example.com/en/about",
-      "ja": "https://example.com/ja/about",
-      "x-default": "https://example.com/en/about",
-    },
-  },
-};
-```
-
-これがあると Google が「英語ユーザーには英語版、日本語ユーザーには日本語版」を出してくれます。
-
-### Core Web Vitals と SEO
-
-Google は **Core Web Vitals**（lesson101）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せない**。
+| 個人の作業用 API キー | `.env.local`（gitignore） |
+| チーム共通の URL | `.env.development`（コミット可） |
+| 本番のシークレット | Vercel Environment Variables |
 
 ### よくある事故
 
-- `og:image` が **相対パス** で実体が読めない → `metadataBase` を設定する
-- `noindex` を本番に持ち込んでしまう → 環境変数で制御する習慣を
-- `sitemap.xml` に **404 の URL** が残る → 動的生成にする
-- 構造化データにスキーマと合わない値を入れる → リッチリザルトテストで検証
-- `canonical` が **自分自身を指していない** → 正しい URL に揃える
+#### 1. 本番 DB に開発から繋いでしまう
+
+`DATABASE_URL` を `.env.local` で本番にして、勘違いしてマイグレーションを実行 → 本番データ破壊。
+
+→ **本番のキーは個人の `.env.local` に置かない** ルールに。Vercel から `vercel env pull` する時も `--environment=development` を明示。
+
+#### 2. `process.env.X` がビルドで消える
+
+Next.js は **静的解析** でビルド時に置換するので、`process.env[key]` のような **動的アクセスは展開されない**。
+
+```ts
+const key = "NEXT_PUBLIC_API_URL";
+process.env[key]; // undefined になりがち
+process.env.NEXT_PUBLIC_API_URL; // OK
+```
+
+#### 3. `.env.production` をコミットしてしまった
+
+→ 「**シークレットを外に置く**」を徹底。`.env.production` を使うなら **dummy 値** に。
+
+#### 4. 古いキーが Slack に残っている
+
+→ シークレット管理サービスの「**監査ログ**」とローテーションスケジュールを意識。
 
 ## 演習
 
 ### ゴール
 
-- Next.js プロジェクトに OGP / sitemap / robots / JSON-LD を一通り入れる
-- リッチリザルトテストで構造化データが認識されるところまで持っていく
+- Next.js の Server / Client / Middleware で環境変数の **読み取り権限** を体感する
+- gitleaks で push 前のチェックを入れる
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest seo-sample --ts --app
-cd seo-sample
+npx create-next-app@latest env-sample --ts --app
+cd env-sample
 ```
 
-### 手順 2: ルートに metadataBase と OGP
+### 手順 2: `.env.local` と `.env.example`
 
-`app/layout.tsx`:
+`.env.example`:
 
-```tsx
-import type { Metadata } from "next";
+```
+# 公開して OK
+NEXT_PUBLIC_APP_NAME=EnvSample
 
-export const metadata: Metadata = {
-  metadataBase: new URL("https://example.com"),
-  title: { default: "Demo Blog", template: "%s | Demo Blog" },
-  description: "Next.js Metadata API の演習",
-  openGraph: {
-    type: "website",
-    siteName: "Demo Blog",
-    locale: "ja_JP",
-  },
-  twitter: { card: "summary_large_image" },
-};
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return <html lang="ja"><body>{children}</body></html>;
-}
+# 公開 NG
+SECRET_TOKEN=replace_me
 ```
 
-### 手順 3: 動的 OGP 画像
+`.env.local`（コミットしない）:
 
-`app/opengraph-image.tsx`:
-
-```tsx
-import { ImageResponse } from "next/og";
-
-export const size = { width: 1200, height: 630 };
-export const contentType = "image/png";
-
-export default function OG() {
-  return new ImageResponse(
-    (
-      <div
-        style={{
-          fontSize: 64,
-          background: "linear-gradient(135deg,#1e3a8a,#06b6d4)",
-          color: "white",
-          width: "100%",
-          height: "100%",
-          display: "flex",
-          alignItems: "center",
-          justifyContent: "center",
-        }}
-      >
-        Demo Blog
-      </div>
-    ),
-    { ...size },
-  );
-}
+```
+NEXT_PUBLIC_APP_NAME=ローカルの名前
+SECRET_TOKEN=local-secret-xxx
 ```
 
-### 手順 4: sitemap と robots
+### 手順 3: Server / Client で読み比べる
 
-`app/sitemap.ts`:
-
-```ts
-import type { MetadataRoute } from "next";
-
-export default function sitemap(): MetadataRoute.Sitemap {
-  return [
-    {
-      url: "https://example.com",
-      lastModified: new Date(),
-      changeFrequency: "weekly",
-      priority: 1,
-    },
-    {
-      url: "https://example.com/about",
-      lastModified: new Date(),
-      changeFrequency: "monthly",
-      priority: 0.5,
-    },
-  ];
-}
-```
-
-`app/robots.ts`:
-
-```ts
-import type { MetadataRoute } from "next";
-
-export default function robots(): MetadataRoute.Robots {
-  return {
-    rules: [{ userAgent: "*", allow: "/", disallow: "/admin/" }],
-    sitemap: "https://example.com/sitemap.xml",
-  };
-}
-```
-
-### 手順 5: JSON-LD
-
-`app/page.tsx`:
+`app/page.tsx`（Server Component）:
 
 ```tsx
 export default function Home() {
-  const jsonLd = {
-    "@context": "https://schema.org",
-    "@type": "WebSite",
-    name: "Demo Blog",
-    url: "https://example.com",
-  };
-
   return (
     <main style={{ padding: 24 }}>
-      <script
-        type="application/ld+json"
-        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
-      />
-      <h1>Demo Blog</h1>
-      <p>SEO 演習</p>
+      <h1>Server Component</h1>
+      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
+      <p>SECRET_TOKEN（サーバー）: {process.env.SECRET_TOKEN ?? "なし"}</p>
     </main>
   );
 }
 ```
 
-### 手順 6: 確認
+`app/client/page.tsx`:
 
-```bash
-npm run dev
+```tsx
+"use client";
+
+export default function ClientPage() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Client Component</h1>
+      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
+      <p>SECRET_TOKEN（クライアント）: {process.env.SECRET_TOKEN ?? "なし"}</p>
+    </main>
+  );
+}
 ```
 
-ブラウザで以下にアクセス:
-
-- `http://localhost:3000/sitemap.xml` → XML が出る
-- `http://localhost:3000/robots.txt` → robots テキストが出る
-- `http://localhost:3000/opengraph-image` → 画像が出る
-- ページのソースを表示すると `<meta property="og:image" content="..." />` や `<script type="application/ld+json">` が含まれている
+`npm run dev` してブラウザで両方確認します。
 
 ### 期待出力
 
-| パス | 内容 |
-|---|---|
-| `/sitemap.xml` | 2 URL を含む sitemap |
-| `/robots.txt` | `Disallow: /admin/` を含む |
-| `/opengraph-image` | 1200x630 の PNG |
-| ページソース | OGP / Twitter Card / JSON-LD のタグが入る |
+| 場所 | NEXT_PUBLIC_APP_NAME | SECRET_TOKEN |
+|---|---|---|
+| Server Component | ローカルの名前 | local-secret-xxx |
+| Client Component | ローカルの名前 | **なし** |
+
+クライアントには **`NEXT_PUBLIC_` 以外が露出しない** ことを確認します。
+
+### 手順 4: gitleaks を導入
+
+```bash
+brew install gitleaks       # macOS。Linux は go install / docker でも
+# または: docker run -v $(pwd):/path zricethezav/gitleaks detect --source /path
+```
+
+リポジトリ直下で:
+
+```bash
+git init
+echo "AWS_SECRET=AKIA1234567890ABCDEF" > test.txt
+git add test.txt
+gitleaks protect --staged
+```
+
+`AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
+
+### 手順 5: pre-commit に組み込む
+
+```bash
+mkdir -p .githooks
+cat > .githooks/pre-commit <<'EOF'
+#!/bin/sh
+gitleaks protect --staged --no-banner || exit 1
+EOF
+chmod +x .githooks/pre-commit
+git config core.hooksPath .githooks
+```
+
+これで `git commit` の前に自動で gitleaks が走ります。
 
 ### 変える
 
-- `app/blog/[slug]/page.tsx` を作って `generateMetadata` で記事ごとに OGP を変える
-- 動的 OGP 画像で記事タイトルを反映する
-- JSON-LD を `Article` に変えて、リッチリザルトテストで認識されるか試す
+- `process.env[key]` のような動的アクセスを書いて、ビルド後にどう展開されるか確認
+- `import "server-only"` を入れたファイルを Client Component から import して **ビルドエラー** になることを確認
+- Zod / t3-env で起動時の env 検証を組み込む
 
 ### 自分で書く（任意）
 
-- `BreadcrumbList` の JSON-LD を作って、検索結果のパンくずを狙う
-- `FAQPage` を作って、よくある質問アコーディオンの表示を狙う
-- 多言語サイトを `hreflang` で構成し、Search Console で確認する
+- Doppler を試して、`doppler run -- npm run dev` で `.env` なしの開発体験を作る
+- Vercel に deploy し、Production / Preview で **異なる値** を設定する
+- 漏洩シミュレーション: わざとリポジトリ（個人テスト用）に `.env` を push し、**キーをローテートする手順** をリハーサルする
 
 ## まとめ
 
-- **OGP / Twitter Card** で SNS シェア時の見栄えを制御。`og:image` は **絶対 URL / 1200x630**
-- Next.js は **Metadata API** に OGP / Twitter Card / canonical / hreflang が揃っている
-- **`metadataBase`** を必ず設定する（相対パス事故防止）
-- `app/opengraph-image.tsx` で **動的 OGP 画像** を JSX で生成
-- `app/sitemap.ts` / `app/robots.ts` でファイルベースに `sitemap.xml` / `robots.txt` を生成
-- **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
-- **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
-- Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない
-- 別のレッスンでは **CI/CD パイプライン** に進み、ビルド・テスト・デプロイの自動化を体系化する
+- `.env` ファイルは **`.local` をコミットせず、`.example` を必ずコミット** する
+- Next.js の **`NEXT_PUBLIC_`** / Vite の **`VITE_`** プレフィックスは「**クライアントに露出させる**」明示
+- それ以外の値は **サーバー専用**。`server-only` パッケージで誤バンドルを防ぐ
+- 設定の置き場は **Vercel Environment Variables** / GitHub Secrets / Doppler / Vault
+- **gitleaks** + pre-commit / GitHub の Secret Scanning で push 前後のスキャン
+- 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
+- **起動時に Zod で env を検証** すると、設定漏れに早く気づける
+- 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める
+- 別のレッスンでは **Content-Security-Policy**（CSP） に進み、ブラウザ側のセキュリティを締める

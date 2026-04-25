@@ -1,401 +1,415 @@
-# lesson112: package.json と npm スクリプト
+# lesson112: React Hook Form の基本
 
 ## ゴール
 
-- `dependencies` / `devDependencies` / `peerDependencies` の違いを言える
-- セマンティックバージョニング（`^` / `~` / 固定）の意味を読める
-- `package-lock.json` がなぜ必要か説明できる
-- npm / pnpm / yarn / Bun の違いを把握する
-- `scripts` の書き方と `npm run` の仕組みを理解する
+- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
+- RHF を `npm install` してフォームに導入できる
+- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
+- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
+- `formState.errors` でエラーメッセージを表示できる
+- `defaultValues` で初期値を入れる
+- `watch` / `setValue` / `reset` の使い分けを知る
 
 ## 解説
 
-### `package.json` はプロジェクトの「目次」
+### 制御コンポーネントの限界
 
-Node.js / フロントのプロジェクトには必ず `package.json` があります。役割は次の 4 つ。
+これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
 
-1. **メタ情報**（プロジェクト名 / バージョン / 作者など）
-2. **依存パッケージ** の宣言
-3. **スクリプト** の登録（`npm run dev` など）
-4. **ツール設定** の置き場（lint-staged / browserslist / 各種 CLI の設定）
-
-最小例:
-
-```json
-{
-  "name": "my-app",
-  "version": "0.1.0",
-  "private": true,
-  "type": "module",
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  },
-  "dependencies": {
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
-  },
-  "devDependencies": {
-    "vite": "^7.0.0",
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "^5.9.0"
-  }
-}
+```tsx
+const [name, setName] = useState("");
+const [email, setEmail] = useState("");
+const [message, setMessage] = useState("");
+// ...
+<input value={name} onChange={(e) => setName(e.target.value)} />
+<input value={email} onChange={(e) => setEmail(e.target.value)} />
+<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
 ```
 
-### 依存の 3 つの種類
+シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
 
-#### `dependencies`
+- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
+- **コードが冗長**: state と setter の宣言が増える
+- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
+- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
 
-「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要がある。
+これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
 
-#### `devDependencies`
+### React Hook Form とは
 
-「**開発時だけ必要** な依存」。`typescript` / `vite` / `eslint` / `vitest` など、ビルド済みコードを動かすには不要なもの。本番のサーバーで `npm install --omit=dev` すると **dev は入らず、容量が減る** メリットがあります。
+RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
 
-#### `peerDependencies`
+- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
+- **少ないコード** で大きなフォームを書ける
+- **バリデーション + エラー管理** が組み込み
 
-「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言する。
+2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
 
-例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示。
-
-普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
-
-#### 補足: `optionalDependencies` / `bundledDependencies`
-
-たまに見かけますが、めったに使いません。`optionalDependencies` は「入らなくても続行」、`bundledDependencies` は「自分のパッケージに同梱」。
-
-### セマンティックバージョニング（semver）
-
-`react: ^19.2.0` の数字は **3 つに区切られた意味** を持ちます。
-
-```
-19.2.0
-│ │ │
-│ │ └── PATCH（バグ修正）
-│ └──── MINOR（後方互換のある機能追加）
-└────── MAJOR（破壊的変更）
-```
-
-ルール:
-
-- **PATCH を上げる** → 既存のコードは動き続けるはず
-- **MINOR を上げる** → 既存のコードは動き、新機能が増える
-- **MAJOR を上げる** → 既存のコードが動かなくなる可能性あり
-
-#### 範囲指定の記号
-
-| 書き方 | 意味 | 例: `^1.2.3` の許容範囲 |
-|---|---|---|
-| `^1.2.3` | MAJOR は固定。MINOR / PATCH は上げて OK | `>= 1.2.3 < 2.0.0` |
-| `~1.2.3` | MINOR も固定。PATCH のみ上げて OK | `>= 1.2.3 < 1.3.0` |
-| `1.2.3` | 完全固定 | `1.2.3` のみ |
-| `>=1.2.3` | これ以上 | `1.2.3` 以降すべて |
-| `1.x` / `1.*` | MAJOR だけ固定 | `>= 1.0.0 < 2.0.0` |
-
-**新規プロジェクトのデフォルトは `^`**。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
-
-ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用も。
-
-### `package-lock.json` の役割
-
-`package.json` に `^19.2.0` と書いてあっても、**実際にインストールされる版は `npm install` 実行時の最新** です。チームで開発していると「**人によって入る版が違う**」事態が起きます。
-
-`package-lock.json` は「**実際に入った全パッケージの正確なバージョン**」を記録するファイル。
-
-```json
-// package-lock.json の中身（抜粋）
-{
-  "node_modules/react": {
-    "version": "19.2.0",
-    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz",
-    "integrity": "sha512-..."
-  }
-}
-```
-
-これにより:
-
-- **再現可能なインストール** が保証される
-- 直接の依存だけでなく、**間接の依存**（dependency の dependency） まで固定される
-- セキュリティ的にも `integrity` でファイルの完全性が確認される
-
-ルール:
-
-- **`package-lock.json` は必ず Git にコミット** する
-- 競合が起きたら片側を採用して `npm install` を再実行する（手動マージはしない）
-- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lockb` が同じ役割
-
-### npm / pnpm / yarn / Bun
-
-2026 年の選択肢は 4 つ。それぞれ「**仕事は同じだが内部の効率と機能が違う**」と理解します。
-
-| | 速度 | ディスク効率 | 安定性 | モノレポ |
-|---|---|---|---|---|
-| npm | 標準 | 普通 | 抜群 | workspaces 対応 |
-| pnpm | 速い | **抜群**（ハードリンク共有） | 抜群 | workspaces 対応 |
-| yarn (v4 / Berry) | 速い | 普通〜良 | 良 | workspaces 対応 |
-| Bun | **最速** | 良 | 改善中 | workspaces 対応 |
-
-#### pnpm の利点
-
-- 同じパッケージを複数プロジェクトで使う場合、**1 回しかディスクに置かない**（`~/.pnpm-store` に集約）
-- 厳密な依存解決（**書いていない依存は import できない**）でバグを防げる
-- `pnpm-workspace.yaml` でモノレポ管理
-
-2026 年現在、**新規プロジェクトで pnpm を選ぶ現場が増えています**。Vue / Vite / Vitest など主要 OSS の公式推奨も pnpm。
-
-#### Bun の利点
-
-- インストールが **桁違いに速い**（並列ダウンロード + 効率的な書き込み）
-- ランタイムも兼ねる（`bun run script.ts` で `tsx` 不要）
-- 仕様が安定してきた 2026 年は、**新規 CLI / バックエンドで採用** が増えている
-
-#### Yarn の現在地
-
-- v1（Classic）は古い。新規には選ばない
-- v4（Berry）は機能豊富だが、PnP モードは **採用が頭打ち**
-
-#### 使い分けの目安
-
-- **学習中 / Next.js 公式チュートリアル** → npm（公式が npm 前提のため）
-- **業務で長く付き合う** → pnpm
-- **試してみたい / インストールの速さ重視** → Bun
-
-このコースの演習では基本 `npm` を使います。これは普及度の問題で、pnpm に置き換えても何も変わりません（コマンド名だけ違う）。
-
-### `scripts` と `npm run`
-
-`package.json` の `scripts` に書いたコマンドを `npm run xxx` で実行できます。
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "test": "vitest",
-    "format": "prettier --write ."
-  }
-}
-```
-
-ルール:
-
-- `npm run dev` で `vite` が走る
-- `npm run` だけで使えるスクリプト一覧が表示される
-- 環境変数 `npm run` 内では `node_modules/.bin` が PATH に追加される（`vite` のパスを書く必要がない）
-- `dev` / `start` / `test` / `restart` / `stop` は `npm run` を省略できる（`npm test` だけで動く）
-
-#### スクリプトを連結する
-
-```json
-{
-  "scripts": {
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "ci": "npm run lint && npm run typecheck && npm run test"
-  }
-}
-```
-
-`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利。
-
-並列実行は `&` ではなく `npm-run-all` / `concurrently` を使うのが安全です。
-
-```json
-{
-  "scripts": {
-    "dev": "concurrently \"npm:dev:*\"",
-    "dev:client": "vite",
-    "dev:server": "node server.js"
-  }
-}
-```
-
-#### pre / post スクリプト
-
-`scripts` に `prebuild` / `postbuild` を書くと **`npm run build` の前後で自動実行** されます。
-
-```json
-{
-  "scripts": {
-    "prebuild": "npm run lint",
-    "build": "vite build",
-    "postbuild": "echo 'done'"
-  }
-}
-```
-
-便利ですが、**チームで把握しづらい** ので連鎖を多用しないほうが無難。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
-
-#### `npx` と `pnpm dlx` / `bunx`
-
-「**一度だけ** コマンドを実行したい」場合の使い捨て実行。
+### インストール
 
 ```bash
-npx create-next-app my-app    # one-shot で create-next-app を取得して実行
-pnpm dlx create-next-app my-app
-bunx create-next-app my-app
+npm install react-hook-form
 ```
 
-`npm install -g` でグローバルに入れずに済むのが利点。**最新版を使える** という意味でも安全。
+### 最小のフォーム
 
-### `engines` で Node.js のバージョンを縛る
+`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
 
-```json
-{
-  "engines": {
-    "node": ">=20.0.0",
-    "npm": ">=10.0.0"
+```tsx
+import { useForm } from "react-hook-form";
+
+type FormValues = {
+  name: string;
+  email: string;
+};
+
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>();
+
+  function onSubmit(data: FormValues) {
+    console.log(data);
   }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input id="name" {...register("name", { required: "必須です" })} />
+        {errors.name && <p role="alert">{errors.name.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          {...register("email", { required: "必須です" })}
+        />
+        {errors.email && <p role="alert">{errors.email.message}</p>}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        送信
+      </button>
+    </form>
+  );
 }
 ```
 
-`engines` で要求するバージョンを書き、環境が満たさない時に警告 / 失敗させられます。`.nvmrc` / `.node-version` と組み合わせて、**チーム全員が同じ Node を使う** よう揃えます。
+主な要素:
 
-### `.npmrc` と `.nvmrc`
+- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
+- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
+- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
+- **`formState.errors`**: バリデーションエラーが格納される
+- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
 
-| ファイル | 役割 |
-|---|---|
-| `.npmrc` | npm 自身の設定（registry / cache / strict-peer-deps など） |
-| `.nvmrc` | nvm が読む。プロジェクトで使う Node のバージョン |
-| `.node-version` | nvm 以外（asdf / fnm / volta）が読む |
+### バリデーションオプション
 
-`.npmrc` の代表例:
+`register` の第 2 引数で各種ルールを指定できます。
 
+```tsx
+{...register("password", {
+  required: "パスワードは必須です",
+  minLength: { value: 8, message: "8 文字以上で入力してください" },
+  maxLength: { value: 100, message: "100 文字以内で入力してください" },
+  pattern: {
+    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+    message: "英字と数字を混ぜてください",
+  },
+})}
 ```
-strict-peer-deps=true
-save-exact=true
-registry=https://registry.npmjs.org/
+
+`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
+
+```tsx
+{...register("age", {
+  validate: (value) => {
+    if (value < 18) return "18 歳以上である必要があります";
+    if (value > 120) return "値が大きすぎます";
+    return true; // OK
+  },
+})}
 ```
 
-### よくある事故
+### `defaultValues` で初期値
 
-#### `npm install` の度に lock が更新される
+編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
 
-→ `^` で書いてあると、新しい patch / minor が出ているとロックが更新される。意図しない更新を防ぐには **CI では `npm ci`** を使う。
+```tsx
+const { register, handleSubmit } = useForm<FormValues>({
+  defaultValues: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
+```
 
-#### `npm ci` と `npm install` の違い
+非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
 
-- `npm install`: 必要に応じて `package-lock.json` を更新
-- `npm ci`: lock の通りに **そのまま** 入れる（CI で **再現性が高く速い**）
+```tsx
+const { register, handleSubmit, reset } = useForm<FormValues>();
 
-#### グローバルインストールに頼らない
+useEffect(() => {
+  fetch("/api/me")
+    .then((r) => r.json())
+    .then((user) => reset(user));
+}, [reset]);
+```
 
-`npm install -g` で入れた CLI は **マシン全体に影響**。プロジェクトごとに違う版が必要な時に困る。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本。
+### `watch` で値を購読
+
+特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
+
+```tsx
+const { watch, register } = useForm<FormValues>();
+const subscribe = watch("subscribe");
+
+return (
+  <>
+    <label>
+      <input type="checkbox" {...register("subscribe")} />
+      購読する
+    </label>
+
+    {subscribe && (
+      <div>
+        <label>頻度</label>
+        <select {...register("frequency")}>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週</option>
+        </select>
+      </div>
+    )}
+  </>
+);
+```
+
+`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
+
+### `setValue` でプログラム的に値を設定
+
+```tsx
+const { setValue } = useForm<FormValues>();
+
+// 別のボタンや非同期処理から値を入れる
+setValue("name", "Bob");
+```
+
+「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
+
+### `reset` でフォームを初期化
+
+送信成功後にフォームを空にする:
+
+```tsx
+async function onSubmit(data: FormValues) {
+  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
+  reset();  // 入力をクリア
+}
+```
+
+### 送信中の表示
+
+`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
+
+```tsx
+const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
+
+return (
+  <button type="submit" disabled={isSubmitting}>
+    {isSubmitting ? "送信中..." : "送信"}
+  </button>
+);
+```
+
+`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
+
+### アクセシブルなエラー表示
+
+「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
+
+```tsx
+<input
+  id="email"
+  type="email"
+  aria-invalid={errors.email ? "true" : "false"}
+  aria-describedby={errors.email ? "email-error" : undefined}
+  {...register("email", { required: "メールは必須です" })}
+/>
+{errors.email && (
+  <p id="email-error" role="alert">
+    {errors.email.message}
+  </p>
+)}
+```
+
+これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
 
 ## 演習
 
 ### ゴール
 
-- `package.json` の依存とスクリプトを実際に編集する
-- `npm ci` と `npm install` の差を体験する
+- React + TS プロジェクトに RHF を導入する
+- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
+- 必須 / メールパターン / 最大長 のバリデーションを実装
+- 送信時に「送信中...」、成功で「送信しました！」を表示
 
-### 手順 1: 新規プロジェクト
+### 途中から始める場合
+
+これまでに作ったフォーム関連レッスン（4 章 / 7 章 のフォーム関連）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
 
 ```bash
-npm create vite@latest pkg-sample -- --template react-ts
-cd pkg-sample
+npm create vite@latest rhf-sample -- --template react-ts
+cd rhf-sample
 npm install
+npm install react-hook-form
 ```
 
-### 手順 2: dependencies / devDependencies を区別する
+### `src/ContactForm.tsx`
 
-```bash
-npm install dayjs              # dependencies に入る
-npm install -D vitest          # devDependencies に入る
-```
+```tsx
+import { useForm } from "react-hook-form";
+import { useState } from "react";
 
-`package.json` を開いて、それぞれが正しく入っていることを確認します。
+type FormValues = {
+  name: string;
+  email: string;
+  message: string;
+};
 
-```json
-{
-  "dependencies": {
-    "dayjs": "^1.11.10",
-    "react": "^19.2.0",
-    "react-dom": "^19.2.0"
-  },
-  "devDependencies": {
-    "@vitejs/plugin-react": "^5.0.0",
-    "typescript": "^5.9.0",
-    "vite": "^7.0.0",
-    "vitest": "^3.0.0"
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>();
+
+  async function onSubmit(data: FormValues) {
+    // 実際は fetch で送信。ここでは 1 秒待つだけ
+    await new Promise((r) => setTimeout(r, 1000));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
   }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
+
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          aria-describedby={errors.name ? "name-error" : undefined}
+          {...register("name", {
+            required: "お名前は必須です",
+            maxLength: { value: 50, message: "50 文字以内で入力してください" },
+          })}
+        />
+        {errors.name && (
+          <p id="name-error" role="alert" style={{ color: "red" }}>
+            {errors.name.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          aria-describedby={errors.email ? "email-error" : undefined}
+          {...register("email", {
+            required: "メールは必須です",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "メールアドレスの形式が正しくありません",
+            },
+          })}
+        />
+        {errors.email && (
+          <p id="email-error" role="alert" style={{ color: "red" }}>
+            {errors.email.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          aria-describedby={errors.message ? "message-error" : undefined}
+          {...register("message", {
+            required: "メッセージは必須です",
+            minLength: { value: 10, message: "10 文字以上で入力してください" },
+          })}
+        />
+        {errors.message && (
+          <p id="message-error" role="alert" style={{ color: "red" }}>
+            {errors.message.message}
+          </p>
+        )}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
+  );
 }
 ```
 
-### 手順 3: scripts を増やす
+### `src/App.tsx`
 
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview",
-    "lint": "echo 'lint placeholder'",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "ci": "npm run lint && npm run typecheck && npm run test"
-  }
+```tsx
+import { ContactForm } from "./ContactForm";
+
+export default function App() {
+  return <ContactForm />;
 }
 ```
-
-`npm run ci` を実行して、3 つのスクリプトが順に走ることを確認します。
-
-### 手順 4: lock の挙動を観察する
-
-```bash
-git init
-git add .
-git commit -m "init"
-
-# package-lock.json を消して install
-rm package-lock.json
-npm install
-git diff --stat package-lock.json
-```
-
-ハッシュや解決バージョンが微妙に変わっていることがあります（依存ツリー全体で再解決される）。これが「lock を Git に入れる理由」です。
-
-### 手順 5: npm ci を試す
-
-```bash
-rm -rf node_modules
-npm ci
-```
-
-`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石。
 
 ### 期待出力
 
-- `npm install dayjs` 後、`dependencies` に `dayjs` が追加される
-- `npm install -D vitest` 後、`devDependencies` に `vitest` が追加される
-- `npm run ci` で 3 ステップが順に走る
-- `package-lock.json` を消して install すると差分が出る場合がある
-- `npm ci` は lock 通りに高速に入る
+- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
+- メールに `abc` を入れて送信 → メール形式エラー
+- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
+- DevTools の Console に送信値が出る
+
+`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
 
 ### 変える
 
-- `dayjs: "^1.11.10"` を `dayjs: "~1.11.10"` に変えて、`npm update` で何が更新されるか観察する
-- `engines: { "node": ">=20" }` を加えて、古い Node で `npm install` が警告を出すことを確認する
-- `prebuild` / `postbuild` を追加して連鎖実行を体験する
+- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
+- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
+- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
 
-### 自分で書く（任意）
+### 自分で書く
 
-- pnpm / Bun を入れて、同じプロジェクトの `install` 速度を比べる
-- モノレポ（`workspaces`）の最小構成を作って、共通の utility パッケージを 2 つのアプリから使う
-- `.npmrc` で `save-exact=true` を設定し、`npm install dayjs` した時に `^` が付かなくなることを確認
+- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
+- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
 
 ## まとめ
 
-- `package.json` は **メタ情報 / 依存 / スクリプト / ツール設定** の 4 つを担う
-- `dependencies` / `devDependencies` / `peerDependencies` の使い分け
-- semver の `^` は **MAJOR 固定 / MINOR・PATCH 自動更新**、`~` は MINOR まで固定
-- `package-lock.json` を **必ず Git に入れる**。CI では `npm ci` で再現性を保つ
-- パッケージマネージャは **npm / pnpm / yarn / Bun** の 4 択。新規業務開発は pnpm が増加傾向、最速重視なら Bun
-- `scripts` は `npm run xxx` で起動。`&&` で連結、`pre` / `post` で連鎖
-- `npx` / `pnpm dlx` / `bunx` で **一度だけ実行** できる
-- `engines` と `.nvmrc` でチーム間の Node のバージョンを揃える
-- 別のレッスンでは **Vite の仕組み** に進んで、開発サーバーとビルドの中身を覗く
+- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
+- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
+- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
+- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
+- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
+- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
+- `isSubmitting` で送信中の UI 制御
+- 別のレッスンでは **Zod** で型安全な複雑バリデーションに進み、サーバーとの連携も統一する

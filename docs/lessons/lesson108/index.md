@@ -1,441 +1,396 @@
-# lesson108: Zod でスキーマバリデーション
+# lesson108: Git の基本操作
 
 ## ゴール
 
-- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
-- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
-- `parse` / `safeParse` の違いと使いどころを知る
-- `z.infer<typeof schema>` で型を自動導出できる
-- React Hook Form と組み合わせて型安全なフォームを作れる
-- API レスポンスの検証や Server Actions の入力検証にも応用できる
-- Valibot / Arktype など代替ライブラリの存在を知る
+- Git が「ファイルの履歴を残す」道具であることを説明できる
+- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
+- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
+- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
+- `.gitignore` でコミットしないファイルを除外できる
+- マージコンフリクトの解消手順を 1 度経験する
 
 ## 解説
 
-### TypeScript の型だけでは足りない
+### Git とは
 
-TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
+**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
 
-```ts
-type User = { id: number; name: string };
+なぜ必要か:
 
-async function getUser(): Promise<User> {
-  const res = await fetch("/api/user");
-  return res.json();   // 本当に User 型？
-}
-```
+- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
+- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
+- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
+- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
 
-`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
+2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
 
-実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
+### リポジトリ（repository）と作業ディレクトリ
 
-### Zod とは
+- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
+- **作業ディレクトリ**: あなたが今編集しているファイル群
 
-Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+### `git init` で履歴管理を開始
 
-1. **実行時バリデーション**: 不正な値を弾く
-2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
-
-「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
-
-### インストール
+新規プロジェクトを Git 管理下に置くには:
 
 ```bash
-npm install zod
+mkdir my-project
+cd my-project
+git init
 ```
 
-### 基本のスキーマ
+`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
 
-```ts
-import { z } from "zod";
+### 3 つのエリア（変更が辿る道）
 
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  email: z.string().email(),
-  age: z.number().int().min(0).max(150),
-  isAdmin: z.boolean(),
-});
+Git では変更が次の 3 段階を辿ります。
 
-type User = z.infer<typeof UserSchema>;
-// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
+```
+作業ディレクトリ          ステージング         リポジトリ（履歴）
+（編集中のファイル）  →  （add した変更）  →  （commit した変更）
+       │                      │                      │
+       └─ git add ─────────────                       │
+       └─ git commit -m "..." ────────────────────────┘
 ```
 
-`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
+- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
+- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
+- **リポジトリ**: `git commit` で履歴に固定された状態
 
-### 組み込み修飾メソッド
+### 基本コマンド
 
-```ts
-z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
-z.string().email("メール形式で")                        // メール
-z.string().url("URL 形式で")                           // URL
-z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
-z.number().int("整数で").positive("正の数で")           // 整数 + 正
-z.number().min(0).max(100)                             // 範囲
-z.string().optional()                                   // string | undefined
-z.string().nullable()                                   // string | null
-z.string().default("デフォルト")                        // デフォルト値
-```
-
-### 配列とユニオン
-
-```ts
-const TodoSchema = z.object({
-  id: z.string().uuid(),
-  title: z.string().min(1),
-  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
-  tags: z.array(z.string()),
-  createdAt: z.string().datetime(),           // ISO 8601
-});
-
-type Todo = z.infer<typeof TodoSchema>;
-```
-
-### `parse` と `safeParse`
-
-スキーマで値を検証する 2 つの方法:
-
-#### `parse`: 失敗時に例外を投げる
-
-```ts
-try {
-  const user = UserSchema.parse(data);
-  console.log(user.name);  // 型は User
-} catch (err) {
-  if (err instanceof z.ZodError) {
-    console.log(err.issues);  // どこで失敗したかの詳細
-  }
-}
-```
-
-#### `safeParse`: 失敗時にも値を返す
-
-```ts
-const result = UserSchema.safeParse(data);
-if (result.success) {
-  console.log(result.data.name);
-} else {
-  console.log(result.error.issues);
-}
-```
-
-`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
-
-### React Hook Form と統合
-
-`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
+#### `git status`: 今の状態を確認
 
 ```bash
-npm install @hookform/resolvers
+git status
 ```
 
-```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
 
-const ContactSchema = z.object({
-  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
-  email: z.string().email("メールアドレスの形式が正しくありません"),
-  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
-  message: z.string().min(10, "10 文字以上で入力してください"),
-});
+#### `git add`: ステージングに追加
 
-type ContactFormValues = z.infer<typeof ContactSchema>;
-
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
-
-  function onSubmit(data: ContactFormValues) {
-    console.log("検証済みデータ:", data);
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <input {...register("name")} />
-      {errors.name && <p>{errors.name.message}</p>}
-
-      <input type="email" {...register("email")} />
-      {errors.email && <p>{errors.email.message}</p>}
-
-      <input type="number" {...register("age")} />
-      {errors.age && <p>{errors.age.message}</p>}
-
-      <textarea {...register("message")} />
-      {errors.message && <p>{errors.message.message}</p>}
-
-      <button type="submit" disabled={isSubmitting}>送信</button>
-    </form>
-  );
-}
+```bash
+git add file.txt        # 1 ファイル
+git add src/            # ディレクトリ全部
+git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
 ```
 
-利点:
+#### `git commit`: 履歴に固定
 
-- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
-- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
-- **エラーメッセージ** が日本語で出せる
-
-### `z.coerce` で型変換
-
-`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
-
-```ts
-z.coerce.number()       // 文字列 → 数値
-z.coerce.boolean()      // 文字列 / 数値 → boolean
-z.coerce.date()         // 文字列 → Date
+```bash
+git commit -m "ボタンの色を変更"
 ```
 
-### API レスポンスの検証
+`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
 
-サーバーから返ってきたデータが想定通りかを検証します。
+#### `git log`: 履歴を見る
 
-```ts
-async function fetchUser(id: number): Promise<User> {
-  const res = await fetch(`/api/users/${id}`);
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
-}
+```bash
+git log              # 詳しく見る
+git log --oneline    # 1 行ずつ簡潔に
+git log --graph      # ブランチをグラフで
+git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
 ```
 
-これで API 仕様変更による不正レスポンスを早期に検知できます。
+#### `git diff`: 変更内容を見る
 
-### Server Actions / Route Handlers の入力検証
-
-5 章 で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
-
-```ts
-"use server";
-
-import { z } from "zod";
-
-const AddTodoSchema = z.object({
-  text: z.string().min(1).max(200),
-});
-
-export async function addTodo(formData: FormData) {
-  const result = AddTodoSchema.safeParse({
-    text: formData.get("text"),
-  });
-  if (!result.success) {
-    return { ok: false as const, error: result.error.issues[0].message };
-  }
-  // 検証済みの result.data.text を使う
-  await db.insertTodo(result.data.text);
-  return { ok: true as const };
-}
+```bash
+git diff              # 作業ディレクトリ vs ステージング
+git diff --staged     # ステージング vs リポジトリ
+git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
 ```
 
-### よくあるパターン
+### `.gitignore` でコミット対象を絞る
 
-#### refine: 複数フィールド間のチェック
+`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
 
-```ts
-const SignupSchema = z.object({
-  password: z.string().min(8),
-  passwordConfirm: z.string(),
-}).refine((data) => data.password === data.passwordConfirm, {
-  message: "パスワードが一致しません",
-  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
-});
+`.gitignore`（プロジェクトルート）:
+
+```
+# 依存パッケージ（巨大、再生成可能）
+node_modules/
+
+# ビルド成果物
+dist/
+build/
+
+# 環境変数（秘匿）
+.env
+.env.local
+
+# OS のメタファイル
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
 ```
 
-#### transform: 値を加工
+`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。
 
-```ts
-const TrimmedString = z.string().transform((s) => s.trim());
+### ブランチ: 並行作業の単位
 
-TrimmedString.parse("  hello  "); // "hello"
+**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
+
+#### ブランチを作って切り替える
+
+```bash
+# 旧来の書き方
+git branch feature/login
+git checkout feature/login
+
+# 現代の書き方（Git 2.23 以降推奨）
+git switch -c feature/login   # -c は「create」
 ```
 
-### 代替ライブラリ
+`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
 
-| ライブラリ | 特徴 |
-|---|---|
-| **Zod** | デファクト。エコシステム最大 |
-| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
-| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
-| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
+#### ブランチを切り替える
 
-新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
+```bash
+git switch main
+git switch feature/login
+```
+
+`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
+
+#### ブランチを一覧
+
+```bash
+git branch          # ローカルブランチ
+git branch -a       # リモート含む全部
+```
+
+### マージ: ブランチを統合
+
+`feature/login` での作業が終わったら、main に統合します。
+
+```bash
+git switch main
+git merge feature/login
+```
+
+これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
+
+### マージコンフリクト
+
+両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
+
+```
+<<<<<<< HEAD
+const message = "こんにちは";
+=======
+const message = "Hello";
+>>>>>>> feature/login
+```
+
+このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
+
+```js
+const message = "Hello, こんにちは";  // 例: 両方を統合
+```
+
+その後:
+
+```bash
+git add path/to/conflicted-file.js
+git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
+```
+
+### リモートリポジトリ（GitHub / GitLab）
+
+`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
+
+#### リモートを追加
+
+GitHub で空の repo を作って、ローカルから紐付け:
+
+```bash
+git remote add origin https://github.com/your-name/your-repo.git
+```
+
+`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
+
+#### push: ローカル → リモート
+
+```bash
+git push -u origin main
+```
+
+`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
+
+#### pull: リモート → ローカル
+
+```bash
+git pull origin main
+```
+
+これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
+
+#### fetch: リモートの内容だけ取得
+
+```bash
+git fetch origin
+```
+
+リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
+
+### よくある初学者のつまずき
+
+1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
+2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
+3. **main で直接作業**: ブランチを切る習慣を最初から
+4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
+
+### 設定の基本
+
+最初の 1 回だけ:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+git config --global init.defaultBranch main
+```
+
+これがないと commit で「誰が」が記録できません。
 
 ## 演習
 
 ### ゴール
 
-- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
-- スキーマから型を自動導出する
-- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
+- ローカルで Git リポジトリを作って commit を 3 回打つ
+- ブランチを作って別の変更を入れ、main にマージする
+- わざとコンフリクトを起こして解消する
 
-### 手順 1: 依存追加
+### 途中から始める場合
+
+ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
+
+### 手順 1: リポジトリを初期化
 
 ```bash
-npm install zod @hookform/resolvers
+mkdir git-practice
+cd git-practice
+git init
 ```
 
-### 手順 2: スキーマ + 型を定義
+### 手順 2: ファイルを作って 1 回目の commit
 
-`src/contact-schema.ts`:
+`README.md`:
 
-```ts
-import { z } from "zod";
-
-export const ContactSchema = z.object({
-  name: z
-    .string()
-    .min(1, "お名前は必須です")
-    .max(50, "50 文字以内で入力してください"),
-  email: z
-    .string()
-    .min(1, "メールは必須です")
-    .email("メールアドレスの形式が正しくありません"),
-  message: z
-    .string()
-    .min(10, "10 文字以上で入力してください")
-    .max(1000, "1000 文字以内で入力してください"),
-});
-
-export type ContactFormValues = z.infer<typeof ContactSchema>;
+```md
+# Git 練習用リポジトリ
 ```
 
-### 手順 3: フォームを書き換え
-
-`src/ContactForm.tsx`:
-
-```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { ContactSchema, type ContactFormValues } from "./contact-schema";
-
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
-
-  async function onSubmit(data: ContactFormValues) {
-    await new Promise((r) => setTimeout(r, 500));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
-
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          {...register("name")}
-        />
-        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          {...register("email")}
-        />
-        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          {...register("message")}
-        />
-        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
-  );
-}
+```bash
+git add README.md
+git commit -m "README を追加"
 ```
 
-### 手順 4: API レスポンス検証の例
+### 手順 3: ファイルを増やして 2 回目の commit
 
-`src/api.ts`:
+`hello.txt`:
 
-```ts
-import { z } from "zod";
-
-const PostSchema = z.object({
-  id: z.number().int(),
-  title: z.string(),
-  body: z.string(),
-  userId: z.number().int(),
-});
-
-export type Post = z.infer<typeof PostSchema>;
-
-const PostListSchema = z.array(PostSchema);
-
-export async function fetchPosts(): Promise<Post[]> {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return PostListSchema.parse(data);   // 不正な構造なら ZodError
-}
+```
+Hello, Git!
 ```
 
-これで API レスポンスの構造が変わってもすぐ気付けます。
+```bash
+git status              # 変更が見える
+git add hello.txt
+git commit -m "hello.txt を追加"
+git log --oneline       # 2 件の履歴が見える
+```
+
+### 手順 4: ブランチで作業
+
+```bash
+git switch -c feature/greeting
+# hello.txt を編集 → 「Hello, Git! こんにちは。」 に
+git add hello.txt
+git commit -m "挨拶を日本語追記"
+```
+
+### 手順 5: main に切り替えて、main 側でも変更
+
+```bash
+git switch main
+# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」 に
+git add hello.txt
+git commit -m "ビックリマーク追加"
+```
+
+これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
+
+### 手順 6: マージ → コンフリクト発生
+
+```bash
+git merge feature/greeting
+```
+
+エラーが出ます:
+
+```
+Auto-merging hello.txt
+CONFLICT (content): Merge conflict in hello.txt
+Automatic merge failed; fix conflicts and then commit the result.
+```
+
+`hello.txt` を開くと:
+
+```
+<<<<<<< HEAD
+Hello, Git!! ビックリマーク追加
+=======
+Hello, Git! こんにちは。
+>>>>>>> feature/greeting
+```
+
+両方を取り込むよう手動で編集:
+
+```
+Hello, Git!! こんにちは。ビックリマーク追加
+```
+
+```bash
+git add hello.txt
+git commit               # エディタが開く → 自動メッセージのまま保存
+git log --oneline --graph
+```
+
+ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
 
 ### 期待出力
 
-- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
-- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
-- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
-- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
+```
+*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
+|\
+| * abcdef0 (feature/greeting) 挨拶を日本語追記
+* | fedcba9 ビックリマーク追加
+|/
+* 7654321 hello.txt を追加
+* 0987654 README を追加
+```
 
 ### 変える
 
-- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
-- `z.string().email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
-- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
+- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
+- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
+- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
 
 ### 自分で書く
 
-- `password` と `passwordConfirm` の一致チェックを `refine` で書く
-- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
-- Server Actions（5 章）の入力を Zod で検証するパターンを 1 つ書いてみる
+- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
+- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
 
 ## まとめ
 
-- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
-- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
-- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
-- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
-- `parse`（例外）/ `safeParse`（戻り値）の使い分け
-- **`z.infer<typeof schema>`** で型を自動導出
-- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
-- API レスポンス検証 / Server Actions 入力検証 にも同じスキーマを再利用
-- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
-- これで7 章 のフォーム 2 連作が完了。次は **状態管理の地図** に進む
+- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
+- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
+- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
+- `.gitignore` で `node_modules` / `.env` 等を除外
+- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
+- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
+- リモート: `remote add origin URL` / `push` / `pull` / `fetch`
+- 別のレッスンでは **GitHub の PR とコードレビュー** に進む

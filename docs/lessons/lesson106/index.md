@@ -1,342 +1,414 @@
-# lesson106: GitHub Actions で CI
+# lesson106: ESLint / Prettier / Biome
 
 ## ゴール
 
-- CI / CD の意味と価値を説明できる
-- GitHub Actions のワークフロー YAML の基本構造を読める
-- push / pull_request トリガーで Lint / Test / Build を自動実行できる
-- 失敗時の通知・ステータスバッジ・キャッシュの基本を知る
-- ブランチ保護ルールに **CI 必須** を組み合わせる
-- Vercel / Netlify の Preview Deployment が裏でやっていることを理解する
+- Lint と Format が **役割の異なる別物** であることを理解する
+- ESLint の flat config（`eslint.config.js`）の最小形を読める
+- Prettier との連携で衝突しない設定を書ける
+- Biome がこの 2 役を **1 ツール** で 35x 速く処理することを理解する
+- 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
+- VS Code の保存時 autofix で「書きながら直る」体験を得る
 
 ## 解説
 
-### CI / CD とは
+### Lint と Format は別物
 
-- **CI**（Continuous Integration、継続的インテグレーション）: コードをリポジトリに統合する **そのたびに** 自動でビルド / テスト / Lint を回す仕組み
-- **CD**（Continuous Delivery / Deployment、継続的デリバリー / デプロイ）: 統合に成功したら自動でステージング / 本番にデプロイする仕組み
+混同しがちですが、役割が違います。
 
-CI が崩れたまま開発を続けると、**「どの変更で壊れたか分からない」** 状態になります。1 つの PR ごとに「壊れていない」を保証することで、main は常に動く状態を保てます。
-
-### GitHub Actions とは
-
-GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料で月 2,000 分**（執筆時点）使えます。
-
-主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
-
-### 最小のワークフロー
-
-`.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test:run
-```
-
-このファイルを **commit + push** すると、GitHub Actions タブに最初の実行が現れ、自動で:
-
-1. Ubuntu の仮想マシンを起動
-2. リポジトリを `checkout`
-3. Node.js 22 をセットアップ（npm キャッシュも有効化）
-4. `npm ci` で依存パッケージをインストール
-5. `npm run test:run` でテストを実行
-
-### 構造を読む
-
-- **`name`**: ワークフローの表示名
-- **`on`**: トリガー条件
-  - `push.branches`: 指定ブランチへの push で実行
-  - `pull_request.branches`: 指定ブランチを **マージ先** にする PR で実行
-  - `schedule`: cron 式で定期実行
-  - `workflow_dispatch`: 手動実行
-- **`jobs`**: 並列実行できる仕事の単位
-- **`runs-on`**: 実行環境（`ubuntu-latest` / `macos-latest` / `windows-latest`）
-- **`steps`**: 順番に実行する処理
-  - `uses: actions/...@v4`: 既製のアクションを使う
-  - `run: ...`: シェルコマンドを実行
-
-### Lint / テスト / ビルドを並列で
-
-実用的には次のような構成です。
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run lint
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run test:run
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build
-```
-
-3 つの job が **並列で実行** されます。1 つでも fail すると全体が fail として扱われ、PR ページに赤い X が出ます。
-
-### キャッシュで速くする
-
-`actions/setup-node@v4` の `cache: npm` を指定するだけで、`~/.npm` の中身がキャッシュされます。2 回目以降の `npm ci` が秒速で終わります。
-
-`pnpm` / `yarn` の場合も同様にキャッシュキーを指定できます。
-
-### マトリクスで複数バージョンをテスト
-
-```yaml
-test:
-  runs-on: ubuntu-latest
-  strategy:
-    matrix:
-      node: [20, 22]
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: ${{ matrix.node }}, cache: npm }
-    - run: npm ci
-    - run: npm run test:run
-```
-
-これで Node 20 と 22 の両方で同じテストが走ります。複数 OS（`os: [ubuntu, macos, windows]`）も同様。
-
-### 環境変数とシークレット
-
-機密情報（API キー / Vercel トークン等）はリポジトリ設定の **Settings → Secrets and variables → Actions → New repository secret** に登録します。ワークフローからは:
-
-```yaml
-- run: deploy --token $VERCEL_TOKEN
-  env:
-    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-```
-
-YAML やコードに **直接書くと公開されてしまう** ので絶対に避けます。
-
-### ステータスバッジ
-
-`README.md` の冒頭に CI バッジを貼ると、ブランチが「動く状態か」が一目で分かります。
-
-```md
-[![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
-```
-
-緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
-
-### ブランチ保護と CI 必須
-
-「GitHub の PR とコードレビュー」で設定したブランチ保護に **「Require status checks to pass before merging」** を追加し、`lint` / `test` / `build` の各 job を必須に指定します。
-
-これで:
-
-- CI が通っていない PR は **マージ ボタンが押せない**
-- 「テスト書いてあるけど動かしたら fail してた」が起きなくなる
-- 安心して main を信じられる
-
-### Vercel / Netlify との関係
-
-Vercel / Netlify の **Preview Deployment** は、内部で GitHub Actions と似た仕組みを動かしています。PR を作るたびに **そのブランチの内容で本物のサイトを一時デプロイ** してくれて、URL が PR にコメントされます。
-
-CI（GitHub Actions）と Preview Deployment は **役割が違う** ので両方使うのが普通です:
-
-- **CI**（Actions）: テストや Lint で「壊れてないか」を機械的に検証
-- **Preview Deployment**: 「本物の動作を人間がブラウザで確認」する場所
-
-本コースの教材サイトでも、PR を作ると Vercel が自動でプレビュー URL を作ってくれています。
-
-### Lighthouse CI で a11y / パフォーマンスを CI に
-
-「アクセシビリティの自動チェック」と「Core Web Vitals」で扱った **Lighthouse** を CI に組み込めます。
-
-```yaml
-- name: Lighthouse CI
-  uses: treosh/lighthouse-ci-action@v12
-  with:
-    urls: |
-      https://your-preview-url.vercel.app/
-    uploadArtifacts: true
-    temporaryPublicStorage: true
-```
-
-PR ごとに自動で Lighthouse が走り、スコアが下がったら警告できます。
-
-### 通知
-
-CI 失敗時に Slack / Discord / Email に通知する Action も豊富です。
-
-- `slackapi/slack-github-action`
-- `act10ns/slack`
-- 失敗時のみ通知する条件: `if: failure()`
-
-```yaml
-- name: Slack 通知
-  if: failure()
-  uses: slackapi/slack-github-action@v2
-  with:
-    payload: '{"text": "CI failed!"}'
-  env:
-    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-```
-
-### よく使う公式アクション
-
-| アクション | 用途 |
+| ツール | 守備範囲 |
 |---|---|
-| `actions/checkout@v4` | リポジトリを checkout |
-| `actions/setup-node@v4` | Node.js セットアップ |
-| `actions/cache@v4` | 任意のディレクトリをキャッシュ |
-| `actions/upload-artifact@v4` | テスト結果やビルド成果物を保存 |
-| `actions/download-artifact@v4` | 保存した成果物を取り出す |
-| `pnpm/action-setup` | pnpm セットアップ（Node とは別途） |
+| **Lint**（ESLint） | コードの **品質** チェック。バグの種 / アンチパターン / a11y 違反 / 未使用変数を検知 |
+| **Format**（Prettier） | コードの **見た目** を整える。インデント / クォート / 改行位置 |
 
-`actions/checkout` のバージョンは年に数回更新されます。最新版は <https://github.com/marketplace?type=actions> で確認できます。
+ESLint は「未使用変数があるよ」「`any` 型は避けて」と教える。Prettier は「シングルクォートに統一して、80 文字で改行して」と整える。両方やると初めて綺麗で安全なコードベースになります。
+
+歴史的には ESLint だけで両方やる時代もありましたが、**役割を分ける** のが現代の合意。最近はさらに **Biome** という「両方を 1 ツールでやる」次世代の選択肢が出てきました。
+
+### ESLint の flat config
+
+ESLint v9（2024 年リリース）から **flat config** が既定になり、古い `.eslintrc` 形式は非推奨です。設定ファイルは **`eslint.config.js`**（ESM）になります。
+
+#### 最小構成（TypeScript + React）
+
+```bash
+npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks
+```
+
+`eslint.config.js`:
+
+```js
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+
+export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+  },
+  {
+    ignores: ["dist/", "node_modules/"],
+  },
+];
+```
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  }
+}
+```
+
+`npm run lint` で全ファイルをチェック、`npm run lint:fix` で自動修正できる範囲は直してくれます。
+
+#### よく使うプラグイン
+
+- `typescript-eslint`: TypeScript の型情報を使った高度なチェック
+- `eslint-plugin-react`: React のお作法
+- `eslint-plugin-react-hooks`: フック規則の検証
+- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（7 章「アクセシビリティ」と相性◎）
+- `eslint-plugin-import`: import の順序とパス解決
+
+### Prettier の最小設定
+
+```bash
+npm install -D prettier
+```
+
+`.prettierrc`（プロジェクトルート）:
+
+```json
+{
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "tabWidth": 2
+}
+```
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}
+```
+
+`.prettierignore` に除外を書きます:
+
+```
+dist/
+node_modules/
+*.min.js
+```
+
+### ESLint と Prettier の衝突を避ける
+
+ESLint にも整形系のルール（インデント / セミコロン）が組み込まれていますが、これが Prettier と衝突します。**`eslint-config-prettier`** を使ってこれらのルールを無効化します。
+
+```bash
+npm install -D eslint-config-prettier
+```
+
+`eslint.config.js` の最後に追加:
+
+```js
+import prettierConfig from "eslint-config-prettier";
+
+export default [
+  // ...上記の設定
+  prettierConfig,  // 最後に置いて整形系のルールを上書きで OFF
+];
+```
+
+これで「ESLint は品質、Prettier は見た目」の役割分担が綺麗に成立します。
+
+### VS Code の保存時 autofix
+
+`.vscode/settings.json`（プロジェクトの設定）:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}
+```
+
+これでファイル保存時に:
+
+1. ESLint の自動修正可能な違反が直る
+2. Prettier がコードを整形する
+
+の 2 段階が走ります。「書きながら綺麗になる」体験になり、PR レビューで「インデントが…」と指摘するムダが消えます。
+
+VS Code の拡張は `dbaeumer.vscode-eslint` と `esbenp.prettier-vscode` を入れます。
+
+### Biome: 1 ツールで両方
+
+**Biome** は Rust 製の Lint + Format ツールです。
+
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
+
+これだけで `biome.json` が生成され、すぐ使えます。
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
+```
+
+#### Biome の魅力
+
+- **設定ファイルが 1 つだけ**（`biome.json`）
+- **ESLint + Prettier より 35x 速い**（10000 ファイル: ESLint 45.2s vs Biome 0.8s）
+- **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
+- **Lint と Format の衝突がない**（同じツール内なので）
+- **VS Code 拡張**（`biomejs.biome`）も公式
+
+#### Biome の限界
+
+- TypeScript の **型情報を使う高度なルール**（`no-floating-promises` 等）は ESLint だけが提供
+- 既存 ESLint プラグイン（`jsx-a11y` 等）は使えない
+- カスタムルールが書きづらい
+
+### 2026 年の選び方
+
+#### 新規プロジェクト（greenfield）
+
+**Biome 単独** が最有力候補です。設定が少なく速いので、立ち上げの摩擦が圧倒的に小さい。
+
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
+
+#### 既存プロジェクト（ESLint + Prettier がある）
+
+**ハイブリッド構成** が現実解:
+
+- **Biome**: フォーマット + 基本 Lint（高速）
+- **ESLint**: 型情報を要する高度なルール + 既存プラグイン
+
+または、コストをかけて Biome に完全移行（手動マイグレーションツールあり）。
+
+#### Lighthouse / a11y 検査も Lint で
+
+ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、7 章「アクセシビリティ」と組み合わせると効果的です。
+
+```js
+// eslint.config.js
+import jsxA11y from "eslint-plugin-jsx-a11y";
+
+export default [
+  // ...
+  jsxA11y.configs.recommended,
+];
+```
+
+これで `<img>` の alt 欠落 / `<button>` の `tabindex="-1"` などが Lint で警告されます。
+
+### Husky + lint-staged で commit 時に自動チェック
+
+「commit する時に Lint / Format を自動実行」して、CI で fail する前に直す仕組みです。
+
+```bash
+npm install -D husky lint-staged
+npx husky init
+```
+
+`.husky/pre-commit`:
+
+```sh
+npx lint-staged
+```
+
+`package.json`:
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": ["biome check --write"]
+  }
+}
+```
+
+`git commit` のたびに、ステージングされたファイルだけが対象に Lint + Format されます。**全プロジェクトを毎回チェックしないので速い** のが lint-staged の利点。
 
 ## 演習
 
 ### ゴール
 
-- 「GitHub の PR とコードレビュー」で作ったリポジトリに `.github/workflows/ci.yml` を追加する
-- PR を作って CI が走るのを確認する
-- ブランチ保護に CI 必須を追加する
+- Vite + React + TS プロジェクトに **Biome** を導入する
+- VS Code で保存時に自動整形 / 自動修正が走るようにする
+- わざとエラーを入れて、Biome が検知することを確認する
 
-### 手順 1: テストスクリプトを用意
+### 手順 1: 新規プロジェクト
 
-リポジトリにテストが何もない場合、最小のものを足します。`package.json` の `scripts` に:
+```bash
+npm create vite@latest lint-sample -- --template react-ts
+cd lint-sample
+npm install
+```
+
+### 手順 2: Biome を導入
+
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
+
+`biome.json` が生成されます。中身は最小設定:
 
 ```json
 {
-  "scripts": {
-    "test:run": "echo 'テスト実行（プレースホルダ）'",
-    "lint": "echo 'Lint 実行（プレースホルダ）'",
-    "build": "echo 'Build 実行（プレースホルダ）'"
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "files": {
+    "ignoreUnknown": false,
+    "ignore": ["node_modules", "dist"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
   }
 }
 ```
 
-実プロジェクトでは Vitest / ESLint / Vite / Next.js のビルドコマンドを書きます。
+`indentStyle` を `space` に変えたい場合は `"indentStyle": "space", "indentWidth": 2` に。
 
-### 手順 2: ワークフローを書く
+### 手順 3: package.json scripts
 
-`.github/workflows/ci.yml`（プロジェクトルートから見たパス）:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test:run
-      - run: npm run build
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
 ```
 
-### 手順 3: ブランチで commit + push
+### 手順 4: VS Code 設定
 
-```bash
-git switch -c chore/ci
-mkdir -p .github/workflows
-# 上記 ci.yml を保存
-git add .github package.json
-git commit -m "chore: GitHub Actions で CI を追加"
-git push -u origin chore/ci
+`.vscode/settings.json`:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}
 ```
 
-### 手順 4: PR を作って CI を観察
+VS Code の拡張ストアで `biomejs.biome` をインストールします。
 
-GitHub のリポジトリ → PR を作成。
+### 手順 5: 動作確認
 
-PR ページに **「Some checks haven't completed yet」** が出て、しばらくすると **「All checks have passed」** に変わるはずです（プレースホルダなので即終わる）。**Details** リンクから個別の job ログを見られます。
+`src/App.tsx` に、わざと整形が崩れたコードを書きます:
 
-PR 内で右側の **Checks** タブを開くと、各 step ごとの所要時間とログが時系列で見られます。
+```tsx
+import {useState}from "react"
 
-### 手順 5: ブランチ保護に CI 必須を追加
+export default function App(){
+const[count,setCount]=useState(0)
+const unused = "使ってない";
+return <div><h1>Count: {count}</h1><button onClick={()=>setCount(c=>c+1)}>+1</button></div>
+}
+```
 
-リポジトリの **Settings → Branches → main → Edit rule**:
+ファイルを保存すると:
 
-- **Require status checks to pass before merging** にチェック
-- 検索ボックスに `ci` と入力 → 表示されたチェックを **必須** に登録
-- 保存
+- インデントが揃う
+- 改行が入る
+- 引用符が統一される
+- `unused` 変数が「使われていない」と警告される
 
-これ以降、CI が成功していない PR はマージできなくなります。試しに `ci.yml` をわざと壊して push してみると、CI が fail して PR がマージできない状態になります（確認したら戻す）。
+ターミナルで `npm run check` を実行すると、すべての違反が一覧されます。`npm run check:fix` で自動修正できる範囲は直されます。
 
 ### 期待出力
 
-- PR ページに緑のチェック「All checks have passed」が出る
-- Actions タブにワークフロー実行履歴が並ぶ
-- ブランチ保護でマージボタンが無効化される（CI 失敗時）
+```
+Checked 5 files in 200ms. No fixes applied.
+Found 1 warning.
+```
+
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [count, setCount] = useState(0);
+  const unused = "使ってない";  // 警告: unused
+  return (
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
+  );
+}
+```
 
 ### 変える
 
-- ジョブを 3 つに分割（lint / test / build）して並列実行に変える。CI 全体の時間が短くなる
-- `runs-on` を `windows-latest` に変えて Windows でも動くか確認（Vite / Next なら通常 OK）
-- `if: github.event_name == 'pull_request'` を追加して、特定の job を PR 時だけ実行
-- `actions/cache@v4` で `~/.cache/Cypress` などをキャッシュして E2E を速くする
+- `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
+- `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
+- `linter.rules.style.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
 
-### 自分で書く
+### 自分で書く（任意）
 
-- README に CI バッジを貼る
-- Vercel デプロイのプレビュー URL を Lighthouse CI で計測するワークフローを足す（`treosh/lighthouse-ci-action@v12`）
-- Slack 通知を `if: failure()` で組み込む
+- 既存の Vite テンプレートに **ESLint + Prettier** を入れて、Biome 構成と比較する
+  - 必要なパッケージ数の違い
+  - 設定ファイルの数の違い
+  - `npm run lint` の所要時間
+- Husky + lint-staged を入れて commit 時に自動 Lint / Format される構成を作る
 
 ## まとめ
 
-- **CI** は push / PR のたびに自動でビルド / テスト / Lint を回す仕組み
-- GitHub Actions は **`.github/workflows/*.yml`** に書くだけで動く
-- 構造: `on`（トリガー）→ `jobs`（並列の仕事）→ `steps`（順次のコマンド / アクション）
-- `actions/checkout` + `actions/setup-node` が定番の出発点。`cache: npm` で 2 回目以降が爆速
-- マトリクスで複数 OS / 複数 Node バージョンを並列テストできる
-- シークレットは **Settings → Secrets** に登録し、ワークフロー内で `secrets.NAME` を参照（具体的な記法は本文の YAML 例を参照）
-- ブランチ保護で **CI 必須** に設定すると安全
-- Vercel / Netlify の Preview Deployment は CI とは別の役割（実機確認）
-- Lighthouse CI / Slack 通知 / Artifact 保存などの拡張が豊富
-- これで7 章 の Git / GitHub 3 連作が完了。次は **フォーム深掘り**（React Hook Form + Zod） に進む
+- **Lint** はコード品質、**Format** はコード整形。役割が違う
+- **ESLint v9** は flat config が既定。`.eslintrc` は非推奨
+- ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
+- VS Code の保存時 autofix で「書きながら綺麗になる」体験
+- **Biome** は Lint + Format を 1 ツール、Rust 製、35x 速い、設定 1 ファイル
+- **新規プロジェクトは Biome 単独** が 2026 年の有力解
+- 既存 ESLint 資産を活かすなら **Biome（基本）+ ESLint**（型情報を要するルール） のハイブリッド
+- `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
+- Husky + lint-staged で commit 時の自動 Lint / Format
+- 別のレッスンでは **モダン CSS** に進む

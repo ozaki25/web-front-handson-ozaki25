@@ -1,427 +1,450 @@
-# lesson115: Web Analytics（Vercel Analytics / GA4）
+# lesson115: Web Components 入門
 
 ## ゴール
 
-- 「サイトを公開したら見るべき指標」が何かを理解する
-- Vercel Analytics と Speed Insights を Next.js に入れられる
-- Google Analytics 4（GA4）の最小設定とカスタムイベント送信が分かる
-- プライバシー（Cookie 同意 / ITP / iOS の制限）配慮の基本を押さえる
-- 解析結果から **何を改善するか** を判断する手順を持つ
+- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
+- Shadow DOM でスタイルと DOM を外から隔離できる
+- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
+- `<slot>` で外側から中身を差し込める
+- React との使い分けを判断できる
 
 ## 解説
 
-### 「サイトを公開したら見るべきもの」
+### Web Components とは
 
-公開後に最低限見たい指標は次の 3 軸です。
+**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
 
-| 軸 | 例 |
+| 柱 | 役割 |
 |---|---|
-| 来訪数 | PV（ページビュー）/ UU（ユニークユーザー）/ 流入元 |
-| 体験 | 表示速度（Core Web Vitals）/ エラー率（→ Sentry） |
-| 行動 | クリック / スクロール / フォーム送信 / コンバージョン |
+| Custom Elements | 自作の HTML タグを定義 |
+| Shadow DOM | スタイルと DOM を隔離 |
+| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
 
-エラー率は Sentry のレッスンで扱いました。**残り 2 軸を埋めるのが Web Analytics** の役割です。
+作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
 
-### サービスの組み合わせ
+### なぜ今 Web Components を知るか
 
-| ツール | カバーする軸 | 特徴 |
-|---|---|---|
-| **Vercel Analytics** | PV / 流入元 | Cookieless、Next.js 統合が秒で済む |
-| **Vercel Speed Insights** | Core Web Vitals | 実ユーザーの LCP / INP / CLS を集める |
-| **Google Analytics 4**（GA4） | PV / イベント / コンバージョン | 機能多 / 学習コスト高 / Cookie 必要 |
-| **Plausible / Fathom / Simple Analytics** | PV / 流入元 | プライバシー重視、料金固定 |
-| **PostHog / Mixpanel / Amplitude** | プロダクト分析（イベント深掘り） | 機能フラグ / セッション再生も統合 |
+2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
 
-「Vercel Analytics + Sentry」だけで小規模サイトは十分。**ユーザー行動の深掘り** が要るなら GA4 / PostHog などを追加します。
+- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
+- 会社共通のデザインシステムを **React 依存にせず** 配布したい
+- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
 
-### Vercel Analytics（Next.js）
+React コンポーネントは React の中でしか動きません。Web Components は **どこでも動く**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
 
-Vercel に Next.js をデプロイしているなら **管理画面で ON にして 1 行 import するだけ** で導入できます。
+### Custom Elements の最小形
 
-```bash
-npm install @vercel/analytics
-```
-
-`app/layout.tsx`:
-
-```tsx
-import { Analytics } from "@vercel/analytics/next";
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Analytics />
-      </body>
-    </html>
-  );
-}
-```
-
-ポイント:
-
-- **Cookie を使わない** プライバシー設計（ファーストパーティ集計）
-- 個人情報を保存しない
-- ヨーロッパでも同意バナーなしで使える
-- Vercel ダッシュボードに **PV / 流入経路 / リファラー / 国別** が出る
-
-### Vercel Speed Insights
-
-実ユーザーの **Core Web Vitals**（lesson101）を集めるツールです。
-
-```bash
-npm install @vercel/speed-insights
-```
-
-```tsx
-import { SpeedInsights } from "@vercel/speed-insights/next";
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <SpeedInsights />
-      </body>
-    </html>
-  );
-}
-```
-
-これで Lighthouse の合成指標ではなく **本物のユーザー体験** が記録されます。「LCP が悪化したのは○月○日のリリース後」のような診断ができる。
-
-### Google Analytics 4（GA4）
-
-#### 設定の流れ
-
-1. [Google アナリティクス](https://analytics.google.com/) にログイン
-2. プロパティを作成（**GA4 を選ぶ**。**Universal Analytics は 2023 年に終了**しているので新規はもう作れない）
-3. **測定 ID**（`G-XXXXXXXXXX`）を取得
-
-#### Next.js に追加（最小）
-
-```tsx
-// app/layout.tsx
-import Script from "next/script";
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const gaId = process.env.NEXT_PUBLIC_GA_ID;
-
-  return (
-    <html lang="ja">
-      <head>
-        {gaId && (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-              strategy="afterInteractive"
-            />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${gaId}');
-              `}
-            </Script>
-          </>
-        )}
-      </head>
-      <body>{children}</body>
-    </html>
-  );
-}
-```
-
-`.env`:
-
-```
-NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
-```
-
-#### カスタムイベントを送る
-
-GA4 は **イベントベース**。「ページが読まれた」も `page_view` イベントです。任意のイベントを送れます。
-
-```ts
-declare global {
-  interface Window {
-    gtag?: (
-      command: "event",
-      action: string,
-      params?: Record<string, unknown>,
-    ) => void;
+```js
+class HelloWorld extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = "<p>Hello, Web Components!</p>";
   }
 }
 
-function trackEvent(name: string, params?: Record<string, unknown>) {
-  if (typeof window !== "undefined" && window.gtag) {
-    window.gtag("event", name, params);
+customElements.define("hello-world", HelloWorld);
+```
+
+HTML で使う:
+
+```html
+<hello-world></hello-world>
+```
+
+ルール:
+
+- クラスは **`HTMLElement` を継承** する
+- `customElements.define(タグ名, クラス)` で登録
+- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
+
+### ライフサイクル
+
+Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
+
+```js
+class MyCounter extends HTMLElement {
+  connectedCallback() {
+    // DOM に追加された時
+    this.render();
+  }
+
+  disconnectedCallback() {
+    // DOM から外された時。リスナー解除などのクリーンアップ
+  }
+
+  static observedAttributes = ["count"];
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    // 監視対象の属性が変わった時
+    if (name === "count") this.render();
+  }
+
+  render() {
+    const count = this.getAttribute("count") ?? "0";
+    this.innerHTML = `<strong>Count: ${count}</strong>`;
   }
 }
 
-// 使う側
-trackEvent("signup_completed", { method: "email" });
-trackEvent("add_to_cart", { item_id: "ABC", value: 1200, currency: "JPY" });
+customElements.define("my-counter", MyCounter);
 ```
 
-GA4 の管理画面で **「主要イベント（旧コンバージョン）」** にチェックを入れると、その回数が KPI として追えるようになります。
+```html
+<my-counter count="3"></my-counter>
+```
 
-#### App Router の SPA 遷移を補足する
+`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
 
-App Router は Server Components で初回はネイティブ遷移ですが、`next/link` で **クライアント遷移** すると `page_view` が自動では飛びません。`usePathname` の変化で送ります。
+### Shadow DOM でスタイルを隔離
 
-```tsx
-"use client";
-import { useEffect } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
+普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
 
-export function GAPageView({ gaId }: { gaId: string }) {
-  const pathname = usePathname();
-  const search = useSearchParams();
+```js
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
+        :host {
+          display: block;
+          padding: 16px;
+          border: 1px solid #ccc;
+          border-radius: 8px;
+        }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2>カードタイトル</h2>
+      <p>カードの中身</p>
+    `;
+  }
+}
+customElements.define("my-card", MyCard);
+```
 
-  useEffect(() => {
-    if (!window.gtag) return;
-    const url = pathname + (search?.toString() ? `?${search}` : "");
-    window.gtag("event", "page_view", {
-      page_path: url,
-      send_to: gaId,
+```html
+<my-card></my-card>
+```
+
+- `attachShadow({ mode: "open" })` で shadow tree を作る
+- `:host` は **このカスタム要素自身** を指すセレクタ
+- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
+
+`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
+
+### `<slot>` で外から中身を差し込む
+
+React の `children` に相当するのが `<slot>` です。
+
+```js
+class FancyBox extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
+        header { font-weight: bold; margin-bottom: 8px; }
+      </style>
+      <header><slot name="title">デフォルトタイトル</slot></header>
+      <div><slot>本文が入ります</slot></div>
+    `;
+  }
+}
+customElements.define("fancy-box", FancyBox);
+```
+
+使う側:
+
+```html
+<fancy-box>
+  <span slot="title">カスタムタイトル</span>
+  <p>ここが本文です。</p>
+</fancy-box>
+```
+
+- `<slot>` は **名前なし** のデフォルトスロット
+- `<slot name="title">` は **名前付き** スロット
+- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
+
+### プロパティ / イベント
+
+ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
+
+```js
+class MyToggle extends HTMLElement {
+  #checked = false;
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.render();
+    this.shadowRoot.querySelector("button").addEventListener("click", () => {
+      this.checked = !this.checked;
     });
-  }, [pathname, search, gaId]);
+  }
 
-  return null;
+  get checked() { return this.#checked; }
+  set checked(value) {
+    this.#checked = Boolean(value);
+    this.render();
+    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <button>${this.#checked ? "ON" : "OFF"}</button>
+    `;
+    this.shadowRoot.querySelector("button").addEventListener("click", () => {
+      this.checked = !this.checked;
+    });
+  }
 }
+customElements.define("my-toggle", MyToggle);
 ```
 
-`<GAPageView gaId={gaId} />` を `app/layout.tsx` に置くだけ。
+使う側:
 
-### プライバシー（重要）
+```html
+<my-toggle></my-toggle>
 
-#### GDPR / Cookie 同意
-
-**ヨーロッパ** からアクセスがある場合、Cookie を使う Analytics は **同意バナー** が必要です。日本の個人情報保護法も「クッキー類による行動データの第三者提供」に同意取得を要求するケースが増えています。
-
-実装の選択肢:
-
-- **Cookieless な Vercel Analytics / Plausible / Fathom** に切り替える
-- GA4 を使うなら **同意管理プラットフォーム**（CMP） を入れる：CookieYes、Cookiebot、Osano、Iubenda
-- GA4 の **Consent Mode v2** を使うと、同意がない場合でも「集計値だけ」を匿名で送れる
-
-#### ITP（Intelligent Tracking Prevention）
-
-Safari の ITP は **3rd-party cookie を実質ブロック**、1st-party cookie も **7 日で失効** させます。Chrome の 3rd-party cookie 廃止は 2025 年に改めて延期されましたが、長期的には **「3rd-party cookie に依存しない設計」** が必要です。
-
-#### 個人情報を送らない
-
-URL に `?email=xxx@example.com` のようなクエリが入った場合、それが **そのまま Analytics に送られる** 事故が起きます。**送信前にサニタイズ** する習慣を。
-
-```ts
-function trackPageView(path: string) {
-  // メールアドレスっぽい文字列を匿名化
-  const safe = path.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]");
-  window.gtag?.("event", "page_view", { page_path: safe });
-}
+<script>
+  const toggle = document.querySelector("my-toggle");
+  toggle.addEventListener("change", (e) => {
+    console.log("ON/OFF:", e.detail.checked);
+  });
+</script>
 ```
 
-### 解析結果の読み方
+- プロパティは **クラスの getter / setter** として定義
+- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
 
-#### PV だけ見ない
+### `<template>` で DOM のクローン元を用意
 
-PV が増えても **すぐ離脱** していたら意味がありません。次の指標を組み合わせて見ます。
+大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
 
-- **エンゲージメント時間**: 1 セッションあたりの滞在
-- **直帰率**（Bounce Rate）: 1 ページだけ見て離脱した割合
-- **コンバージョン率**: 目的のアクション（購入 / 登録）に至った割合
+```html
+<template id="card-template">
+  <style>
+    :host { display: block; border: 1px solid #ccc; padding: 12px; }
+  </style>
+  <slot name="title"></slot>
+  <slot></slot>
+</template>
 
-#### 集約より分解
+<script>
+  const tpl = document.getElementById("card-template");
+  class MyCardTpl extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({ mode: "open" });
+      shadow.appendChild(tpl.content.cloneNode(true));
+    }
+  }
+  customElements.define("my-card-tpl", MyCardTpl);
+</script>
+```
 
-「全体の PV」より「**流入元別の PV**」「**国別の PV**」を見ると、何を改善するかが見えやすいです。「Twitter からの流入は直帰率が高い」「日本以外は読まれていない」など。
+`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
 
-#### Speed Insights は「**75 パーセンタイル**」を見る
+### React との使い分け
 
-平均値ではなく **75th percentile** が指標になります。「**75% のユーザーがこの値より良い体験**」という意味。Core Web Vitals の合格基準も 75th percentile で判定されます。
+「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
 
-### 自分の Vercel デプロイ以外（Vite SPA など）
+| | Web Components | React |
+|---|---|---|
+| 動く場所 | どの HTML ページでも | React アプリの中だけ |
+| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
+| 型 | TypeScript と相性が微妙 | 強い |
+| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
+| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
 
-Vercel Analytics は **Vercel 以外でも動く** ようになりました。`@vercel/analytics/react` をインポートするだけ。
+**原則**:
+
+- **アプリ内部** の UI → React で書く（DX が圧倒的）
+- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
+- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
+
+React 19 以降は **Custom Elements を props / event で自然に扱える** ようになりました。昔は `ref` で手動 setAttribute が必要でしたが、いまは React でも普通に書けます。
 
 ```tsx
-import { Analytics } from "@vercel/analytics/react";
-
-createRoot(document.getElementById("root")!).render(
-  <>
-    <App />
-    <Analytics />
-  </>,
-);
+// React 19+
+<my-toggle onchange={(e) => console.log(e.detail)} />
 ```
 
-GA4 / Plausible / PostHog などはホスティング先を問わず動きます。
+### Lit の存在
 
-### 最低限の Cookie 同意ダイアログ（参考）
+Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
 
-外部 CMP を使わず、**同意があるまで GA4 を読み込まない** 簡易実装。
+```js
+import { LitElement, html, css } from "lit";
 
-```tsx
-"use client";
-import { useState, useEffect } from "react";
-import Script from "next/script";
-
-export function ConsentBanner({ gaId }: { gaId: string }) {
-  const [accepted, setAccepted] = useState(false);
-
-  useEffect(() => {
-    setAccepted(localStorage.getItem("ga-consent") === "yes");
-  }, []);
-
-  const accept = () => {
-    localStorage.setItem("ga-consent", "yes");
-    setAccepted(true);
-  };
-
-  return (
-    <>
-      {accepted && (
-        <>
-          <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
-          <Script id="ga4">
-            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaId}');`}
-          </Script>
-        </>
-      )}
-      {!accepted && (
-        <div role="dialog" aria-label="Cookie 同意">
-          <p>このサイトは GA4 で利用状況を計測しています。</p>
-          <button onClick={accept}>同意する</button>
-        </div>
-      )}
-    </>
-  );
+class MyCard extends LitElement {
+  static styles = css`
+    :host { display: block; padding: 16px; border: 1px solid #ccc; }
+  `;
+  render() {
+    return html`<h2>タイトル</h2><slot></slot>`;
+  }
 }
+customElements.define("my-card", MyCard);
 ```
 
-実運用では地域判定 / 拒否時の挙動 / 設定リンクなど追加要件があるので、**プロダクションでは CMP を使う** のが現実的。
+Web Components を本格的に書くなら Lit が現在のデファクト。Google / Adobe / Shopify も使っています。
 
 ## 演習
 
 ### ゴール
 
-- Next.js プロジェクトに **Vercel Analytics + Speed Insights** を入れる
-- GA4 のカスタムイベントを 1 つ送れるようにする
+- Counter の Web Component を作る
+- Shadow DOM でスタイル隔離を確認する
+- `<slot>` で外から中身を差し込む
 
-### 手順 1: 新規 Next.js プロジェクト
-
-```bash
-npx create-next-app@latest analytics-sample --ts --app
-cd analytics-sample
-```
-
-質問にはデフォルトで答えます（Tailwind: yes / src directory: no / App Router: yes）。
-
-### 手順 2: Vercel Analytics と Speed Insights
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm install @vercel/analytics @vercel/speed-insights
+npm create vite@latest web-components-sample -- --template vanilla-ts
+cd web-components-sample
+npm install
 ```
 
-`app/layout.tsx`:
+### 手順 2: index.html
 
-```tsx
-import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import "./globals.css";
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Web Components Demo</title>
+    <style>
+      /* 外側の CSS（Shadow DOM で隔離されるはず） */
+      h2 { color: red; }
+      body { font-family: sans-serif; padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <h2>外側の h2（赤いはず）</h2>
 
-export const metadata: Metadata = {
-  title: "Analytics Sample",
-  description: "Vercel Analytics と GA4 のテスト",
-};
+    <my-card>
+      <span slot="title">内側のタイトル</span>
+      <p>スロットに入る本文</p>
+    </my-card>
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Analytics />
-        <SpeedInsights />
-      </body>
-    </html>
-  );
-}
+    <my-counter start="5"></my-counter>
+    <p id="log">イベントログ: -</p>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
 ```
 
-### 手順 3: GA4 を追加
+### 手順 3: src/main.ts
 
-`.env.local`:
-
-```
-NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
-```
-
-`app/layout.tsx` に Script を追加（前述の最小例の通り）。
-
-### 手順 4: カスタムイベントを送るボタン
-
-`app/page.tsx`:
-
-```tsx
-"use client";
-
-declare global {
-  interface Window {
-    gtag?: (cmd: "event", name: string, params?: Record<string, unknown>) => void;
+```ts
+// my-card
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2><slot name="title">デフォルトタイトル</slot></h2>
+      <div><slot></slot></div>
+    `;
   }
 }
+customElements.define("my-card", MyCard);
 
-export default function Home() {
-  const handleClick = () => {
-    window.gtag?.("event", "demo_click", { label: "hero-cta", value: 1 });
-    alert("送信しました（DevTools の Network で確認）");
-  };
+// my-counter
+class MyCounter extends HTMLElement {
+  #count = 0;
 
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Analytics 演習</h1>
-      <button onClick={handleClick}>イベントを送信</button>
-    </main>
-  );
+  static observedAttributes = ["start"];
+
+  attributeChangedCallback(name: string, _old: string, value: string) {
+    if (name === "start") {
+      this.#count = Number(value);
+      this.render();
+    }
+  }
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.#count = Number(this.getAttribute("start") ?? "0");
+    this.render();
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
+        button { padding: 4px 12px; }
+        strong { min-width: 40px; text-align: center; }
+      </style>
+      <button id="dec">-</button>
+      <strong>${this.#count}</strong>
+      <button id="inc">+</button>
+    `;
+    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
+      this.#count++;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
+      this.#count--;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+  }
 }
+customElements.define("my-counter", MyCounter);
+
+// ログ
+const log = document.getElementById("log")!;
+document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
+  const ce = e as CustomEvent<{ count: number }>;
+  log.textContent = `イベントログ: count = ${ce.detail.count}`;
+});
 ```
 
-### 手順 5: 確認
+### 手順 4: 起動して確認
 
 ```bash
 npm run dev
 ```
 
-ブラウザの DevTools で **Network** タブを開き、`google-analytics.com/g/collect` へのリクエストが飛ぶことを確認します（GA4 のイベント送信）。`vitals.vercel-insights.com` への送信も Speed Insights のもの。
+ブラウザで以下を確認します。
+
+1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
+2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
+3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
+4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
 
 ### 期待出力
 
-- ボタンクリックで `collect?...&en=demo_click` 形式のリクエストが出る
-- `vitals.vercel-insights.com/v1/vitals` に LCP / INP / CLS のメトリクスが送られる
-- Vercel にデプロイすると、ダッシュボードで PV と Speed Insights が見られる
+- Shadow DOM の中の h2 は青、外側の h2 は赤
+- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
 
 ### 変える
 
-- ConsentBanner を実装し、同意があるまで GA4 を読まない構成に変える
-- イベント名を `add_to_cart` / `view_item` のような **GA4 推奨イベント名** にすると、レポートで自動分類される
-- `gtag('config', gaId, { send_page_view: false })` にして `page_view` を自分で送る形にする
+- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認
+- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
+- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
+- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
 
 ### 自分で書く（任意）
 
-- Plausible / Fathom / PostHog のうち 1 つを試して、Vercel Analytics との UI 差を比較する
-- ページ遷移ごとに `page_view` を送る `<GAPageView />` を作って `app/layout.tsx` に組み込む
-- `Speed Insights` のデータと `Lighthouse` のスコアを比較し、合成 vs 実ユーザーの差を観察
+- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
+- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
+- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
 
 ## まとめ
 
-- 「公開後に見るもの」は **来訪 / 体験 / 行動** の 3 軸。エラーは Sentry、残り 2 軸が Analytics の役割
-- **Vercel Analytics** は Cookieless で導入が秒。Vercel 以外でも `@vercel/analytics/react` で動く
-- **Speed Insights** は実ユーザーの Core Web Vitals を **75 パーセンタイル** で集める
-- **GA4** はイベントベースで強力だが、**Cookie 同意 / Consent Mode v2** を意識する必要がある
-- 個人情報（メールアドレスなど）が **URL から漏れて Analytics に送られる事故** を避ける
-- ITP / 3rd-party cookie 廃止の流れで、**1st-party / Cookieless 設計** が主流
-- 「PV だけを見ない」。**エンゲージメント / 流入元 / 国 / コンバージョン** を分解して見る
-- 別のレッスンでは **OGP と SEO** に進み、サイトの「読まれ方」を整える
+- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
+- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
+- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
+- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
+- プロパティは getter / setter、通知は `CustomEvent` で
+- 本格運用するなら **Lit** が今のデファクト
+- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
+- React 19 以降は Custom Elements の props / event 受け渡しが自然
+- 別のレッスンでは **国際化対応**（Intl API） に進む

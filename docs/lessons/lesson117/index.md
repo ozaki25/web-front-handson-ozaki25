@@ -1,483 +1,416 @@
-# lesson117: CI/CD パイプラインの設計
+# lesson117: フィーチャーフラグ
 
 ## ゴール
 
-- 「CI」と「CD」を正しく区別して語れる
-- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
-- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
-- Lighthouse CI で速度劣化を **PR 単位** で検知できる
-- Vercel の **Preview Deployment** とテストを連携できる
-
-::: tip 前提
-このレッスンは lesson106「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson106 を参照してください。
-:::
+- フィーチャーフラグが「**デプロイ** と **機能公開** を分離する」考え方であることを説明できる
+- 環境変数ベースの最小実装ができる
+- ロールアウト（10% → 50% → 100%）の意義を理解する
+- LaunchDarkly / GrowthBook / Vercel Edge Config / Statsig の位置付けが分かる
+- A/B テストとフィーチャーフラグの違いと重なりを説明できる
 
 ## 解説
 
-### CI と CD の違い
+### 背景: 「リリース」と「公開」を切り離したい
 
-| 略 | 正式名称 | やること |
-|---|---|---|
-| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
-| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
+新機能をリリースすると、次の不安が常に付きまといます。
 
-「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
+- **本番で初めて壊れたら？**
+- **想定外のトラフィックで重くなったら？**
+- **特定ユーザーだけが踏むバグがあったら？**
 
-### パイプラインの基本構成
+従来の「**ビルドして本番にデプロイ → 全ユーザーに公開**」は、不具合が出た瞬間に **ロールバックしか選択肢がない** という弱さがあります。
+
+フィーチャーフラグ（Feature Flag、Feature Toggle）は **「コードはデプロイ済み、機能は OFF」の状態を作る** 仕組みです。
 
 ```
-push / PR
-   ↓
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
-└─────────┘  └─────────┘  └─────────┘
-        ↓        ↓        ↓
-        └────────┴────────┘
-                   ↓
-              ┌─────────┐
-              │  Build  │
-              └─────────┘
-                   ↓
-              ┌─────────┐
-              │ Deploy  │  ← main にマージされた時のみ
-              └─────────┘
+[ デプロイ ]──────────────[ 機能公開 ]
+     │                         │
+     ↓                         ↓
+  GitHub で merge          管理画面で ON
+   = 全ユーザーに            = 特定の人 / %
+     コードが届く              に出す
 ```
 
-ポイント:
+これによって:
 
-- **lint / test / typecheck は並列**（独立しているので速い）
-- **build は依存** が解決した後（手戻りを早く検知）
-- **deploy は最後** にする
-- **PR では deploy しない**（preview deployment は別フロー）
+- **5% に出してから様子を見る**
+- **問題が出たら 1 クリックで戻す**（ビルド不要）
+- **社内ユーザーだけ先行公開**
+- **A/B テスト**（バリアント A と B の効果を比較）
 
-### GitHub Actions の最小パイプライン
+### 最小実装: 環境変数で
 
-`.github/workflows/ci.yml`:
+「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。
 
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm test
-
-  build:
-    needs: [lint, typecheck, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-          cache: npm
-      - run: npm ci
-      - run: npm run build
+```ts
+// .env.production
+NEXT_PUBLIC_NEW_CHECKOUT=false
 ```
 
-`needs:` で **前のジョブが成功した時だけ** 次に進みます。
-
-### キャッシュで速くする
-
-毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
-
-#### `actions/cache` で任意のディレクトリ
-
-```yaml
-- uses: actions/cache@v4
-  with:
-    path: |
-      ~/.npm
-      .next/cache
-    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-    restore-keys: |
-      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
-```
-
-Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
-
-::: warning キャッシュの落とし穴
-キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
-:::
-
-### マトリクスビルド
-
-複数の Node.js バージョン / OS で同時にテストする時に便利。
-
-```yaml
-test:
-  runs-on: ${{ matrix.os }}
-  strategy:
-    matrix:
-      os: [ubuntu-latest, macos-latest, windows-latest]
-      node: [20, 22]
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: ${{ matrix.node }} }
-    - run: npm ci
-    - run: npm test
-```
-
-これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
-
-### 並列の使いどころ
-
-- **Lint / Typecheck / Test を並列に**
-- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
-- **Storybook ビルドを別ジョブに**
-- **Cypress / Playwright を shard** で分割
-
-シャーディング例（Playwright）:
-
-```yaml
-strategy:
-  fail-fast: false
-  matrix:
-    shard: [1, 2, 3, 4]
-steps:
-  - run: npx playwright test --shard=${{ matrix.shard }}/4
-```
-
-### CD（デプロイ）の戦略
-
-#### Vercel / Netlify / Cloudflare Pages を使うなら
-
-これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
-
-#### 自前でデプロイする時の最小例
-
-```yaml
-deploy:
-  if: github.ref == 'refs/heads/main'
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 20, cache: npm }
-    - run: npm ci
-    - run: npm run build
-    - run: npm run deploy
-      env:
-        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-```
-
-`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
-
-### Vercel の Preview Deployment と組み合わせる
-
-Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
-
-- レビュアーが **動作確認しながら** レビューできる
-- E2E テストを **本番に近い環境** で走らせられる
-- Lighthouse CI を **プレビュー URL に対して** 実行できる
-
-#### プレビュー URL に E2E を回す
-
-```yaml
-e2e:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 20, cache: npm }
-    - run: npm ci
-    - run: npx playwright install --with-deps
-    - name: Wait for Vercel preview
-      uses: patrickedqvist/wait-for-vercel-preview@v1
-      id: vercel
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        max_timeout: 300
-    - run: npx playwright test
-      env:
-        BASE_URL: ${{ steps.vercel.outputs.url }}
-```
-
-### Lighthouse CI
-
-PR 単位で **Lighthouse スコアの劣化** を検知します。
-
-```bash
-npm install -D @lhci/cli
-```
-
-`lighthouserc.json`:
-
-```json
-{
-  "ci": {
-    "collect": {
-      "url": ["https://example.com/"],
-      "numberOfRuns": 3
-    },
-    "assert": {
-      "assertions": {
-        "categories:performance": ["error", { "minScore": 0.9 }],
-        "categories:accessibility": ["error", { "minScore": 0.95 }]
-      }
-    },
-    "upload": {
-      "target": "temporary-public-storage"
-    }
+```tsx
+// app/checkout/page.tsx
+export default function CheckoutPage() {
+  if (process.env.NEXT_PUBLIC_NEW_CHECKOUT === "true") {
+    return <NewCheckout />;
   }
+  return <LegacyCheckout />;
 }
 ```
 
-GitHub Actions で:
+メリット:
 
-```yaml
-lighthouse:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 20, cache: npm }
-    - run: npm ci
-    - run: npx lhci autorun
+- 何も足さずに始められる
+- ビルド時に値が **インライン** されるので実行時オーバーヘッドゼロ
+
+デメリット:
+
+- 切り替えに **再ビルド + デプロイ** が必要（瞬時には変えられない）
+- ユーザー単位で出し分けできない
+- A/B テストには使えない
+
+「**動作確認用 / 開発中の機能を本番に隠す**」程度なら環境変数で十分。**運用で柔軟に切り替えたい** なら次のステップへ。
+
+### 中規模実装: 設定をリモート管理
+
+ビルドし直さずに切り替えたいなら、**フラグの値を外部から取得** します。
+
+```ts
+// utils/flags.ts
+type Flags = { newCheckout: boolean; aiSummary: boolean };
+
+let cached: Flags | null = null;
+
+export async function getFlags(): Promise<Flags> {
+  if (cached) return cached;
+  const res = await fetch("https://api.example.com/flags", { cache: "no-store" });
+  cached = await res.json();
+  return cached!;
+}
 ```
 
-スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
+```tsx
+// app/page.tsx
+import { getFlags } from "@/utils/flags";
 
-### シークレットの取り扱い
-
-- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
-- workflow ファイルに **平文で書かない**
-- Pull Request からの workflow は **secrets が読めない** 設定（`pull_request_target` を使う場合は厳重注意）
-
-### 環境（Environment）の活用
-
-`environment: production` を指定すると:
-
-- Required reviewers（**承認が必要**）
-- Wait timer（**N 分待つ**）
-- Branch policy（**main 限定**）
-- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
-
-を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
-
-```yaml
-deploy-prod:
-  environment: production
-  runs-on: ubuntu-latest
-  steps: ...
+export default async function Home() {
+  const flags = await getFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
 ```
 
-### 再利用可能な workflow
+API のバックエンドは:
 
-組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
+- 自前のテーブル（Postgres / Redis）
+- **Vercel Edge Config**（Vercel 公式の超低遅延 KV）
+- Cloudflare KV / R2
 
-```yaml
-# .github/workflows/_node-ci.yml（呼ばれる側）
-on:
-  workflow_call:
-    inputs:
-      node-version: { type: string, default: "20" }
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ inputs.node-version }}, cache: npm }
-      - run: npm ci
-      - run: npm run lint && npm run test
+Vercel Edge Config の例:
+
+```ts
+import { get } from "@vercel/edge-config";
+
+const newCheckout = await get<boolean>("newCheckout");
 ```
 
-```yaml
-# 呼び出す側
-jobs:
-  ci:
-    uses: my-org/.github/.github/workflows/_node-ci.yml@main
-    with:
-      node-version: "22"
+**ms 単位で読める** ので、ページレンダリングの先頭で読んでも遅くなりません。
+
+### ユーザーに紐付くロールアウト
+
+「10% に出す」「特定の社員だけに出す」を実現するには **ユーザー識別子** が要ります。
+
+```ts
+function isFeatureEnabled(userId: string, percent: number): boolean {
+  // ユーザー ID をハッシュ → 0〜99 にマップ
+  const hash = simpleHash(userId) % 100;
+  return hash < percent;
+}
+
+const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
 ```
 
-### 失敗を早く検知するコツ
+ハッシュベースだと、**同じユーザーは毎回同じ結果**（再現性）が得られます。「今回は ON、次回は OFF」を防げる。
 
-- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
-- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
-- **`timeout-minutes`** を設定して暴走を止める
-- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
+### SaaS の選択肢
 
-### コスト管理
+機能が複雑になると自前は辛いので SaaS を使います。
 
-GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
+| サービス | 特徴 |
+|---|---|
+| **LaunchDarkly** | エンタープライズ標準。機能フラグ + 実験機能 + 監査ログ。価格は高め |
+| **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
+| **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
+| **Flagsmith** | OSS / セルフホスト可能 |
+| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
+| **PostHog Feature Flags** | Analytics と統合 |
 
-- **キャッシュ** で `npm ci` の時間を削る
-- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
-- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
+#### LaunchDarkly の最小例
 
-```yaml
-on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "package*.json"
+```bash
+npm install launchdarkly-react-client-sdk
 ```
+
+```tsx
+import { withLDProvider, useFlags } from "launchdarkly-react-client-sdk";
+
+function App() {
+  const flags = useFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
+
+export default withLDProvider({
+  clientSideID: process.env.NEXT_PUBLIC_LD_CLIENT_ID!,
+  context: { kind: "user", key: "user-123", email: "user@example.com" },
+})(App);
+```
+
+管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
+
+#### GrowthBook の最小例
+
+```bash
+npm install @growthbook/growthbook-react
+```
+
+```tsx
+import { GrowthBook, GrowthBookProvider, useFeatureIsOn } from "@growthbook/growthbook-react";
+
+const gb = new GrowthBook({
+  apiHost: "https://cdn.growthbook.io",
+  clientKey: process.env.NEXT_PUBLIC_GB_CLIENT_KEY,
+  attributes: { id: currentUser.id },
+});
+
+await gb.loadFeatures();
+
+function NewCheckoutGuard() {
+  const enabled = useFeatureIsOn("new-checkout");
+  return enabled ? <NewCheckout /> : <LegacyCheckout />;
+}
+
+<GrowthBookProvider growthbook={gb}>
+  <NewCheckoutGuard />
+</GrowthBookProvider>
+```
+
+### A/B テストとの関係
+
+フィーチャーフラグは「**ON か OFF か**」、A/B テストは「**A 案と B 案、どちらの効果が高いか**」を測るもの。
+
+実装は近く、フラグ系 SaaS は両方こなします。
+
+```ts
+// バリアント割当
+const variant = useExperiment("checkout-flow"); // "control" or "v2"
+
+return variant === "v2" ? <NewCheckout /> : <LegacyCheckout />;
+```
+
+A/B テストは **統計的な有意差** の判定が必要なので、SaaS の機能（Bayesian / Frequentist のテスト統計）を活用します。
+
+### Kill Switch（緊急停止）
+
+フィーチャーフラグの **大きな価値** がこれ。本番で問題が起きた時に **コードを巻き戻さず** に機能を即 OFF にできる。
+
+- 「決済 v2 を ON にしたら障害」→ 管理画面で OFF に
+- 「新検索が API を叩きすぎ」→ OFF に
+
+ロールバック（git revert + 再デプロイ）が **数分** かかるのに対し、フラグ OFF は **数秒**。これが本番運用の安心感に直結します。
+
+### フラグの寿命管理
+
+フラグは増えると **コードが if 地獄** になります。**寿命を管理** する習慣が大事。
+
+| フラグの種類 | 寿命の目安 |
+|---|---|
+| Release flag（新機能の段階公開） | 公開完了後すぐ削除 |
+| Experiment flag（A/B テスト） | 結果が出たら削除 |
+| Ops flag（緊急停止用） | 長期保存 |
+| Permission flag（権限による出し分け） | 永続 |
+
+「**Release flag は公開後 2 週間で削除**」のようなルールを決めて、定期清掃します。
+
+#### lint で検出
+
+GrowthBook / LaunchDarkly などの SaaS は「**コードに残っているフラグ一覧**」を検出する CLI を提供しています。CI で「3 ヶ月使われていないフラグ」を warning 出力するのが有効。
+
+### サーバー / クライアント / Edge
+
+Next.js のような SSR / RSC 環境では「**フラグをどこで評価するか**」が重要です。
+
+| 場所 | 例 |
+|---|---|
+| **Server Component** | `await getFlag()` を直接呼ぶ。SSR でフラグ反映 |
+| **Edge Middleware** | リクエストヘッダで分岐し、A/B 用に URL を書き換え |
+| **Client Component** | `useFlag()` フックでクライアントサイド分岐。**ハイドレーション後の表示揺れ** に注意 |
+
+クライアント側だけで分岐すると、ハイドレーションの瞬間に「**ON → OFF のチラつき**」が出ることがあります。なるべく **サーバー側で確定** させて RSC として配るのが安全。
+
+### よくある失敗
+
+#### 1. フラグの ON / OFF が複雑になりすぎる
+
+`if (flag1 && (flag2 || flag3) && !flag4) { ... }` のような状態は **テスト不可能**。フラグは独立に動かす設計を。
+
+#### 2. デフォルト値の事故
+
+ネットワークが落ちた時 / API 失敗時の **fallback 値** を必ず決める。
+
+```ts
+const enabled = (await getFlag("newCheckout")) ?? false; // 失敗時は OFF
+```
+
+#### 3. クライアント露出
+
+「管理画面用フラグ」をクライアントから読めるようにすると、**敵対的なユーザーが ON にしてしまう** 可能性がある。**サーバー側で評価** が原則。
+
+#### 4. 削除されないフラグ
+
+書いたまま忘れて、**コードが永遠に if で分岐**。定期的な清掃を。
 
 ## 演習
 
 ### ゴール
 
-- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
-- キャッシュを効かせて 2 倍速にする
+- 環境変数ベースのフラグから始め、リモート管理ベースに育てる
+- ユーザー ID ベースの 10% ロールアウトを実装する
 
-### 手順 1: ベースのプロジェクト
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest cicd-sample -- --template react-ts
-cd cicd-sample
-npm install
-git init && git add . && git commit -m "init"
+npx create-next-app@latest flags-sample --ts --app
+cd flags-sample
 ```
 
-GitHub にリポジトリを作って push。
+### 手順 2: 環境変数フラグ
 
-### 手順 2: scripts を整える
+`.env.local`:
 
-`package.json`:
+```
+NEXT_PUBLIC_NEW_HOMEPAGE=true
+```
 
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  }
+`app/page.tsx`:
+
+```tsx
+export default function Home() {
+  const newHomepage = process.env.NEXT_PUBLIC_NEW_HOMEPAGE === "true";
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
+    </main>
+  );
 }
 ```
 
-ESLint 設定 / 簡単な test は省略可。
+`.env.local` の値を `false` に変えて再起動すると、表示が切り替わります。
 
-### 手順 3: workflow
+### 手順 3: ユーザー ID ベースのロールアウト
 
-`.github/workflows/ci.yml`:
+`utils/rollout.ts`:
 
-```yaml
-name: CI
+```ts
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h;
+}
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
-      - run: npm ci
-      - run: npm test
-
-  build:
-    needs: [lint, typecheck, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 20, cache: npm }
-      - run: npm ci
-      - run: npm run build
+export function isInRollout(userId: string, percent: number): boolean {
+  return hash(userId) % 100 < percent;
+}
 ```
 
-### 手順 4: PR を作って動作確認
+`app/page.tsx`:
 
-```bash
-git checkout -b feature/test
-echo "// test" >> src/App.tsx
-git commit -am "test"
-git push -u origin feature/test
+```tsx
+import { isInRollout } from "@/utils/rollout";
+
+const FAKE_USERS = ["user-1", "user-2", "user-3", "user-4", "user-5"];
+
+export default function Home() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>10% ロールアウトのデモ</h1>
+      <ul>
+        {FAKE_USERS.map((id) => (
+          <li key={id}>
+            {id}: {isInRollout(id, 10) ? "ON" : "OFF"}
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
 ```
 
-PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
+10% に絞ると **ほとんどの user が OFF**、50% にすると半々、と **再現性** を持って分かれることを確認します。
+
+### 手順 4: フラグを集約する
+
+`utils/flags.ts`:
+
+```ts
+import { isInRollout } from "./rollout";
+
+export type Flags = {
+  newCheckout: boolean;
+  aiSummary: boolean;
+};
+
+export function getFlags(userId: string): Flags {
+  return {
+    newCheckout: process.env.NEXT_PUBLIC_NEW_CHECKOUT === "true" && isInRollout(userId, 10),
+    aiSummary: process.env.NEXT_PUBLIC_AI_SUMMARY === "true",
+  };
+}
+```
+
+`app/dashboard/page.tsx`:
+
+```tsx
+import { getFlags } from "@/utils/flags";
+
+export default function Dashboard() {
+  const flags = getFlags("user-current");
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Dashboard</h1>
+      {flags.newCheckout && <p>新チェックアウト ON</p>}
+      {flags.aiSummary && <p>AI 要約 ON</p>}
+    </main>
+  );
+}
+```
 
 ### 期待出力
 
-- 4 つのジョブが Actions のタブに並ぶ
-- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
-- どれか fail すると build が走らない（`needs:` のおかげ）
+- `.env.local` の値を変えて再起動すると、`new` / `old` が切り替わる
+- ユーザー ID 別に ON / OFF が **再現性** を持って決まる
+- フラグを集約すると、ページごとの分岐が読みやすくなる
 
 ### 変える
 
-- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
-- マトリクスを使って Node 20 と 22 の両方でテストする
-- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
+- 5%、25%、50%、100% に変えて、ロールアウトの比率を実感する
+- ハッシュ関数を `Math.random()` に変えると **同じユーザーで結果がバラつく** ことを確認（NG パターン）
+- フラグ評価を Server Component に閉じ込めて、クライアントには結果だけ渡す
 
 ### 自分で書く（任意）
 
-- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
-- Vercel に連携して PR で Preview URL が作られる構成にする
-- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
-- `environment: production` で本番デプロイに承認ステップを入れる
+- Vercel Edge Config を使ってフラグをリモート管理にする
+- GrowthBook の SDK を入れて、UI で % を変えて即時反映を体験する
+- A/B テスト用の variant 割当を実装し、analytics に variant をタグ付けして送る
 
 ## まとめ
 
-- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
-- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
-- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
-- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
-- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
-- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
-- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
-- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える
-- 別のレッスンでは **Feature Flags** に進み、リリースとロールアウトの分離へ
+- フィーチャーフラグは **デプロイと機能公開を分離** する仕組み
+- 最小実装は **環境変数 1 つ**。柔軟性を上げたければリモート管理（Edge Config / DB）
+- **ハッシュベース** のロールアウトで再現性を保つ
+- SaaS は LaunchDarkly / **GrowthBook** / Statsig / Flagsmith / Vercel + PostHog など
+- **Kill Switch** で本番障害をビルドなしに止められる価値が大きい
+- A/B テストはフラグの仲間。SaaS は両方こなす
+- フラグは増える → **寿命を管理して定期清掃**
+- Server / Edge で評価して **クライアントのチラつき** を避ける
+- 別のレッスンでは **環境変数とシークレット** に進み、設定値の管理を体系化する

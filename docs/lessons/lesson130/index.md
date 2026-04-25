@@ -1,354 +1,498 @@
-# lesson130: 次世代ツールチェイン（Biome / Oxc / Turbopack）
+# lesson130: OGP と SEO 実践
 
 ## ゴール
 
-- 「**Rust 製ツール群** に置き換わりつつある」フロントエンド界隈の構図を理解する
-- Biome / Oxc / Rolldown / Turbopack それぞれの **役割と立ち位置** を区別できる
-- **既存プロジェクトに今すぐ導入するか** を判断できる
-- 速さの数字を **誇張なく** 受け取れる
-- 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
-
-::: tip 前提
-このレッスンは lesson110「ESLint / Prettier / Biome」と lesson113「Vite の仕組み」の発展編です。基本概念は先のレッスンで確認してください。
-:::
+- OGP（Open Graph）タグと Twitter Card で **シェアされた時の見栄え** を制御できる
+- Next.js の Metadata API（lesson86 の発展）で OGP を動的に生成できる
+- `sitemap.xml` と `robots.txt` の役割と Next.js での生成方法を知る
+- JSON-LD（構造化データ）でリッチリザルトを狙える
+- Google Search Console の使い方が分かる
 
 ## 解説
 
-### なぜ Rust 移行が進むのか
+### OGP（Open Graph Protocol）
 
-JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トランスパイラ）は **JavaScript で書かれて** きました。それは「**自分自身でメタ的に開発できる**」という美点があった一方:
+Twitter（X）/ Facebook / LINE / Slack / Discord などで URL を共有した時、**タイトル + 説明 + 画像** がカード形式で表示されます。これを制御するのが OGP です。
 
-- **シングルスレッド** 寄りで並列化が難しい
-- **GC のオーバーヘッド**
-- **JS 自体の起動コスト**
+```html
+<head>
+  <title>記事のタイトル</title>
+  <meta property="og:title" content="記事のタイトル" />
+  <meta property="og:description" content="この記事は OGP の使い方について書きます" />
+  <meta property="og:image" content="https://example.com/og.png" />
+  <meta property="og:url" content="https://example.com/post/1" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="My Blog" />
 
-これがプロジェクトサイズの増加に追いついていません。**Rust** は次の特徴で対抗:
-
-- **並列処理が得意**（fearless concurrency）
-- **GC なし** で予測可能なメモリ使用
-- **コンパイル時の最適化** で実行が速い
-- **WebAssembly に出せる**（CI / IDE 連携）
-
-結果として 2024〜2026 年の間に主要ツールが **Rust ベースに置き換え** が進んでいます。
-
-### 次世代ツールチェインの全体像
-
-| 役割 | 旧（JS 製） | 新（Rust 製） |
-|---|---|---|
-| バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
-| パーサー / トランスパイラ | Babel | **SWC** / Oxc |
-| Lint | ESLint | **Biome** / Oxlint |
-| Format | Prettier | **Biome** / dprint |
-| 型チェック | tsc | **stc**（試行段階） |
-
-それぞれを順に見ていきます。
-
-### Biome
-
-[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（lesson110 で扱い済み）。
-
-特徴:
-
-- **設定 1 ファイル**（`biome.json`）
-- **ESLint + Prettier より圧倒的に速い**（35x ベンチマーク）
-- TypeScript / JSX / JSON / CSS をサポート
-- VS Code 拡張あり
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@my_handle" />
+</head>
 ```
 
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
+ポイント:
+
+- `og:image` は **絶対 URL** を渡す（相対パスは効かない）
+- 画像サイズは **1200 x 630px** が推奨（Twitter / Facebook 共通）
+- `og:type` は `website` / `article` / `book` / `profile` などから選ぶ
+- Twitter Card は OGP を補完する。`summary_large_image` で大きく表示
+
+### Next.js の Metadata API（おさらい + 発展）
+
+lesson86 で `metadata` を export する書き方を扱いました。OGP も同じ仕組みで書けます。
+
+```ts
+// app/blog/[slug]/page.tsx
+import type { Metadata } from "next";
+
+type Props = { params: Promise<{ slug: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPost(slug);
+  return {
+    title: post.title,
+    description: post.excerpt,
+    openGraph: {
+      title: post.title,
+      description: post.excerpt,
+      url: `https://example.com/blog/${slug}`,
+      siteName: "My Blog",
+      images: [
+        {
+          url: post.coverImage,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+      type: "article",
+      publishedTime: post.publishedAt,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.excerpt,
+      images: [post.coverImage],
+      creator: "@my_handle",
+    },
+  };
 }
 ```
 
-#### Biome の限界
+### `metadataBase` を必ず指定
 
-- **TypeScript の型情報を使う高度なルール** は未対応（ESLint の `no-floating-promises` など）
-- 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
-- **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
+OGP の画像 URL を相対パスで書きたい時は、**ルートで `metadataBase`** を指定します。
 
-→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
-
-### Oxc / Oxlint
-
-[Oxc](https://oxc-project.github.io/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
-
-#### 構成要素
-
-| 名前 | 役割 |
-|---|---|
-| **oxc_parser** | JavaScript / TypeScript パーサ |
-| **oxlint** | Lint（ESLint 互換ルール） |
-| **oxc_minifier** | minify（terser / esbuild の代替） |
-| **oxc_resolver** | モジュール解決 |
-| **oxc_transformer** | TS / JSX → JS の変換 |
-
-「**Rust で書かれたフロントエンドの基盤一式**」を狙うプロジェクト。
-
-#### Oxlint の最小例
-
-```bash
-npm install -D oxlint
-npx oxlint
+```ts
+// app/layout.tsx
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+};
 ```
 
-ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。
+これがないと相対パスが効かず、開発時のローカル URL（`http://localhost:3000`）が混入する事故が起きます。
 
-```json
-// .oxlintrc.json
-{
-  "rules": {
-    "no-unused-vars": "error",
-    "no-debugger": "error"
-  }
+### 動的 OGP 画像（`opengraph-image.tsx`）
+
+Next.js 13.3+ から、**ファイルベースで OGP 画像を生成** できます。
+
+```tsx
+// app/blog/[slug]/opengraph-image.tsx
+import { ImageResponse } from "next/og";
+
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default async function OG({ params }: { params: { slug: string } }) {
+  const post = await getPost(params.slug);
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: 60,
+          background: "linear-gradient(135deg, #1e3a8a, #06b6d4)",
+          color: "white",
+        }}
+      >
+        <div style={{ fontSize: 64, fontWeight: 700 }}>{post.title}</div>
+        <div style={{ fontSize: 32, marginTop: 24, opacity: 0.85 }}>
+          {post.excerpt}
+        </div>
+      </div>
+    ),
+    { ...size },
+  );
 }
 ```
 
-#### Oxc が他に与える影響
+これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動き、軽量。
 
-Vite 8（lesson113）が **Rolldown を採用**、Rolldown は **Oxc を内蔵** しています。つまり Oxc は **Vite / Rolldown / 多くの新ツール** の土台になりつつある。
+### `sitemap.xml`
 
-Oxc は **VoidZero**（Evan You が立ち上げた会社）が支援しており、Vite / Rolldown と **同じ会社の同じ方向性** で開発が進んでいます。
+検索エンジンに「**このサイトにこういう URL があるよ**」と教えるファイル。Google は基本クロールで見つけてくれますが、**サイトが大きい / 内部リンクが少ない** 場合は sitemap が大事です。
 
-### Rolldown
+#### Next.js の `app/sitemap.ts`
 
-Vite 8 から採用された **Rust 製バンドラ**（lesson113 で扱い済み）。
+```ts
+import type { MetadataRoute } from "next";
 
-- **Rollup と同じプラグイン API**
-- **esbuild より速い**（Oxc を内部で使用）
-- **Vite / Rolldown / Oxc が 1 つのチームで開発**
-
-「esbuild と Rollup の両方の良さを Rust で 1 つに」が Rolldown の旗印。Vite 8 のリリースで実用フェーズに入りました。
-
-### SWC
-
-[SWC](https://swc.rs/)（Speedy Web Compiler）は **Rust 製の TypeScript / JSX トランスパイラ**。Babel の置き換え狙い。
-
-特徴:
-
-- Next.js / Parcel 内部で採用
-- Babel より **20〜70 倍速い**
-- プラグインは Rust または WebAssembly
-
-歴史的には Oxc より早く実用化されましたが、**Oxc が後発として** 機能で追いついています。Next.js は引き続き SWC ベース。
-
-### Turbopack
-
-[Turbopack](https://turbo.build/pack) は Vercel 製の **Rust 製バンドラ**。Next.js 専用に近い位置付け。
-
-- Next.js 16 で **`next dev` / `next build` のデフォルト**
-- webpack の **増分ビルド** を更に強化
-- Rolldown と並列に開発されている（**競合関係**）
-
-Vite 系（Vite + Rolldown + Oxc）と Vercel 系（Next.js + Turbopack + SWC）の 2 派が進む構図。
-
-### dprint
-
-[dprint](https://dprint.dev/) は **Rust 製のフォーマッタ**（Prettier 代替）。
-
-```bash
-npm install -D dprint
-```
-
-```jsonc
-// dprint.json
-{
-  "typescript": { "lineWidth": 100, "indentWidth": 2, "semiColons": "always" },
-  "json": {},
-  "markdown": {},
-  "includes": ["**/*.{ts,tsx,js,json,md}"],
-  "excludes": ["dist", "node_modules"],
-  "plugins": [
-    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
-    "https://plugins.dprint.dev/json-0.19.0.wasm",
-    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
-  ]
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const posts = await getAllPosts();
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    ...posts.map((p) => ({
+      url: `https://example.com/blog/${p.slug}`,
+      lastModified: p.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
+  ];
 }
 ```
 
-特徴:
+ビルド時に `/sitemap.xml` が自動生成されます。
 
-- 各言語のフォーマッタを **WebAssembly プラグイン** として持つ
-- Prettier より少し古めの設計だが速い
-- Deno / 一部 Rust エコシステムで採用
+#### 巨大サイトでは分割
 
-「Biome に注目が集まる中、**Prettier の代替として地味に使える**」位置付け。
+URL が 50,000 件 / 50MB を超える場合は **sitemap index** に分割します。Next.js では `app/sitemap.ts` を `[id]/sitemap.ts` 配列で複数 export することで対応できます。
 
-### 「Rust 製で速い」の意味するもの
+### `robots.txt`
 
-「**ESLint より 50 倍速い**」のような数字は要 **慎重に**。
+クローラーへの指示。`/admin` などをクロールから除外します。
 
-- **大規模プロジェクト**（10,000+ ファイル）では **数分 → 数秒** の改善で大きな違い
-- **小規模プロジェクト**（100 ファイル以下）では **既に十分速い** ので体感差はわずか
-- **CI 時間** には大きな影響、**保存時 Lint** には微差
+#### Next.js の `app/robots.ts`
 
-判断:
+```ts
+import type { MetadataRoute } from "next";
 
-- **CI が長くなって困っている** → 移行価値あり
-- **そうでもない** → 既存ツールで困っていなければ慌てない
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin/", "/api/"],
+      },
+    ],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
 
-### TypeScript の Rust 化
+ビルドで `/robots.txt` が自動生成されます。
 
-「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
-
-- [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
-- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、2025 年発表）: 公式の **Go ベース TypeScript** が **2026 年に preview**
-
-特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
-
-::: warning
-2026 年現在、これらは **まだ完全互換ではない**。型チェックは tsc / IDE のままで、ビルドだけ SWC / esbuild という現状が続きます。
+::: warning robots.txt は「お願い」
+robots.txt は **善意のクローラーが従う** だけで、強制力はありません。本当に隠したい URL は **認証で守る** / **`X-Robots-Tag: noindex` ヘッダ** / **`<meta name="robots" content="noindex">`** を使います。
 :::
 
-### 既存プロジェクトへの導入判断
+### 構造化データ（JSON-LD）
 
-#### すぐ導入してもよい
+検索結果に **リッチリザルト**（評価星 / レシピ写真 / FAQ アコーディオンなど）を出すための仕組み。Schema.org のスキーマを **JSON-LD** で埋め込みます。
 
-- **新規プロジェクト** で Biome 単独
-- **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
-- **Oxlint を ESLint と並走** させて速度を体感
+#### 記事（Article）
 
-#### 慎重に
+```tsx
+// app/blog/[slug]/page.tsx
+export default async function Page({ params }: Props) {
+  const { slug } = await params;
+  const post = await getPost(slug);
 
-- **ESLint プラグインに依存** している既存プロジェクト
-- **`@types/*` を多用** する大規模 TypeScript（型情報を使うルールが必要）
-- **チームの ESLint 知識** が分厚い場合（再学習コスト）
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.excerpt,
+    image: post.coverImage,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt,
+    author: { "@type": "Person", name: post.author },
+  };
 
-#### 数年待つ
-
-- **TypeScript の Rust 化**（公式 Go 版を待つ）
-- **完全な ESLint プラグイン互換** が出るまで
-
-### ツール選択のフレーム
-
-新規プロジェクトでの 2026 年標準:
-
+  return (
+    <article>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>{post.title}</h1>
+      {/* ... */}
+    </article>
+  );
+}
 ```
-言語: TypeScript 5.9
-バンドラ: Vite 8（内部 Rolldown + Oxc）
-        または Next.js 16（内部 Turbopack + SWC）
-Lint:   Biome / Oxlint
-Format: Biome / Prettier
-テスト: Vitest（内部 Vite）/ Playwright
-パッケージ: pnpm / Bun
+
+#### よく使うスキーマ
+
+| `@type` | 用途 |
+|---|---|
+| `Article` / `BlogPosting` / `NewsArticle` | 記事 |
+| `Product` | EC 商品（価格 / 在庫） |
+| `Recipe` | レシピ |
+| `FAQPage` | よくある質問（手風琴 UI で出る） |
+| `Organization` | 会社情報 |
+| `BreadcrumbList` | パンくず |
+
+#### 検証
+
+[Google リッチリザルトテスト](https://search.google.com/test/rich-results) で URL を入れると、認識される構造化データが見られます。
+
+### Google Search Console
+
+「Google の目線で自分のサイトがどう見えているか」を見るツール。
+
+#### できること
+
+- どの検索クエリで何位に出ているか
+- どのページがインデックスされているか / エラーがあるか
+- Core Web Vitals の実フィールドデータ
+- `sitemap.xml` の登録 / クロール状況確認
+- モバイルユーザビリティの問題検出
+
+#### 設定
+
+1. Search Console にプロパティを追加（ドメインまたは URL プレフィックス）
+2. 所有権の確認（DNS TXT レコード / HTML タグ / Google Analytics アカウント連携）
+3. **`sitemap.xml` を登録**
+4. 数日待つとデータが集まり始める
+
+### canonical URL
+
+「同じ内容のページが複数 URL で見える」場合、検索エンジンに **正規 URL** を伝えるのが `<link rel="canonical">`。
+
+```ts
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/blog/post-1",
+  },
+};
 ```
 
-「**速い + 設定少ない**」を全方位で享受できる構成。
+クエリパラメータ違い / 大文字小文字違いで重複インデックスされないように。
 
-### 5 年後の展望
+### hreflang（多言語サイト）
 
-おそらく続くもの:
+同じコンテンツを複数言語で出す場合の指定。
 
-- **Rust ベースの拡大**（CI / dev サーバ全般）
-- **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
-- **TypeScript 公式の Go / Rust 化**（高速化）
+```ts
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/en/about",
+    languages: {
+      "en": "https://example.com/en/about",
+      "ja": "https://example.com/ja/about",
+      "x-default": "https://example.com/en/about",
+    },
+  },
+};
+```
 
-まだ揺れているもの:
+これがあると Google が「英語ユーザーには英語版、日本語ユーザーには日本語版」を出してくれます。
 
-- **Biome vs ESLint** の決着（プラグイン互換次第）
-- **Vite 系 vs Vercel 系** のシェア
-- **WebAssembly 化したツール**（IDE / ブラウザでの実行）
+### Core Web Vitals と SEO
 
-「**まずは安定の ESLint + Prettier、心の準備として Biome / Oxc を試す**」が 2026 年の堅実なスタンス。
+Google は **Core Web Vitals**（lesson101）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せない**。
+
+### よくある事故
+
+- `og:image` が **相対パス** で実体が読めない → `metadataBase` を設定する
+- `noindex` を本番に持ち込んでしまう → 環境変数で制御する習慣を
+- `sitemap.xml` に **404 の URL** が残る → 動的生成にする
+- 構造化データにスキーマと合わない値を入れる → リッチリザルトテストで検証
+- `canonical` が **自分自身を指していない** → 正しい URL に揃える
 
 ## 演習
 
 ### ゴール
 
-- Biome と Oxlint をそれぞれ既存プロジェクトに **共存** させる
-- 速度を **同じプロジェクト** で比較する
+- Next.js プロジェクトに OGP / sitemap / robots / JSON-LD を一通り入れる
+- リッチリザルトテストで構造化データが認識されるところまで持っていく
 
-### 手順 1: ベースのプロジェクト
-
-既存の Vite + React + TS プロジェクトを使うか、新規作成。
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest tooling-bench -- --template react-ts
-cd tooling-bench
-npm install
+npx create-next-app@latest seo-sample --ts --app
+cd seo-sample
 ```
 
-### 手順 2: ESLint で計測
+### 手順 2: ルートに metadataBase と OGP
 
-```bash
-# Vite テンプレートには ESLint が入っている
-time npm run lint
-```
+`app/layout.tsx`:
 
-時間を記録。
+```tsx
+import type { Metadata } from "next";
 
-### 手順 3: Biome を導入
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: { default: "Demo Blog", template: "%s | Demo Blog" },
+  description: "Next.js Metadata API の演習",
+  openGraph: {
+    type: "website",
+    siteName: "Demo Blog",
+    locale: "ja_JP",
+  },
+  twitter: { card: "summary_large_image" },
+};
 
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
-```
-
-```json
-// biome.json
-{
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="ja"><body>{children}</body></html>;
 }
 ```
 
-```bash
-time npx biome check .
+### 手順 3: 動的 OGP 画像
+
+`app/opengraph-image.tsx`:
+
+```tsx
+import { ImageResponse } from "next/og";
+
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default function OG() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          fontSize: 64,
+          background: "linear-gradient(135deg,#1e3a8a,#06b6d4)",
+          color: "white",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        Demo Blog
+      </div>
+    ),
+    { ...size },
+  );
+}
 ```
 
-### 手順 4: Oxlint を試す
+### 手順 4: sitemap と robots
 
-```bash
-npm install -D oxlint
-time npx oxlint .
+`app/sitemap.ts`:
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+  ];
+}
 ```
 
-### 手順 5: 結果を比較
+`app/robots.ts`:
 
-実測値の例（小規模プロジェクト）:
+```ts
+import type { MetadataRoute } from "next";
 
-| ツール | 時間 | 検出数 |
-|---|---|---|
-| ESLint | 2.5s | 5 |
-| Biome | 0.3s | 4 |
-| Oxlint | 0.1s | 3 |
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [{ userAgent: "*", allow: "/", disallow: "/admin/" }],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
 
-「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
+### 手順 5: JSON-LD
+
+`app/page.tsx`:
+
+```tsx
+export default function Home() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Demo Blog",
+    url: "https://example.com",
+  };
+
+  return (
+    <main style={{ padding: 24 }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>Demo Blog</h1>
+      <p>SEO 演習</p>
+    </main>
+  );
+}
+```
+
+### 手順 6: 確認
+
+```bash
+npm run dev
+```
+
+ブラウザで以下にアクセス:
+
+- `http://localhost:3000/sitemap.xml` → XML が出る
+- `http://localhost:3000/robots.txt` → robots テキストが出る
+- `http://localhost:3000/opengraph-image` → 画像が出る
+- ページのソースを表示すると `<meta property="og:image" content="..." />` や `<script type="application/ld+json">` が含まれている
 
 ### 期待出力
 
-- 3 つのツールがそれぞれ動き、速度差が見える
-- 検出ルール / 重複が違うので、**ノイズの少ないツール** を選ぶ判断の材料になる
+| パス | 内容 |
+|---|---|
+| `/sitemap.xml` | 2 URL を含む sitemap |
+| `/robots.txt` | `Disallow: /admin/` を含む |
+| `/opengraph-image` | 1200x630 の PNG |
+| ページソース | OGP / Twitter Card / JSON-LD のタグが入る |
 
 ### 変える
 
-- 1000 ファイル規模のプロジェクトで再測定
-- CI でそれぞれを実行し、月のビルド時間を試算
-- IDE 拡張（Biome / Oxlint）を入れて、保存時のレイテンシを比較
+- `app/blog/[slug]/page.tsx` を作って `generateMetadata` で記事ごとに OGP を変える
+- 動的 OGP 画像で記事タイトルを反映する
+- JSON-LD を `Article` に変えて、リッチリザルトテストで認識されるか試す
 
 ### 自分で書く（任意）
 
-- 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
-- dprint を入れて Prettier と比較
-- TypeScript Go 版（`tsgo`）の preview を試す
+- `BreadcrumbList` の JSON-LD を作って、検索結果のパンくずを狙う
+- `FAQPage` を作って、よくある質問アコーディオンの表示を狙う
+- 多言語サイトを `hreflang` で構成し、Search Console で確認する
 
 ## まとめ
 
-- フロントエンドツールが **Rust 製** に置き換わりつつある
-- **Biome**: Lint + Format 1 ツール、設定 1 ファイル、35x 高速
-- **Oxc / Oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
-- **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
-- **SWC / Turbopack**: Next.js / Vercel が独自路線
-- **dprint**: Prettier 代替の Rust 製フォーマッタ
-- **TypeScript 公式の Go 版**（tsgo）が 2026 年に preview
-- 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
-- 既存プロジェクトは「**速度に困ってから**」で良い
-- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
-- 別のレッスンでは **AI を前提にした開発** に進み、本ハンズオンの最終話題に入る
+- **OGP / Twitter Card** で SNS シェア時の見栄えを制御。`og:image` は **絶対 URL / 1200x630**
+- Next.js は **Metadata API** に OGP / Twitter Card / canonical / hreflang が揃っている
+- **`metadataBase`** を必ず設定する（相対パス事故防止）
+- `app/opengraph-image.tsx` で **動的 OGP 画像** を JSX で生成
+- `app/sitemap.ts` / `app/robots.ts` でファイルベースに `sitemap.xml` / `robots.txt` を生成
+- **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
+- **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
+- Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない
+- 別のレッスンでは **CI/CD パイプライン** に進み、ビルド・テスト・デプロイの自動化を体系化する

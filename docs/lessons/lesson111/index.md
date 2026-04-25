@@ -1,450 +1,483 @@
-# lesson111: Web Components 入門
+# lesson111: CI/CD パイプラインの設計
 
 ## ゴール
 
-- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
-- Shadow DOM でスタイルと DOM を外から隔離できる
-- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
-- `<slot>` で外側から中身を差し込める
-- React との使い分けを判断できる
+- 「CI」と「CD」を正しく区別して語れる
+- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
+- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
+- Lighthouse CI で速度劣化を **PR 単位** で検知できる
+- Vercel の **Preview Deployment** とテストを連携できる
+
+::: tip 前提
+このレッスンは lesson110「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson110 を参照してください。
+:::
 
 ## 解説
 
-### Web Components とは
+### CI と CD の違い
 
-**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
+| 略 | 正式名称 | やること |
+|---|---|---|
+| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
+| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
 
-| 柱 | 役割 |
-|---|---|
-| Custom Elements | 自作の HTML タグを定義 |
-| Shadow DOM | スタイルと DOM を隔離 |
-| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
+「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
 
-作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
+### パイプラインの基本構成
 
-### なぜ今 Web Components を知るか
-
-2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
-
-- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
-- 会社共通のデザインシステムを **React 依存にせず** 配布したい
-- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
-
-React コンポーネントは React の中でしか動きません。Web Components は **どこでも動く**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
-
-### Custom Elements の最小形
-
-```js
-class HelloWorld extends HTMLElement {
-  connectedCallback() {
-    this.innerHTML = "<p>Hello, Web Components!</p>";
-  }
-}
-
-customElements.define("hello-world", HelloWorld);
+```
+push / PR
+   ↓
+┌─────────┐  ┌─────────┐  ┌─────────┐
+│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
+└─────────┘  └─────────┘  └─────────┘
+        ↓        ↓        ↓
+        └────────┴────────┘
+                   ↓
+              ┌─────────┐
+              │  Build  │
+              └─────────┘
+                   ↓
+              ┌─────────┐
+              │ Deploy  │  ← main にマージされた時のみ
+              └─────────┘
 ```
 
-HTML で使う:
+ポイント:
 
-```html
-<hello-world></hello-world>
+- **lint / test / typecheck は並列**（独立しているので速い）
+- **build は依存** が解決した後（手戻りを早く検知）
+- **deploy は最後** にする
+- **PR では deploy しない**（preview deployment は別フロー）
+
+### GitHub Actions の最小パイプライン
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build
 ```
 
-ルール:
+`needs:` で **前のジョブが成功した時だけ** 次に進みます。
 
-- クラスは **`HTMLElement` を継承** する
-- `customElements.define(タグ名, クラス)` で登録
-- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
+### キャッシュで速くする
 
-### ライフサイクル
+毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
 
-Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
+#### `actions/cache` で任意のディレクトリ
 
-```js
-class MyCounter extends HTMLElement {
-  connectedCallback() {
-    // DOM に追加された時
-    this.render();
-  }
-
-  disconnectedCallback() {
-    // DOM から外された時。リスナー解除などのクリーンアップ
-  }
-
-  static observedAttributes = ["count"];
-
-  attributeChangedCallback(name, oldValue, newValue) {
-    // 監視対象の属性が変わった時
-    if (name === "count") this.render();
-  }
-
-  render() {
-    const count = this.getAttribute("count") ?? "0";
-    this.innerHTML = `<strong>Count: ${count}</strong>`;
-  }
-}
-
-customElements.define("my-counter", MyCounter);
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: |
+      ~/.npm
+      .next/cache
+    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+    restore-keys: |
+      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
 ```
 
-```html
-<my-counter count="3"></my-counter>
+Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
+
+::: warning キャッシュの落とし穴
+キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
+:::
+
+### マトリクスビルド
+
+複数の Node.js バージョン / OS で同時にテストする時に便利。
+
+```yaml
+test:
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, macos-latest, windows-latest]
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }} }
+    - run: npm ci
+    - run: npm test
 ```
 
-`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
+これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
 
-### Shadow DOM でスタイルを隔離
+### 並列の使いどころ
 
-普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
+- **Lint / Typecheck / Test を並列に**
+- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
+- **Storybook ビルドを別ジョブに**
+- **Cypress / Playwright を shard** で分割
 
-```js
-class MyCard extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
-        :host {
-          display: block;
-          padding: 16px;
-          border: 1px solid #ccc;
-          border-radius: 8px;
-        }
-        h2 { color: #2563eb; margin: 0 0 8px; }
-      </style>
-      <h2>カードタイトル</h2>
-      <p>カードの中身</p>
-    `;
-  }
-}
-customElements.define("my-card", MyCard);
+シャーディング例（Playwright）:
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    shard: [1, 2, 3, 4]
+steps:
+  - run: npx playwright test --shard=${{ matrix.shard }}/4
 ```
 
-```html
-<my-card></my-card>
+### CD（デプロイ）の戦略
+
+#### Vercel / Netlify / Cloudflare Pages を使うなら
+
+これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
+
+#### 自前でデプロイする時の最小例
+
+```yaml
+deploy:
+  if: github.ref == 'refs/heads/main'
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 20, cache: npm }
+    - run: npm ci
+    - run: npm run build
+    - run: npm run deploy
+      env:
+        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
 ```
 
-- `attachShadow({ mode: "open" })` で shadow tree を作る
-- `:host` は **このカスタム要素自身** を指すセレクタ
-- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
+`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
 
-`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
+### Vercel の Preview Deployment と組み合わせる
 
-### `<slot>` で外から中身を差し込む
+Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
 
-React の `children` に相当するのが `<slot>` です。
+- レビュアーが **動作確認しながら** レビューできる
+- E2E テストを **本番に近い環境** で走らせられる
+- Lighthouse CI を **プレビュー URL に対して** 実行できる
 
-```js
-class FancyBox extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
-        header { font-weight: bold; margin-bottom: 8px; }
-      </style>
-      <header><slot name="title">デフォルトタイトル</slot></header>
-      <div><slot>本文が入ります</slot></div>
-    `;
-  }
-}
-customElements.define("fancy-box", FancyBox);
+#### プレビュー URL に E2E を回す
+
+```yaml
+e2e:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 20, cache: npm }
+    - run: npm ci
+    - run: npx playwright install --with-deps
+    - name: Wait for Vercel preview
+      uses: patrickedqvist/wait-for-vercel-preview@v1
+      id: vercel
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        max_timeout: 300
+    - run: npx playwright test
+      env:
+        BASE_URL: ${{ steps.vercel.outputs.url }}
 ```
 
-使う側:
+### Lighthouse CI
 
-```html
-<fancy-box>
-  <span slot="title">カスタムタイトル</span>
-  <p>ここが本文です。</p>
-</fancy-box>
+PR 単位で **Lighthouse スコアの劣化** を検知します。
+
+```bash
+npm install -D @lhci/cli
 ```
 
-- `<slot>` は **名前なし** のデフォルトスロット
-- `<slot name="title">` は **名前付き** スロット
-- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
+`lighthouserc.json`:
 
-### プロパティ / イベント
-
-ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
-
-```js
-class MyToggle extends HTMLElement {
-  #checked = false;
-
-  connectedCallback() {
-    this.attachShadow({ mode: "open" });
-    this.render();
-    this.shadowRoot.querySelector("button").addEventListener("click", () => {
-      this.checked = !this.checked;
-    });
-  }
-
-  get checked() { return this.#checked; }
-  set checked(value) {
-    this.#checked = Boolean(value);
-    this.render();
-    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `
-      <button>${this.#checked ? "ON" : "OFF"}</button>
-    `;
-    this.shadowRoot.querySelector("button").addEventListener("click", () => {
-      this.checked = !this.checked;
-    });
-  }
-}
-customElements.define("my-toggle", MyToggle);
-```
-
-使う側:
-
-```html
-<my-toggle></my-toggle>
-
-<script>
-  const toggle = document.querySelector("my-toggle");
-  toggle.addEventListener("change", (e) => {
-    console.log("ON/OFF:", e.detail.checked);
-  });
-</script>
-```
-
-- プロパティは **クラスの getter / setter** として定義
-- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
-
-### `<template>` で DOM のクローン元を用意
-
-大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
-
-```html
-<template id="card-template">
-  <style>
-    :host { display: block; border: 1px solid #ccc; padding: 12px; }
-  </style>
-  <slot name="title"></slot>
-  <slot></slot>
-</template>
-
-<script>
-  const tpl = document.getElementById("card-template");
-  class MyCardTpl extends HTMLElement {
-    connectedCallback() {
-      const shadow = this.attachShadow({ mode: "open" });
-      shadow.appendChild(tpl.content.cloneNode(true));
+```json
+{
+  "ci": {
+    "collect": {
+      "url": ["https://example.com/"],
+      "numberOfRuns": 3
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
     }
   }
-  customElements.define("my-card-tpl", MyCardTpl);
-</script>
-```
-
-`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
-
-### React との使い分け
-
-「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
-
-| | Web Components | React |
-|---|---|---|
-| 動く場所 | どの HTML ページでも | React アプリの中だけ |
-| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
-| 型 | TypeScript と相性が微妙 | 強い |
-| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
-| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
-
-**原則**:
-
-- **アプリ内部** の UI → React で書く（DX が圧倒的）
-- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
-- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
-
-React 19 以降は **Custom Elements を props / event で自然に扱える** ようになりました。昔は `ref` で手動 setAttribute が必要でしたが、いまは React でも普通に書けます。
-
-```tsx
-// React 19+
-<my-toggle onchange={(e) => console.log(e.detail)} />
-```
-
-### Lit の存在
-
-Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
-
-```js
-import { LitElement, html, css } from "lit";
-
-class MyCard extends LitElement {
-  static styles = css`
-    :host { display: block; padding: 16px; border: 1px solid #ccc; }
-  `;
-  render() {
-    return html`<h2>タイトル</h2><slot></slot>`;
-  }
 }
-customElements.define("my-card", MyCard);
 ```
 
-Web Components を本格的に書くなら Lit が現在のデファクト。Google / Adobe / Shopify も使っています。
+GitHub Actions で:
+
+```yaml
+lighthouse:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 20, cache: npm }
+    - run: npm ci
+    - run: npx lhci autorun
+```
+
+スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
+
+### シークレットの取り扱い
+
+- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
+- workflow ファイルに **平文で書かない**
+- Pull Request からの workflow は **secrets が読めない** 設定（`pull_request_target` を使う場合は厳重注意）
+
+### 環境（Environment）の活用
+
+`environment: production` を指定すると:
+
+- Required reviewers（**承認が必要**）
+- Wait timer（**N 分待つ**）
+- Branch policy（**main 限定**）
+- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
+
+を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
+
+```yaml
+deploy-prod:
+  environment: production
+  runs-on: ubuntu-latest
+  steps: ...
+```
+
+### 再利用可能な workflow
+
+組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
+
+```yaml
+# .github/workflows/_node-ci.yml（呼ばれる側）
+on:
+  workflow_call:
+    inputs:
+      node-version: { type: string, default: "20" }
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: ${{ inputs.node-version }}, cache: npm }
+      - run: npm ci
+      - run: npm run lint && npm run test
+```
+
+```yaml
+# 呼び出す側
+jobs:
+  ci:
+    uses: my-org/.github/.github/workflows/_node-ci.yml@main
+    with:
+      node-version: "22"
+```
+
+### 失敗を早く検知するコツ
+
+- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
+- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
+- **`timeout-minutes`** を設定して暴走を止める
+- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
+
+### コスト管理
+
+GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
+
+- **キャッシュ** で `npm ci` の時間を削る
+- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
+- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
+
+```yaml
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "package*.json"
+```
 
 ## 演習
 
 ### ゴール
 
-- Counter の Web Component を作る
-- Shadow DOM でスタイル隔離を確認する
-- `<slot>` で外から中身を差し込む
+- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
+- キャッシュを効かせて 2 倍速にする
 
-### 手順 1: 新規プロジェクト
+### 手順 1: ベースのプロジェクト
 
 ```bash
-npm create vite@latest web-components-sample -- --template vanilla-ts
-cd web-components-sample
+npm create vite@latest cicd-sample -- --template react-ts
+cd cicd-sample
 npm install
+git init && git add . && git commit -m "init"
 ```
 
-### 手順 2: index.html
+GitHub にリポジトリを作って push。
 
-```html
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Web Components Demo</title>
-    <style>
-      /* 外側の CSS（Shadow DOM で隔離されるはず） */
-      h2 { color: red; }
-      body { font-family: sans-serif; padding: 24px; }
-    </style>
-  </head>
-  <body>
-    <h2>外側の h2（赤いはず）</h2>
+### 手順 2: scripts を整える
 
-    <my-card>
-      <span slot="title">内側のタイトル</span>
-      <p>スロットに入る本文</p>
-    </my-card>
+`package.json`:
 
-    <my-counter start="5"></my-counter>
-    <p id="log">イベントログ: -</p>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-```
-
-### 手順 3: src/main.ts
-
-```ts
-// my-card
-class MyCard extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-        h2 { color: #2563eb; margin: 0 0 8px; }
-      </style>
-      <h2><slot name="title">デフォルトタイトル</slot></h2>
-      <div><slot></slot></div>
-    `;
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   }
 }
-customElements.define("my-card", MyCard);
-
-// my-counter
-class MyCounter extends HTMLElement {
-  #count = 0;
-
-  static observedAttributes = ["start"];
-
-  attributeChangedCallback(name: string, _old: string, value: string) {
-    if (name === "start") {
-      this.#count = Number(value);
-      this.render();
-    }
-  }
-
-  connectedCallback() {
-    this.attachShadow({ mode: "open" });
-    this.#count = Number(this.getAttribute("start") ?? "0");
-    this.render();
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
-        button { padding: 4px 12px; }
-        strong { min-width: 40px; text-align: center; }
-      </style>
-      <button id="dec">-</button>
-      <strong>${this.#count}</strong>
-      <button id="inc">+</button>
-    `;
-    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
-      this.#count++;
-      this.render();
-      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
-    });
-    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
-      this.#count--;
-      this.render();
-      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
-    });
-  }
-}
-customElements.define("my-counter", MyCounter);
-
-// ログ
-const log = document.getElementById("log")!;
-document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
-  const ce = e as CustomEvent<{ count: number }>;
-  log.textContent = `イベントログ: count = ${ce.detail.count}`;
-});
 ```
 
-### 手順 4: 起動して確認
+ESLint 設定 / 簡単な test は省略可。
+
+### 手順 3: workflow
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 20, cache: npm }
+      - run: npm ci
+      - run: npm run build
+```
+
+### 手順 4: PR を作って動作確認
 
 ```bash
-npm run dev
+git checkout -b feature/test
+echo "// test" >> src/App.tsx
+git commit -am "test"
+git push -u origin feature/test
 ```
 
-ブラウザで以下を確認します。
-
-1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
-2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
-3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
-4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
+PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
 
 ### 期待出力
 
-- Shadow DOM の中の h2 は青、外側の h2 は赤
-- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
+- 4 つのジョブが Actions のタブに並ぶ
+- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
+- どれか fail すると build が走らない（`needs:` のおかげ）
 
 ### 変える
 
-- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認
-- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
-- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
-- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
+- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
+- マトリクスを使って Node 20 と 22 の両方でテストする
+- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
 
 ### 自分で書く（任意）
 
-- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
-- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
-- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
+- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
+- Vercel に連携して PR で Preview URL が作られる構成にする
+- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
+- `environment: production` で本番デプロイに承認ステップを入れる
 
 ## まとめ
 
-- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
-- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
-- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
-- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
-- プロパティは getter / setter、通知は `CustomEvent` で
-- 本格運用するなら **Lit** が今のデファクト
-- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
-- React 19 以降は Custom Elements の props / event 受け渡しが自然
-- 別のレッスンでは **国際化対応**（Intl API） に進む
+- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
+- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
+- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
+- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
+- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
+- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
+- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
+- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える
+- 別のレッスンでは **Feature Flags** に進み、リリースとロールアウトの分離へ

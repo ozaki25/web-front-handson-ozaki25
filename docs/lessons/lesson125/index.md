@@ -1,481 +1,390 @@
-# lesson125: GraphQL と tRPC の地図
+# lesson125: IndexedDB 入門
 
 ## ゴール
 
-- REST と **GraphQL** と **tRPC** の違いを 3 行で言える
-- GraphQL のクエリ / ミューテーション / サブスクリプションの最小例を読める
-- tRPC の「型安全な RPC」の考え方を理解する
-- 自分のプロジェクトで **どれを選ぶか** の判断軸を持つ
-- 関連エコシステム（Apollo Client / urql / Relay / GraphQL Yoga）の位置付けが分かる
+- IndexedDB が `localStorage` と何が違うか説明できる
+- 生 API の用語（database / objectStore / transaction / cursor）を読める
+- `idb` ライブラリで Promise ベースの最小コードを書ける
+- `Dexie.js` のクラス指向 API の利点を理解する
+- ユースケース（オフライン作業 / 大量データキャッシュ）を判断できる
 
 ## 解説
 
-### 3 つの選択肢
+### `localStorage` の限界
 
-API の設計には主に 3 つの流派があります。
+lesson35 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
-| | スタイル | 特徴 |
-|---|---|---|
-| **REST** | リソース指向 + HTTP メソッド | 標準的、CDN キャッシュが効く |
-| **GraphQL** | スキーマ + クエリ言語 | 必要なフィールドだけ取得、複数リソース 1 リクエスト |
-| **tRPC** | 関数呼び出し + TypeScript | 型がそのまま伝わる、クライアント自動生成不要 |
+- **容量が小さい**（オリジン全体で 5〜10MB）
+- **値は文字列だけ**（オブジェクトは JSON 化が必要）
+- **同期 API**（読み書きで UI が止まる）
+- **検索 / インデックスがない**
+- **トランザクションがない**
 
-「**どれが正解** 」ではなく、**プロジェクトとチームに合わせて** 選びます。
+「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
 
-### REST のおさらいと弱み
+### IndexedDB とは
 
-```
-GET    /users/123          ← 取得
-POST   /users              ← 作成
-PUT    /users/123          ← 更新（全部）
-PATCH  /users/123          ← 更新（一部）
-DELETE /users/123          ← 削除
-```
+ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
 
-長所:
+- **容量は数十 MB 〜 GB クラス**（ブラウザによる）
+- **オブジェクトをそのまま** 保存（structured clone）
+- **完全に非同期**（イベント / Promise）
+- **インデックスでの検索** が可能
+- **トランザクション** でアトミック操作
+- **Service Worker からも使える**
 
-- HTTP メソッドとパスで読みやすい
-- **CDN / プロキシのキャッシュ** が効く
-- 標準なのでツールが豊富（Postman / OpenAPI）
+### 用語
 
-弱み:
+| 用語 | 意味 |
+|---|---|
+| **Database** | 1 つの DB。複数の objectStore を持つ |
+| **Object Store** | テーブル / コレクションに相当 |
+| **Key Path** | レコードの主キーフィールド（`id` 等） |
+| **Index** | 検索を速くする補助インデックス |
+| **Transaction** | 読み書きをまとめる単位（`readonly` / `readwrite`） |
+| **Cursor** | 範囲走査するイテレータ |
 
-- **取得しすぎ / 取得不足**（Over/Under fetching）。`GET /users/123` で名前しか要らないのにフルプロフィールが返る
-- **複数リソースのために何回も呼ぶ**（N+1 問題）
-- **バージョニングが面倒**（v1 / v2 / v3 を共存させる）
+### 生 API の最小例
 
-### GraphQL
+```js
+const open = indexedDB.open("my-db", 1);
 
-「**1 つのエンドポイント**（POST /graphql）に **クエリ言語** を送って、必要なフィールドだけ取得する」考え方。Facebook が 2015 年に公開。
+open.onupgradeneeded = (event) => {
+  const db = event.target.result;
+  const store = db.createObjectStore("posts", { keyPath: "id" });
+  store.createIndex("by-author", "author");
+};
 
-#### スキーマ
+open.onsuccess = (event) => {
+  const db = event.target.result;
 
-```graphql
-type User {
-  id: ID!
-  name: String!
-  email: String!
-  posts: [Post!]!
-}
+  const tx = db.transaction("posts", "readwrite");
+  const store = tx.objectStore("posts");
+  store.put({ id: "1", title: "Hello", author: "Alice" });
 
-type Post {
-  id: ID!
-  title: String!
-  body: String!
-  author: User!
-}
-
-type Query {
-  user(id: ID!): User
-  posts(limit: Int = 10): [Post!]!
-}
-
-type Mutation {
-  createPost(title: String!, body: String!): Post!
-}
-
-type Subscription {
-  postAdded: Post!
-}
-```
-
-#### クエリ
-
-```graphql
-query {
-  user(id: "123") {
-    name
-    posts(limit: 5) {
-      title
-    }
-  }
-}
-```
-
-レスポンス:
-
-```json
-{
-  "data": {
-    "user": {
-      "name": "山田",
-      "posts": [{ "title": "Hello" }, { "title": "GraphQL 楽しい" }]
-    }
-  }
-}
+  tx.oncomplete = () => console.log("保存完了");
+};
 ```
 
 ポイント:
 
-- **`name` と `posts.title` だけ** 要求 → サーバーはそれだけ返す（**Over fetch を防げる**）
-- **複数リソース**（user + posts） を 1 リクエストで取れる（**N+1 を防げる**）
+- `open` の **`onupgradeneeded`** でスキーマを定義（version を上げると再実行）
+- `transaction(name, mode)` で操作する store を選ぶ
+- `put` / `get` / `delete` / `getAll` などのメソッドはイベントハンドラで結果を受ける
 
-#### ミューテーション
+**生 API は冗長で書きづらい** ので、ラッパーを使うのが普通です。
 
-```graphql
-mutation {
-  createPost(title: "新記事", body: "本文") {
-    id
-    title
-  }
-}
-```
+### `idb`（Promise ラッパー）
 
-書き込みは `mutation` で書きます（query との明示的な区別）。
-
-#### サブスクリプション
-
-```graphql
-subscription {
-  postAdded {
-    id
-    title
-  }
-}
-```
-
-WebSocket / SSE 上で **リアルタイムに新着を受信** できます。
-
-#### サーバー側の実装
-
-人気の選択肢:
-
-| ライブラリ | 特徴 |
-|---|---|
-| **Apollo Server** | フルスタック。エンタープライズ |
-| **GraphQL Yoga** | 軽量で速い。Next.js / Bun と相性 |
-| **Pothos / TypeGraphQL** | TypeScript 中心のスキーマ定義 |
-| **Hasura / PostGraphile** | DB から自動生成 |
-
-#### クライアント側の主な選択肢
-
-| ライブラリ | 特徴 |
-|---|---|
-| **Apollo Client** | キャッシュ機能が強い。エコシステム最大 |
-| **urql** | 軽量、設定がシンプル |
-| **Relay** | Meta 製。ページネーション / フラグメントで強力 |
-| **GraphQL Request** | 最小、シンプルな fetch ラッパー |
-| **graphql-codegen** | スキーマ → 型 / Hooks 自動生成 |
-
-#### 例: Apollo Client + Next.js
+[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
 
 ```bash
-npm install @apollo/client graphql
+npm install idb
 ```
-
-```tsx
-import { ApolloClient, InMemoryCache, gql } from "@apollo/client";
-
-const client = new ApolloClient({
-  uri: "/api/graphql",
-  cache: new InMemoryCache(),
-});
-
-const data = await client.query({
-  query: gql`
-    query {
-      user(id: "123") { name }
-    }
-  `,
-});
-```
-
-#### GraphQL の弱み
-
-- **CDN キャッシュが効きにくい**（POST 1 本のため）
-- **学習コスト**（スキーマ言語、N+1 解決の DataLoader、フラグメント）
-- **小規模では過剰**（モノリスな自社 API なら REST / tRPC で十分）
-- **ファイルアップロード** は専用拡張が必要
-
-### tRPC
-
-「**TypeScript の関数を、そのままクライアントから呼ぶ**」発想。Next.js / TypeScript 専用と言って良い構造。
-
-特徴:
-
-- **API スキーマを書かない**（TypeScript の型がスキーマ）
-- **クライアントが型を自動取得**（`import type` の延長）
-- **コード生成が要らない**
-
-#### サーバー側
 
 ```ts
-// server/router.ts
-import { initTRPC } from "@trpc/server";
-import { z } from "zod";
+import { openDB, DBSchema } from "idb";
 
-const t = initTRPC.create();
+interface MyDB extends DBSchema {
+  posts: {
+    key: string;
+    value: { id: string; title: string; author: string };
+    indexes: { "by-author": string };
+  };
+}
 
-export const appRouter = t.router({
-  hello: t.procedure
-    .input(z.object({ name: z.string() }))
-    .query(({ input }) => `Hello, ${input.name}`),
-
-  createPost: t.procedure
-    .input(z.object({ title: z.string(), body: z.string() }))
-    .mutation(async ({ input }) => {
-      // DB に保存
-      return { id: "p1", ...input };
-    }),
+const db = await openDB<MyDB>("my-db", 1, {
+  upgrade(db) {
+    const store = db.createObjectStore("posts", { keyPath: "id" });
+    store.createIndex("by-author", "author");
+  },
 });
 
-export type AppRouter = typeof appRouter;
+await db.put("posts", { id: "1", title: "Hello", author: "Alice" });
+const post = await db.get("posts", "1");
+const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
 ```
 
-#### Next.js の Route Handler に乗せる
+`DBSchema` を使うと **型付きの API** になり、IDE 補完が効きます。
+
+### `Dexie.js`（クラス指向）
+
+[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
+
+```bash
+npm install dexie
+```
 
 ```ts
-// app/api/trpc/[trpc]/route.ts
-import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
-import { appRouter } from "@/server/router";
+import Dexie, { Table } from "dexie";
 
-const handler = (req: Request) =>
-  fetchRequestHandler({
-    endpoint: "/api/trpc",
-    req,
-    router: appRouter,
-    createContext: () => ({}),
-  });
+interface Post {
+  id?: number;
+  title: string;
+  author: string;
+  createdAt: number;
+}
 
-export { handler as GET, handler as POST };
-```
+class MyDB extends Dexie {
+  posts!: Table<Post, number>;
+  constructor() {
+    super("my-db");
+    this.version(1).stores({
+      posts: "++id, author, createdAt",
+    });
+  }
+}
 
-#### クライアント側
+const db = new MyDB();
 
-```ts
-// utils/trpc.ts
-import { createTRPCReact } from "@trpc/react-query";
-import type { AppRouter } from "@/server/router";
+await db.posts.add({ title: "Hello", author: "Alice", createdAt: Date.now() });
 
-export const trpc = createTRPCReact<AppRouter>();
-```
-
-```tsx
-const { data } = trpc.hello.useQuery({ name: "world" });
-//        ^? string  ← サーバーから自動推論
+const aliceLatest = await db.posts
+  .where("author").equals("Alice")
+  .reverse()
+  .sortBy("createdAt");
 ```
 
 ポイント:
 
-- 「**サーバーで関数を変えたら**、**クライアントの呼び出し側で即型エラー**」
-- IDE で **オートコンプリート** がそのまま効く
-- スキーマ言語を書かない / コード生成しない / **TypeScript ファースト**
-
-### REST / GraphQL / tRPC の選び方
-
-#### こういう時は **REST**
-
-- 公開 API（外部の開発者向け / SDK 配布）
-- CDN キャッシュを最大限活かしたい
-- HTTP の知識だけで読める「**普通**」が欲しい
-- 多言語クライアント（iOS / Android / Web）でも動く
-
-#### こういう時は **GraphQL**
-
-- フロントから **複数リソースを 1 回で** 取りたい
-- フィールド過不足の最適化が大事
-- 大規模 / 多チーム（バックエンドとフロントの **契約** をスキーマで明示）
-- リアルタイム要件（Subscription）
-
-#### こういう時は **tRPC**
-
-- フロント / バックが **同じ TypeScript リポジトリ**
-- 自社専用 API（外部公開しない）
-- 型の一貫性を **何より優先** したい
-- 小〜中規模で **手数を最小** にしたい（Next.js + tRPC が定番）
-
-### 共存もアリ
-
-「**REST + tRPC**」「**GraphQL + tRPC**」のような組合せもよく見ます:
-
-- 公開 API は REST / GraphQL
-- 自社の Next.js 内部は tRPC
-
-「**外向き / 内向きで分ける**」のは現実的な解。
-
-### Server Components 時代の API
-
-Next.js の App Router では **Server Component が直接 DB を叩ける**（`async function` の中で `prisma.user.findFirst({...})`）ようになりました。これは **「Web フロントが API を呼ぶ」発想を崩します**。
-
-- 初期表示は **Server Component が直接 DB / 外部 API**
-- 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
-
-「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代。Server Actions / Server Components は lesson73 / 63 / 68 や後続のレッスンで詳しく扱います。
-
-### よくある質問
-
-#### 「GraphQL は重い」は本当？
-
-DataLoader を使った **N+1 対策** をやれば、REST の何倍も軽くなることもあります。逆に **無対策だと重い**。エコシステムの知識が要る。
-
-#### 「tRPC は本番に強い？」
-
-Vercel / T3 Stack（Next.js + tRPC + Prisma）は実本番で多数事例あり。エンタープライズの大規模では **tRPC v11 + Server Actions** で十分。
-
-#### REST + Zod + OpenAPI で似たことができる？
-
-できます。`tsoa` / `zod-openapi` / `Hono + zod-openapi` で **REST に型** を載せた構成は最近人気。**「tRPC 風 REST」** と呼ばれます。
-
-## 演習
-
-### ゴール
-
-- 同じ「**ユーザー一覧 + 詳細**」を REST / GraphQL / tRPC の **3 通り** で書いて比較する
-- それぞれの **コード量 / 型の通り方 / DX** を体感する
-
-### 手順 1: ベースの Next.js
-
-```bash
-npx create-next-app@latest api-styles --ts --app
-cd api-styles
-```
-
-### 手順 2: REST 版
-
-`app/api/users/route.ts`:
-
-```ts
-const users = [
-  { id: "1", name: "Alice", email: "a@example.com" },
-  { id: "2", name: "Bob", email: "b@example.com" },
-];
-
-export async function GET() {
-  return Response.json(users);
-}
-```
-
-`app/users-rest/page.tsx`:
+- `++id` は **自動採番** の主キー
+- `stores` の文字列で **インデックスを宣言**
+- `where().equals().reverse().sortBy()` のような **チェーン** が書ける
+- React 用 hooks（`useLiveQuery`）も提供される
 
 ```tsx
-type User = { id: string; name: string; email: string };
+import { useLiveQuery } from "dexie-react-hooks";
 
-export default async function Page() {
-  const res = await fetch("http://localhost:3000/api/users", { cache: "no-store" });
-  const users: User[] = await res.json();
+function PostList() {
+  const posts = useLiveQuery(() => db.posts.toArray(), []);
   return (
     <ul>
-      {users.map((u) => (
-        <li key={u.id}>{u.name}</li>
-      ))}
+      {posts?.map((p) => <li key={p.id}>{p.title}</li>)}
     </ul>
   );
 }
 ```
 
-REST は **クライアント側で型** を別途定義するのがネック（ずれると壊れる）。
+`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
 
-### 手順 3: tRPC 版
+### `localStorage` / `sessionStorage` / IndexedDB の使い分け
+
+| 用途 | 推奨 |
+|---|---|
+| ユーザー設定（ダークモード / 言語） | `localStorage` |
+| タブ単位の一時状態 | `sessionStorage` |
+| 認証トークン | **どちらも使わない**。HttpOnly Cookie に |
+| Todo / 下書き / オフライン編集データ | **IndexedDB** |
+| 画像 / 動画 / Blob | **IndexedDB**（Cache API も候補） |
+| API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
+| ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
+
+「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
+
+### 容量とクォータ
+
+ブラウザは「**クォータ**」というオリジン単位の上限を割り当てます。`navigator.storage.estimate()` で確認できます。
+
+```js
+const { quota, usage } = await navigator.storage.estimate();
+console.log(`使用 ${usage} / クォータ ${quota}`);
+```
+
+ChromeBook / iOS / 容量不足時に **自動退去**（eviction）されることがあります。**消えても困らない設計** にする / `navigator.storage.persist()` で **退去耐性** をリクエスト:
+
+```js
+const granted = await navigator.storage.persist();
+if (granted) console.log("永続化 OK");
+```
+
+ただしユーザーの Bookmark / インストール等の条件次第。
+
+### `Cache API` との違い
+
+Service Worker と一緒に出てくる **`Cache API`**（lesson124）と IndexedDB は **別物**:
+
+| | Cache API | IndexedDB |
+|---|---|---|
+| 単位 | Request / Response | 任意のオブジェクト |
+| 用途 | HTTP リソースの保存 | アプリのデータ保存 |
+| クエリ | URL マッチ | インデックス検索 |
+| トランザクション | なし | あり |
+
+「画像や HTML を保存 → Cache API」、「ユーザーが編集中の下書き → IndexedDB」と覚えればよいです。
+
+### IndexedDB のオフライン同期パターン
+
+```
+[ユーザー操作] → IndexedDB に保存（pending）
+                       ↓
+              [ネットがある時]
+                       ↓
+              バックエンドに POST
+                       ↓
+            成功したら IndexedDB のフラグを更新
+```
+
+- 書き込みは **常にローカルに保存**（UI が即座に反応）
+- バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
+- 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
+
+ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+
+### よくある罠
+
+- **transaction が auto-commit する**: `await` を別の Promise で挟むと **トランザクションが終わってしまう**。同じ tx の中ではすべての操作を **同期的に並べる**
+- **構造化クローンの制約**: 関数 / シンボル / DOM ノードは保存できない
+- **大量レコード**: `cursor` で逐次処理する。`getAll()` でメモリ爆発に注意
+- **iOS Safari**: 古いバージョンで挙動が不安定。最新版（17 / 18 系）はかなり改善
+- **マイグレーション**: `version` を上げて `upgrade` 内で `objectStoreNames` をチェックして差分を当てる
+
+## 演習
+
+### ゴール
+
+- Dexie.js で **オフラインメモアプリ** を作る
+- `localStorage` 比較で「容量 / 非同期 / 検索」の差を体感する
+
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm install @trpc/server @trpc/client @trpc/react-query @tanstack/react-query zod superjson
+npm create vite@latest indexeddb-sample -- --template react-ts
+cd indexeddb-sample
+npm install
+npm install dexie dexie-react-hooks
 ```
 
-`server/router.ts`:
+### 手順 2: DB の定義
+
+`src/db.ts`:
 
 ```ts
-import { initTRPC } from "@trpc/server";
-import { z } from "zod";
+import Dexie, { Table } from "dexie";
 
-const t = initTRPC.create();
+export interface Memo {
+  id?: number;
+  title: string;
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
-const users = [
-  { id: "1", name: "Alice", email: "a@example.com" },
-  { id: "2", name: "Bob", email: "b@example.com" },
-];
+class MemoDB extends Dexie {
+  memos!: Table<Memo, number>;
+  constructor() {
+    super("memo-app");
+    this.version(1).stores({
+      memos: "++id, updatedAt",
+    });
+  }
+}
 
-export const appRouter = t.router({
-  listUsers: t.procedure.query(() => users),
-  getUser: t.procedure.input(z.object({ id: z.string() })).query(({ input }) =>
-    users.find((u) => u.id === input.id),
-  ),
-});
-
-export type AppRouter = typeof appRouter;
+export const db = new MemoDB();
 ```
 
-`app/api/trpc/[trpc]/route.ts`:
+### 手順 3: メモ一覧 + 追加
 
-```ts
-import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
-import { appRouter } from "@/server/router";
+`src/App.tsx`:
 
-const handler = (req: Request) =>
-  fetchRequestHandler({
-    endpoint: "/api/trpc",
-    req,
-    router: appRouter,
-    createContext: () => ({}),
+```tsx
+import { useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, Memo } from "./db";
+
+export default function App() {
+  const memos = useLiveQuery(
+    () => db.memos.orderBy("updatedAt").reverse().toArray(),
+    [],
+  );
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
+
+  const add = async () => {
+    if (!title.trim()) return;
+    await db.memos.add({
+      title,
+      body,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    setTitle("");
+    setBody("");
+  };
+
+  const remove = (id: number) => db.memos.delete(id);
+
+  return (
+    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <h1>オフラインメモ</h1>
+      <div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="タイトル" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="本文" />
+        <button onClick={add}>追加</button>
+      </div>
+      <ul>
+        {memos?.map((m) => (
+          <li key={m.id}>
+            <strong>{m.title}</strong> — {new Date(m.updatedAt).toLocaleString()}
+            <p>{m.body}</p>
+            <button onClick={() => remove(m.id!)}>削除</button>
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
+
+### 手順 4: 確認
+
+```bash
+npm run dev
+```
+
+メモを追加し、**ブラウザを閉じて再度開いて** も残っていることを確認。DevTools の Application → IndexedDB → `memo-app` → `memos` で実データが見られる。
+
+### 手順 5: ストレージ使用量を表示
+
+`App` 末尾に追加:
+
+```tsx
+import { useEffect, useState } from "react";
+
+const [usage, setUsage] = useState("");
+useEffect(() => {
+  navigator.storage.estimate().then(({ usage, quota }) => {
+    setUsage(`使用 ${Math.round((usage ?? 0) / 1024)}KB / クォータ ${Math.round((quota ?? 0) / 1024 / 1024)}MB`);
   });
-
-export { handler as GET, handler as POST };
+}, [memos]);
 ```
 
-`utils/trpc.ts` / Provider 設定 / Client での使用は tRPC 公式の Quickstart に従う。`trpc.listUsers.useQuery()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
-
-### 手順 4: GraphQL 版
-
-```bash
-npm install graphql graphql-yoga
-```
-
-`app/api/graphql/route.ts`:
-
-```ts
-import { createYoga, createSchema } from "graphql-yoga";
-
-const users = [
-  { id: "1", name: "Alice", email: "a@example.com" },
-  { id: "2", name: "Bob", email: "b@example.com" },
-];
-
-const yoga = createYoga({
-  schema: createSchema({
-    typeDefs: `
-      type User { id: ID! name: String! email: String! }
-      type Query { users: [User!]! user(id: ID!): User }
-    `,
-    resolvers: {
-      Query: {
-        users: () => users,
-        user: (_: unknown, { id }: { id: string }) => users.find((u) => u.id === id),
-      },
-    },
-  }),
-  graphqlEndpoint: "/api/graphql",
-  fetchAPI: { Response },
-});
-
-export const GET = yoga;
-export const POST = yoga;
-```
-
-`http://localhost:3000/api/graphql` で GraphiQL が開いてクエリを試せます。
+`<p>{usage}</p>` を画面に出す。メモを増やすと使用量が増えていくのが見えます。
 
 ### 期待出力
 
-- 3 通りで同じデータが取得できる
-- tRPC 版は **クライアント側に型を一切書かない** のに型が通る
-- GraphQL 版は **必要なフィールドだけ** 要求する記述ができる
+- メモがブラウザを閉じても残る
+- `Application → IndexedDB` でストアの中身が見られる
+- ストレージ使用量が表示され、メモ追加で増える
 
 ### 変える
 
-- tRPC で `getUser` を呼んでみる。`input` を間違えると **クライアントの型エラー** が出ることを確認
-- GraphQL で **複数リソース** を 1 リクエストで取得する（user + その投稿）
-- REST に Zod を入れて、レスポンスの型を保証する
+- `useLiveQuery(() => db.memos.where("title").startsWithIgnoreCase("a").toArray())` のような **検索** を追加
+- DB の `version(2)` で `body` にインデックスを追加し、マイグレーション挙動を観察
+- 大量データ（1 万件）を一括追加して **`getAll` の遅さ** と **`each` cursor の差** を比較
 
 ### 自分で書く（任意）
 
-- T3 Stack（Next.js + tRPC + Prisma + Tailwind）の最小例を作る
-- 既存の REST API を GraphQL でラップする（Apollo / Yoga）
-- 公開 API を REST、内部 API を tRPC、で分ける構成を作る
+- API と同期する Memo アプリを作る（**ローカルに保存 → サーバーに同期**）
+- 画像（Blob）を添付できるようにする
+- `localStorage` から IndexedDB に乗り換えるマイグレーションスクリプトを書く
 
 ## まとめ
 
-- **REST** は標準で **CDN キャッシュが効く**。公開 API / 多言語クライアントに強い
-- **GraphQL** は **必要なフィールドだけ** / **複数リソース 1 回**。大規模・多チーム / リアルタイム
-- **tRPC** は **型がそのまま伝わる**。Next.js + TypeScript モノレポで圧倒的 DX
-- **どれが正解** ではなく、プロジェクトとチームに合わせて選ぶ
-- 共存（外向き REST + 内向き tRPC）も実用解
-- Next.js App Router の **Server Components / Server Actions** が「API すら不要」の選択肢として加わった
-- 別のレッスンでは **Service Worker / PWA 深掘り** に進み、オフライン対応を見る
+- `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
+- 用語: **database / objectStore / transaction / cursor**
+- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
+- React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
+- 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
+- クォータ / 退去 / `navigator.storage.persist()` を意識する
+- オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番
+- 別のレッスンでは **React Compiler** に進み、`useMemo` / `useCallback` 不要時代の React を見る

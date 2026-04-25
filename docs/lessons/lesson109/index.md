@@ -1,384 +1,330 @@
-# lesson109: 状態管理の地図（TanStack Query / Zustand / Jotai）
+# lesson109: GitHub の PR とコードレビュー
 
 ## ゴール
 
-- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
-- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
-- **TanStack Query** が **サーバー state** に特化していることを理解する
-- **Zustand** が **グローバルクライアント state** の現代の定番であることを知る
-- **Jotai** の atom 思想と Zustand との使い分けを 1 行で言える
-- **Redux Toolkit** の現在地（特定用途に残る）を把握する
-- 「迷ったら何を選ぶか」の判断軸を持つ
+- GitHub と Git の関係を区別して説明できる
+- リモートリポジトリを作成し、ローカル → GitHub に push できる
+- ブランチで作業 → Pull Request（PR）作成 → レビュー → マージの流れを理解する
+- 良いコミットメッセージと PR タイトルの書き方を知る
+- マージ戦略（merge / squash / rebase）の違いを 1 行で言える
+- ブランチ保護ルールの目的を説明できる
+- セルフホストではなく GitHub を選ぶ理由を 1 つ挙げられる
 
 ## 解説
 
-### state を 5 種類に分ける
+### Git と GitHub は別物
 
-「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
+混同されがちですが:
 
-| 種類 | 例 | 最適なツール |
-|---|---|---|
-| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
-| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
-| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
-| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
-| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
+- **Git**: バージョン管理ツール（`git` コマンド本体）
+- **GitHub**: Git リポジトリをホスティングする SaaS。PR / Issue / Actions / Projects 等の協業機能付き
 
-> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
+似たサービスに **GitLab** / **Bitbucket** / **Codeberg** などがありますが、2026 年時点でデファクトは GitHub です。本コースも GitHub を前提にします。
 
-### 1. ローカル state: `useState` / `useReducer`
+### リモートリポジトリを作る
 
-特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
+#### 1. GitHub で空の repo を作成
 
-```tsx
-const [isOpen, setIsOpen] = useState(false);
-```
+1. <https://github.com/new> にアクセス
+2. **Repository name** を入力（例: `my-todo-app`）
+3. **Public / Private** を選択
+4. **Initialize this repository** のチェックは **すべて外す**（後でローカルから push するため）
+5. **Create repository**
 
-「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
+#### 2. ローカルから push
 
-### 2. URL state: `useSearchParams`
-
-「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。
-
-```tsx
-"use client";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-
-export function FilterBar() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const tag = searchParams.get("tag") ?? "all";
-
-  function setTag(newTag: string) {
-    const params = new URLSearchParams(searchParams);
-    params.set("tag", newTag);
-    router.push(`${pathname}?${params}`);
-  }
-
-  return (
-    <select value={tag} onChange={(e) => setTag(e.target.value)}>
-      <option value="all">すべて</option>
-      <option value="js">JavaScript</option>
-      <option value="css">CSS</option>
-    </select>
-  );
-}
-```
-
-URL に状態が入ると:
-
-- ブラウザの戻る / 進むで遷移できる
-- URL を共有すれば同じ画面が再現できる
-- ブックマークできる
-
-「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
-
-### 3. サーバー state: TanStack Query
-
-API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
-
-- **古くなる**（他のユーザーが書き換えるかもしれない）
-- **キャッシュしたい**（同じデータを何度も取りたくない）
-- **再取得したい**（ページに戻ってきた時など）
-- **楽観的更新したい**（UI を先に変えて、サーバー応答で確定）
-
-これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。
-
-**TanStack Query**（React Query から改名）はこの問題を **`useQuery` 1 行** で解決します。
+GitHub の repo 作成後の画面に表示される手順をそのまま実行:
 
 ```bash
-npm install @tanstack/react-query
+git remote add origin https://github.com/your-name/my-todo-app.git
+git branch -M main
+git push -u origin main
 ```
 
-```tsx
-import { useQuery } from "@tanstack/react-query";
+これでローカルのコミットが GitHub に上がります。`-u`（upstream）はそのブランチの追跡先を記録するので、次回からは `git push` だけで OK。
 
-function PostsList() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("/api/posts");
-      return res.json();
-    },
-  });
+### Pull Request（PR）の流れ
 
-  if (isLoading) return <p>読み込み中...</p>;
-  if (error) return <p>エラー</p>;
-  return <ul>{data.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
-}
+PR は「**このブランチの変更を main に取り込みたい**、レビューしてください」という依頼書です。現代の開発フローでは **直接 main に push する代わりに** PR を経由するのが基本です。
+
+#### 典型的なフロー
+
+```
+1. ローカルでブランチ作成: git switch -c feature/add-login
+2. 変更してコミット (1 件 or 複数件)
+3. ブランチを GitHub に push: git push -u origin feature/add-login
+4. GitHub で PR を作成（main ← feature/add-login）
+5. レビュアーがコードをチェック、コメント、修正依頼
+6. 必要に応じて修正コミットを追加 push（PR は自動更新）
+7. レビュー承認（Approve）
+8. main にマージ
+9. ブランチを削除（GitHub の UI からワンクリック）
 ```
 
-`useQuery` がやってくれること:
+#### PR の作り方
 
-- **キャッシュ**: 同じ `queryKey` のデータは再利用
-- **重複排除**: 同じ key で複数コンポーネントから呼んでも 1 回だけ fetch
-- **再取得**: ウィンドウフォーカス時 / ネットワーク復帰時
-- **ステール管理**: `staleTime` を超えたら古い扱いに
-- **楽観的更新**: `useMutation` で送信中に UI を先に更新
-- **無限スクロール**: `useInfiniteQuery`
+`git push` 後に GitHub のリポジトリページを開くと、**「Compare & pull request」** ボタンが出ます。または:
 
-2026 年の React アプリで **API 呼び出しがある** なら、TanStack Query 入れない理由はほぼないです。
+- リポジトリの **Pull requests** タブ → **New pull request**
+- ベースブランチ（マージ先）= `main`、比較ブランチ（変更元）= `feature/add-login`
+- タイトルと説明を書く → **Create pull request**
 
-> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
+### 良いコミットメッセージ・PR タイトル
 
-### 4. グローバルクライアント state: Zustand / Jotai / Context
+#### コミットメッセージ
 
-「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には:
+**Why**（なぜ）を中心に書きます。**What**（何）はコードを見れば分かるので最小限で。
 
-#### 軽量な定番: Zustand
+NG:
+
+```
+修正
+変更
+fix
+```
+
+OK:
+
+```
+Login ボタンの色をブランドカラーに統一
+useEffect のクリーンアップ漏れで起きていたメモリリークを修正
+ヘッダーのレスポンシブ対応（600px 以下で縦並び）
+```
+
+書式は **1 行目 50 文字以内** + **空行** + 詳細。最近は **Conventional Commits**（`feat:` / `fix:` / `docs:` などの prefix）も人気です。
+
+```
+feat(auth): magic link ログインを追加
+
+メール経由のワンタイム URL でログインできるようにする。
+パスワード認証は次のリリースで非推奨化する予定。
+```
+
+#### PR タイトル
+
+PR タイトルもコミットメッセージと同じ書き方が良いです。マージ後のコミット履歴に残るので、後から検索できる文言を選びます。
+
+PR 説明（本文）は **「何を変えたか」「なぜ」「どうテストしたか」** の 3 つを書くのが定番。テンプレート（`.github/pull_request_template.md`）を用意するチームも多いです。
+
+### コードレビュー
+
+#### レビュアーの観点
+
+- **動くか**: ローカルで動かして確認できれば理想
+- **読めるか**: 半年後の自分が読んで意味が通るか
+- **テストがあるか**: 重要なロジックに自動テストが付いているか
+- **影響範囲**: 既存機能を壊していないか
+- **セキュリティ**: 入力値検証 / シークレット漏洩 / XSS / SQL インジェクション
+- **パフォーマンス**: 明らかに遅くなる書き方をしていないか
+
+#### コメントの書き方
+
+GitHub の **Files changed** タブで、行ごとに `+` ボタンを押すとインラインコメントが書けます。
+
+良いコメント:
+
+```
+suggestion: ここは Array.from よりも展開構文の方が読みやすそうです
+question: なぜ条件を反転させているか教えてもらえますか？
+nit: 命名は `users` より `userList` の方がチームの規約に合いそうです
+blocking: ここで input をエスケープしないと XSS の余地があります
+```
+
+`suggestion` / `question` / `nit`（nitpick = 些細な指摘）/ `blocking`（マージブロッカー）のような **接頭辞** を使うと、レビュアーの意図が明確で議論が早くなります。
+
+GitHub の **Suggested change** 機能を使うと、コードを直接書き換える提案も送れます。レビュイーは 1 クリックで取り込めます。
+
+### マージ戦略の 3 種類
+
+PR の **Merge** ボタンには 3 つのオプションがあります（リポジトリ設定で許可されているものだけ表示）。
+
+#### 1. Merge commit（既定）
+
+```
+*   Merge pull request #42 from feature/login
+|\
+| * a (feature/login)
+| * b
+|/
+* c (main)
+```
+
+ブランチの履歴が残り、マージ用の追加コミット（`Merge pull request ...`）が作られます。
+
+- 利点: 履歴が完全に残る、PR と main の関係が分かりやすい
+- 欠点: 履歴グラフが複雑になりやすい
+
+#### 2. Squash and merge
+
+```
+* squashed (main) ← feature/login の全 commit を 1 つに圧縮
+* c (main)
+```
+
+PR の全コミットを **1 つに圧縮** して main に合流。
+
+- 利点: main の履歴が線形 + クリーン、1 PR = 1 commit でリバートしやすい
+- 欠点: PR 内の細かい履歴が失われる
+
+最近のチームでは **Squash が既定** になることが多いです。本コースの教材サイトもこの方針です。
+
+#### 3. Rebase and merge
+
+PR のコミットを **そのまま順番に** main の上に積む。マージコミットなし。
+
+- 利点: 完全に線形な履歴
+- 欠点: PR 中のコミットが個別に main に並ぶので、ノイズが多い場合は読みづらい
+
+### ブランチ保護ルール
+
+GitHub の **Settings → Branches → Branch protection rules** で main ブランチに守りを入れます。
+
+典型的な設定:
+
+- **Require a pull request before merging**: main への直接 push を禁止
+- **Require approvals: 1 人以上**: 最低 1 人の Approve を必須化
+- **Require status checks to pass**: CI（Lint / Test / Build）が通らないとマージできない
+- **Require branches to be up to date**: main の最新を取り込んでから merge
+- **Require linear history**: Squash / Rebase 限定にする
+- **Restrict pushes that create matching branches**: 特定ブランチ名の作成を制限
+
+これでチームの誰かがうっかり main に push しても、ブロックしてくれます。
+
+### Issue / Discussions / Projects
+
+GitHub には PR 以外にも協業ツールがあります。
+
+- **Issues**: バグ報告 / 機能要望 / TODO の管理
+- **Discussions**: Q&A / アイデア共有（Issue より柔らかい場）
+- **Projects**: カンバン / ロードマップで Issue / PR を整理
+- **Milestones**: リリース単位で Issue / PR をまとめる
+
+本コースでも、機能追加要望や軽微な修正は Issue → PR の流れで管理しています（過去の issue 番号が commit メッセージに付いているのを見たことがあるかもしれません）。
+
+### `gh` CLI
+
+GitHub の操作をコマンドラインからやる公式ツールです。
 
 ```bash
-npm install zustand
+# インストール（macOS）
+brew install gh
+
+# ログイン（1 回だけ）
+gh auth login
+
+# PR を作成
+gh pr create --title "feat: login を追加" --body "..."
+
+# PR 一覧
+gh pr list
+
+# PR をマージ
+gh pr merge --squash
 ```
 
-```tsx
-import { create } from "zustand";
-
-type AuthStore = {
-  user: { id: string; name: string } | null;
-  login: (user: { id: string; name: string }) => void;
-  logout: () => void;
-};
-
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
-  login: (user) => set({ user }),
-  logout: () => set({ user: null }),
-}));
-```
-
-```tsx
-function Header() {
-  const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
-
-  return user ? (
-    <div>
-      ようこそ、{user.name} さん
-      <button onClick={logout}>ログアウト</button>
-    </div>
-  ) : (
-    <p>未ログイン</p>
-  );
-}
-```
-
-利点:
-
-- **Provider が要らない**: import するだけで使える
-- **boilerplate が少ない**: Redux に比べて 1/5 のコード
-- **TypeScript フレンドリー**
-- **React 外でも呼べる**: `useAuthStore.getState()` で外部からも参照可能
-
-2026 年の **グローバルクライアント state の第一候補**。Redux Toolkit の boilerplate に疲れた人が大量に乗り換えました。
-
-#### atom ベース: Jotai
-
-```bash
-npm install jotai
-```
-
-```tsx
-import { atom, useAtom } from "jotai";
-
-const countAtom = atom(0);
-
-function Counter() {
-  const [count, setCount] = useAtom(countAtom);
-  return <button onClick={() => setCount(count + 1)}>{count}</button>;
-}
-```
-
-特徴:
-
-- 状態を **小さな atom** に分割。それぞれが独立に管理される
-- 「明確な store がない、散らばった state を組み合わせる」アプリ向け
-- 派生状態（derived atom）が綺麗に書ける
-
-Zustand の **明確な store** とは対照的に、Jotai は **粒度の細かい atom** を組み合わせる思想です。React の useState を「アプリ全体に拡張した版」と考えると分かりやすい。
-
-#### React Context（組み込み）
-
-`useContext` も簡易な共有手段ですが、**頻繁に変わる state には向きません**（全消費者が再レンダリングされる）。テーマや言語設定のような「滅多に変わらない」共有値に使うのが定番です。
-
-「`Context` で済むなら Context、頻繁に変わるなら Zustand or Jotai、サーバー由来なら TanStack Query」が 2026 年の使い分けです。
-
-### Redux / Redux Toolkit の現在地
-
-Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。
-
-Redux が今でも残るのは:
-
-- **既存プロジェクト**: 移行コストで残る
-- **大規模 + 複雑な action / reducer ロジック** が要る場合
-- **Redux DevTools の時間旅行デバッグ** が欲しい場合
-- **ミドルウェア（thunk / saga）の生態系** に依存
-
-新規アプリなら **Zustand から始める** のが軽量で十分です。
-
-### SWR（TanStack Query の代替）
-
-Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。
-
-- TanStack Query: 機能豊富、エコシステム大、複雑系も得意
-- SWR: シンプル、API が小さい、学習コスト低、Next.js との親和性
-
-「シンプルさを優先」なら SWR、「全部入りで困らない」なら TanStack Query、というイメージです。
-
-### 「迷ったらこう選ぶ」フローチャート
-
-1. **コンポーネント内だけで完結？** → `useState`
-2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
-3. **サーバーから取るデータ？** → **TanStack Query**
-4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
-5. **散らばった派生状態が多い？** → **Jotai**
-6. **滅多に変わらない設定値？** → **Context**
-7. **フォームの入力値？** → **React Hook Form**
-
-これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
+ブラウザを開かずに操作できるので、慣れると圧倒的に速いです。
 
 ## 演習
 
 ### ゴール
 
-- 「TanStack Query で API データ取得」「Zustand でテーマ切替」「URL state でフィルタ」を 1 つのアプリで体験する
-- それぞれが **どの種類の state** を扱っているか意識する
+- ローカルの Git リポジトリを GitHub に push する
+- ブランチで作業 → PR 作成 → 自分でセルフレビュー → マージする
+- ブランチ保護ルールを 1 つ設定する
 
-### 途中から始める場合
+### 手順 1: GitHub アカウント準備
 
-新規 Vite + React + TS プロジェクトを作成。
+GitHub アカウントを持っていない場合は <https://github.com/> で作成。SSH キーや Personal Access Token も設定しておきます（公式ガイド: <https://docs.github.com/ja/authentication>）。
+
+### 手順 2: 「Git の基本操作」で作ったリポジトリを push
 
 ```bash
-npm create vite@latest state-sample -- --template react-ts
-cd state-sample
-npm install
-npm install @tanstack/react-query zustand
+cd git-practice    # 「Git の基本操作」で作ったディレクトリ
 ```
 
-### 手順 1: TanStack Query の Provider を入れる
+GitHub で空 repo（例: `git-practice`）を作成後:
 
-`src/main.tsx`:
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import App from "./App";
-
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
-);
+```bash
+git remote add origin https://github.com/your-name/git-practice.git
+git branch -M main
+git push -u origin main
 ```
 
-### 手順 2: Zustand store
+### 手順 3: ブランチで変更 → PR
 
-`src/themeStore.ts`:
-
-```ts
-import { create } from "zustand";
-
-type ThemeStore = {
-  theme: "light" | "dark";
-  toggle: () => void;
-};
-
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: "light",
-  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-}));
+```bash
+git switch -c feature/colors
+echo "色を変える予定" >> README.md
+git add README.md
+git commit -m "docs: 色変更の予定をメモに追加"
+git push -u origin feature/colors
 ```
 
-### 手順 3: 統合した App
+GitHub のリポジトリページに **「Compare & pull request」** ボタンが出るのでクリック → タイトルと説明を書いて **Create pull request**。
 
-`src/App.tsx`:
+### 手順 4: セルフレビュー
 
-```tsx
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useThemeStore } from "./themeStore";
+自分で PR の **Files changed** タブを開き、変更を眺めます。気になった行に `+` ボタンでコメントを 1 つ書いてみる（例: `nit: 「予定」より「TODO」の方が一般的かも`）。
 
-type Post = { id: number; title: string };
+### 手順 5: マージ
 
-export default function App() {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggle);
-  const [filter, setFilter] = useState("all");  // 簡易版（本来は URL state）
+PR ページ下部の **Merge pull request** → **Squash and merge** を試します。マージ後、`feature/colors` ブランチを削除（**Delete branch** ボタン）。
 
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-      return (await res.json()) as Post[];
-    },
-  });
+ローカルでも:
 
-  const filtered = filter === "all" ? data : data?.filter((p) => p.id <= 10);
-
-  return (
-    <main
-      style={{
-        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
-        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
-        padding: 16,
-        minHeight: "100vh",
-      }}
-    >
-      <h1>状態管理の地図</h1>
-
-      <button onClick={toggleTheme}>
-        テーマ: {theme}（クリックで切替 — Zustand）
-      </button>
-
-      <div style={{ marginTop: 12 }}>
-        <button onClick={() => setFilter("all")}>すべて（ローカル state）</button>
-        <button onClick={() => setFilter("first10")}>最初の 10 件</button>
-      </div>
-
-      <h2>記事一覧（TanStack Query で fetch）</h2>
-      {isLoading && <p>読み込み中...</p>}
-      {error && <p>エラー</p>}
-      <ul>
-        {filtered?.slice(0, 20).map((p) => (
-          <li key={p.id}>#{p.id} {p.title}</li>
-        ))}
-      </ul>
-    </main>
-  );
-}
+```bash
+git switch main
+git pull origin main
+git branch -d feature/colors    # ローカルブランチも削除
 ```
+
+### 手順 6: ブランチ保護を 1 つ設定
+
+リポジトリの **Settings** → **Branches** → **Add rule** で:
+
+- **Branch name pattern**: `main`
+- **Require a pull request before merging** にチェック
+- 保存
+
+これで、これ以降 `main` に直接 push できなくなります。試しに `git push origin main` を直接やろうとすると拒否されます（ブランチ保護を一時解除するか、PR 経由で取り込む必要がある）。
 
 ### 期待出力
 
-- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示
-- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
-- 「最初の 10 件」を押すと表示が絞り込まれる（ローカル state）
-- ブラウザを **リロードしても fetch は走らない**（TanStack Query のキャッシュ）→ DevTools の Network で 2 回目以降は出ない
+- GitHub にローカルの履歴がそのまま反映される
+- PR 画面で行単位の差分とコメントが表示される
+- Squash でマージすると、main の履歴が線形になる（PR の複数 commit が 1 つに圧縮）
+- main への直接 push が「Branch protection rules: protected branch」のエラーで拒否される
 
 ### 変える
 
-- `useQuery` の `staleTime: 1000 * 60` を渡してみる。1 分間は再取得されないキャッシュ
-- Zustand の `theme` をブラウザリロード後も保持するために `zustand/middleware` の `persist` を使ってみる
-- `filter` を URL state に変更（`useSearchParams` で `?filter=...`）
+- マージ戦略を **Merge commit** に変えてみる（リポジトリ設定で許可）。グラフが分岐 + 合流の形になる
+- PR をマージせず **Close** してみる（後から消したい時の操作）
+- Issues タブで Issue を作り、コミットメッセージに `Closes #1` と書いて push してみる。マージ時に Issue が自動で閉じる
 
 ### 自分で書く
 
-- TanStack Query の `useMutation` で「記事を作成」ボタンを足す（POST）。送信中の UI を表示
-- Jotai を入れて、`countAtom` でカウンターを実装し、Zustand 版と書き味を比較
+- リポジトリに `.github/pull_request_template.md` を追加し、PR の説明テンプレートを作る:
+
+  ```md
+  ## 概要
+
+  ## 変更内容
+  -
+  -
+
+  ## テスト
+  - [ ] ローカルで動作確認
+  - [ ] 単体テスト追加 / 更新
+  ```
+
+- `gh` CLI をインストールして、`gh pr create` でブラウザを開かずに PR を作る
 
 ## まとめ
 
-- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
-- 2026 年は **役割ごとに使い分ける** のが定番
-- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
-- **Jotai** は atom ベース、散らばった派生状態に向く
-- **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
-- **SWR** は TanStack Query のシンプル代替
-- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ
-- 別のレッスンでは **モダン CSS**（:has / Container Queries / View Transitions） に進む
+- **Git は道具、GitHub はホスティングサービス**
+- 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
+- コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
+- マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
+- ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
+- `gh` CLI でコマンドラインからほぼ全操作が可能
+- 別のレッスンでは **GitHub Actions で CI** を組み込み、PR の段階で Lint / テスト / ビルドを自動実行する

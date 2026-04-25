@@ -1,336 +1,441 @@
-# lesson113: Vite の仕組みを軽く
+# lesson113: Zod でスキーマバリデーション
 
 ## ゴール
 
-- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown 単独に統一** された経緯が分かる
-- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
-- 本番ビルドでチャンク分割が起きる理由が言える
-- `import.meta.env` で環境変数を読み込める
-- Vite プラグインの位置付けを把握する
+- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
+- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
+- `parse` / `safeParse` の違いと使いどころを知る
+- `z.infer<typeof schema>` で型を自動導出できる
+- React Hook Form と組み合わせて型安全なフォームを作れる
+- API レスポンスの検証や Server Actions の入力検証にも応用できる
+- Valibot / Arktype など代替ライブラリの存在を知る
 
 ## 解説
 
-### Vite の立ち位置
+### TypeScript の型だけでは足りない
 
-Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
-
-特徴:
-
-- **開発サーバーが速い**（数百 ms で起動）
-- **HMR が一瞬**（保存と同時にブラウザが追随）
-- **本番ビルドはツリーシェイク + 最適化** までやる
-- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
-
-### 2 段構成の歴史と Rolldown 統一
-
-Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
-
-| 局面 | 使うツール | 役割 |
-|---|---|---|
-| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
-| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
-
-開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
-
-#### Vite 8（2026 年 3 月）で Rolldown に統一
-
-[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを採用し、**開発も本番も Rolldown 1 本** に統一しました。
-
-- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
-- **esbuild より速く、Rollup の機能を備える**
-- 結果として Vite はビルドが **最大 10〜30 倍速** になった
-- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
-
-「esbuild + Rollup の 2 段構成」から「Rolldown 1 段」に進化した、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
-
-### 開発サーバーの仕組み
-
-Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
-
-#### 古典的 webpack の流れ
-
-1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
-2. ブラウザに 1 つの大きな JS を渡す
-3. 一部修正されると **再バンドル**
-
-→ ファイル数が増えると線形に遅くなる。
-
-#### Vite の流れ
-
-1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
-2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
-3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
-
-→ ファイル数が増えても初回の起動が速い。
-
-#### 例: 何が起きているか
-
-ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
-
-ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
-
-### HMR（Hot Module Replacement）
-
-開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
-
-普通のブラウザリロードと違って:
-
-- フォームに入力した値が **保持** される
-- スクロール位置が保たれる
-- 状態（state）も保たれる（フレームワーク側が対応していれば）
-
-#### 仕組みを大づかみに
-
-1. Vite はファイル変更を **fs.watch** で監視
-2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
-3. **影響モジュールだけ** ブラウザに WebSocket で送る
-4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
-
-React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
-
-### 本番ビルドの仕組み
-
-`vite build` で行われること:
-
-1. **エントリポイント** から依存関係を辿る
-2. **ツリーシェイク** で使われない export を削除
-3. **チャンク分割** で複数ファイルに分ける
-4. **minify** でファイルサイズを削減
-5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
-
-#### チャンク分割（コード分割）
-
-すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
-
-- **ベンダー**（`node_modules`）を別チャンクに
-- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
-
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson102 のバンドルサイズ最適化と繋がる話）。
+TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
 
 ```ts
-// クリック時に初めて読み込む
-const handleClick = async () => {
-  const { showModal } = await import("./modal");
-  showModal();
-};
+type User = { id: number; name: string };
+
+async function getUser(): Promise<User> {
+  const res = await fetch("/api/user");
+  return res.json();   // 本当に User 型？
+}
 ```
 
-#### ハッシュ付きファイル名
+`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
 
-`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
+実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
 
-### `import.meta.env` で環境変数
+### Zod とは
 
-Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
+Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+
+1. **実行時バリデーション**: 不正な値を弾く
+2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
+
+「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
+
+### インストール
 
 ```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_KEY=do_not_expose
+npm install zod
 ```
 
+### 基本のスキーマ
+
 ```ts
-console.log(import.meta.env.VITE_API_URL); // OK
-console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
+  age: z.number().int().min(0).max(150),
+  isAdmin: z.boolean(),
+});
+
+type User = z.infer<typeof UserSchema>;
+// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
 ```
 
-ルール:
+`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
 
-- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
-- それ以外は Vite が **読み捨てる**（漏洩対策）
-- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
-
-組み込みで使える環境情報:
+### 組み込み修飾メソッド
 
 ```ts
-import.meta.env.MODE        // "development" / "production"
-import.meta.env.DEV         // true / false
-import.meta.env.PROD        // true / false
-import.meta.env.BASE_URL    // "/" など
+z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
+z.string().email("メール形式で")                        // メール
+z.string().url("URL 形式で")                           // URL
+z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
+z.number().int("整数で").positive("正の数で")           // 整数 + 正
+z.number().min(0).max(100)                             // 範囲
+z.string().optional()                                   // string | undefined
+z.string().nullable()                                   // string | null
+z.string().default("デフォルト")                        // デフォルト値
 ```
 
-### プラグイン
-
-Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
+### 配列とユニオン
 
 ```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import svgr from "vite-plugin-svgr";
-import { VitePWA } from "vite-plugin-pwa";
+const TodoSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1),
+  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
+  tags: z.array(z.string()),
+  createdAt: z.string().datetime(),           // ISO 8601
+});
 
-export default defineConfig({
-  plugins: [
-    react(),
-    svgr(),
-    VitePWA({ registerType: "autoUpdate" }),
-  ],
+type Todo = z.infer<typeof TodoSchema>;
+```
+
+### `parse` と `safeParse`
+
+スキーマで値を検証する 2 つの方法:
+
+#### `parse`: 失敗時に例外を投げる
+
+```ts
+try {
+  const user = UserSchema.parse(data);
+  console.log(user.name);  // 型は User
+} catch (err) {
+  if (err instanceof z.ZodError) {
+    console.log(err.issues);  // どこで失敗したかの詳細
+  }
+}
+```
+
+#### `safeParse`: 失敗時にも値を返す
+
+```ts
+const result = UserSchema.safeParse(data);
+if (result.success) {
+  console.log(result.data.name);
+} else {
+  console.log(result.error.issues);
+}
+```
+
+`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
+
+### React Hook Form と統合
+
+`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
+
+```bash
+npm install @hookform/resolvers
+```
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const ContactSchema = z.object({
+  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
+  email: z.string().email("メールアドレスの形式が正しくありません"),
+  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
+  message: z.string().min(10, "10 文字以上で入力してください"),
+});
+
+type ContactFormValues = z.infer<typeof ContactSchema>;
+
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  function onSubmit(data: ContactFormValues) {
+    console.log("検証済みデータ:", data);
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <input {...register("name")} />
+      {errors.name && <p>{errors.name.message}</p>}
+
+      <input type="email" {...register("email")} />
+      {errors.email && <p>{errors.email.message}</p>}
+
+      <input type="number" {...register("age")} />
+      {errors.age && <p>{errors.age.message}</p>}
+
+      <textarea {...register("message")} />
+      {errors.message && <p>{errors.message.message}</p>}
+
+      <button type="submit" disabled={isSubmitting}>送信</button>
+    </form>
+  );
+}
+```
+
+利点:
+
+- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
+- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
+- **エラーメッセージ** が日本語で出せる
+
+### `z.coerce` で型変換
+
+`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
+
+```ts
+z.coerce.number()       // 文字列 → 数値
+z.coerce.boolean()      // 文字列 / 数値 → boolean
+z.coerce.date()         // 文字列 → Date
+```
+
+### API レスポンスの検証
+
+サーバーから返ってきたデータが想定通りかを検証します。
+
+```ts
+async function fetchUser(id: number): Promise<User> {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
+}
+```
+
+これで API 仕様変更による不正レスポンスを早期に検知できます。
+
+### Server Actions / Route Handlers の入力検証
+
+5 章 で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
+
+```ts
+"use server";
+
+import { z } from "zod";
+
+const AddTodoSchema = z.object({
+  text: z.string().min(1).max(200),
+});
+
+export async function addTodo(formData: FormData) {
+  const result = AddTodoSchema.safeParse({
+    text: formData.get("text"),
+  });
+  if (!result.success) {
+    return { ok: false as const, error: result.error.issues[0].message };
+  }
+  // 検証済みの result.data.text を使う
+  await db.insertTodo(result.data.text);
+  return { ok: true as const };
+}
+```
+
+### よくあるパターン
+
+#### refine: 複数フィールド間のチェック
+
+```ts
+const SignupSchema = z.object({
+  password: z.string().min(8),
+  passwordConfirm: z.string(),
+}).refine((data) => data.password === data.passwordConfirm, {
+  message: "パスワードが一致しません",
+  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
 });
 ```
 
-代表的なプラグイン:
+#### transform: 値を加工
 
-- `@vitejs/plugin-react`: React の HMR + JSX 変換
-- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
-- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
-- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（lesson97）
+```ts
+const TrimmedString = z.string().transform((s) => s.trim());
 
-Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
+TrimmedString.parse("  hello  "); // "hello"
+```
 
-### Vite と他ツールの関係
+### 代替ライブラリ
 
-Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
+| ライブラリ | 特徴 |
+|---|---|
+| **Zod** | デファクト。エコシステム最大 |
+| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
+| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
+| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
 
-- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
-- **Remix v3 / React Router v7+**: 内部で Vite を採用
-- **Nuxt 3+**: 内部で Vite を採用
-- **Astro**: 内部で Vite を採用
-- **SvelteKit**: 内部で Vite を採用
-
-つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
-
-### 「ハマる」パターン
-
-#### `process.env` が `undefined`
-
-→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
-
-#### 環境変数がクライアントに出てこない
-
-→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
-
-#### CommonJS のパッケージで失敗
-
-→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
-
-#### `node:fs` を import してエラー
-
-→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
+新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
 
 ## 演習
 
 ### ゴール
 
-- Vite の開発サーバーで **HMR を体感** する
-- ビルド出力のチャンク分割を眺める
-- `import.meta.env` で環境変数を読む
+- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
+- スキーマから型を自動導出する
+- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
 
-### 手順 1: 新規プロジェクト
-
-```bash
-npm create vite@latest vite-internals -- --template react-ts
-cd vite-internals
-npm install
-```
-
-### 手順 2: HMR を試す
+### 手順 1: 依存追加
 
 ```bash
-npm run dev
+npm install zod @hookform/resolvers
 ```
 
-ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
+### 手順 2: スキーマ + 型を定義
 
-### 手順 3: ネットワークタブで個別配信を観察
+`src/contact-schema.ts`:
 
-DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
+```ts
+import { z } from "zod";
 
-### 手順 4: 環境変数
+export const ContactSchema = z.object({
+  name: z
+    .string()
+    .min(1, "お名前は必須です")
+    .max(50, "50 文字以内で入力してください"),
+  email: z
+    .string()
+    .min(1, "メールは必須です")
+    .email("メールアドレスの形式が正しくありません"),
+  message: z
+    .string()
+    .min(10, "10 文字以上で入力してください")
+    .max(1000, "1000 文字以内で入力してください"),
+});
 
-`.env` を作成:
-
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_TOKEN=xxxxx
+export type ContactFormValues = z.infer<typeof ContactSchema>;
 ```
 
-`src/App.tsx` に追加:
+### 手順 3: フォームを書き換え
+
+`src/ContactForm.tsx`:
 
 ```tsx
-console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
-console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
-console.log("MODE:", import.meta.env.MODE);
-```
-
-ブラウザのコンソールで:
-
-- `VITE_API_URL` は表示される
-- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
-- `MODE` は `"development"`
-
-### 手順 5: 本番ビルド
-
-```bash
-npm run build
-ls -la dist/assets
-npm run preview
-```
-
-`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
-
-### 手順 6: 動的 import でチャンクを分割
-
-`src/App.tsx`:
-
-```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
+import { ContactSchema, type ContactFormValues } from "./contact-schema";
 
-export default function App() {
-  const [text, setText] = useState("");
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
 
-  const handleClick = async () => {
-    const mod = await import("./heavy");
-    setText(mod.heavyFunction());
-  };
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  async function onSubmit(data: ContactFormValues) {
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
+  }
 
   return (
-    <div>
-      <button onClick={handleClick}>重い処理</button>
-      <p>{text}</p>
-    </div>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
+
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name")}
+        />
+        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email")}
+        />
+        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          {...register("message")}
+        />
+        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
   );
 }
 ```
 
-`src/heavy.ts`:
+### 手順 4: API レスポンス検証の例
+
+`src/api.ts`:
 
 ```ts
-export function heavyFunction() {
-  return "計算結果です";
+import { z } from "zod";
+
+const PostSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  body: z.string(),
+  userId: z.number().int(),
+});
+
+export type Post = z.infer<typeof PostSchema>;
+
+const PostListSchema = z.array(PostSchema);
+
+export async function fetchPosts(): Promise<Post[]> {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return PostListSchema.parse(data);   // 不正な構造なら ZodError
 }
 ```
 
-`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
+これで API レスポンスの構造が変わってもすぐ気付けます。
 
 ### 期待出力
 
-- HMR でファイル保存と同時に画面が更新（リロードなし）
-- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
-- `VITE_` プレフィックスの環境変数のみクライアントから読める
-- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
+- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
+- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
+- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
+- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
 
 ### 変える
 
-- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
-- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
-- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
+- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
+- `z.string().email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
+- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
 
-### 自分で書く（任意）
+### 自分で書く
 
-- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
-- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
-- Vite 7 と Vite 8（Rolldown）でビルド時間を比較してみる（既存のプロジェクトで `npm install vite@7` ↔ `vite@8`）
+- `password` と `passwordConfirm` の一致チェックを `refine` で書く
+- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
+- Server Actions（5 章）の入力を Zod で検証するパターンを 1 つ書いてみる
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
-- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
-- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
-- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
-- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
-- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
-- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
-- 別のレッスンでは **Sentry でエラートラッキング** に進む
+- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
+- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
+- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
+- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
+- `parse`（例外）/ `safeParse`（戻り値）の使い分け
+- **`z.infer<typeof schema>`** で型を自動導出
+- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
+- API レスポンス検証 / Server Actions 入力検証 にも同じスキーマを再利用
+- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
+- これで7 章 のフォーム 2 連作が完了。次は **状態管理の地図** に進む

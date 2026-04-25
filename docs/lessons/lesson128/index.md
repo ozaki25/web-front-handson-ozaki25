@@ -1,480 +1,426 @@
-# lesson128: React Compiler
+# lesson128: エラートラッキング（Sentry）
 
 ## ゴール
 
-- React Compiler が **何を自動化** するかを言える
-- 「手動メモ化（`useMemo` / `useCallback` / `React.memo`）が要らなくなる」境界を理解する
-- React Compiler 1.0（2025 年 10 月安定版）の **現在地** を知る
-- Next.js / Vite で React Compiler を **有効化** できる
-- 既存コードでハマらないための注意点（Rules of React）を押さえる
-
-::: tip 前提
-このレッスンは lesson64「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson64 / 55 を確認してください。
-:::
+- 本番のエラーを **見逃さず通知する** 仕組みの必要性を理解する
+- Sentry を React / Next.js プロジェクトに導入できる
+- Source Map で **minified コードを元のコードに復元** する流れが分かる
+- ユーザーコンテキスト / タグ / リリースで **エラーを絞り込む** 方法を知る
+- 代替サービス（Datadog / Bugsnag / Rollbar 等）の位置付けを把握する
 
 ## 解説
 
-### 「手動メモ化」の苦しみ
+### なぜエラートラッキングが必要か
 
-React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなる。そのために導入されたのが:
+開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
 
-- `useMemo`: 値の **再計算を抑える**
-- `useCallback`: 関数の **再生成を抑える**
-- `React.memo`: コンポーネントの **再レンダリングを抑える**
+エラートラッキングサービスは:
 
-```tsx
-const filtered = useMemo(
-  () => items.filter((i) => i.active),
-  [items],
-);
+- ブラウザで起きたエラーを **自動収集** する
+- スタックトレース / OS / ブラウザ / URL / 直前の操作（breadcrumbs）を一緒に送る
+- **集約・重複排除** してダッシュボードに並べる
+- Slack / Email / PagerDuty に **通知** する
+- リリース単位で「**この版で増えたエラー**」を可視化する
 
-const onClick = useCallback(
-  () => handler(value),
-  [value],
-);
+これがあるかないかで、本番運用の体感が大きく変わります。
 
-const Memoed = React.memo(Child);
-```
+### Sentry の位置付け
 
-3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
+[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
 
-- **書き忘れ**でパフォーマンス劣化
-- **依存配列のミス**でバグ
-- **過度なメモ化**で逆に遅くなる
-- 読みづらいコード
+特徴:
 
-これを **コンパイラが自動でやる** のが React Compiler の役割です。
+- React / Next.js / Node.js / モバイルなど **多言語対応**
+- パフォーマンス監視 / セッションリプレイ / プロファイリングも統合
+- Source Map アップロードが整っていて、**minify されたコードでも元のコードで読める**
+- 月 5,000 イベントまで **無料枠**
 
-### React Compiler とは
-
-[React Compiler](https://react.dev/learn/react-compiler/introduction) は、**Babel ベースのコンパイラ** で、ソースコードを **解析してメモ化を自動挿入** します。
-
-```tsx
-// あなたが書くコード
-function Cart({ items }: { items: Item[] }) {
-  const total = items.reduce((sum, i) => sum + i.price, 0);
-  return <p>合計: {total}</p>;
-}
-
-// Compiler が変換した結果（イメージ）
-function Cart({ items }: { items: Item[] }) {
-  const $ = useMemoCache(2);
-  let total;
-  if ($[0] !== items) {
-    total = items.reduce((sum, i) => sum + i.price, 0);
-    $[0] = items;
-    $[1] = total;
-  } else {
-    total = $[1];
-  }
-  return <p>合計: {total}</p>;
-}
-```
-
-実際の出力は人間が読まなくて良い形式ですが、要は **手動の useMemo を全部書いた状態** に近づけてくれます。
-
-### 1.0 安定版（2025 年 10 月）
-
-[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、**プロダクション ready** 扱い。
-
-主な仕様:
-
-- React 17 / 18 / 19 と互換（19 推奨）
-- TypeScript 完全対応
-- Next.js / Remix / Expo / Vite すべてでサポート
-- ビルド時間は **やや増える**（軽量化が継続中）
-
-### Next.js 16 で有効化
-
-[Next.js 16](https://nextjs.org/blog/next-16)（2025 年 10 月）以降、React Compiler は **stable** な設定オプションになりました（experimental から昇格）。
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  reactCompiler: true,
-};
-
-export default nextConfig;
-```
-
-これだけで OK。デフォルトでは ON ではないので、**明示的に有効化** します。
-
-#### 細かい設定
-
-```ts
-const nextConfig: NextConfig = {
-  reactCompiler: {
-    compilationMode: "annotation",  // "all" | "annotation" | "infer"
-  },
-};
-```
-
-| `compilationMode` | 説明 |
-|---|---|
-| `"all"`（デフォルト） | すべてのコンポーネントを変換 |
-| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ |
-| `"infer"` | use の前提を満たす関数のみ |
-
-「徐々に試したい」場合は `"annotation"` から始めて、確認後に `"all"` に切り替えるのが安全。
-
-### Vite で有効化
+### React に導入する最小手順
 
 ```bash
-npm install -D babel-plugin-react-compiler
+npm install @sentry/react
 ```
 
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
+`src/main.tsx`（最初の方）:
 
-const ReactCompilerConfig = {};
+```tsx
+import * as Sentry from "@sentry/react";
 
-export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [
-          ["babel-plugin-react-compiler", ReactCompilerConfig],
-        ],
-      },
-    }),
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  integrations: [
+    Sentry.browserTracingIntegration(),
+    Sentry.replayIntegration(),
   ],
+  tracesSampleRate: 1.0,        // パフォーマンス計測。本番は 0.1 程度に
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+  environment: import.meta.env.MODE,
+  release: import.meta.env.VITE_APP_VERSION,
 });
 ```
 
-### 「メモ化が要らなくなる」とは
+`.env`:
 
-#### Before
-
-```tsx
-function ProductList({ products, query }: Props) {
-  const filtered = useMemo(
-    () => products.filter((p) => p.name.includes(query)),
-    [products, query],
-  );
-
-  const handleClick = useCallback(
-    (id: string) => navigate(`/product/${id}`),
-    [navigate],
-  );
-
-  return (
-    <ul>
-      {filtered.map((p) => (
-        <ProductCard key={p.id} product={p} onClick={handleClick} />
-      ))}
-    </ul>
-  );
-}
-
-const ProductCard = React.memo(({ product, onClick }: CardProps) => (
-  <li onClick={() => onClick(product.id)}>{product.name}</li>
-));
+```
+VITE_SENTRY_DSN=https://xxxxx@oXXX.ingest.sentry.io/12345
+VITE_APP_VERSION=1.0.0
 ```
 
-#### After（Compiler 有効）
+DSN は Sentry の管理画面で「プロジェクトの設定」から取得します。
+
+### エラーを意図的に送る
+
+#### 自動的に拾われるもの
+
+- 未捕捉の `throw`
+- 未処理の Promise rejection
+- React のレンダリング中エラー（後述の Error Boundary 経由）
+
+#### 手動で送る
 
 ```tsx
-function ProductList({ products, query }: Props) {
-  const filtered = products.filter((p) => p.name.includes(query));
-  const handleClick = (id: string) => navigate(`/product/${id}`);
-
-  return (
-    <ul>
-      {filtered.map((p) => (
-        <ProductCard key={p.id} product={p} onClick={handleClick} />
-      ))}
-    </ul>
-  );
+try {
+  await someApi();
+} catch (e) {
+  Sentry.captureException(e);
+  throw e;  // 必要なら再 throw
 }
 
-function ProductCard({ product, onClick }: CardProps) {
-  return <li onClick={() => onClick(product.id)}>{product.name}</li>;
-}
+// メッセージだけ送る
+Sentry.captureMessage("ユーザーが何度もログインに失敗");
 ```
 
-「**普通に書いた JSX** が、コンパイル後は **十分にメモ化された** コードに変換される」のが Compiler の価値。
+### React の Error Boundary と統合
 
-### 何が変わるか / 変わらないか
-
-#### 変わるもの
-
-- **`useMemo` / `useCallback` の手動記述が不要** に
-- **`React.memo` で囲う必要がない**（依存があれば自動でメモ化される）
-- 依存配列の書き間違いミスが消える
-
-#### 変わらないもの
-
-- `useEffect` / `useState` / `useRef` などの Hook は **そのまま** 使う
-- **データ取得** や **副作用** の責務は変わらない
-- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題
-
-### Rules of React
-
-Compiler が動くには **コードが React のルールに従っている** ことが前提です。
-
-#### Components / Hooks は **純粋**
-
-- レンダリング中に副作用を起こさない（DOM 直接操作 / API 呼び出し / setState）
-- 同じ入力からは同じ出力を返す（**ピュア**）
+Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson68 と相性 ◎）。
 
 ```tsx
-// NG: レンダリング中に外部状態を変更
-function Bad() {
-  globalCounter++;        // 副作用
-  return <p>{globalCounter}</p>;
-}
+import * as Sentry from "@sentry/react";
 
-// OK: 副作用は useEffect 内で
-function Good() {
-  useEffect(() => { globalCounter++; }, []);
-  return <p>{globalCounter}</p>;
-}
+const App = () => (
+  <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
+    <Routes />
+  </Sentry.ErrorBoundary>
+);
 ```
 
-#### イベントハンドラは外部状態を変えても OK
+これだけで「**Error Boundary が捕まえた React レンダリングエラー** が Sentry に届く」状態になります。
 
-```tsx
-function Counter() {
-  const [n, setN] = useState(0);
-  return <button onClick={() => setN(n + 1)}>{n}</button>;
-}
-```
+### Next.js に導入する最小手順
 
-イベントハンドラはレンダリング中ではないので **副作用 OK**。Compiler はこれを区別します。
-
-#### `eslint-plugin-react-compiler` で違反を検出
+[Sentry の Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/) は **ウィザード** で 1 コマンド導入できます。
 
 ```bash
-npm install -D eslint-plugin-react-compiler
+npx @sentry/wizard@latest -i nextjs
 ```
 
-```js
-// eslint.config.js
-import reactCompiler from "eslint-plugin-react-compiler";
+ウィザードが行うこと:
 
-export default [
-  {
-    plugins: { "react-compiler": reactCompiler },
-    rules: {
-      "react-compiler/react-compiler": "error",
-    },
-  },
-];
+- プロジェクトの選択 / DSN の設定
+- `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
+- `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
+- `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
+- `next.config.ts` を `withSentryConfig` でラップ
+- ビルド時に **Source Map を自動アップロード** する設定を追加
+
+```ts
+// next.config.ts（生成例）
+import { withSentryConfig } from "@sentry/nextjs";
+
+const nextConfig = {
+  /* 既存の Next.js 設定 */
+};
+
+export default withSentryConfig(nextConfig, {
+  org: "your-org",
+  project: "your-project",
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+});
 ```
 
-このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint で **コードを浄化** するのが安全。
+**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
 
-### 「Compile されない」コードへの対処
+### Source Map とは
 
-Compiler が「危険」と判断したコンポーネントは **そのまま** にします（壊れない）。
+本番ビルドの JS は **minify** されて変数名が `a` / `b` になり、行も詰められています。これだとスタックトレースを見ても **どのコードか分からない**。
 
-警告メッセージ:
+Source Map は「minify 後の位置 → 元のソースの行・列」のマッピング情報です。これがあると:
 
 ```
-[ReactCompiler] Function `MyComponent` could not be compiled.
-Reason: Mutation of value passed as argument
+TypeError: Cannot read property 'foo' of undefined
+  at a.b.c (index-Xj9k2.js:1:12345)
 ```
 
-対応:
+が:
 
-1. ESLint の指摘を素直に直す（**ピュア化**）
-2. 直せない事情があれば **`"use no memo"`** ディレクティブで対象外に
-3. **`"use memo"`** で「変換して欲しい」と明示
-
-```tsx
-"use no memo";
-
-function LegacyComponent() {
-  // Compiler 対象外
-}
+```
+TypeError: Cannot read property 'foo' of undefined
+  at UserProfile.fetchData (src/components/UserProfile.tsx:42:18)
 ```
 
-### 既存プロジェクトに導入する流れ
+に **復元** されます。
 
-1. **`eslint-plugin-react-compiler` を入れて警告を見る**
-2. 警告を直せる範囲で直す
-3. **`compilationMode: "annotation"`** で **限定的に試す**
-4. 動作確認 → 問題なければ **`"all"`** に切り替え
-5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
+#### Sentry の Source Map 運用
 
-「全部一気に」ではなく **段階導入** が事故を減らします。
+- **ビルド時に Source Map を生成**（`vite build` / `next build`）
+- それを **Sentry にアップロード**（公開しない）
+- Sentry の管理画面で **元のソースで** スタックトレースが見られる
 
-### パフォーマンス効果は？
+`@sentry/nextjs` のウィザードがビルド時のアップロードまで設定してくれるので、最近は手動設定の必要が減りました。
 
-[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などで:
+::: warning Source Map をブラウザに公開しない
+Source Map をそのまま `dist/` に置いてデプロイすると、**元のソースが誰でも読める** 状態になります。Sentry にアップロードして、ビルド成果物からは削除（または `.map` を CDN に出さない）するのが安全。
+:::
 
-- **手動メモ化が完璧でないコードベース** には大きな改善
-- **既に十分メモ化済みのコード** にはほぼ同等
-- **小規模アプリ** には変化なし
+### ユーザーコンテキスト
 
-「**すべての React アプリが速くなる魔法** ではない」けれど、コードの **保守性** は確実に上がります。
+「**誰の** エラーか」が分かると原因究明が圧倒的に早くなります。
 
-### `useMemo` を残すべき場面
+```ts
+Sentry.setUser({
+  id: user.id,
+  email: user.email,
+  username: user.name,
+});
+```
 
-- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替え。Compiler が判断しても明示する方が読みやすい
-- **deep compare** が必要な場合: lodash の `isEqual` で比較したい時など
-- **API 互換**: 公開ライブラリ（コンパイラ前提に強制できない）
+ログアウト時:
 
-### React 19 / Next.js 16 / React Compiler の関係
+```ts
+Sentry.setUser(null);
+```
 
-整理すると:
+::: tip 個人情報の扱い
+メールアドレスや氏名は **個人情報**。GDPR / 個人情報保護法的に、ユーザー同意やデータ最小化が必要です。本番では **ID だけ送る** / **ハッシュ化する** などの運用が無難。
+:::
 
-- **React 19**: Hooks 中心の API（`useEffectEvent` / `cacheSignal` / `<Activity />`）
-- **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
-- **Next.js 16**: Turbopack 標準、Cache Components、`reactCompiler` 設定が stable
+### タグとコンテキスト
 
-3 つは **独立に進化** していて、組み合わせは選択可能。
+タグは「**フィルタ用** の短い key-value」、コンテキストは「**詳細データ**」です。
 
-### よくある誤解
+```ts
+// タグ（ダッシュボードで絞り込みに使える）
+Sentry.setTag("page", "checkout");
+Sentry.setTag("payment-provider", "stripe");
 
-- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけ。本質的なボトルネックは別
-- 「**全 useMemo を消すべき**」→ Compiler 任せでも動くが、**読みやすさのために残す** のはアリ
-- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要
+// コンテキスト（イベントに添付される詳細）
+Sentry.setContext("cart", {
+  items: 3,
+  total: 12000,
+  currency: "JPY",
+});
+```
+
+### リリース管理
+
+「この版で増えたエラー」を見るには、`release` と `environment` を設定します。
+
+```ts
+Sentry.init({
+  dsn: "...",
+  release: "my-app@1.2.3",       // package.json のバージョンや Git の SHA
+  environment: process.env.NODE_ENV,
+});
+```
+
+CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知すると、ダッシュボードで:
+
+- 「リリース 1.2.3 で **新規** に出たエラー」
+- 「リリース 1.2.2 では出ていなかったが 1.2.3 で **退行** したエラー」
+- 「修正済みリリース」
+
+がトラッキングできます。
+
+### Breadcrumbs
+
+エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
+
+- ボタンクリック / フォーム送信
+- ページ遷移
+- ネットワークリクエスト
+- console.log（任意）
+
+```ts
+Sentry.addBreadcrumb({
+  category: "checkout",
+  message: "クーポンコードを適用",
+  level: "info",
+});
+```
+
+「エラー発生 5 秒前にこのボタンを押している」が分かるので **再現が容易** になります。
+
+### セッションリプレイ
+
+Sentry の **Session Replay** を有効にすると、エラー発生時の **画面録画** が見られます（DOM の差分を記録するので画像ではなく軽い）。
+
+```ts
+Sentry.init({
+  // ...
+  integrations: [Sentry.replayIntegration()],
+  replaysSessionSampleRate: 0.1,   // 通常セッションの 10%
+  replaysOnErrorSampleRate: 1.0,   // エラーが起きたセッションは 100%
+});
+```
+
+「**ユーザーがどう操作してエラーに辿り着いたか**」が動画で分かるのは強烈です。ただし **個人情報の保護** が必要（パスワード入力欄などはマスクする設定）。
+
+### 代替サービス
+
+| サービス | 特徴 |
+|---|---|
+| **Sentry** | OSS / 自前ホスト可。フロント・バック両方 |
+| **Datadog** | 監視全部入り（メトリクス / ログ / APM / RUM）。運用の重心が APM 寄り |
+| **Bugsnag** | エラートラッキング特化。料金体系がシンプル |
+| **Rollbar** | 老舗のエラートラッキング。深い検索機能 |
+| **LogRocket** | セッションリプレイが強み |
+| **Honeybadger** | 開発者にやさしい価格 |
+
+「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
+
+### Edge / Worker 環境での扱い
+
+Cloudflare Workers / Vercel Edge Functions では従来の Sentry SDK が動きにくかったですが、2026 年現在は **`@sentry/cloudflare` / `@sentry/vercel-edge`** など環境別 SDK が整備されています。Next.js の Edge Middleware は `@sentry/nextjs` の `sentry.edge.config.ts` で対応します。
 
 ## 演習
 
 ### ゴール
 
-- Next.js 16 で React Compiler を有効化する
-- `useMemo` / `useCallback` を消しても動くことを確認
-- ESLint プラグインで違反を検出する
+- React + Vite プロジェクトに Sentry を入れる
+- 意図的にエラーを起こして Sentry に届くことを確認する
+- ユーザーコンテキストとタグを付ける
 
-### 手順 1: 新規プロジェクト
+### 手順 1: Sentry アカウントとプロジェクト作成
 
-```bash
-npx create-next-app@latest compiler-sample --ts --app
-cd compiler-sample
-```
+[sentry.io](https://sentry.io/) で無料アカウントを作り、**新規プロジェクト**（platform = React）を作成。**DSN** を控えます。
 
-### 手順 2: React Compiler を有効化
-
-`next.config.ts`:
-
-```ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  reactCompiler: true,
-};
-
-export default nextConfig;
-```
-
-### 手順 3: ESLint プラグインを導入
+### 手順 2: 新規 React プロジェクト
 
 ```bash
-npm install -D eslint-plugin-react-compiler
+npm create vite@latest sentry-sample -- --template react-ts
+cd sentry-sample
+npm install @sentry/react
+npm install
 ```
 
-`eslint.config.mjs`（Next.js 16 デフォルト）に追加:
+### 手順 3: 初期化
 
-```js
-import reactCompiler from "eslint-plugin-react-compiler";
+`.env`:
 
-const config = [
-  // ...既存
-  {
-    plugins: { "react-compiler": reactCompiler },
-    rules: { "react-compiler/react-compiler": "error" },
-  },
-];
-
-export default config;
+```
+VITE_SENTRY_DSN=（控えた DSN を貼る）
+VITE_APP_VERSION=0.1.0
 ```
 
-### 手順 4: メモ化なしのコンポーネント
-
-`app/page.tsx`:
+`src/main.tsx`:
 
 ```tsx
-"use client";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import * as Sentry from "@sentry/react";
+import App from "./App.tsx";
+import "./index.css";
+
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 1.0,
+  environment: import.meta.env.MODE,
+  release: `sentry-sample@${import.meta.env.VITE_APP_VERSION}`,
+});
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
+      <App />
+    </Sentry.ErrorBoundary>
+  </StrictMode>,
+);
+```
+
+### 手順 4: わざとエラーを起こす
+
+`src/App.tsx`:
+
+```tsx
+import * as Sentry from "@sentry/react";
 import { useState } from "react";
 
-export default function Page() {
-  const [items, setItems] = useState([1, 2, 3, 4, 5]);
-  const [filter, setFilter] = useState("");
+export default function App() {
+  const [crash, setCrash] = useState(false);
 
-  // useMemo を書かない
-  const filtered = items.filter((n) => String(n).includes(filter));
+  if (crash) {
+    throw new Error("意図的にクラッシュさせた");
+  }
+
+  const sendCustom = () => {
+    Sentry.captureMessage("カスタムメッセージ from Sentry test");
+  };
+
+  const sendException = () => {
+    try {
+      // @ts-expect-error わざと
+      null.foo();
+    } catch (e) {
+      Sentry.captureException(e);
+    }
+  };
+
+  const setUser = () => {
+    Sentry.setUser({ id: "user-123", username: "テストユーザー" });
+    Sentry.setTag("test-run", "manual");
+  };
 
   return (
-    <main style={{ padding: 24 }}>
-      <input value={filter} onChange={(e) => setFilter(e.target.value)} />
-      <ul>
-        {filtered.map((n) => (
-          <li key={n}>{n}</li>
-        ))}
-      </ul>
-      <button onClick={() => setItems((x) => [...x, x.length + 1])}>追加</button>
-    </main>
+    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <h1>Sentry Demo</h1>
+      <button onClick={() => setCrash(true)}>レンダリングエラー</button>
+      <button onClick={sendException}>例外を送信</button>
+      <button onClick={sendCustom}>メッセージを送信</button>
+      <button onClick={setUser}>ユーザーをセット</button>
+    </div>
   );
 }
 ```
 
-`npm run dev` で動作。filter 入力 / 追加ボタンが快適に動くことを確認。
+### 手順 5: 起動して確認
 
-### 手順 5: わざとルール違反
-
-```tsx
-let counter = 0;
-
-export default function BadCounter() {
-  counter++;  // レンダリング中の副作用
-  return <p>{counter}</p>;
-}
+```bash
+npm run dev
 ```
 
-ESLint がエラーを出します。**修正方法**: state に置き換える / `useEffect` に移す。
-
-### 手順 6: 段階導入を試す
-
-`next.config.ts`:
-
-```ts
-const nextConfig: NextConfig = {
-  reactCompiler: { compilationMode: "annotation" },
-};
-```
-
-このモードで `"use memo"` を書いたコンポーネントだけ変換されます:
-
-```tsx
-"use memo";
-
-export default function CompiledComponent() { /* ... */ }
-```
+ボタンを押して、Sentry のダッシュボードでイベントが届くのを確認します（数秒〜数十秒の遅延あり）。
 
 ### 期待出力
 
-- React Compiler が有効化されたメッセージがビルド時に出る
-- ESLint プラグインがルール違反を **エラー / warning** で出す
-- 動作は手動メモ化版と同じか **わずかに速い**
+- 「レンダリングエラー」を押すと Error Boundary の fallback が表示され、Sentry にイベントが届く
+- 「例外を送信」で `TypeError` が届く
+- 「メッセージを送信」で文字列イベントが届く
+- 「ユーザーをセット」した後のイベントは **ユーザー情報付き** で届く
+- ダッシュボードで `release: sentry-sample@0.1.0` 付きとして表示される
 
 ### 変える
 
-- 既存コード（lesson64 / lesson67 の React アプリなど）に Compiler を入れる
-- React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
-- 大量レンダリング（1000 行のリスト）で差を観察
+- `tracesSampleRate` を `0.1` にして、パフォーマンス計測のサンプリング率を下げる
+- `Sentry.replayIntegration()` を追加し、セッションリプレイを有効にする
+- `setTag("page", "home")` などタグを増やしてダッシュボードで絞り込みを試す
 
 ### 自分で書く（任意）
 
-- 既存プロジェクトで `useMemo` / `useCallback` を **すべて削除** して動作する範囲を試す
-- `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
-- ベンチマーク（lesson101 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
+- Next.js プロジェクトに `npx @sentry/wizard@latest -i nextjs` で Sentry を入れる
+- API Route の中で意図的にエラーを起こし、Sentry に届くことを確認する
+- ビルド時に Source Map をアップロードして、minify 後のコードが元のソースで表示されることを確認
 
 ## まとめ
 
-- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラ
-- **2025 年 10 月に 1.0 安定版** がリリース、Meta 大規模で実戦投入済み
-- **Next.js 16** で `reactCompiler: true` の設定が stable に
-- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加
-- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提
-- **`eslint-plugin-react-compiler`** で違反を検出 → 直すか `"use no memo"` で対象外に
-- 段階導入は **`compilationMode: "annotation"`** から
-- 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
-- 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい
-- 別のレッスンでは **Server Components の設計** に進む
+- **エラートラッキング** は「ユーザーが言わなければ気づけないバグ」を救うインフラ
+- Sentry は React / Next.js / Node.js を 1 つの SDK でカバー
+- React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
+- **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
+- `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
+- `release` / `environment` で **退行**（regression） を可視化
+- **Breadcrumbs** と **Session Replay** で再現が容易になる
+- 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
+- 別のレッスンでは **Vercel Analytics と GA4** に進み、ユーザー行動とパフォーマンスの計測へ
