@@ -204,6 +204,7 @@ export default withPwa(withMermaid(
             { text: 'lesson94: API モック — MSW（Mock Service Worker）', link: '/lessons/lesson94/' },
             { text: 'lesson95: E2E テスト — Playwright', link: '/lessons/lesson95/' },
             { text: 'lesson96: Core Web Vitals の 3 つの指標と Lighthouse', link: '/lessons/lesson96/' },
+            { text: 'lesson97: バンドルサイズの最適化とコード分割', link: '/lessons/lesson97/' },
           ],
         },
       ],
