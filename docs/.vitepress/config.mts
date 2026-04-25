@@ -234,6 +234,7 @@ export default withPwa(withMermaid(
             { text: 'lesson124: WebSocket と Server-Sent Events（SSE）', link: '/lessons/lesson124/' },
             { text: 'lesson125: GraphQL と tRPC の地図', link: '/lessons/lesson125/' },
             { text: 'lesson126: Service Worker と PWA 深掘り', link: '/lessons/lesson126/' },
+            { text: 'lesson127: IndexedDB 入門', link: '/lessons/lesson127/' },
           ],
         },
       ],
