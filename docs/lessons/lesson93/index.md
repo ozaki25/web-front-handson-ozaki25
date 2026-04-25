@@ -161,6 +161,18 @@ Strict-Transport-Security: max-age=31536000; includeSubDomains
 
 Vercel / Netlify などはデフォルトで HTTPS のみでの配信になっています。本コースの教材サイトもすべて HTTPS です。
 
+> **`includeSubDomains` の罠**: 一度配信すると、ブラウザはこのドメインの **全サブドメインも HTTPS 必須** として `max-age` の期間（上の例では 1 年）覚え続けます。社内ツールなど一部サブドメインに HTTPS が無いと、その期間アクセスできなくなります。`max-age=0` を返しても **既に保存済みのブラウザを巻き戻せません**。本番投入は `max-age` を短めから始めて段階的に伸ばすのが安全です。
+
+### `SameSite=None; Secure`（クロスサイト Cookie の現代的形）
+
+外部サイトからの埋め込み（iframe / クロスオリジン fetch with credentials）で Cookie を送りたい場合は、`SameSite=None` を明示する必要があります。**さらに `Secure` の併記が必須**（Chrome / Safari / Firefox の現行仕様）です。
+
+```
+Set-Cookie: session=abc; Path=/; HttpOnly; Secure; SameSite=None
+```
+
+`SameSite=None` 単独や、HTTPS でない通信での `SameSite=None` は **ブラウザが拒否します**。サードパーティ Cookie 廃止の流れも進んでいるため、可能なら `SameSite=Lax` で済ませる設計を選ぶのが現代の標準です。
+
 ### Content-Security-Policy（CSP）
 
 レスポンスヘッダで **「このページで実行してよい JS の出所」** を制限する仕組みです。XSS の最後の砦として効きます。

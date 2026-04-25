@@ -280,6 +280,46 @@ export function TodoFetcher() {
 
 本コースでは型ガードを手書きしましたが、実務では **Zod** のようなスキーマバリデーションライブラリがよく使われます。`z.object({ text: z.string().min(1) }).parse(body)` の 1 行で同じ検証が書けるため、プロジェクトが育ったら Zod の導入を検討する価値があります。
 
+### 補足: 別オリジンから叩かれる場合（CORS の最小例）
+
+Route Handlers は **Server Actions と違い、別オリジンから直接 fetch できる** 形態です。ブラウザは別オリジンへの POST など「単純でないリクエスト」を送る前に **OPTIONS（プリフライト）リクエスト** を自動で投げ、サーバーから許可ヘッダが返ったら本リクエストを送ります。
+
+```ts
+// app/api/todos/route.ts
+export async function POST(request: Request) {
+  // ... 通常の処理 ...
+  return NextResponse.json(
+    { ok: true },
+    {
+      headers: {
+        "Access-Control-Allow-Origin": "https://allowed.example.com",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    },
+  );
+}
+
+// プリフライト用の OPTIONS ハンドラ
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "https://allowed.example.com",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+```
+
+ポイント:
+
+- **同一オリジン**（自分のサイト内）から叩く場合は CORS 設定は不要（`fetch("/api/todos")` で動く）
+- **別オリジンから Cookie を送りたい** 場合は `Access-Control-Allow-Credentials: true` と、`Access-Control-Allow-Origin: *` ではなく **特定オリジンの明示** が必要
+- 詳しくは別のレッスン **「CORS の詳細」** で扱います
+
 ## まとめ
 
 - Route Handlers は `app/api/.../route.ts` の HTTP API
