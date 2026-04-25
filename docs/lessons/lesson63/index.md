@@ -215,4 +215,4 @@ export default App;
 - 依存配列に値を入れると、その値が変わるたびに再実行
 - 本コースではこの 2 パターンのみ扱う。クリーンアップ関数やイベントリスナ管理は扱わない
 - React 19 では `<title>` を JSX に直接書けるので、実務で「タイトルだけ」なら `useEffect` は不要
-- 次は `useEffect` で localStorage 保存に挑戦
+- 別のレッスン「TODO アプリを React で作る」では `useEffect` を localStorage 保存に使う
