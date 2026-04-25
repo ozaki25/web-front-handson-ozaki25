@@ -114,6 +114,8 @@ const [name, setName] = useState(""); // name: string
 const [todos, setTodos] = useState<Todo[]>([]);
 ```
 
+`useState<Todo[]>` の `<>` は **3 章「ジェネリクス入門」で学んだ型パラメータ** そのものです。「`useState` という関数に、扱う state の型 `Todo[]` を引数として渡している」と読めます。
+
 今回は数値しか使わないので、型推論に任せます。
 
 ## 演習

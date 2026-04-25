@@ -320,7 +320,8 @@ dist/
 ### 自分で書く
 
 - 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
-- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る
+- `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
+- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
 
 ### Next.js での実例
 

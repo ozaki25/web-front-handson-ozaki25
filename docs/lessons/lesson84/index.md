@@ -4,7 +4,7 @@
 
 - ここまでの知識を統合して「投稿できる TODO アプリ」を完成させます。
 - `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
-- `export const metadata` でサイト共通タイトル、`generateMetadata` で詳細ページの動的タイトルを設定できます。
+- `export const metadata` でサイト共通タイトルを設定できます（**動的タイトル / OGP は「Metadata API で SEO を整える」のレッスンで詳しく扱います**）。
 - `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
 
 ## 解説
@@ -26,9 +26,12 @@
 
 1. TODO の **詳細ページ** `/todos/[id]`
 2. 一覧からの削除ボタン
-3. ルートレイアウトの `metadata`（サイト共通）
-4. 詳細ページの `generateMetadata`（動的タイトル）
-5. `/todos?highlight=<id>` のハイライト表示（`searchParams` の初登場）
+3. ルートレイアウトの `metadata`（サイト共通の静的タイトル）
+4. `/todos?highlight=<id>` のハイライト表示（`searchParams` の初登場）
+
+::: tip 動的タイトル（generateMetadata）と OGP は別レッスンで
+詳細ページ用の **`generateMetadata`** や OGP（`openGraph`）の細かい指定は **「Metadata API で SEO を整える」** のレッスンで深掘りします。本レッスンでは synthesis の集中度を保つため、ルートレイアウトの **静的 `metadata`** のみ扱います。
+:::
 
 ### `export const metadata`（静的）
 
@@ -43,26 +46,6 @@ export const metadata = {
 ```
 
 `title` `description` 以外にも OG 画像などを指定できますが、本コースでは 2 つに留めます。
-
-### `generateMetadata`（動的）
-
-URL ごとにタイトルを変えたいときは、静的な定数では足りません。その場合は **`generateMetadata` 関数** を `export` します。
-
-```tsx
-import type { Metadata } from "next";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/todos/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Todo #${id}` };
-}
-```
-
-- 関数名は `generateMetadata` 固定です。
-- 引数の型は Next.js 16 のグローバル型 `PageProps<"/todos/[id]">` で受けます（`import` 不要）。`params` は Promise なので `await` します。
-- 戻り値は `export const metadata` と同じ形のオブジェクトです。型は `Metadata` です（`next` から `import type`）。
-- 戻り値を `Promise<Metadata>` と明示すると、誤字やプロパティ名の間違いを TS が拾ってくれます。
 
 ### `searchParams` も Promise
 
@@ -80,6 +63,12 @@ export default async function TodosPage({
 - `PageProps<"/todos">` のグローバル型が `searchParams` を `Promise<{ [key: string]: string | string[] | undefined }>` として推論します。`?highlight=abc` のようなクエリを取り出すときは `await searchParams` してから `highlight` を読みます。
 - `?highlight=abc&foo=bar` のように複数指定されていれば、それぞれのキーが文字列として届きます。
 - 同じキーが複数個（`?foo=1&foo=2`）あると配列になりますが、本レッスンでは扱いません。
+
+#### `PageProps<"/...">` グローバル型について
+
+`PageProps<"/todos">` は **Next.js 16 が `.next/types/` 配下に自動生成するグローバル型** で、`import` 不要で使えます。これは `tsconfig.json` の `include` に `.next/types/**/*.ts` が入っている前提で動きます（StackBlitz の Next.js テンプレートはこの設定が入っているのでそのまま動きます）。
+
+**初回 `npm run dev` を立ち上げる前にエディタが赤線を出すこと** がありますが、起動して `.next/types` が生成されれば消えます。
 
 ## 演習
 
@@ -433,20 +422,9 @@ export default async function TodosPage({
 `app/todos/[id]/page.tsx` を新規作成します。
 
 ```tsx
-import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import Link from "next/link";
 import { getTodo } from "../../actions";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/todos/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const todo = await getTodo(id);
-  return {
-    title: todo ? `Todo: ${todo.text}` : "Todo not found",
-  };
-}
 
 export default async function TodoDetailPage({
   params,
@@ -476,9 +454,9 @@ export default async function TodoDetailPage({
 
 ポイント:
 
-- `generateMetadata` で動的タイトルを返します。`await params` と `getTodo(id)` を呼びます。
 - 見つからないときは `notFound()` を呼びます（「エラーと見つからないページ」と同じです）。
 - `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
+- 詳細ページの **動的タイトル**（`generateMetadata`）は「Metadata API で SEO を整える」のレッスンで扱います。ここではブラウザのタブが共通の「TODO アプリ」のままで OK です。
 
 ### 手順 5: 詳細ページの `not-found.tsx`
 
@@ -504,27 +482,23 @@ export default function TodoNotFound() {
 
 ```tsx
 export const metadata = {
-  title: {
-    default: "TODO アプリ",
-    template: "%s | TODO アプリ",
-  },
+  title: "TODO アプリ",
   description: "Next.js App Router の学習用 TODO アプリ",
 };
 ```
 
-- `title.default`: 子ページで `title` を設定しない場合のデフォルトです。
-- `title.template`: 子ページが自分のタイトルを持つ場合、`%s` の部分に埋め込みます。例えば詳細ページの `generateMetadata` が `{ title: "Todo: 買い物" }` を返すと、実際のタブには **「Todo: 買い物 | TODO アプリ」** と表示されます。
+これでブラウザのタブに「TODO アプリ」と表示されます。`title.template` を使うとページごとに `%s | TODO アプリ` のように共通サフィックスを付けられますが、これは「Metadata API で SEO を整える」で深掘りします。
 
 ### 期待出力
 
 1. `/todos` を開く → TODO 一覧が表示されます。0 件なら「まだ 1 件もない」のメッセージが出ます。
 2. 「買い物」「課題」「運動」を順に追加 → 3 件の一覧が出ます。各項目は詳細リンクと削除ボタン付きです。
-3. タブのタイトル: 「TODO アプリ」です。
-4. 「買い物」をクリック → `/todos/<id>` に遷移します。タブのタイトルが「Todo: 買い物 | TODO アプリ」に変わります。
+3. タブのタイトルはどのページでも「TODO アプリ」です。
+4. 「買い物」をクリック → `/todos/<id>` に遷移します。詳細が表示されます。
 5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になります。
-6. 一覧で「削除」ボタンを押す → その 1 件が消えます。タブのタイトルは「TODO アプリ」のままです。
-7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。タブのタイトルは「Todo not found | TODO アプリ」です。
-8. `/about` は1 章 の自己紹介ページです。タブのタイトルは「TODO アプリ」です（ルートの `default` が適用されます）。
+6. 一覧で「削除」ボタンを押す → その 1 件が消えます。
+7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。
+8. `/about` は 1 章 の自己紹介ページです。
 9. ナビから 3 ページを行き来できます。
 
 ### 動作確認チェックリスト
@@ -541,7 +515,7 @@ export const metadata = {
 ### 変えてみる
 
 1. `<input type="hidden" name="id">` の値を書き換えて送信してみましょう（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認します。
-2. `generateMetadata` で `description` も返してみましょう: `return { title: ..., description: `ID ${id} の TODO` };`
+2. ルートレイアウトの `metadata.title` を `{ default: "TODO アプリ", template: "%s | TODO アプリ" }` に変えると、子ページで `metadata.title` を設定したときに自動でサフィックスが付きます。「Metadata API で SEO を整える」のレッスンで詳しく扱います。
 3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習です。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲みます。
 
 ### 自分で書く（応用）
@@ -558,7 +532,7 @@ TODO に「完了」のフラグを追加する演習です。
 ## まとめ
 
 - `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
-- `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できます。`template` を使うと子ページのタイトルを共通で包めます。
+- ルートレイアウトの `metadata` でサイト共通のタブタイトルを設定しました（動的タイトル / OGP は「Metadata API で SEO を整える」で扱います）。
 - `PageProps<"/todos">` で URL クエリ（`searchParams`）を受け取り、`await` してから条件付きスタイルに反映できます。
 - 2 章 の TODO（素の JS）→ 4 章 の「TODO アプリを React で作る」（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
 - 「Vercel にデプロイする」では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。

@@ -425,7 +425,39 @@ export async function fetchPosts(): Promise<Post[]> {
 
 - `password` と `passwordConfirm` の一致チェックを `refine` で書く
 - 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
-- Server Actions（5 章）の入力を Zod で検証するパターンを 1 つ書いてみる
+
+### 自分で書く（5 章 を継承する）
+
+5 章 の **「小さなアプリを仕上げる」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これは **本コースの螺旋反復で「同じ TODO アプリの安全性を一段上げる」** 演習です。
+
+1. `actions.ts` の冒頭に Zod スキーマを定義:
+
+   ```ts
+   import { z } from "zod";
+
+   const AddTodoSchema = z.object({
+     text: z.string().min(1, "内容を入力してください").max(200, "200 文字以内"),
+   });
+   ```
+
+2. `addTodo` の中で `safeParse` する形に書き換える（既存の `if (!text) ...` 検証を Zod に置き換え）:
+
+   ```ts
+   export async function addTodo(prev: AddTodoResult, formData: FormData): Promise<AddTodoResult> {
+     const result = AddTodoSchema.safeParse({ text: formData.get("text") });
+     if (!result.success) {
+       return { ok: false, error: result.error.issues[0].message };
+     }
+     // result.data.text を使う
+     ...
+   }
+   ```
+
+3. `useActionState` で受けるエラー表示はそのまま動きます（型 `AddTodoResult` を変えていないため）。
+
+4. 削除 (`deleteTodo`) も同じ流れで Zod 化できます（`id: z.string().uuid()` などが書けます）。
+
+これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
 
 ## まとめ
 

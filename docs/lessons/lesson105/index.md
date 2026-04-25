@@ -322,7 +322,6 @@ export function heavyFunction() {
 
 - 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
 - `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
-- Vite 7 と Vite 8（Rolldown）でビルド時間を比較してみる（既存のプロジェクトで `npm install vite@7` ↔ `vite@8`）
 
 ## まとめ
 

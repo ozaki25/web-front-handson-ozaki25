@@ -300,13 +300,9 @@ function FadeInSection({ children }: { children: React.ReactNode }) {
 - 無限スクロールの最小実装を体験する
 - ResizeObserver でサイズ表示器を作る
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 新規プロジェクト（StackBlitz の Vanilla テンプレート）
 
-```bash
-npm create vite@latest observer-sample -- --template vanilla-ts
-cd observer-sample
-npm install
-```
+これまでの 2 章 と同じく **StackBlitz の Vanilla（HTML + CSS + JS）テンプレート** で進めます。<https://stackblitz.com/fork/js> から新しいプロジェクトを開きます。
 
 ### 手順 2: index.html
 
@@ -316,7 +312,7 @@ npm install
   <head>
     <meta charset="UTF-8" />
     <title>Observer Demo</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main>
@@ -344,17 +340,17 @@ npm install
         <p id="size-info">サイズ: -</p>
       </section>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script src="script.js"></script>
   </body>
 </html>
 ```
 
-### 手順 3: src/style.css
+### 手順 3: style.css
 
 ```css
-body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+body { font-family: sans-serif; padding: 24px; line-height: 1.6; color: #1a1a1a; background: #fafafa; }
 main { max-width: 700px; margin: 0 auto; }
-section { margin-block: 80px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+section { margin-block: 80px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
 
 .fade-in {
   opacity: 0;
@@ -380,9 +376,9 @@ section { margin-block: 80px; padding: 16px; border: 1px solid #ccc; border-radi
 }
 ```
 
-### 手順 4: src/main.ts
+### 手順 4: script.js
 
-```ts
+```js
 // 1. フェードイン
 const fadeObserver = new IntersectionObserver(
   (entries) => {
@@ -398,8 +394,8 @@ const fadeObserver = new IntersectionObserver(
 document.querySelectorAll(".fade-in").forEach((el) => fadeObserver.observe(el));
 
 // 2. 無限スクロール（ダミーデータ）
-const list = document.getElementById("list")!;
-const sentinel = document.getElementById("sentinel")!;
+const list = document.getElementById("list");
+const sentinel = document.getElementById("sentinel");
 let page = 1;
 
 function loadMore() {
@@ -423,8 +419,8 @@ const scrollObserver = new IntersectionObserver((entries) => {
 scrollObserver.observe(sentinel);
 
 // 3. ResizeObserver
-const resizable = document.getElementById("resizable")!;
-const sizeInfo = document.getElementById("size-info")!;
+const resizable = document.getElementById("resizable");
+const sizeInfo = document.getElementById("size-info");
 const resizeObserver = new ResizeObserver((entries) => {
   for (const entry of entries) {
     const { width, height } = entry.contentRect;
@@ -434,13 +430,9 @@ const resizeObserver = new ResizeObserver((entries) => {
 resizeObserver.observe(resizable);
 ```
 
-### 手順 5: 起動して確認
+### 手順 5: ブラウザで確認
 
-```bash
-npm run dev
-```
-
-ブラウザで以下を確認します。
+StackBlitz は保存と同時にプレビューが更新されます。以下を確認します。
 
 1. ページを下にスクロールすると `.fade-in` セクションが **入ってきた瞬間にふわっと** 表示される
 2. もっと下にスクロールするとアイテムが **自動で追加** される（5 ページまで）

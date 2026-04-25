@@ -51,6 +51,10 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 
 レンダリング中に `throw` された例外を捕まえるのが `error.tsx` です。**Client Component として書く必要があります**（`"use client"` が必要です）。エラーの情報とリトライ関数を props で受け取ります。
 
+::: tip 4 章 の Error Boundary との関係
+これは 4 章 の **「Error Boundary と Suspense」** で自作したクラスコンポーネント版 Error Boundary を、Next.js が **ファイル規約** に押し込めた仕組みです。`error.tsx` を置くと Next.js が裏で Error Boundary を組み立てて配下のページを包んでくれます。
+:::
+
 ```
 app/
 └── posts/

@@ -460,9 +460,21 @@ export default function CompiledComponent() { /* ... */ }
 - React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
 - 大量レンダリング（1000 行のリスト）で差を観察
 
-### 自分で書く（任意）
+### 自分で書く（4 章 の成果物に適用）
 
-- 既存プロジェクトで `useMemo` / `useCallback` を **すべて削除** して動作する範囲を試す
+このコースの **4 章 「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト（あるいは「TODO アプリを React で作る」の成果物）に React Compiler を入れて **before / after を比較** します。
+
+1. 該当プロジェクトを開く
+2. **React DevTools の Profiler** で、何かアクション（追加・削除など）を 1 回計測 → 「再レンダリング回数」「総時間」をメモ
+3. `babel-plugin-react-compiler` を追加 + `vite.config.ts` に組み込む
+4. **同じアクション** を再度 Profiler で計測
+5. 「再レンダリングが減ったか」「総時間が短くなったか」を観察
+6. 続けて、コード上の `useMemo` / `useCallback` を **1 つずつ削除** して、Profiler の値が変わらないことを確認
+
+これが「Compiler が効いている」直接的な証拠になります。手元に成果物がない場合は、`useMemo` を多用した小さいリスト + フィルタの例を新規に作って試します。
+
+### 補足: 単独の任意課題
+
 - `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
 - ベンチマーク（lesson101 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 

@@ -221,7 +221,8 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 **`app/layout.tsx`**
 
 ```tsx
-import type { Metadata, ReactNode } from "next";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
 import Link from "next/link";
 
 export const metadata: Metadata = {
@@ -262,7 +263,7 @@ export default function RootLayout({
 }
 ```
 
-注: `ReactNode` は本来 `react` から import しますが、上の例ではシンプルさのため `next` からの型 import にまとめています。実案件では `import type { ReactNode } from "react";` に分けて書いても構いません。
+注: **`ReactNode` は `next` の公開型ではなく `react` から import します**。`Metadata` は `next` から、`ReactNode` は `react` から、と use 元が違う点に注意します。
 
 **`app/page.tsx`**
 

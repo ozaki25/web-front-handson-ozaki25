@@ -555,9 +555,24 @@ export async function createPost(prev: any, formData: FormData) {
 - `cache()` で同じデータの取得を 1 回に集約する
 - `server-only` パッケージを入れて、誤って Client から import されないように守る
 
-### 自分で書く（任意）
+### 自分で書く（5 章 の synthesis 成果物に適用）
 
-- 既存の Client Component を 1 つ取り上げ、**最小の Client + Server へ分割**
+このコースの **5 章「小さなアプリを仕上げる」** で完成させた TODO アプリ（`/todos` / `/todos/[id]` / `/about`）を **境界の目で見直す** 演習です。
+
+1. プロジェクトの全 `.tsx` を `grep "use client"` で抽出 → どれが Client Component か一覧化
+2. 各 Client Component について、**本当に Client が必要か** を確認:
+   - 状態 / イベント / ブラウザ API があるか?
+   - 無いなら `"use client"` を外して Server Component に戻す
+3. **`server-only` パッケージで「壊す」テスト**:
+   - `app/actions.ts` の冒頭に `import "server-only";` を追加
+   - 試しに Client Component から `import { addTodo } from "../actions"` してビルド → **エラーが出る**ことを確認
+4. **データ取得の場所** をチェック: Client Component の `useEffect` 内で `fetch` していないか? あれば Server Component に **吸い上げて props で渡す**
+5. 「`<DeleteButton>` だけが Client、リスト本体は Server」のように **葉に閉じ込める** 形になっているか確認
+
+before / after で「Client にバンドルされる JS」が減っていれば成功です（Network タブで JS の合計サイズを見る）。
+
+### 補足: 単独の任意課題
+
 - DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
 - React Compiler（lesson126）と組み合わせて、`useMemo` を消した状態で動かす
 

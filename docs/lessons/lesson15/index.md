@@ -296,13 +296,9 @@ button.addEventListener('click', () => {
 
 - `:has()` / `@container` / View Transitions API を **同じページに同居** させて動作を確認する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 新規プロジェクト（StackBlitz の Vanilla テンプレート）
 
-```bash
-npm create vite@latest css-modern -- --template vanilla-ts
-cd css-modern
-npm install
-```
+これまでの 1 章 と同じく **StackBlitz の Vanilla（HTML + CSS + JS）テンプレート** で進めます。<https://stackblitz.com/fork/js> を開いて新しいプロジェクトを始めるか、これまで作ってきた自己紹介ページの隣に `modern-css.html` のような別ファイルとして追加してもかまいません。
 
 ### 手順 2: index.html
 
@@ -314,7 +310,7 @@ npm install
   <head>
     <meta charset="UTF-8" />
     <title>Modern CSS Demo</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main>
@@ -339,12 +335,12 @@ npm install
         </form>
       </section>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script src="script.js"></script>
   </body>
 </html>
 ```
 
-### 手順 3: src/style.css
+### 手順 3: style.css
 
 ```css
 @layer reset, base, components;
@@ -354,9 +350,9 @@ npm install
 }
 
 @layer base {
-  body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+  body { font-family: sans-serif; padding: 24px; line-height: 1.6; color: #1a1a1a; background: #fafafa; }
   main { display: grid; gap: 32px; max-width: 800px; }
-  section { padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+  section { padding: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
 }
 
 @layer components {
@@ -386,11 +382,11 @@ npm install
 }
 ```
 
-### 手順 4: src/main.ts
+### 手順 4: script.js
 
-```ts
-const box = document.getElementById("box")!;
-const toggle = document.getElementById("toggle")!;
+```js
+const box = document.getElementById("box");
+const toggle = document.getElementById("toggle");
 
 toggle.addEventListener("click", () => {
   if (!document.startViewTransition) {
@@ -403,13 +399,9 @@ toggle.addEventListener("click", () => {
 });
 ```
 
-### 手順 5: 起動して確認
+### 手順 5: ブラウザで確認
 
-```bash
-npm run dev
-```
-
-ブラウザで開いて以下を確認します。
+StackBlitz は保存と同時にプレビューが更新されます。以下を確認します。
 
 1. **`:has()`**: form 内の `input` をフォーカスすると form 全体に枠が出る。checkbox を ON にすると label の背景が変わる
 2. **`@container`**: ブラウザの `<section>` の幅を狭めるとカードが縦並びに、広げると横並びになる（**画面幅ではなく親要素の幅** で動くことを確認）

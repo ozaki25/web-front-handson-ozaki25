@@ -119,7 +119,7 @@ const userName = "Alice";
 let count = 0;
 
 console.log("Hello, JavaScript");
-console.log(name);
+console.log(userName);
 console.log(count);
 
 count = count + 1;
