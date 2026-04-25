@@ -6,7 +6,7 @@
 - データ取得とインタラクションの **分離** が説明できる
 - Server Actions と Client Component の **協調パターン** を書ける
 - よくある設計ミス（巨大 Client Component / 不要なシリアライズ）を避けられる
-- 章 5「Next.js」全体の **総合演習** として、自分の設計を整理できる
+- 5 章「Next.js」全体の **総合演習** として、自分の設計を整理できる
 
 ::: tip 前提
 このレッスンは lesson73「Server Component と Client Component」、lesson74「Server Component でデータ取得」、lesson79「Server Actions の最小形」の発展編です。基本概念は先のレッスンで確認してください。

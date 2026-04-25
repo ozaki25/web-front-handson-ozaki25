@@ -323,4 +323,4 @@ Network タブの **Type** 列で:
 - フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
 - **`font-display: swap`** + **`<link rel="preload">`** が基本
 - **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化
-- これで章 7 の Core Web Vitals 3 連作が完了。次は **Git と GitHub ワークフロー** に進む
+- これで7 章 の Core Web Vitals 3 連作が完了。次は **Git と GitHub ワークフロー** に進む

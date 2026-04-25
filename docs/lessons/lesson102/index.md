@@ -324,7 +324,7 @@ dist/
 
 ### Next.js での実例
 
-教材サイトの章 5 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
+教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
 
 それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
 

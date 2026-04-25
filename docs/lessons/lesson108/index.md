@@ -438,4 +438,4 @@ export async function fetchPosts(): Promise<Post[]> {
 - **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
 - API レスポンス検証 / Server Actions 入力検証 にも同じスキーマを再利用
 - 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
-- これで章 7 のフォーム 2 連作が完了。次は **状態管理の地図** に進む
+- これで7 章 のフォーム 2 連作が完了。次は **状態管理の地図** に進む

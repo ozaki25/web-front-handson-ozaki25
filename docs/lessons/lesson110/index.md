@@ -77,7 +77,7 @@ export default [
 - `typescript-eslint`: TypeScript の型情報を使った高度なチェック
 - `eslint-plugin-react`: React のお作法
 - `eslint-plugin-react-hooks`: フック規則の検証
-- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（章 7「アクセシビリティ」と相性◎）
+- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（7 章「アクセシビリティ」と相性◎）
 - `eslint-plugin-import`: import の順序とパス解決
 
 ### Prettier の最小設定
@@ -219,7 +219,7 @@ npx biome init
 
 #### Lighthouse / a11y 検査も Lint で
 
-ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、章 7「アクセシビリティ」と組み合わせると効果的です。
+ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、7 章「アクセシビリティ」と組み合わせると効果的です。
 
 ```js
 // eslint.config.js

@@ -261,7 +261,7 @@ return (
 
 ### 途中から始める場合
 
-これまでに作ったフォーム関連レッスン（章 4 / 章 7 のフォーム関連）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
+これまでに作ったフォーム関連レッスン（4 章 / 7 章 のフォーム関連）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
 
 ```bash
 npm create vite@latest rhf-sample -- --template react-ts
