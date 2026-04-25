@@ -91,6 +91,18 @@ Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / 
 
 「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
 
+### 補足: Lighthouse タブで Core Web Vitals を測る
+
+Performance タブの録画は **詳細を追える代わりに見方を覚える必要** があります。最初に手を出すべきは Performance タブの隣にある **Lighthouse タブ** です。`Analyze page load` を押すだけで、ページに対して点数とレポートが出ます。
+
+実務で見るのは点数より **Core Web Vitals** と呼ばれる 3 指標です。Google の検索ランキング要因にもなっているため、SEO とパフォーマンスは一体です。
+
+- **LCP** (Largest Contentful Paint): 一番大きい要素（メインの画像 / 見出し）が描画されるまでの時間。**2.5 秒以下** が目安
+- **INP** (Interaction to Next Paint): クリック / タップ / キーボード入力に反応して次の描画が出るまでの時間。**200ms 以下** が目安
+- **CLS** (Cumulative Layout Shift): 表示中にレイアウトが何回ガタッとずれるかの累積。**0.1 以下** が目安
+
+Lighthouse は試験環境（あなたの PC）で測るので、本番の数値とは少しずれます。本番の実ユーザー指標は **Google Search Console** の Core Web Vitals レポートや **Web Vitals API** で取得します。
+
 ### Sources タブ: JS をデバッガで止める
 
 ソースコードを眺めて、行番号をクリックすると **ブレークポイント** が貼れます。そこに実行が到達すると、その行で JS が一時停止し、変数の値を確認できます。

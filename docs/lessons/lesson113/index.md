@@ -63,6 +63,8 @@ type User = z.infer<typeof UserSchema>;
 
 `z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
 
+> **補足: `z.infer<typeof X>` の `typeof` は型レベルの取得**: ここでの `typeof UserSchema` は、JS の値レベル `typeof`（`typeof x === "string"` のような演算子）とは別物です。TypeScript には型を扱う専用の `typeof` があり、「**変数の型を取り出す**」役割を持ちます。`UserSchema` は値（オブジェクト）として存在しますが、その値の **型** を取り出して `z.infer<...>` に渡すことで「スキーマから型を自動導出」できます。`z.infer<typeof X>` という書き方をひとつのイディオムとして覚えてしまって構いません。
+
 ### 組み込み修飾メソッド
 
 ```ts
@@ -193,6 +195,17 @@ z.coerce.number()       // 文字列 → 数値
 z.coerce.boolean()      // 文字列 / 数値 → boolean
 z.coerce.date()         // 文字列 → Date
 ```
+
+> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
+>
+> ```ts
+> age: z.preprocess(
+>   (v) => (v === "" || v === null ? undefined : v),
+>   z.coerce.number().int("整数で").min(18, "18 歳以上")
+> )
+> ```
+>
+> または `z.string().min(1, "必須です").transform(Number).pipe(z.number().int())` のように **string で受けてから変換** する書き方でも回避できます。
 
 ### API レスポンスの検証
 
@@ -472,4 +485,4 @@ export async function fetchPosts(): Promise<Post[]> {
 - **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
 - API レスポンス検証 / Server Actions 入力検証 にも同じスキーマを再利用
 - 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
-- 別のレッスンで **状態管理の地図（TanStack Query / Zustand / Jotai）** に進み、サーバー状態とクライアント状態の選択肢を整理する
+- 別のレッスン **「状態管理の地図」** で TanStack Query / Zustand / Jotai を扱い、サーバー状態とクライアント状態の選択肢を整理する

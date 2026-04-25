@@ -570,7 +570,7 @@ form button:focus {
 
 - 子要素を `absolute` で浮かせたのに、親ではなく `<body>` 基準になる → 親に `position: relative` を付け忘れている。
 - `z-index` が効かない → そもそも `position` が `static`（初期値）のまま。`z-index` は `position` が `static` 以外でないと効かない。
-- `fixed` したボタンがスクロールすると動いてしまう → 祖先要素のどこかに `transform` や `filter` が指定されていると、`fixed` の基準がその祖先に変わる仕様がある。今回の演習では起きないが、将来遭遇したら思い出す。
+- `fixed` したボタンがスクロールすると動いてしまう → 祖先要素のどこかに `transform` や `filter` が指定されていると、`fixed` の **基準** （containing block）がその祖先に変わる仕様がある。**containing block** とは「位置決めの基準になる箱」のことで、通常 `fixed` ではビューポート（画面）が基準になるが、上記の場合は祖先に切り替わる。今回の演習では起きないが、将来遭遇したら思い出す。
 
 ## まとめ
 
