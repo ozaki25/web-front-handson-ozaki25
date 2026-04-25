@@ -1,425 +1,200 @@
-# lesson89: セマンティック HTML とアクセシビリティの基礎
+# lesson89: ブラウザと HTTP の基本
 
 ## ゴール
 
-- なぜアクセシビリティ（a11y）に配慮するかを自分の言葉で説明できる
-- セマンティック HTML が a11y の土台になる理由を理解する
-- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）の役割を説明できる
-- 見出し階層（`<h1>`〜`<h6>`）を正しく並べられる
-- 画像の `alt` 属性とフォームの `<label>` の役割を説明できる
-- WCAG の **コントラスト比** の基準（AA / AAA）を知っている
+- Web ページが表示されるまでにブラウザとサーバーのあいだで何が起きているか、おおまかに説明できる
+- HTTP のリクエスト / レスポンスがそれぞれ「何行か文字列が連なったもの」であることを理解する
+- HTTP メソッド（GET / POST / PUT / DELETE など）の違いを 1 行で言える
+- ステータスコードの番台（2xx / 3xx / 4xx / 5xx）を使い分けの文脈で説明できる
+- 主要なリクエスト / レスポンスヘッダの役割を数個挙げられる
 
 ## 解説
 
-### なぜアクセシビリティ（a11y）に配慮するか
+### ブラウザがページを表示するまでの流れ
 
-アクセシビリティ（accessibility、略して **a11y**）は「**すべてのユーザーがウェブを使える状態** にする」取り組みです。対象は次のような利用者です。
+アドレスバーに `https://example.com/` と入れて Enter を押したとき、ざっくり次の流れで動いています。
 
-- **視覚に関するもの**: 全盲 / 弱視 / 色覚特性のある人（スクリーンリーダーを使う、拡大表示する、コントラストが低いと読めない）
-- **聴覚に関するもの**: 聴覚を使いにくい人（動画の字幕が必要）
-- **運動に関するもの**: マウスを使いにくい人（キーボードや音声コマンドで操作する）
-- **認知に関するもの**: 複雑な UI や素早い動きが苦手な人
+1. DNS でホスト名（`example.com`）を IP アドレスに解決する
+2. その IP アドレスの **サーバーに TCP 接続 + TLS**（https なら） を張る
+3. `GET / HTTP/1.1` 的な **リクエスト** を送る
+4. サーバーから **レスポンス**（HTML 文字列）が返る
+5. HTML を読みながら、中に書かれている `<link>` / `<script>` / `<img>` の URL を **追加でリクエスト** する（CSS / JS / 画像）
+6. それらをすべて受け取って、ブラウザが DOM・CSSOM・レイアウト計算 → 画面に描画
 
-さらに **誰にとっても役立つ** 場面も多くあります。
+本レッスンでは、このうち **3-5 の「HTTP 通信の中身」** を見ていきます。「DOM を操作する」で扱った DOM は 6 の段階（ブラウザの内部表現）の話でした。
 
-- スマホを片手で操作する状況（大きなタップ領域が欲しい）
-- 日差しの強い屋外（高コントラストが欲しい）
-- 満員電車で音が出せない（字幕が欲しい）
-- キーボード派の開発者（Tab で操作したい）
+### HTTP は「文字列のやり取り」
 
-2026 年現在、**WCAG 2.2**（Web Content Accessibility Guidelines 2.2）が国際標準で、政府・公共機関や大企業のサイトでは AA 準拠が事実上の必須になっています。開発者の側でも「動くだけ」ではなく「みんなが使える」を最低ラインとして出荷するのが当たり前になってきました。
+HTTP は意外と素朴なプロトコルで、**人間が読める文字列** を TCP の上で送り合っているだけです。
 
-### セマンティック HTML が土台
+例えばクライアント（ブラウザ）がサーバーに送るリクエストは、次のような形をしています。
 
-**セマンティック HTML** とは「見た目ではなく **意味** を表す HTML を書く」ことです。タイトルには `<h1>`、本文の段落には `<p>`、ナビゲーションには `<nav>` のように、タグに役割を持たせます。
+```
+GET /articles/42 HTTP/1.1
+Host: example.com
+User-Agent: Mozilla/5.0 (...)
+Accept: text/html
+Accept-Language: ja,en
+Cookie: session=abc123
 
-見た目だけなら `<div>` と CSS だけでも作れますが、**機械（ブラウザ / スクリーンリーダー / 検索エンジン / AI エージェント）には意味が伝わりません**。
-
-NG（見た目だけ）:
-
-```html
-<div class="big-text">記事タイトル</div>
-<div class="paragraph">本文...</div>
-<div class="link" onclick="go()">続きを読む</div>
 ```
 
-OK（意味を持たせる）:
+1 行目: **リクエストライン**。`HTTP メソッド パス HTTP バージョン` の 3 つ。2 行目以降: **ヘッダ**。キー: 値。空行が 1 つ入ったあと、必要ならリクエストボディが続きます（GET では普通は付けません）。
 
-```html
-<h1>記事タイトル</h1>
-<p>本文...</p>
-<a href="/next">続きを読む</a>
+それに対してサーバーからのレスポンスは次のような形です。
+
+```
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 1234
+Cache-Control: public, max-age=3600
+Set-Cookie: session=abc123; HttpOnly
+
+<!doctype html>
+<html>
+...
+</html>
 ```
 
-スクリーンリーダーは `<h1>` を「見出しレベル 1」と読み上げます。`<a>` を「リンク」と説明します。`<div>` ではそれが起きません。
+1 行目: **ステータスライン**。`HTTP バージョン ステータスコード 理由フレーズ`。2 行目以降: **ヘッダ**。空行の後に **ボディ**（HTML / JSON / 画像バイナリなど）。
 
-**「a11y のために ARIA を足す」より前に、「セマンティック HTML を正しく書く」ことが 7〜8 割を占める** と覚えてください。
+この 2 つのかたまりがブラウザとサーバーのあいだを **1 往復する** のが HTTP 通信の基本単位です。HTTPS の場合も、TLS で暗号化されるだけで中身の形は同じです。
 
-### ランドマーク要素でページを 5 つの場所に分ける
+### HTTP メソッドの 4 つ
 
-ページは大きく次の 5 つの **ランドマーク**（目印）に分けられます。スクリーンリーダーはこれらの要素を「ランドマーク一覧」で見せてくれるので、「ヘッダーに飛ぶ」「メイン本文に飛ぶ」が即座にできます。
+大きく 4 つ覚えておけば、ほぼ現代のアプリは読めます。
 
-| タグ | 役割 |
-|---|---|
-| `<header>` | ページ上部。サイトロゴやナビが入る |
-| `<nav>` | ナビゲーション。主要リンクをまとめる場所 |
-| `<main>` | ページの **メインコンテンツ**。1 ページに 1 つだけ |
-| `<aside>` | 補足情報・サイドバー |
-| `<footer>` | ページ下部。コピーライト・連絡先など |
+| メソッド | 用途 | 冪等性 | ボディ |
+|---|---|---|---|
+| **`GET`** | 取得 | あり（何回呼んでも同じ） | 基本なし |
+| **`POST`** | 作成・任意の操作 | なし | あり |
+| **`PUT`** | 全体置換 | あり | あり |
+| **`DELETE`** | 削除 | あり | 基本なし |
 
-典型的な構成:
+他にも `PATCH`（部分更新）/ `HEAD`（ヘッダだけ取得）/ `OPTIONS`（CORS の事前問い合わせ）がありますが、まずは上の 4 つです。
 
-```html
-<body>
-  <header>
-    <h1>私のブログ</h1>
-    <nav>
-      <a href="/">ホーム</a>
-      <a href="/posts">記事一覧</a>
-      <a href="/about">自己紹介</a>
-    </nav>
-  </header>
+**冪等性**（idempotent） とは「同じリクエストを何回送っても結果が同じ」という性質です。ネットワーク不良で再送されても安全な `GET` / `PUT` / `DELETE` と、再送で二重登録になる恐れがある `POST` は別物として扱われます。
 
-  <main>
-    <h2>今日の記事</h2>
-    <p>本文...</p>
-  </main>
+### ステータスコードの 4 つの番台
 
-  <aside>
-    <h2>関連記事</h2>
-    <ul>
-      <li><a href="/posts/1">別の記事</a></li>
-    </ul>
-  </aside>
+先頭 1 桁でグループを表します。
 
-  <footer>
-    <p>&copy; 2026 オザキ</p>
-  </footer>
-</body>
-```
-
-`<header>` と `<footer>` はページ全体のもの以外に、`<article>` や `<section>` の中にも置けます（そのブロックのヘッダー / フッターになる）。
-
-### 見出し階層は飛ばさない
-
-`<h1>`〜`<h6>` は **必ず 1 つずつ降りていく** のが原則です。`<h1>` の次に急に `<h3>` を使うと、スクリーンリーダーの読み上げで「2 段下がった！何か抜けた？」と混乱します。
-
-```html
-<!-- NG: h1 → h3 で h2 が飛んでいる -->
-<h1>記事タイトル</h1>
-<h3>サブセクション</h3>
-
-<!-- OK: h1 → h2 → h3 の順 -->
-<h1>記事タイトル</h1>
-<h2>章</h2>
-<h3>サブセクション</h3>
-```
-
-また `<h1>` は **1 ページに 1 つ** が基本です（HTML5 の `<section>` 内でも `<h1>` を使える仕様はありますが、対応のばらつきがあるので本コースでは 1 ページ 1 個に統一します）。
-
-### 画像には `alt`、フォーム入力には `<label>`
-
-スクリーンリーダーは画像の中身を「見る」ことはできません。代わりに **`alt` 属性** のテキストを読み上げます。
-
-```html
-<!-- 情報を持つ画像: 内容を説明 -->
-<img src="/graph.png" alt="2026 年の売上グラフ。4 月で前年比 20% 増" />
-
-<!-- 装飾だけの画像: 空文字で OK（読み飛ばされる） -->
-<img src="/decoration.png" alt="" />
-```
-
-`alt` を書かないと、スクリーンリーダーはファイル名（`graph.png`）を読み上げてしまい、意味を伝えられません。**飾りなら空文字、情報を持つなら説明文** が原則です。
-
-フォームも同じで、`<input>` には **`<label>`** を必ず紐付けます。
-
-```html
-<!-- NG: input 単独はラベルなし -->
-<p>お名前</p>
-<input type="text" />
-
-<!-- OK: label と for / id で紐付ける -->
-<label for="name">お名前</label>
-<input id="name" type="text" />
-
-<!-- OK: label で input を包む -->
-<label>
-  お名前
-  <input type="text" />
-</label>
-```
-
-`<label>` があると、スクリーンリーダーは「お名前、テキスト入力、空」のように読み上げます。ラベル部分をクリックすると入力欄にフォーカスが移るので、晴眼者にも扱いやすくなります。
-
-### コントラスト比: 見える色の組み合わせを選ぶ
-
-文字色と背景色のコントラストが低いと、弱視の人や日差しの強い環境では読めません。WCAG は **数値の基準** を定めています。
-
-| 対象 | AA（実用レベル） | AAA（高水準） |
+| 番台 | 意味 | 代表例 |
 |---|---|---|
-| 通常のテキスト（〜18px） | 4.5:1 以上 | 7:1 以上 |
-| 大きなテキスト（18pt 太字 or 24px 以上） | 3:1 以上 | 4.5:1 以上 |
-| UI 部品の境界線・アイコン | 3:1 以上 | — |
+| **2xx 成功** | リクエストは正常に処理された | `200 OK` / `201 Created` / `204 No Content` |
+| **3xx リダイレクト / キャッシュ** | 別の URL へ / ブラウザのキャッシュを使って | `301 Moved Permanently` / `302 Found` / `304 Not Modified` |
+| **4xx クライアントエラー** | 送り方が悪い | `400 Bad Request` / `401 Unauthorized` / `403 Forbidden` / `404 Not Found` |
+| **5xx サーバーエラー** | サーバー側の問題 | `500 Internal Server Error` / `502 Bad Gateway` / `503 Service Unavailable` |
 
-コントラスト比は **Chrome DevTools の Elements タブ** で確認できます。スタイルペインで色をクリックすると、自動で計算してくれます。Lighthouse の Accessibility スコアも 4.5:1 未満を警告してくれます。
+細かい違いの覚え方:
 
-数字を自分で計算する必要はありません。実務では次のような定番ツールを使います。
+- `401` は「認証が要る / 認証情報が間違っている」
+- `403` は「認証は通ったが権限がない」
+- `404` は「リソースがない」
+- `500` は「サーバー側が想定外で落ちた」
+- `502` / `503` は「サーバーの手前（ロードバランサ / リバースプロキシ）で問題」
 
-- Chrome DevTools（CSS の color プロパティをクリック）
-- WebAIM Contrast Checker（<https://webaim.org/resources/contrastchecker/>）
-- Figma のコントラストチェッカープラグイン
+### 主要なヘッダ
 
-ダークモードで `color: #808080` のような中間色を使うと、背景がダーク（`#1a1a1a`）でもライト（`#ffffff`）でもギリギリ読めない、という事故が起きがちです。ライト / ダーク双方でチェックする習慣をつけてください。
+全部は覚えなくて良いですが、以下は DevTools の Network タブでも頻出します。
 
-### `lang` 属性で言語を明示する
+**リクエストヘッダ（クライアント → サーバー）:**
 
-ページの言語を `<html lang="ja">` で指定します。スクリーンリーダーが適切な発音（日本語 / 英語）で読み上げるのに使われます。
+| ヘッダ | 意味 |
+|---|---|
+| `Host` | どのホストに向けたリクエストか |
+| `User-Agent` | ブラウザの種類・バージョン |
+| `Accept` | 受け取れる Content-Type |
+| `Accept-Language` | 希望言語（`ja,en` など） |
+| `Authorization` | 認証情報（`Bearer xxxx` など） |
+| `Cookie` | サーバーから受け取った Cookie |
+| `Referer` | どのページから来たか（綴り間違い通りに定義されている） |
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    ...
-```
+**レスポンスヘッダ（サーバー → クライアント）:**
 
-本コースのこれまでの演習でもすべて `lang="ja"` を付けてきました。**サイトごとに 1 回設定するだけで良い** 基本です。
+| ヘッダ | 意味 |
+|---|---|
+| `Content-Type` | ボディの種類（`text/html` / `application/json` 等） |
+| `Content-Length` | ボディのバイト数 |
+| `Cache-Control` | キャッシュ制御（次の「HTTP キャッシュ」で詳解） |
+| `ETag` | リソースのバージョン識別子（キャッシュ用） |
+| `Location` | リダイレクト先（3xx と一緒に使う） |
+| `Set-Cookie` | Cookie を発行 |
+
+### DevTools の Network タブで見る
+
+ここまでの話は、ブラウザの DevTools を使うと **実際にやり取りされているリクエスト / レスポンスの生の姿** として観察できます。
+
+Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページをリロード → 一覧から 1 行クリックすると、Headers / Payload / Preview / Response / Timing の各パネルで詳細が見られます。
+
+この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。別のレッスンで DevTools の各タブを詳しく扱うので、本レッスンの演習は DevTools の入り口までで十分です。
 
 ## 演習
 
 ### ゴール
 
-- `<div>` だらけのページをセマンティック HTML に書き換える
-- 見出し階層を正しく並べ直す
-- 画像に適切な `alt` 属性を付ける
-- フォームに `<label>` を付ける
-- DevTools でコントラスト比を確認する
-
-### 途中から始める場合
-
-このレッスンは独立しています。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開いて、下の出発点のコードを貼ってください。
-
-<details>
-<summary>出発点のコード（`div` だらけの NG パターン）</summary>
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>a11y の練習</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <div class="top">
-      <div class="logo">私のブログ</div>
-      <div class="menu">
-        <div onclick="location.href='/'">ホーム</div>
-        <div onclick="location.href='/posts'">記事一覧</div>
-      </div>
-    </div>
-
-    <div class="body">
-      <div class="title">今日の記事</div>
-      <div class="para">本文です。本文です。本文です。</div>
-
-      <div class="sub">サブセクション</div>
-      <div class="para">サブ本文です。</div>
-
-      <img src="https://placehold.jp/300x200.png" />
-
-      <div class="form">
-        <div>お名前</div>
-        <input type="text" />
-        <div>メール</div>
-        <input type="email" />
-        <div onclick="submit()">送信</div>
-      </div>
-    </div>
-
-    <div class="bottom">
-      <div>&copy; 2026 オザキ</div>
-    </div>
-  </body>
-</html>
-```
-
-**`style.css`**
-
-```css
-body {
-  font-family: sans-serif;
-  color: #cccccc;
-  background: #ffffff;
-  margin: 0;
-}
-.top, .bottom { background: #e0e0e0; padding: 16px; }
-.menu div { display: inline-block; margin-right: 12px; cursor: pointer; color: #4da6ff; }
-.title { font-size: 24px; font-weight: bold; }
-.sub { font-size: 18px; font-weight: bold; }
-.para { margin: 8px 0; }
-.body { padding: 16px; }
-.form div[onclick] { display: inline-block; background: #eeeeee; color: #aaaaaa; padding: 6px 12px; cursor: pointer; }
-```
-
-</details>
+- 任意のページを開いて DevTools の Network タブで通信を観察する
+- 1 つのリクエスト / レスポンスを選び、ヘッダ・ステータス・メソッドを読み取れる
+- `curl` でも同じ内容が取れることを手元で確認する（任意）
 
 ### 手順
 
-1. `index.html` を **セマンティック HTML** に書き換えます（下の完成形を参照）。
-2. `style.css` の **コントラスト比** を上げて、文字が読みやすくなるよう修正します。
-3. DevTools で確認します。
+1. 手元のブラウザで `https://jsonplaceholder.typicode.com/posts/1` を開きます（ブラウザが JSON をそのまま表示します）
+2. DevTools（F12）→ Network タブを開いた状態で、ページをリロードします
+3. 一番上に `posts/1` のような行が出ます。これをクリックします
+4. 右側に開くパネルで以下を確認します。
 
-### `index.html` の完成形
+### 観察するポイント
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>a11y の練習</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <header>
-      <h1>私のブログ</h1>
-      <nav>
-        <a href="/">ホーム</a>
-        <a href="/posts">記事一覧</a>
-      </nav>
-    </header>
+**Headers タブ:**
 
-    <main>
-      <article>
-        <h2>今日の記事</h2>
-        <p>本文です。本文です。本文です。</p>
+- General: Request URL / Request Method（`GET`）/ Status Code（`200 OK`）
+- Response Headers: `content-type: application/json; charset=utf-8` / `cache-control: ...`
+- Request Headers: `Host` / `User-Agent` / `Accept` / `Accept-Language`
 
-        <h3>サブセクション</h3>
-        <p>サブ本文です。</p>
+**Response タブ（または Preview タブ）:**
 
-        <img
-          src="https://placehold.jp/300x200.png"
-          alt="記事の挿絵（プレースホルダ画像）"
-          width="300"
-          height="200"
-        />
-      </article>
+- レスポンスボディの JSON（`{ "userId": 1, "id": 1, "title": "...", ... }`）
 
-      <section aria-labelledby="contact-heading">
-        <h2 id="contact-heading">お問い合わせ</h2>
-        <form>
-          <p>
-            <label for="name">お名前</label>
-            <input id="name" type="text" />
-          </p>
-          <p>
-            <label for="email">メール</label>
-            <input id="email" type="email" />
-          </p>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </main>
+**Timing タブ:**
 
-    <footer>
-      <p>&copy; 2026 オザキ</p>
-    </footer>
-  </body>
-</html>
+- DNS Lookup / Initial connection / TLS / Waiting (TTFB) / Content Download の各段階にかかった時間
+
+### 任意課題: `curl` で同じことを体験する
+
+ターミナルから `curl` を叩くと、ブラウザ抜きで同じ通信を確認できます。
+
+```bash
+curl -i https://jsonplaceholder.typicode.com/posts/1
 ```
 
-変更点の理由:
+`-i` オプションでレスポンスヘッダも表示します。出力の先頭に `HTTP/2 200` のようなステータスライン、空行の後に JSON ボディが続くのが見えます。
 
-- `<div class="top">` → `<header>`、`<div class="menu">` → `<nav>`、`<div class="body">` → `<main>`、`<div class="bottom">` → `<footer>` にしてランドマーク化
-- `<div class="title">` → `<h2>`、`<div class="sub">` → `<h3>` で見出し階層を明示（`<h1>` はサイトタイトルで使っている）
-- クリック可能な `<div>` を `<a>` / `<button type="submit">` に変更（キーボードで操作できるようになる）
-- `<img>` に `alt` / `width` / `height` を付与
-- `<input>` に `<label>` を紐付け
-- `<html lang="ja">` で言語を明示
+送信側を見たいときは `-v`（詳細）を使います。
 
-### `style.css` の完成形
-
-```css
-body {
-  font-family: sans-serif;
-  color: #1a1a1a;        /* #cccccc → #1a1a1a（コントラスト比を大幅に改善）*/
-  background: #ffffff;
-  margin: 0;
-}
-
-header, footer {
-  background: #1e3a8a;   /* #e0e0e0 → #1e3a8a */
-  color: #ffffff;
-  padding: 16px;
-}
-
-header h1 {
-  margin: 0 0 8px 0;
-}
-
-nav a {
-  color: #ffffff;        /* #4da6ff → #ffffff（青背景に白文字）*/
-  margin-right: 16px;
-}
-
-main {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 16px;
-}
-
-button[type="submit"] {
-  background: #1e3a8a;   /* #eeeeee → 濃い青 */
-  color: #ffffff;        /* #aaaaaa → 白 */
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-button[type="submit"]:focus {
-  outline: 3px solid #60a5fa;  /* フォーカスリングを明示 */
-  outline-offset: 2px;
-}
+```bash
+curl -v https://jsonplaceholder.typicode.com/posts/1
 ```
 
-### 期待出力
-
-- ページ上部の見出しが大きく表示され、下のナビが横に並ぶ
-- 本文の見出しが 2 段階に階層化されて表示される
-- 画像が表示される（`alt` はマウスオーバーで一部のブラウザで表示される）
-- フォームの「お名前」「メール」をクリックすると入力欄にフォーカスが移る
-- Tab キーで「ホーム」リンク → 「記事一覧」リンク → お名前入力 → メール入力 → 送信ボタンと順に移動できる
-- 送信ボタンにフォーカスを移すと、太い青のフォーカスリングが見える
-
-### 確認ポイント（DevTools）
-
-Chrome の DevTools で以下を確認します。
-
-1. **Elements タブ**: `<h1>` `<h2>` `<h3>` が見出し階層として並んでいる。`<main>` `<header>` `<footer>` `<nav>` がランドマークとして使われている
-2. **Lighthouse タブ**: 「Accessibility」を単独で選んでレポートを生成。スコアが 90 以上になる
-3. **コントラスト比**: Elements で `body` の `color` をクリックすると、自動で計算された `Contrast ratio` が右側に出る。AA（4.5:1 以上）を満たしていることを確認
+`>` で始まる行がリクエスト、`<` で始まる行がレスポンスです。最初の `> GET /posts/1 HTTP/2` と `> host: jsonplaceholder.typicode.com` を見比べると、本文で説明したリクエストの形と一致していることが分かります。
 
 ### 変える
 
-- `body` の `color` を `#808080` に変えてみる。Lighthouse で「Background and foreground colors do not have a sufficient contrast ratio」の警告が出ることを確認
-- `<h2>` を削って、いきなり `<h3>` から始めてみる。Lighthouse が「Heading elements are not in a sequentially-descending order」と警告する
-- `<img>` の `alt` を消してみる。Lighthouse が「Image elements do not have `[alt]` attributes」と警告する
+- URL を `https://jsonplaceholder.typicode.com/does-not-exist` に変えて、ブラウザのアドレスバーで開く。Network タブで Status Code が **`404`** になっていることを確認
+- `https://httpstat.us/500` を開く。Status Code が **`500`** になる（HTTP のテスト用サービス。明示的に各ステータスを返す）
+- `https://httpstat.us/301` を開く。リダイレクト先があって、ブラウザが自動で追従する様子を Network タブで確認
 
 ### 自分で書く
 
-- `<main>` の下に「記事一覧」セクションを追加し、`<section>` でくるむ。各記事は `<article>` にして、`<h3>` のタイトル + `<p>` の要約を 3 件並べる
-- フォームの `<input>` に `required` を付け、送信ボタンにキーボードで Tab → Enter で送信できることを確認する
+- DevTools の Network タブで、最近よく見るサイト（自分のポートフォリオ・ブログ等）を開き、**1 つの HTML ページを開くときにいくつのリクエストが発生しているか** を数えてみる
+- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンスで、別のレッスンで仕組みを扱う
 
 ## まとめ
 
-- アクセシビリティは「誰でも使える」状態を目指すこと。WCAG 2.2 が 2026 年の国際標準
-- **セマンティック HTML が a11y の土台**。`<div>` + `role=...` より `<nav>` / `<main>` / `<h1>` のような意味のあるタグを優先
-- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）でページを整理
-- 見出しは `<h1>` → `<h2>` → `<h3>` の順に飛ばさず降りる。`<h1>` はページに 1 つ
-- 画像には `alt`、フォームには `<label>` を必ず
-- コントラスト比は本文 **4.5:1** 以上が AA（実用レベル）
-- `<html lang="ja">` で言語を明示
-- 別のレッスンでは **ARIA 属性とキーボード操作** を扱い、セマンティック HTML で足りないときの補い方に進む
+- HTTP はリクエスト / レスポンスという文字列の塊を 1 往復やり取りする素朴なプロトコル
+- リクエストは「メソッド + パス + ヘッダ + ボディ（任意）」の形
+- レスポンスは「ステータス + ヘッダ + ボディ」の形
+- メソッドは `GET` / `POST` / `PUT` / `DELETE` を基本に、冪等性を意識して使う
+- ステータスコードは 2xx / 3xx / 4xx / 5xx で大分類。細かい違い（401 vs 403 など）は都度覚える
+- ヘッダには `Host` / `User-Agent` / `Accept` / `Content-Type` / `Cache-Control` / `Set-Cookie` などがあり、DevTools の Network タブで実物を観察できる
+- 別のレッスンで、その **DevTools の各タブ** を読み方から押さえる

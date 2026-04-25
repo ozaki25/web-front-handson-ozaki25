@@ -1,105 +1,365 @@
-# lesson30: TODO アプリを作る
+# lesson30: DOM を操作する
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-let items = ['牛乳を買う', '本を読む'];
-const list = document.getElementById('list');
-const btn = document.getElementById('add');
+const title = document.querySelector('#title');
+const textBtn = document.querySelector('#btn-text');
+const classBtn = document.querySelector('#btn-class');
+const resetBtn = document.querySelector('#btn-reset');
 
-function render() {
-  list.innerHTML = items.map((t) => '<li>' + t + '</li>').join('');
-}
-
-btn.addEventListener('click', () => {
-  items = [...items, '項目' + (items.length + 1)];
-  render();
+textBtn.addEventListener('click', () => {
+  title.textContent = '書き換えました';
+  console.log('textContent を変更');
 });
 
-render();
+classBtn.addEventListener('click', () => {
+  title.classList.toggle('active');
+  console.log("classList.toggle('active') でスタイル切り替え");
+});
+
+resetBtn.addEventListener('click', () => {
+  title.textContent = '最初の見出し';
+  title.classList.remove('active');
+  console.log('元に戻しました');
+});
 `
 </script>
 
 ## ゴール
 
-- 2 章 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
-- 入力・追加・削除できる TODO アプリを HTML + JS で完成させる
-- `localStorage` に保存して、リロードしても残るようにする
-- 後続章で進化させる共通題材として、最終形を StackBlitz に保存する
+- HTML が DOM という木構造（ツリー）として扱われることを絵で理解できる
+- `querySelector` / `getElementById` / `querySelectorAll` を使い分けて要素を取得できる
+- `textContent` と `innerHTML` の違いと、XSS の落とし穴を説明できる
+- `classList` で CSS クラスを付け外しできる
+- `getAttribute` / `setAttribute` / 要素のプロパティ（`link.href` など）で属性を読み書きできる
+- `.value` / `.checked` でフォームの値を読み書きできる
+- `element.style` と `dataset` でスタイルやデータ属性を扱える
+- `createElement` / `appendChild` で要素を作って追加、`remove()` で削除できる
+- `parentElement` / `children` / `nextElementSibling` でツリーをたどれる
 
 ## 解説
 
-ここまでのレッスンで積み上げてきた道具で、実際に動く小さなアプリを組み立てます。新しい概念は 1 つだけ: **`localStorage`** です。
+### HTML は DOM という「木」になっている
 
-### `localStorage` とは
+ブラウザは HTML を読み込むと、それを **木構造（ツリー構造）のデータ** として保持します。この内部表現が **DOM**（Document Object Model） です。JS から DOM を操作すると、画面の内容を動的に変えられます。
 
-ブラウザが提供する「文字列を保存しておける箱」です。ページを閉じてもデータは残り、次に同じページを開いたときに読み出せます。
+「木」と呼ばれるのは、タグの入れ子関係が木の枝分かれのように表現されるためです。たとえば次の HTML を見てみましょう。
 
-```js
-localStorage.setItem("key", "value"); // 保存
-const v = localStorage.getItem("key"); // 取り出し（なければ null）
+```html
+<html>
+  <head>
+    <title>自己紹介</title>
+  </head>
+  <body>
+    <h1>こんにちは</h1>
+    <ul>
+      <li>コーヒー</li>
+      <li>散歩</li>
+    </ul>
+  </body>
+</html>
 ```
 
-- 保存できるのは **文字列だけ**
-- 配列やオブジェクトをそのまま入れることはできない
+これは DOM としては、次のように枝分かれする 1 本の木になります。
 
-### `JSON.stringify` / `JSON.parse`
+<div style="font-family:system-ui, sans-serif; font-size:0.9em; line-height:1.6; background:var(--vp-c-bg-mute); padding:16px 20px; border-radius:6px; margin:12px 0;">
+  <div><code>document</code></div>
+  <div style="padding-left:18px;">└─ <code>&lt;html&gt;</code></div>
+  <div style="padding-left:36px;">├─ <code>&lt;head&gt;</code></div>
+  <div style="padding-left:54px;">│&nbsp;&nbsp;└─ <code>&lt;title&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"自己紹介"</span></div>
+  <div style="padding-left:36px;">└─ <code>&lt;body&gt;</code></div>
+  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;├─ <code>&lt;h1&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"こんにちは"</span></div>
+  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;└─ <code>&lt;ul&gt;</code></div>
+  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"コーヒー"</span></div>
+  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"散歩"</span></div>
+</div>
 
-配列やオブジェクトを文字列に変換 / 戻すための道具です。
+一番上に `document`（ページ全体を表すオブジェクト）があり、そこから `<html>` 要素が伸び、さらに `<head>` と `<body>` に枝分かれします。それぞれの要素の中身（子要素）も同じようにぶら下がります。
+
+この木を扱うときの呼び方を覚えておくと、あとのコードが読みやすくなります。
+
+- **親**（parent）: 1 段上の要素。`<li>` の親は `<ul>` です。
+- **子**（child）: 1 段下の要素。`<ul>` の子は `<li>` が 2 つです。
+- **兄弟**（sibling）: 同じ親を持つ隣の要素。2 つの `<li>` は互いに兄弟です。
+- **テキストノード**: タグの中身の文字列（例: `"コーヒー"`）。これも木の一部として、タグの下にぶら下がっています。
+
+ブラウザの DevTools の Elements（または「要素」）タブを開くと、まさにこのツリーが左端に展開されて表示されます。手元の Chrome で F12 を押して Elements タブを眺めてみてください。タグをクリックするたびに、ツリーの枝が開いたり閉じたりします。
+
+これまでは Console に出すだけでしたが、本レッスンからは **この木に JS で手を入れて、画面を書き換える** 世界に入ります。
+
+### 要素を取得する: `querySelector` / `getElementById` / `querySelectorAll`
+
+DOM から要素を取り出す方法はいくつかあります。用途に応じて使い分けます。
+
+#### `document.querySelector`: CSS セレクタで 1 つ取る
+
+CSS セレクタで **最初に見つかった 1 つ** を取り出します。
 
 ```js
-const todos = [{ id: "1", text: "A" }, { id: "2", text: "B" }];
-
-const str = JSON.stringify(todos);
-// '[{"id":"1","text":"A"},{"id":"2","text":"B"}]'
-
-const back = JSON.parse(str);
-// [{ id: "1", text: "A" }, { id: "2", text: "B" }]
+const title = document.querySelector("h1");
+const box = document.querySelector("#box");
+const btn = document.querySelector(".btn");
 ```
 
-- `JSON.stringify(値)`: JS のデータを JSON 文字列に
-- `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
+- `"h1"`: 要素セレクタ
+- `"#id名"`: id セレクタ
+- `".クラス名"`: クラスセレクタ
+- 複雑なセレクタもそのまま書けます（例: `"ul.menu > li:first-child"`）
 
-`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **「fetch で API から取得する」で学んだ `try` / `catch` で囲む** のが安全です。
+見つからない場合は `null` が返ります。
 
-### id をユニークに作る
+#### `document.getElementById`: id 専用のショートカット
 
-削除のたびに「どの TODO を消したか」を判断するために、各 TODO には **一意な id** を持たせます。ブラウザ標準の `crypto.randomUUID()` を使うと、衝突しない id 文字列が手に入ります。
+id で取り出すときの専用 API です。`querySelector("#id名")` と同じ結果になりますが、より短く書けます。
 
 ```js
-const id = crypto.randomUUID();
-// 例: "8a7c3f...-...-..."
+const title = document.getElementById("title");
+// 上と同じ: document.querySelector("#title")
 ```
 
-### 画面構成
+引数は **`#` を付けない id 名そのもの** です。`querySelector` と違って CSS セレクタではないので、`#` や `.` を書くと動きません。
 
-完成系は以下の構造です。
+見つからない場合はこちらも `null` が返ります。実務では、id 指定に限っては `getElementById` を好む人もいれば、`querySelector` で統一する人もいます。どちらでも動きますが、本コースの演習では **id 指定は `getElementById`、それ以外は `querySelector`** を使い分ける書き方で進めます。
 
-- 画面上部: 入力欄 `<input>` と「追加」ボタン
-- 下部: TODO 一覧 `<ul>`（各行は `<li>` で、テキストと「削除」ボタンを含む）
+#### `document.querySelectorAll`: CSS セレクタで **全部** 取る
 
-新しい TODO を追加すると一覧の末尾に `<li>` が 1 件増え、削除ボタンを押すとその行だけが消えます。リロードしてもデータが残ります。
+同じセレクタに当てはまる要素をまとめて取り出します。戻り値は **NodeList** という配列っぽいオブジェクトで、`forEach` で 1 件ずつ処理できます。
 
-### デモで確認する
+```js
+const items = document.querySelectorAll("li");
 
-下のデモは、TODO アプリの核となる「配列の state + `render` 関数 + イベントハンドラ」の最小形です。ボタンを押すと配列に要素が追加され、`map` で一覧を組み立て直して画面に描画します。
+items.forEach((li) => {
+  console.log(li.textContent);
+});
+```
+
+配列メソッド（`map` / `filter` など）は直接は使えません。使いたい場合は `Array.from(items)` で真の配列に変換してから扱います。
+
+> `<script defer>` を使っていれば、HTML の解析が終わってから JS が動くので、要素がまだ存在せず `null` になる事故を防げます。
+
+### テキストの読み書き: `textContent`
+
+取得した要素の中身のテキストを読み書きします。
+
+```js
+const title = document.querySelector("h1");
+
+console.log(title.textContent);    // 元のテキストを読む
+title.textContent = "書き換えました"; // 書き換える
+```
+
+### HTML ごと読み書きする: `innerHTML`
+
+`textContent` は「ただの文字列」として扱いますが、**HTML タグとして解釈しながら** 中身を読み書きしたいときは `innerHTML` を使います。
+
+```js
+const box = document.querySelector("#box");
+
+console.log(box.innerHTML);
+// 書き込むと HTML として解釈される
+box.innerHTML = "<strong>重要</strong> なお知らせ";
+```
+
+この例では `<strong>` が **タグとして** 解釈され、画面には太字の「重要」と続く「なお知らせ」が表示されます。
+
+#### `innerHTML` の落とし穴（XSS）
+
+便利ですが、**ユーザー入力をそのまま `innerHTML` に入れるのは絶対に避けてください**。悪意ある HTML（例: `<script>` タグや `onerror` 属性付きの `<img>`）が入ってきた場合、ブラウザがそれを実行してしまい、**Cookie の盗難やなりすまし投稿** などの攻撃（XSS = Cross-Site Scripting）につながります。
+
+```js
+// NG: 入力をそのまま埋め込むのは危険
+const userInput = getFromUser();   // 例: '<img src=x onerror="alert(1)">'
+box.innerHTML = userInput;         // ブラウザがタグとして実行してしまう
+
+// OK: テキストとして埋め込む（タグは無害化される）
+box.textContent = userInput;
+```
+
+**指針:**
+
+- **ユーザーが入力した値** や **外部 API から来た値** を画面に出すときは、原則 `textContent` を使う
+- `innerHTML` は「自分で書いた安全な HTML 文字列」を流し込むときだけ使う
+- 迷ったら `textContent`
+
+### クラスの操作: `classList`
+
+CSS クラスを付け外しするための専用 API です。
+
+```js
+const box = document.querySelector("#box");
+
+box.classList.add("active");      // クラスを追加
+box.classList.remove("active");   // クラスを削除
+box.classList.toggle("active");   // あれば消す、なければ付ける
+```
+
+CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
+
+### 属性の読み書き: `getAttribute` / `setAttribute` / `removeAttribute`
+
+HTML タグの **属性**（`href` / `src` / `alt` / `disabled` など）を読み書きします。
+
+```js
+const link = document.querySelector("a");
+
+console.log(link.getAttribute("href"));     // 現在の href を読む
+link.setAttribute("href", "https://example.com"); // 書き換える
+link.removeAttribute("target");             // 属性を消す
+```
+
+さらに、よく使う属性はプロパティとしても読み書きできます。たとえば `link.href` / `img.src` / `input.disabled` などです。
+
+```js
+const img = document.querySelector("img");
+img.src = "/photo.png";
+img.alt = "写真";
+```
+
+属性名と同じプロパティがあるときは **プロパティ経由（`img.src = ...`）の方が短く書けます**。使い分けは以下を目安にしてください。
+
+- 標準的な HTML 属性 → プロパティ経由で OK（`link.href` / `img.src` / `input.disabled`）
+- `data-*` など自作の属性 → `getAttribute` / `setAttribute`、または後述の `dataset`
+
+### フォームの値: `.value` / `.checked`
+
+`<input>` / `<textarea>` / `<select>` の値は `.value` で読み書きします。チェックボックスやラジオの入り切りは `.checked` です。
+
+```js
+const nameInput = document.querySelector("#name");
+const agreeCheckbox = document.querySelector("#agree");
+
+console.log(nameInput.value);         // 入力欄の現在の文字列
+nameInput.value = "初期値";            // 入力欄に値を入れる
+
+console.log(agreeCheckbox.checked);   // true / false
+agreeCheckbox.checked = true;         // プログラムからチェックを入れる
+```
+
+`<input type="number">` でも `.value` は **文字列** で返ります。数値として扱いたい場合は `Number(nameInput.value)` のように変換します。
+
+### インラインスタイルを当てる: `element.style`
+
+JS から直接スタイルを当てる場合は `element.style.プロパティ` を使います。CSS のプロパティ名は **キャメルケース** になります（`background-color` → `backgroundColor`）。
+
+```js
+const box = document.querySelector("#box");
+
+box.style.backgroundColor = "steelblue";
+box.style.color = "white";
+box.style.padding = "12px";
+```
+
+ただし、**見た目の切り替えは基本的に CSS 側でクラスを用意して `classList.toggle` する方が保守しやすい** です。`element.style` は、CSS では表現しにくい値（マウス位置に応じた座標や、ドラッグ中の一時的な幅など）を JS から直接計算して当てたいときに使うのが定番です。
+
+### データ属性: `dataset`
+
+HTML の `data-*` 属性は、DOM 要素に **任意のデータをぶら下げる** ための標準的な方法です。JS からは `dataset` 経由で読み書きできます。
+
+```html
+<button id="delete-btn" data-todo-id="42" data-confirm-required="true">削除</button>
+```
+
+```js
+const btn = document.querySelector("#delete-btn");
+
+console.log(btn.dataset.todoId);            // "42"
+console.log(btn.dataset.confirmRequired);   // "true"
+
+btn.dataset.todoId = "99";                  // 書き換えも可能
+```
+
+- `data-todo-id` → `dataset.todoId`（ケバブケース → キャメルケース変換）
+- **値は常に文字列** として扱われるため、数値として使いたい場合は `Number(btn.dataset.todoId)` で変換する
+
+ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。イベントと組み合わせる例は別のレッスンで扱います。
+
+下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
 
 <LiveDemo
-  height="260px"
-  :html="`<button id='add'>項目を追加</button><ul id='list'></ul>`"
-  :css="`button { padding: 6px 12px; margin-bottom: 8px; cursor: pointer; } ul { padding-left: 20px; }`"
+  height="240px"
+  :html="`
+<h1 id='title'>最初の見出し</h1>
+<p>ボタンを押すと JS が DOM を書き換えます。</p>
+<div>
+  <button id='btn-text' type='button'>テキストを書き換える</button>
+  <button id='btn-class' type='button'>クラスを切り替える</button>
+  <button id='btn-reset' type='button'>元に戻す</button>
+</div>
+  `"
+  :css="`
+button { margin-right: 6px; padding: 6px 12px; }
+#title.active {
+  color: white;
+  background: steelblue;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+  `"
   :js="demoJs"
 />
 
-本編ではこの土台に「入力欄からのテキスト追加」「削除ボタン」「`localStorage` による永続化」を重ねていきます。
+### 要素を作って追加: `createElement` / `appendChild`
+
+新しい要素を作って、既存の要素の子として追加します。
+
+```js
+const ul = document.querySelector("ul");
+
+const li = document.createElement("li");
+li.textContent = "新しい項目";
+ul.appendChild(li);
+```
+
+手順:
+
+1. `document.createElement("li")` で `<li>` 要素を作る（まだ画面には出ていない）
+2. `li.textContent = "..."` で中身のテキストを入れる
+3. `ul.appendChild(li)` で実際にページに追加する
+
+この「作る → テキストを入れる → 追加する」の流れは、以降のレッスンで繰り返し使います。
+
+### 要素を削除する: `element.remove()`
+
+取得した要素を DOM から消すには、その要素自身の `remove()` を呼びます。
+
+```js
+const item = document.querySelector("#old-item");
+item.remove();   // DOM ツリーから取り除く
+```
+
+昔は `parent.removeChild(child)` という書き方が主流でしたが、現代のブラウザでは **`element.remove()` の方が短く直感的** です。本コースでは `remove()` を使います。
+
+削除された要素はページから消えますが、JS の変数にまだ保持している場合は `appendChild` で再度ツリーに戻すこともできます。ただし、この使い方は混乱しやすいので、削除したら忘れる方が安全です。
+
+### ツリーをたどる: `parentElement` / `children` / `nextElementSibling`
+
+最初に紹介した「親 / 子 / 兄弟」の関係は、JS からも辿れます。
+
+```js
+const li = document.querySelector("li");
+
+console.log(li.parentElement);          // 親（例: <ul>）
+console.log(li.children);               // 子要素（HTMLCollection）
+console.log(li.nextElementSibling);     // 次の兄弟
+console.log(li.previousElementSibling); // 前の兄弟
+```
+
+- **`parentElement`**: 1 段上の要素
+- **`children`**: 直接の子要素一覧（配列っぽい `HTMLCollection`、`forEach` や `for...of` で回せます）
+- **`nextElementSibling` / `previousElementSibling`**: 同じ親の隣の要素。末端なら `null`
+
+似た名前で `parentNode` / `childNodes` / `nextSibling` もありますが、こちらはテキストノードや改行ノードまで含むので、**通常はタグだけを対象にする `parentElement` / `children` / `nextElementSibling` を使う** のが無難です。
+
+使いどころの例:
+
+- 「削除」ボタンを押されたら、そのボタンを含む `<li>` ごと消したい → `event.target.parentElement.remove()`
+- `<ul>` の中にある全部の `<li>` をループしたい → `ul.children` を `for...of` で回す
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは2 章 の総仕上げで、ここまでの演習ファイルがあるとスムーズですが、下のコードでここまでの状態を再現してから演習に入っても同じ状態から始められます。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `style.css` も加わります（ファイル作成がまだなら新規作成してください）。
 
 <details>
 <summary>出発点のコード</summary>
@@ -113,125 +373,50 @@ const id = crypto.randomUUID();
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson29</title>
-    <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson29: カウンター</h1>
-
-    <section>
-      <p id="count-label">カウント: 0</p>
-      <button id="inc">+1</button>
-      <button id="dec">-1</button>
-      <button id="reset">リセット</button>
-    </section>
-
-    <hr />
-
-    <section>
-      <h2>フォーム送信</h2>
-      <form id="form">
-        <label for="name-input">名前:</label>
-        <input id="name-input" type="text" />
-        <button type="submit">送信</button>
-      </form>
-      <p id="form-result">（未入力）</p>
-    </section>
+    <h1>lesson29: fetch で API から取得する</h1>
+    <p>DevTools の Console を確認してください。</p>
   </body>
 </html>
-```
-
-**`style.css`**
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-  max-width: 480px;
-}
-
-button {
-  margin-right: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-hr {
-  margin: 24px 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-}
 ```
 
 **`script.js`**
 
 ```js
-// カウンター
-let count = 0;
-const label = document.querySelector("#count-label");
-const incBtn = document.querySelector("#inc");
-const decBtn = document.querySelector("#dec");
-const resetBtn = document.querySelector("#reset");
+async function main() {
+  try {
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+    const posts = await response.json();
+    console.log("取得件数:", posts.length);
+    console.log("先頭:", posts[0]);
 
-function render() {
-  label.textContent = `カウント: ${count}`;
+    for (const post of posts.slice(0, 3)) {
+      console.log(`#${post.id} ${post.title}`);
+    }
+  } catch (error) {
+    console.log("エラーが発生しました");
+    console.log(error);
+  }
 }
 
-incBtn.addEventListener("click", () => {
-  count = count + 1;
-  render();
-});
-
-decBtn.addEventListener("click", () => {
-  count = count - 1;
-  render();
-});
-
-resetBtn.addEventListener("click", () => {
-  count = 0;
-  render();
-});
-
-// フォーム
-const form = document.querySelector("#form");
-const nameInput = document.querySelector("#name-input");
-const result = document.querySelector("#form-result");
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = nameInput.value;
-  result.textContent = `こんにちは、${value} さん`;
-});
+main();
 ```
 
 </details>
 
-本レッスンは **3 段構え** です。各段でコミット（ファイル保存）して、次の段に進みます。
+### ゴール
 
-### 共通: HTML と CSS
+- ボタンっぽい見た目の要素のクラスを JS で付け替える
+- JS から新しい `<li>` 要素を作って `<ul>` に追加する
 
-3 段を通して使います。
+### 手順
 
-#### `index.html`
+1. `index.html` / `style.css` / `script.js` をそれぞれ以下の内容にする
+2. プレビューを確認する
+
+### `index.html`
 
 ```html
 <!DOCTYPE html>
@@ -239,24 +424,22 @@ form.addEventListener("submit", (event) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson30 TODO</title>
+    <title>lesson30</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>TODO</h1>
-
-    <form id="form">
-      <input id="input" type="text" placeholder="やることを入力" />
-      <button type="submit">追加</button>
-    </form>
-
-    <ul id="list"></ul>
+    <h1 id="title">lesson30</h1>
+    <p id="box">このボックスのクラスが切り替わります</p>
+    <ul id="list">
+      <li>既存の項目 1</li>
+      <li>既存の項目 2</li>
+    </ul>
   </body>
 </html>
 ```
 
-#### `style.css`
+### `style.css`
 
 ```css
 body {
@@ -264,37 +447,18 @@ body {
   background-color: #fff;
   font-family: sans-serif;
   padding: 16px;
-  max-width: 480px;
 }
 
-#form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
+#box {
+  padding: 12px;
+  border: 1px solid #888;
+  border-radius: 6px;
 }
 
-#input {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 1rem;
-}
-
-button {
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-#list {
-  list-style: none;
-  padding: 0;
-}
-
-#list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #ddd;
+#box.active {
+  background-color: #ffe58f;
+  color: #222;
+  border-color: #d48806;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -303,238 +467,76 @@ button {
     background-color: #1a1a1a;
   }
 
-  #input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
+  #box {
+    border-color: #aaa;
   }
 
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  #list li {
-    border-bottom-color: #444;
+  #box.active {
+    background-color: #5a4600;
+    color: #fff;
+    border-color: #e6a817;
   }
 }
 ```
 
-### ステップ 1: 入力 + 一覧表示
-
-まずは追加だけを作ります。削除や localStorage はまだ考えません。
-
-#### `script.js`（ステップ 1）
-
-**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（「分割代入とスプレッド」で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、4 章 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、2 章 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+### `script.js`
 
 ```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
+const title = document.querySelector("#title");
+console.log(title.textContent);
+title.textContent = "DOM を書き換えました";
+
+const box = document.querySelector("#box");
+box.classList.add("active");
+
 const list = document.querySelector("#list");
 
-let todos = [];
-
-function render() {
-  list.textContent = ""; // 一度空にする
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    list.appendChild(li);
-  }
+const items = ["りんご", "みかん", "ぶどう"];
+for (const item of items) {
+  const li = document.createElement("li");
+  li.textContent = item;
+  list.appendChild(li);
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  input.value = "";
-  render();
-});
-
-render();
+const newLi = document.createElement("li");
+newLi.textContent = "最後に追加した項目";
+list.appendChild(newLi);
 ```
 
-#### 期待出力（ステップ 1）
+### 期待出力
 
-- 入力欄に「牛乳を買う」と入力して「追加」を押す → `<ul>` の末尾に `牛乳を買う` の `<li>` が 1 件増える
-- さらに「本を読む」を追加 → 2 件目が末尾に並ぶ
-- 入力欄に何も入れずに「追加」を押しても何も起きない（空文字は弾く）
-- **リロードすると全部消える**（localStorage はまだ使っていない）
-
-ここでいったんファイルを保存（コミット相当）します。
-
-### ステップ 2: 削除ボタンを追加
-
-各 `<li>` に「削除」ボタンを付け、「配列の変換」の `filter` を使って対象を取り除きます。
-
-#### `script.js`（ステップ 2）
-
-```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-let todos = [];
-
-function render() {
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-
-    const span = document.createElement("span");
-    span.textContent = todo.text;
-    li.appendChild(span);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "削除";
-    deleteBtn.addEventListener("click", () => {
-      todos = todos.filter((t) => t.id !== todo.id);
-      render();
-    });
-    li.appendChild(deleteBtn);
-
-    list.appendChild(li);
-  }
-}
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  input.value = "";
-  render();
-});
-
-render();
-```
-
-#### 期待出力（ステップ 2）
-
-- 各行に「削除」ボタンが付いている
-- 「削除」を押すとその行だけが消える（他の行は残る）
-- 3 件追加 → 真ん中の「削除」を押すと、その 1 件だけ消える
-- リロードするとまだ全部消える（localStorage はまだ）
-
-ここでもう一度保存（2 回目のコミット相当）します。
-
-### ステップ 3: `localStorage` で保存・復元
-
-最終形です。TODO の変更があるたびに localStorage に保存し、起動時に読み戻します。
-
-#### `script.js`（最終形）
-
-```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-const STORAGE_KEY = "todo-app-todos";
-
-function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error);
-    return [];
-  }
-}
-
-function saveTodos() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
-
-let todos = loadTodos();
-
-function render() {
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-
-    const span = document.createElement("span");
-    span.textContent = todo.text;
-    li.appendChild(span);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "削除";
-    deleteBtn.addEventListener("click", () => {
-      todos = todos.filter((t) => t.id !== todo.id);
-      saveTodos();
-      render();
-    });
-    li.appendChild(deleteBtn);
-
-    list.appendChild(li);
-  }
-}
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  saveTodos();
-  input.value = "";
-  render();
-});
-
-render();
-```
-
-#### 期待出力（最終形）
-
-- 3 件追加 → リロード → 3 件がそのまま表示される
-- 削除 → リロード → 削除後の状態が残る
-- 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
-- DevTools の Application（または Storage）タブ → Local Storage の項目で `todo-app-todos` に JSON 文字列が入っているのが確認できる
-- Console で `localStorage.setItem("todo-app-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
+- 画面の見出し: 「DOM を書き換えました」になっている
+- ボックスは背景黄色（または枠色が濃いオレンジ）に変わる
+- リストに `既存の項目 1` / `既存の項目 2` / `りんご` / `みかん` / `ぶどう` / `最後に追加した項目` の 6 項目が並ぶ
+- Console に元のタイトル「lesson30」が出る
 
 ### 変える
 
-- `STORAGE_KEY` を好きな名前に変える → 以前の保存と別扱いになり、リストが空から始まる
-- 追加時に `todos = [...todos, newTodo]` を `todos = [newTodo, ...todos]` に変えて、新しいものが先頭に来るようにする
-- 入力値の前後の空白を許すように、`trim()` を外してみる（半角スペースだけで追加できてしまう）
+- `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
+- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（別のレッスンでクリックに結び付ける）
+- `items` に要素を 2 つ足して、リストが 8 行になることを確認
+- `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
+- `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認
+- `document.querySelectorAll("li")` で全 `<li>` を取り、`forEach` で `console.log` して件数が合うか確認
 
 ### 自分で書く
 
-- 「すべて削除」ボタンを追加し、押すと `todos = []` にして保存・再描画する
-- 各 `<li>` をクリックすると `classList.toggle("done")` が切り替わり、CSS で打ち消し線を付ける（打ち消し線の状態自体は保存しなくてよい）
-- 現在の件数を「全 N 件」として画面上部に表示する
+- 新しい段落要素 `<p>` を `createElement` で作り、好きな文章を入れて `document.body.appendChild` で本文末尾に追加する
+- `#title` の `textContent` を、JS 側で `const userName = "..."` と定義した名前を含むテンプレートリテラル（`` `ようこそ、${userName} さん` ``）に置き換える
+- `<a id="mdn" href="https://example.com">MDN</a>` を `index.html` に足し、JS から `setAttribute("href", "https://developer.mozilla.org/ja/")` で書き換える。リンクをクリックして飛び先が変わることを確認する
+- `<li>` の 1 つに `data-fruit="citrus"` を付け、`dataset.fruit` で値を読み取って `console.log` する
+- リストの **最初の `<li>`** を `querySelector("li")` で取り、`remove()` で消す。画面から 1 件減ることを確認する
 
 ## まとめ
 
-- TODO アプリの最小構成は **配列の state + `render` 関数 + イベントハンドラ** で作れる
-- 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
-- `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
-- `JSON.parse` は失敗しうるので `try` / `catch` で囲む
-- **この TODO アプリは4 章 の「TODO アプリを React で作る」で React 版に進化し、5 章 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく
+- DOM は HTML の入れ子を表現した木構造。親 / 子 / 兄弟 の関係で要素がつながる
+- 取得: `querySelector`（1 件）/ `querySelectorAll`（複数）/ `getElementById`（id 専用）
+- テキスト書き換え: `textContent`（安全）。HTML として解釈したい場合だけ `innerHTML`（XSS に注意）
+- クラス: `classList.add` / `remove` / `toggle` / `contains`
+- 属性: `getAttribute` / `setAttribute` / `removeAttribute`、標準属性は `element.プロパティ` でも可
+- フォーム値: `.value` / `.checked`（`.value` は常に文字列）
+- スタイル: 切り替えは CSS + `classList`。動的計算した値を当てるときだけ `element.style.プロパティ`
+- データ属性: `data-*` ↔ `dataset.キー`（ケバブ→キャメル変換）
+- 生成: `createElement` + `appendChild`、削除: `element.remove()`
+- たどる: `parentElement` / `children` / `nextElementSibling`
+- 別のレッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る

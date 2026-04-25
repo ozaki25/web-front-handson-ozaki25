@@ -1,166 +1,113 @@
-# lesson24: 配列の変換
+# lesson24: オブジェクト
 
 <script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
 const demoJs = `
-const users = [
-  { name: 'Alice', age: 20 },
-  { name: 'Bob',   age: 15 },
-  { name: 'Carol', age: 30 },
-];
-
-const names  = users.map((u) => u.name);
-const adults = users.filter((u) => u.age >= 20);
-const first  = users.find((u) => u.age >= 20);
-
-console.log('map   (名前だけ):', names);
-console.log('filter(成人だけ):', adults);
-console.log('find  (最初の成人):', first);
-console.log('元の配列は変わらない:', users);
+const user = { name: 'Alice', age: 20, isStudent: true };
+console.log('name(ドット): ' + user.name);
+console.log('age(ブラケット): ' + user['age']);
+user.age = 21;
+console.log('書き換え後の age: ' + user.age);
+for (const key of Object.keys(user)) {
+  console.log(key + ' = ' + user[key]);
+}
 `
 </script>
 
 ## ゴール
 
-- `map` で配列の各要素を変換した新しい配列を作れる
-- `filter` で条件に合う要素だけを残した新しい配列を作れる
-- いずれも元の配列を変えない（新しい配列を返す）ことを理解する
+- `{ key: value }` の形でオブジェクトを作れる
+- ドット記法でプロパティを読み書きできる
+- プロパティを追加・更新できる
 
 ## 解説
 
-### 「全部変換する」`map`
+### オブジェクトとは
 
-`map` は配列の各要素に関数を適用して、結果を並べた **新しい配列** を返します。
+「名前付きの値」をいくつかまとめたものがオブジェクトです。配列が「並んだリスト」なら、オブジェクトは「ラベル付きの箱の集まり」です。
 
 ```js
-const numbers = [1, 2, 3, 4];
-const doubled = numbers.map((n) => n * 2);
-
-console.log(doubled); // [2, 4, 6, 8]
-console.log(numbers); // [1, 2, 3, 4] （元は変わらない）
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
 ```
 
-- `配列.map((要素) => 新しい値)`
-- 戻り値は **同じ長さの新しい配列**
-- 元の配列は変わらない
+- `{` と `}` で囲む
+- 中は `キー: 値` のペアをカンマで区切る
+- キーのことをプロパティ名と呼ぶ
 
-オブジェクトの配列でもよく使います。
+キーは文字列（クオートは省略できる）、値は何でも入れられます（文字列・数値・真偽値・別のオブジェクト・配列など）。
+
+### ドット記法で読み書き
+
+プロパティを読むときも書くときも、ドット（`.`）を使います。
+
+```js
+const user = {
+  name: "Alice",
+  age: 20,
+};
+
+console.log(user.name); // "Alice"
+console.log(user.age);  // 20
+
+user.age = 21;          // 書き換え
+console.log(user.age);  // 21
+
+user.city = "Tokyo";    // 新しいプロパティを追加
+console.log(user.city); // "Tokyo"
+```
+
+存在しないプロパティを読むと `undefined` が返ります。
+
+```js
+console.log(user.email); // undefined
+```
+
+`const` で宣言したオブジェクトでも、プロパティの追加や書き換えはできます（配列と同じ）。
+
+### 配列の中にオブジェクトを並べる
+
+実際のデータでよくある形です。
 
 ```js
 const users = [
   { name: "Alice", age: 20 },
   { name: "Bob", age: 25 },
-];
-
-const names = users.map((user) => user.name);
-console.log(names); // ["Alice", "Bob"]
-```
-
-### 「条件で絞り込む」`filter`
-
-`filter` は条件を満たす要素だけを残した **新しい配列** を返します。
-
-```js
-const numbers = [1, 2, 3, 4, 5];
-const evens = numbers.filter((n) => n % 2 === 0);
-
-console.log(evens);   // [2, 4]
-console.log(numbers); // [1, 2, 3, 4, 5]
-```
-
-- `配列.filter((要素) => 条件)`
-- 条件が `true` の要素だけが残る
-- 戻り値は **同じかそれより短い新しい配列**
-- 元の配列は変わらない
-
-オブジェクトの配列で絞り込む例。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
   { name: "Carol", age: 30 },
 ];
 
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-// [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
+console.log(users[0].name);      // "Alice"
+console.log(users[1].age);       // 25
+console.log(users.length);       // 3
 ```
 
-下のデモで、同じ配列に対して `map` / `filter` / `find` がそれぞれどんな結果を返すかを並べて比較できます。元の配列は変わらない点にも注目してください。
+`for...of` と組み合わせると、全員の情報を順に処理できます。
+
+```js
+for (const user of users) {
+  console.log(`${user.name} は ${user.age} 歳`);
+}
+```
+
+この「配列にオブジェクトを並べる」形は、TODO アプリやユーザー一覧など、後のレッスンで頻繁に使います。
+
+### デモで確認する
+
+下のデモでは、オブジェクトをドット記法・ブラケット記法でアクセスし、値の書き換えとプロパティ一覧表示を体感できます。
 
 <LiveDemo
   height="260px"
-  :html="`<p>同じ配列に対する map / filter / find の結果:</p>`"
+  :html="`<p>オブジェクトの読み書きをまとめて確認するデモ</p>`"
   :css="``"
   :js="demoJs"
 />
 
-### `for...of` との違い
-
-「繰り返し処理」の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
-
-- 「変換 / 絞り込み」という **意図が名前で伝わる**
-- 結果が新しい配列で返るので、元の配列を壊さない
-- 1 行で書けて短い
-
-特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
-
-### 「1 件だけ取り出す」`find`
-
-`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
-
-const found = users.find((user) => user.age >= 20);
-console.log(found); // { name: "Alice", age: 20 }
-
-const missing = users.find((user) => user.age >= 100);
-console.log(missing); // undefined
-```
-
-- `配列.find((要素) => 条件)`
-- 戻り値は **1 件の要素**（配列ではない）
-- 該当がなければ `undefined`
-- `filter` と違って、見つけた時点で走査を打ち切る
-
-ID で目的の 1 件を取り出すような場面でよく使います。
-
-```js
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-];
-
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target); // { id: "a2", text: "本を返す" }
-```
-
-5 章 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
-
-### チェーン（つなげて書く）
-
-`map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-
-console.log(adultNames); // ["Alice", "Carol"]
-```
-
-「成人だけ絞り込んでから、名前だけ取り出す」という流れが素直に書けます。
+`Object.keys(obj)` はオブジェクトのキー名を配列で返すメソッドです。ブラケット記法 `obj[key]` と組み合わせると、全プロパティを順に処理できます。
 
 ## 演習
 
@@ -183,7 +130,7 @@ console.log(adultNames); // ["Alice", "Carol"]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson23: 分割代入とスプレッド</h1>
+    <h1>lesson23: スコープとクロージャ</h1>
   </body>
 </html>
 ```
@@ -191,45 +138,49 @@ console.log(adultNames); // ["Alice", "Carol"]
 **`script.js`**
 
 ```js
-// 演習 A: 分割代入
-const user = { name: "Alice", age: 20, city: "Tokyo" };
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
 
-const { name, age } = user;
-console.log(name);
-console.log(age);
+const counterA = makeCounter();
+const counterB = makeCounter();
 
-const colors = ["red", "green", "blue"];
-const [first, second] = colors;
-console.log(first);
-console.log(second);
+console.log(counterA());
+console.log(counterA());
+console.log(counterB());
+console.log(counterA());
+console.log(counterB());
 
-// 演習 B: スプレッド
-const copy = { ...user };
-console.log(copy);
+function makeFilter(status) {
+  return function (todo) {
+    return todo.status === status;
+  };
+}
 
-const updated = { ...user, age: 21 };
-console.log(updated);
-console.log(user);
+const todos = [
+  { text: "牛乳を買う", status: "done" },
+  { text: "本を読む",   status: "todo" },
+  { text: "掃除する",   status: "done" },
+  { text: "ゴミを出す", status: "todo" },
+];
 
-const a = [1, 2];
-const b = [3, 4];
-const merged = [...a, ...b];
-console.log(merged);
+const isDone = makeFilter("done");
+const isTodo = makeFilter("todo");
 
-const todos = ["牛乳を買う", "本を読む"];
-const added = [...todos, "ジョギング"];
-console.log(added);
-console.log(todos);
+console.log(todos.filter(isDone));
+console.log(todos.filter(isTodo));
 ```
 
 </details>
 
 ### ゴール
 
-- ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
-- ユーザー配列から「名前だけ」の配列を作る
-- 2 つを組み合わせて「成人の名前だけ」の配列を作る
-- ID で TODO の 1 件を取り出す（`find`）
+- `user` オブジェクトを作り、ドット記法で名前と年齢を読み書きする
+- 配列に複数のユーザーを並べて、`for...of` で全員分表示する
 
 ### 手順
 
@@ -248,7 +199,7 @@ console.log(todos);
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson24: 配列の変換</h1>
+    <h1>lesson24: オブジェクト</h1>
   </body>
 </html>
 ```
@@ -256,76 +207,67 @@ console.log(todos);
 ### `script.js`
 
 ```js
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
+
+console.log(user);
+console.log(user.name);
+console.log(user.age);
+
+user.age = 21;
+console.log(user.age);
+
+user.city = "Tokyo";
+console.log(user.city);
+console.log(user);
+
+console.log(user.email);
+
 const users = [
   { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
+  { name: "Bob", age: 25 },
   { name: "Carol", age: 30 },
-  { name: "Dave", age: 17 },
 ];
 
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-
-const names = users.map((user) => user.name);
-console.log(names);
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-console.log(adultNames);
-
-const numbers = [1, 2, 3, 4, 5];
-const doubled = numbers.map((n) => n * 2);
-const evens = numbers.filter((n) => n % 2 === 0);
-console.log(doubled);
-console.log(evens);
-console.log(numbers);
-
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-  { id: "a3", text: "ゴミを出す" },
-];
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target);
-
-const missing = todos.find((todo) => todo.id === "zzz");
-console.log(missing);
+for (const u of users) {
+  console.log(`${u.name} は ${u.age} 歳`);
+}
 ```
 
 ### 期待出力
 
 ```
-[{name: "Alice", age: 20}, {name: "Carol", age: 30}]
-["Alice", "Bob", "Carol", "Dave"]
-["Alice", "Carol"]
-[2, 4, 6, 8, 10]
-[2, 4]
-[1, 2, 3, 4, 5]
-{id: "a2", text: "本を返す"}
+{name: "Alice", age: 20, isStudent: true}
+Alice
+20
+21
+Tokyo
+{name: "Alice", age: 21, isStudent: true, city: "Tokyo"}
 undefined
+Alice は 20 歳
+Bob は 25 歳
+Carol は 30 歳
 ```
 
-最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
+オブジェクト全体を `console.log` したときの表示形式はブラウザで少し異なります。
 
 ### 変える
 
-- `filter` の条件を `user.age < 20` に変えて「未成年」を取り出す
-- `map` を `(user) => user.age` に変えて「年齢だけ」の配列を作る
-- チェーンの `filter` と `map` の順番を入れ替えるとどうなるか考える（先に `map` で名前にしてしまうと `user.age` が使えなくなる）
+- `user` に `hobby: "読書"` というプロパティを追加で持たせて `console.log(user.hobby)` を試す
+- `user.isStudent = false;` で値を書き換えて Console に出してみる
+- `users` に 4 人目 `{ name: "Dave", age: 40 }` を `push` で追加し、もう一度 `for...of` で全員出す
 
 ### 自分で書く
 
-- 数値配列 `[10, 25, 7, 42, 3]` から「10 以上のものだけ」を残す → `[10, 25, 42]`
-- 文字列配列 `["apple", "banana", "cherry"]` から「すべて大文字に変えた新しい配列」を作る（ヒント: `s.toUpperCase()`）→ `["APPLE", "BANANA", "CHERRY"]`
-- TODO の配列 `[{ id: "1", text: "A" }, { id: "2", text: "B" }, { id: "3", text: "C" }]` から `id: "2"` だけを除いた新しい配列を作る（`filter` を使う）
+- `book` オブジェクト（`title` / `author` / `year`）を作り、3 つのプロパティをテンプレートリテラルで 1 行にまとめて表示する
+- 本を 3 冊入れた `books` 配列を作り、`for...of` で「『タイトル』（著者, 年）」の形で全件出す
 
 ## まとめ
 
-- `map` は「同じ長さの新しい配列を作る」変換
-- `filter` は「条件で絞り込んだ新しい配列を作る」抽出
-- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
-- どれも元の配列は変えない
-- チェーンすると複数の処理を 1 行でつなげられる
-- **`find` は5 章 の「動的ルート」（詳細取得、URL の `id` から 1 件取り出す）で再登場する**
-- **`map` は4 章 の「配列を描画する」で JSX の配列を作る形で再登場する**
+- オブジェクトは `{ key: value, ... }` で作る
+- 読み書きはドット記法（`user.name`）
+- 存在しないプロパティを読むと `undefined`
+- 配列にオブジェクトを並べる形は実務でもよく使う

@@ -1,335 +1,305 @@
-# lesson76: try / catch でエラー処理
-
-<script setup>
-const demoJs = `
-const output = document.getElementById('output');
-
-function run() {
-  const raw = '{ broken json';
-  try {
-    const data = JSON.parse(raw);
-    output.textContent = '成功: ' + JSON.stringify(data);
-  } catch (error) {
-    output.textContent =
-      'catch しました: ' + error.name + ' / ' + error.message;
-  } finally {
-    output.textContent += ' (finally まで到達)';
-  }
-}
-
-document.getElementById('btn').addEventListener('click', run);
-`
-</script>
+# lesson76: `next/font` でフォント
 
 ## ゴール
 
-- プログラムが途中で止まってしまう原因を知り、例外処理が必要な場面を言葉にできる
-- `try` / `catch` / `finally` の構文と実行順を書ける
-- `Error` オブジェクトから `message` や `name` を取り出せる
-- `throw new Error(...)` で自分でエラーを投げられる
-- 壊れた JSON を `JSON.parse` に渡して例外を受け止められる
+- Web フォントを `next/font/google` と `next/font/local` で読み込めます。
+- `font.className` をルートレイアウトの `<html>` や `<body>` に付けて、全ページに適用できます。
+- `display` のデフォルトが `"swap"` であること（システムフォント → Web フォントへ差し替わる）を理解できます。
+- 適用前と適用後の見た目の違いを目で確認できます。
 
 ## 解説
 
-### なぜエラー処理が必要か
+### `<link href="...">` でフォント読み込みの何が辛いか
 
-普段書いている JS は、処理の途中で **例外（Exception）** が飛ぶことがあります。例外が飛ぶと、その行より下は実行されず、キャッチされなければ以降の全処理が止まります。
+素の HTML では、Google Fonts の使い方として次のように書くのが定番でした。
 
-例外が飛ぶ代表的な場面は次のようなものです。
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">
+```
 
-- 壊れた文字列を `JSON.parse` に渡す（構文エラー）
-- ネットワークが切れた状態で `fetch` する（通信エラー）
-- 想定外の入力（`undefined` のプロパティを読む、ゼロ除算以外の不整合など）
-- 自分で `throw` したカスタムエラー
+これだと次の問題があります。
 
-ここで **例外をちゃんと受け止める** 仕組みが `try` / `catch` です。
+- **外部ホストに毎回アクセス**: ユーザーのブラウザが `fonts.googleapis.com` と `fonts.gstatic.com` の 2 つに追加接続する。
+- **プライバシー**: Google にユーザーの IP が送られる（国・地域によっては規制対象）。
+- **フォントファイルが重い**: 全グリフが送られてしまう可能性がある。
 
-### `try` / `catch` / `finally` の構文
+`next/font` はこれらを解決します。
 
-基本形は次のとおりです。
+- **ビルド時に自サーバーへフォントファイルをコピー**（自ホスト化）。ユーザーは Google に直接アクセスしません。
+- 使っている文字だけを含む **サブセット** を自動生成します。
+- フォントの CSS 変数やクラス名を React 側から参照できるようにします。
 
-```js
-try {
-  // 例外が起きるかもしれない処理
-} catch (error) {
-  // 例外が起きたときだけ実行される
-} finally {
-  // 例外の有無に関係なく最後に実行される
+### `next/font/google` の使い方
+
+```tsx
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>{children}</body>
+    </html>
+  );
 }
 ```
 
-- `try` ブロックの中で例外が飛んだ瞬間、実行は `catch` に飛びます
-- `catch` の引数 `error` には **投げられた値**（通常は `Error` オブジェクト）が入ります
-- `finally` は例外があろうとなかろうと最後に必ず走ります
-- `catch` と `finally` は **どちらかだけでも OK** です
+- `next/font/google` から **使いたいフォント名を名前付き import** します（`Inter`、`Roboto`、`Noto_Sans_JP` など）。
+- 関数として呼び出し、`subsets` を指定します（`["latin"]` / `["japanese"]` など）。
+- 戻り値の `inter` は `{ className, style, variable }` を持つオブジェクトです。
+- `className` を `<html>` か `<body>` に付けると、そのフォントが配下全体に適用されます。
 
-### `Error` オブジェクト
+### `display` のデフォルトは `"swap"`
 
-例外としてよく投げられるのは `Error` オブジェクトです。次のプロパティを持ちます。
+`next/font` の `display` オプションのデフォルトは **`"swap"`** です。**フォント読込中はシステムフォント（ゴシックなど）で表示し、Web フォントが届いたら差し替わる** 動きになります。
 
-- `error.message`: 人間向けのエラーメッセージ
-- `error.name`: エラーの種類（`"SyntaxError"` / `"TypeError"` など）
-- `error.stack`: スタックトレース（どのファイルの何行目で起きたかの情報、デバッグ用）
+- 初期表示が速い（FOIT = Flash of Invisible Text が起きにくい）
+- 代わりに、読み込み完了の瞬間にフォントが切り替わる FOUT（Flash of Unstyled Text）が起きる可能性がある
 
-```js
-try {
-  JSON.parse("{ broken");
-} catch (error) {
-  console.log(error.name);    // "SyntaxError"
-  console.log(error.message); // "Unexpected token ..." など
-}
+本レッスンではこのデフォルトをそのまま使います。`display` を明示する必要はありません。
+
+### `next/font/local` の使い方
+
+ローカルの `.woff2` ファイルを使う場合は次のように書きます。
+
+```tsx
+import localFont from "next/font/local";
+
+const myFont = localFont({
+  src: "./MyFont.woff2",
+});
 ```
 
-### `throw` で自分でエラーを投げる
+本コースでは Google Fonts のみを扱うので `next/font/google` に集中します。`next/font/local` は存在だけ知っておきましょう。
 
-関数の中で「この引数はおかしいので、呼び出し元に決めてもらう」ときは、`throw` を使います。
+### 日本語フォントの注意
 
-```js
-function divide(a, b) {
-  if (b === 0) {
-    throw new Error("0 で割ることはできません");
-  }
-  return a / b;
-}
+日本語の Google Font（`Noto Sans JP` など）は、ラテン文字より **グリフ数が遥かに多い** ため、サブセットを指定しないと重くなりがちです。本演習では `Noto_Sans_JP` を使いつつ、全体には `Inter` を、見出しにだけ日本語フォントを当てる形を試します。
 
-try {
-  const result = divide(10, 0);
-  console.log(result);
-} catch (error) {
-  console.log("失敗:", error.message); // "失敗: 0 で割ることはできません"
-}
-```
+### `font.className` の正体
 
-- `throw new Error("メッセージ")` がお作法です
-- `throw "文字列"` のように文字列をそのまま投げることもできますが、スタックトレースが取れないので `Error` オブジェクトを投げるのが基本です
+`next/font` の `className` は、**ビルド時に生成される固有のクラス名** です（見た目は `__className_abc123` のような自動生成の文字列になります）。中身は `font-family`、`font-weight`、`font-display: swap` などの CSS 宣言が自動的に書き込まれています。
 
-### 実行順を目で追う
-
-`try` / `catch` / `finally` の実行順を 1 回見ておくと誤解しません。
-
-```js
-function safeParse(raw) {
-  try {
-    console.log("A: parse を試す");
-    const data = JSON.parse(raw);
-    console.log("B: parse 成功");
-    return data;
-  } catch (error) {
-    console.log("C: parse 失敗", error.message);
-    return null;
-  } finally {
-    console.log("D: 片付け処理");
-  }
-}
-
-safeParse('{"ok":true}'); // A → B → D
-safeParse("{ broken");     // A → C → D
-```
-
-成功時も失敗時も `finally` は必ず走ります。ファイルを閉じる / ローディング表示を消すなど、**片付けたいこと** を書く場所です。
-
-### 壊れた JSON を受け止める最小例
-
-実際に壊れた JSON を `try` / `catch` で受ける様子を下のデモで見てください。ボタンを押すと、パースに失敗したエラーをキャッチして表示します。
-
-<LiveDemo
-  height="180px"
-  :html="`
-<button id='btn'>壊れた JSON をパースする</button>
-<p id='output'>（ここに結果が出ます）</p>
-  `"
-  :css="`
-body { padding: 16px; font-family: system-ui; }
-button { padding: 8px 16px; font-size: 1rem; cursor: pointer; }
-p { margin-top: 12px; }
-  `"
-  :js="demoJs"
-/>
-
-### catch しなかったらどうなるか
-
-`try` / `catch` を書かずに例外を投げると、ブラウザ Console に赤字で「Uncaught ...」と表示され、そこから下の処理が **一切走らなくなります**。ページ全体の JS が止まってしまうので、**ユーザー入力や外部データを扱う場所では必ず囲む** のが鉄則です。
+学習者が自分で `@font-face { ... }` を書く必要はありません。`className` を付けるだけで完結します。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` / `storage.js` の 3 ファイル構成で進めます。「import / export でモジュール化」で作った `storage.js` を出発点にして、壊れた JSON に強くする流れです。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/layout.tsx` に `next/font/google` の import と `className` を足すだけなので、前レッスンまでの資産が無くても動きます。
 
-<details>
-<summary>出発点のコード</summary>
+### 前回のプロジェクトを開く
 
-**`index.html`**
+これまでのプロジェクトを開き直しましょう。
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson76</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <h1>lesson76: try / catch</h1>
-    <pre id="log"></pre>
-  </body>
-</html>
+### 手順 1: 適用前の見た目を記録する
+
+まず、`/about` を開いてスクショを 1 枚撮っておきます（または目で覚えておきます）。これが「システムフォント」の状態です。
+
+ASCII 図で表すと次のような雰囲気です（ブラウザやフォント設定で変わります）。
+
+```
++---------------------------------------+
+| Home | About | Todos                  |
++---------------------------------------+
+|  自己紹介                             |  ← システムゴシック
+|  Web フロントエンドを学び中です。    |     角ばった一般的な表示
+|                                       |
+|  好きなもの                           |
+|  [画像] コーヒー                      |
+|  [画像] 本                            |
+|  [画像] 散歩                          |
++---------------------------------------+
 ```
 
-**`storage.js`**
+日本語は OS のシステムフォント（macOS なら Hiragino、Windows なら Yu Gothic、など）で表示されています。
 
-```js
-const STORAGE_KEY = "try-catch-demo";
+### 手順 2: `Inter` をルートレイアウトに適用
 
-export function loadValue() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return null;
-  }
-  return JSON.parse(raw);
-}
+`app/layout.tsx` を次のように書き換えます。
 
-export function saveValue(value) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-}
-```
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { Inter } from "next/font/google";
+import "./globals.css";
 
-**`main.js`**
+const inter = Inter({ subsets: ["latin"] });
 
-```js
-import { loadValue, saveValue } from "./storage.js";
+export const metadata = {
+  title: "My Next App",
+};
 
-saveValue({ name: "Alice", age: 20 });
-
-const value = loadValue();
-console.log(value);
-```
-
-</details>
-
-### ゴール
-
-- `storage.js` の `loadValue` を `try` / `catch` で保護し、壊れたデータのときは既定値（`null`）を返す
-- `main.js` から `divide(a, b)` という自作関数を呼び、`b === 0` のときは `throw` して `catch` で拾う
-- Console に「何が起きたか」が日本語で表示される
-
-### 手順
-
-1. `storage.js` の `loadValue` を、例外に強い形へ書き換える
-2. `main.js` に `divide` 関数を追加し、呼び出しを `try` / `catch` で囲む
-3. わざと壊れた値を `localStorage.setItem` で入れてリロードし、既定値が返ることを確かめる
-
-### 主要ファイルの完成形
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson76</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <h1>lesson76: try / catch</h1>
-    <pre id="log"></pre>
-  </body>
-</html>
-```
-
-**`storage.js`**
-
-```js
-const STORAGE_KEY = "try-catch-demo";
-
-export function loadValue() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error.name, error.message);
-    return null;
-  }
-}
-
-export function saveValue(value) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
+  );
 }
 ```
 
-**`main.js`**
+ポイント:
 
-```js
-import { loadValue, saveValue } from "./storage.js";
+- `import { Inter } from "next/font/google";` を追加。
+- `const inter = Inter({ subsets: ["latin"] });` をモジュール先頭に。
+- `<html>` の `className={inter.className}` を付与。
 
-function divide(a, b) {
-  if (b === 0) {
-    throw new Error("0 で割ることはできません");
-  }
-  return a / b;
+保存すると、StackBlitz のビルドが走り、プレビューが更新されます。
+
+### 期待出力: 適用後の見た目
+
+もう一度 `/about` を開きます。今度は **欧文部分が Inter** で表示されます。日本語はまだシステムフォントのままです。
+
+ASCII 図で表すとこう変わります。
+
+```
++---------------------------------------+
+| Home | About | Todos   ← Inter に変化 |
++---------------------------------------+
+|  自己紹介                             |  ← 日本語はシステムフォント
+|  Web フロントエンドを学び中です。    |     Web → Web は Inter で表示
+|                                       |
+|  Cards                                |  ← ラテン文字は丸みのある Inter
++---------------------------------------+
+```
+
+英字の「Home / About / Todos」、本文中の「Web」などの **ラテン文字が Inter に変わっている** ことを、適用前スクショと見比べて確認します。
+
+どこが違って見えるかのヒント:
+
+- Inter は可読性重視の現代的なサンセリフ。特に数字とアルファベットの字形（例: `a`、`g`、`1`、`4`）が、システムゴシックと見分けやすいです。
+- 字間（トラッキング）も少し広くなります。
+
+### 手順 3: 日本語は `Noto_Sans_JP` を見出しに当てる
+
+日本語の本文も Web フォントにしたい場合は、`Noto_Sans_JP` を併用します。ここでは「見出しだけ `Noto_Sans_JP`、本文は Inter + システム日本語フォント」の使い分けをやってみます。
+
+`app/layout.tsx` を次のように拡張します。
+
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { Inter, Noto_Sans_JP } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+const notoJp = Noto_Sans_JP({
+  subsets: ["latin"],
+  weight: ["500", "700"],
+});
+
+export const metadata = {
+  title: "My Next App",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>
+        <header className={`site-header ${notoJp.className}`}>
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
+  );
 }
-
-// 1. 自作エラーを投げて受け取る
-try {
-  const result = divide(10, 0);
-  console.log("計算結果:", result);
-} catch (error) {
-  console.log("divide が失敗:", error.message);
-} finally {
-  console.log("divide の後処理");
-}
-
-// 2. 保存と読み出し（正常系）
-saveValue({ name: "Alice", age: 20 });
-const ok = loadValue();
-console.log("読み込み結果:", ok);
-
-// 3. わざと壊れたデータを入れてから読み出す
-localStorage.setItem("try-catch-demo", "{ broken");
-const broken = loadValue();
-console.log("壊れたとき:", broken);
 ```
 
-### 期待出力
+ポイント:
 
-Console に次のような行が出ます（エラーメッセージの文言はブラウザによって少し変わります）。
+- 2 つのフォントを同時に呼べます。
+- `Noto_Sans_JP` は **アンダースコア区切り** のインポート名です（ハイフン付きのフォント名はアンダースコアに置き換わります）。
+- `weight` を `["500", "700"]` に絞って、不要なウェイトをダウンロードさせません。
+- `className` は **テンプレートリテラルで複数合成** できます（`${notoJp.className}` をヘッダーだけに付与）。
+
+> `subsets` に `"japanese"` を指定すると日本語グリフも含まれますが、**ファイルが大きくなる** ので本演習では `"latin"` のみにし、日本語はシステムフォントに任せる割り切りにします。必要な読者は `subsets: ["latin", "japanese"]` を試してみてください。
+
+### 期待出力（再度の対比）
+
+ブラウザで `/about` を開いて手順 2 との違いを見ます。
 
 ```
-divide が失敗: 0 で割ることはできません
-divide の後処理
-読み込み結果: {name: 'Alice', age: 20}
-保存データの読み込みに失敗しました
-SyntaxError <壊れた JSON のメッセージ>
-壊れたとき: null
++---------------------------------------+
+| Home | About | Todos   ← Noto Sans JP |
++---------------------------------------+
+|  自己紹介   ← 本文は Inter + システム  |
+|  ...                                  |
++---------------------------------------+
 ```
 
-- 赤字の「Uncaught ...」は **出ない**。出ていたら `try` / `catch` で囲み損ねている
-- `finally` の「divide の後処理」が、成功・失敗どちらでも表示される
+ヘッダーの文字が Noto Sans JP の統一感ある字形になり、本文と少し印象が変わります。ヘッダーの日本語は現時点では入っていないので、差分は欧文（Home / About / Todos）の字形で見ることになります。
 
-### 変える
+### 変えてみる
 
-- `divide(10, 2)` に書き換える → `divide が失敗` の行が消え、`計算結果: 5` と出る。`finally` は変わらず出る
-- `throw new Error(...)` の引数メッセージを好きな日本語に変える → `catch` 側の `error.message` がそれになる
-- `storage.js` の `return null;` を `return [];` に変える → 壊れたときに空配列が返るようになる
+1. `<html lang="ja" className={inter.className}>` を `<html lang="ja" className={notoJp.className}>` に変えて、全体が Noto Sans JP になった見た目を確認しましょう（字面が丸くなる）。
+2. `Inter` の呼び出しに `{ subsets: ["latin"], weight: ["400", "700"] }` を渡してみましょう。weight の指定で読み込まれるファイル数が変わります（DevTools → Network で確認）。
+3. いったん `className={inter.className}` を外して保存し、システムフォントに戻った見た目をもう一度目に焼き付けてから、付け直しましょう。切り替わりの一瞬（FOUT）が体感できることがあります。
+
+### スコープ外
+
+- `variable` font の詳細、CSS 変数 (`--font-inter`) 連携は扱いません。
+- `display` の他の値（`"block"`、`"fallback"`、`"optional"`）は扱いません。デフォルト `"swap"` のみ。
+- 有料フォントサービス（Adobe Fonts など）との連携は扱いません。
 
 ### 自分で書く
 
-- `safeParse(raw)` という関数を `storage.js` に追加し、`loadValue` の中から使うようにリファクタする
-- `main.js` に `parseNumber(text)` という関数を作る。`text` が数値に変換できないとき（`Number(text)` が `NaN`）は `throw new Error("数値ではありません")`。呼び出し側で `try` / `catch` する
-- `storage.js` の `saveValue` にも `try` / `catch` を入れる。`localStorage` の容量オーバーなどで失敗した場合に `console.log` で気付けるようにする
+`Roboto` や `Lato` など別の Google Font を 1 つ選び、`<html>` に適用してみましょう。`import { Roboto } from "next/font/google"` のようにインポートし、`subsets: ["latin"]` を指定するだけです。字形の違いを `/about` の見出しや本文で観察します。
 
 ## まとめ
 
-- 例外は放置するとそこから先の処理が全部止まる
-- `try` / `catch` / `finally` で受け止められる。`finally` は成功・失敗どちらでも最後に走る
-- `Error` オブジェクトは `name` / `message` / `stack` を持つ
-- `throw new Error("...")` で自分でもエラーを投げられる
-- 外部データ（`localStorage` / `fetch` の結果 / ユーザー入力）を扱う場所は、ほぼ例外なく `try` / `catch` で囲む
-- 次の「JSON を読み書きする」で、壊れた JSON を扱うパターンをもっと実践的に練習する
+- `next/font/google` から使いたいフォントを import し、`subsets` を指定して呼び出すだけでフォントの自動最適化が有効になります。
+- 戻り値の `className` を `<html>` や `<body>` に付けると、配下全体に適用されます。
+- `display` のデフォルトは **`"swap"`**（先にシステムフォントで描画し、読み込みが済んだら差し替わる FOUT 挙動）です。
+- 適用前のシステムフォントと適用後の Web フォントで、同じページの印象が大きく変わることを目で確認できました。
+- 別のレッスンで動的ルート `[id]` に進みます。フォントと画像は裏側で効き続けたまま、URL に応じたページを作っていきます。

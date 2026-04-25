@@ -1,415 +1,441 @@
-# lesson108: ネイティブ UI（details / dialog / popover）
+# lesson108: Zod でスキーマバリデーション
 
 ## ゴール
 
-- `<details>` / `<summary>` で JS なしに折りたたみを作れる
-- `<dialog>` でモーダルを作り、`showModal()` / `close()` を使える
-- Popover API（`popover` 属性）で非モーダルなポップアップが書ける
-- ネイティブ UI が **アクセシビリティを自動で付けてくれる** ことを理解する
-- 「なぜライブラリより HTML 単独を試すべきか」を説明できる
+- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
+- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
+- `parse` / `safeParse` の違いと使いどころを知る
+- `z.infer<typeof schema>` で型を自動導出できる
+- React Hook Form と組み合わせて型安全なフォームを作れる
+- API レスポンスの検証や Server Actions の入力検証にも応用できる
+- Valibot / Arktype など代替ライブラリの存在を知る
 
 ## 解説
 
-### なぜ「ネイティブ UI」なのか
+### TypeScript の型だけでは足りない
 
-モーダルや折りたたみを作りたい時、以前は HeadlessUI / Radix UI のようなライブラリを入れるのが普通でした。いまは **HTML 単独で同じことができる** 要素が揃っています。
+TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
 
-ライブラリを避けられると:
+```ts
+type User = { id: number; name: string };
 
-- **バンドルサイズが減る**（数十 KB の差が積み重なる）
-- **アクセシビリティが自動**（フォーカストラップ / Escape 閉じ / `role` / `aria-*` が組み込み）
-- **学習コストが減る**（HTML の常識だけで読める）
-
-このレッスンでは代表的な 3 つを扱います。
-
-| 要素 / 属性 | 用途 |
-|---|---|
-| `<details>` / `<summary>` | 折りたたみ |
-| `<dialog>` | モーダル（裏側を操作不能に） |
-| `popover` 属性 | 非モーダルなポップアップ（アクションメニュー / toast） |
-
-### `<details>` と `<summary>` — 折りたたみ
-
-FAQ / スポイラー / アコーディオンを **JS なし** で書けます。
-
-```html
-<details>
-  <summary>答えを見る</summary>
-  <p>正解は 42 です。</p>
-</details>
+async function getUser(): Promise<User> {
+  const res = await fetch("/api/user");
+  return res.json();   // 本当に User 型？
+}
 ```
 
-<LiveDemo
-  height="160px"
-  :html="`
-<details>
-  <summary>答えを見る</summary>
-  <p>正解は 42 です。</p>
-</details>
+`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
 
-<details open>
-  <summary>最初から開いている例</summary>
-  <p>open 属性で初期展開できます。</p>
-</details>
-  `"
-  :css="`
-body { font-family: sans-serif; }
-details { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
-summary { cursor: pointer; font-weight: bold; }
-  `"
-  :js="``"
-/>
+実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
 
-ポイント:
+### Zod とは
 
-- `open` 属性で初期状態を制御（`<details open>`）
-- クリックで開閉、Enter / Space でも動作する（キーボード対応は自動）
-- `toggle` イベントで開閉を検知できる
+Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
 
-```js
-details.addEventListener("toggle", (e) => {
-  console.log(details.open ? "開いた" : "閉じた");
+1. **実行時バリデーション**: 不正な値を弾く
+2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
+
+「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
+
+### インストール
+
+```bash
+npm install zod
+```
+
+### 基本のスキーマ
+
+```ts
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.string().email(),
+  age: z.number().int().min(0).max(150),
+  isAdmin: z.boolean(),
+});
+
+type User = z.infer<typeof UserSchema>;
+// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
+```
+
+`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
+
+### 組み込み修飾メソッド
+
+```ts
+z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
+z.string().email("メール形式で")                        // メール
+z.string().url("URL 形式で")                           // URL
+z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
+z.number().int("整数で").positive("正の数で")           // 整数 + 正
+z.number().min(0).max(100)                             // 範囲
+z.string().optional()                                   // string | undefined
+z.string().nullable()                                   // string | null
+z.string().default("デフォルト")                        // デフォルト値
+```
+
+### 配列とユニオン
+
+```ts
+const TodoSchema = z.object({
+  id: z.string().uuid(),
+  title: z.string().min(1),
+  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
+  tags: z.array(z.string()),
+  createdAt: z.string().datetime(),           // ISO 8601
+});
+
+type Todo = z.infer<typeof TodoSchema>;
+```
+
+### `parse` と `safeParse`
+
+スキーマで値を検証する 2 つの方法:
+
+#### `parse`: 失敗時に例外を投げる
+
+```ts
+try {
+  const user = UserSchema.parse(data);
+  console.log(user.name);  // 型は User
+} catch (err) {
+  if (err instanceof z.ZodError) {
+    console.log(err.issues);  // どこで失敗したかの詳細
+  }
+}
+```
+
+#### `safeParse`: 失敗時にも値を返す
+
+```ts
+const result = UserSchema.safeParse(data);
+if (result.success) {
+  console.log(result.data.name);
+} else {
+  console.log(result.error.issues);
+}
+```
+
+`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
+
+### React Hook Form と統合
+
+`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
+
+```bash
+npm install @hookform/resolvers
+```
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const ContactSchema = z.object({
+  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
+  email: z.string().email("メールアドレスの形式が正しくありません"),
+  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
+  message: z.string().min(10, "10 文字以上で入力してください"),
+});
+
+type ContactFormValues = z.infer<typeof ContactSchema>;
+
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  function onSubmit(data: ContactFormValues) {
+    console.log("検証済みデータ:", data);
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <input {...register("name")} />
+      {errors.name && <p>{errors.name.message}</p>}
+
+      <input type="email" {...register("email")} />
+      {errors.email && <p>{errors.email.message}</p>}
+
+      <input type="number" {...register("age")} />
+      {errors.age && <p>{errors.age.message}</p>}
+
+      <textarea {...register("message")} />
+      {errors.message && <p>{errors.message.message}</p>}
+
+      <button type="submit" disabled={isSubmitting}>送信</button>
+    </form>
+  );
+}
+```
+
+利点:
+
+- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
+- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
+- **エラーメッセージ** が日本語で出せる
+
+### `z.coerce` で型変換
+
+`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
+
+```ts
+z.coerce.number()       // 文字列 → 数値
+z.coerce.boolean()      // 文字列 / 数値 → boolean
+z.coerce.date()         // 文字列 → Date
+```
+
+### API レスポンスの検証
+
+サーバーから返ってきたデータが想定通りかを検証します。
+
+```ts
+async function fetchUser(id: number): Promise<User> {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
+}
+```
+
+これで API 仕様変更による不正レスポンスを早期に検知できます。
+
+### Server Actions / Route Handlers の入力検証
+
+5 章 で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
+
+```ts
+"use server";
+
+import { z } from "zod";
+
+const AddTodoSchema = z.object({
+  text: z.string().min(1).max(200),
+});
+
+export async function addTodo(formData: FormData) {
+  const result = AddTodoSchema.safeParse({
+    text: formData.get("text"),
+  });
+  if (!result.success) {
+    return { ok: false as const, error: result.error.issues[0].message };
+  }
+  // 検証済みの result.data.text を使う
+  await db.insertTodo(result.data.text);
+  return { ok: true as const };
+}
+```
+
+### よくあるパターン
+
+#### refine: 複数フィールド間のチェック
+
+```ts
+const SignupSchema = z.object({
+  password: z.string().min(8),
+  passwordConfirm: z.string(),
+}).refine((data) => data.password === data.passwordConfirm, {
+  message: "パスワードが一致しません",
+  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
 });
 ```
 
-#### `::details-content` で中身をアニメーション
+#### transform: 値を加工
 
-2024 年以降、`::details-content` 疑似要素と `interpolate-size` 機能で、高さ 0 → auto の **スムーズな開閉アニメーション** が CSS だけで書けるようになりました。
+```ts
+const TrimmedString = z.string().transform((s) => s.trim());
 
-```css
-details::details-content {
-  opacity: 0;
-  height: 0;
-  overflow: hidden;
-  transition: opacity 0.3s, height 0.3s, content-visibility 0.3s allow-discrete;
-  content-visibility: hidden;
-}
-details[open]::details-content {
-  opacity: 1;
-  height: calc-size(auto);
-  content-visibility: visible;
-}
+TrimmedString.parse("  hello  "); // "hello"
 ```
 
-### `<dialog>` — モーダル
+### 代替ライブラリ
 
-以前は `position: fixed` の `<div>` に ARIA を付けてフォーカス管理を書いていました。`<dialog>` はそれを **1 つの要素** に置き換えます。
-
-```html
-<button id="open-btn">開く</button>
-
-<dialog id="my-dialog">
-  <form method="dialog">
-    <p>本当に削除しますか？</p>
-    <button value="cancel">キャンセル</button>
-    <button value="confirm">削除</button>
-  </form>
-</dialog>
-
-<script>
-  const dialog = document.getElementById("my-dialog");
-  document.getElementById("open-btn").addEventListener("click", () => {
-    dialog.showModal();
-  });
-  dialog.addEventListener("close", () => {
-    console.log("戻り値:", dialog.returnValue);
-  });
-</script>
-```
-
-#### 2 つの開き方
-
-| メソッド | 挙動 |
+| ライブラリ | 特徴 |
 |---|---|
-| `dialog.showModal()` | **モーダル**。裏側の要素が `inert`（操作不能）になり、Escape で閉じる |
-| `dialog.show()` | **非モーダル**。裏側も操作できる。Escape で閉じない |
+| **Zod** | デファクト。エコシステム最大 |
+| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
+| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
+| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
 
-普通の「確認ダイアログ」は `showModal()` を使います。
-
-#### `<form method="dialog">` の便利さ
-
-`<form method="dialog">` 内の送信ボタンを押すと、dialog が閉じて、押したボタンの `value` が `dialog.returnValue` に入ります。「キャンセル / 確定」の戻り値が **HTML だけで** 取れます。
-
-#### CSS でスタイル
-
-`<dialog>` がモーダル時に自動で出てくる背景（黒い覆い）は `::backdrop` 疑似要素で装飾できます。
-
-```css
-dialog {
-  border: none;
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-}
-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(4px);
-}
-```
-
-#### 自動で付いてくるアクセシビリティ
-
-- `role="dialog"` が自動
-- `aria-modal="true"` が `showModal()` 時に自動
-- フォーカストラップ（Tab で外に出られない）が自動
-- Escape で閉じる
-- 開いた時にダイアログにフォーカスが入る
-
-これを自前で書くと 100 行は超えます。
-
-### Popover API — 非モーダルなポップアップ
-
-アクションメニュー / ツールチップ / 通知トースト / 設定パネルのような「**モーダルじゃない** けれど出し入れしたい UI」のための API です。**2024 年に Baseline 入り**、2026 年現在は全主要ブラウザで使えます。
-
-#### 最小形
-
-```html
-<button popovertarget="menu">メニュー</button>
-
-<div id="menu" popover>
-  <p>項目 1</p>
-  <p>項目 2</p>
-  <p>項目 3</p>
-</div>
-```
-
-`popover` 属性が付いた要素は、**デフォルトで非表示**。`popovertarget` 属性を持つボタンを押すと開きます。**JS は一行も書きません**。
-
-<LiveDemo
-  height="280px"
-  :html="`
-<button popovertarget='menu'>メニューを開く</button>
-
-<div id='menu' popover>
-  <p><a href='#'>プロフィール</a></p>
-  <p><a href='#'>設定</a></p>
-  <p><a href='#'>ログアウト</a></p>
-</div>
-  `"
-  :css="`
-body { font-family: sans-serif; padding: 16px; }
-button { padding: 8px 16px; }
-[popover] { padding: 16px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
-[popover] p { margin: 4px 0; }
-  `"
-  :js="``"
-/>
-
-#### 3 種類の popover 値
-
-| 値 | 閉じる条件 |
-|---|---|
-| `popover` or `popover=\"auto\"` | **外側をクリック**、Escape、他の auto popover が開いた時に閉じる |
-| `popover=\"manual\"` | **自分で close を呼ばない限り閉じない**。toast 向き |
-| `popover=\"hint\"` | tooltip 用。ライトディスミスだが manual と auto の中間 |
-
-#### JS から制御
-
-```js
-const menu = document.getElementById("menu");
-menu.showPopover();  // 開く
-menu.hidePopover();  // 閉じる
-menu.togglePopover(); // トグル
-```
-
-#### `<dialog>` との違い
-
-| | `<dialog>` | Popover |
-|---|---|---|
-| モーダル化 | `showModal()` でできる | できない（常に非モーダル） |
-| 裏側の操作 | モーダル時は `inert` | 常に可能 |
-| 外側クリックで閉じる | 自前実装が必要 | auto popover なら自動 |
-| 用途 | 確認ダイアログ / フォーム | メニュー / tooltip / toast |
-
-**「モーダル = `<dialog>`、非モーダル = popover」** と覚えると迷いません。両方を組み合わせることも可能で、`<dialog popover>` のように書けば「popover として動く dialog」になります。
-
-### Anchor Positioning との組み合わせ
-
-Popover API と相性が良いのが [Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning)（2024 年以降 Chrome 系で対応）。
-
-```css
-button { anchor-name: --menu-btn; }
-
-#menu {
-  position: absolute;
-  position-anchor: --menu-btn;
-  top: anchor(bottom);
-  left: anchor(left);
-}
-```
-
-「ボタンの真下に menu を自動配置」が **JS なし** で書けます。Safari / Firefox の対応はまだ進行中なので、フォールバックを用意するか polyfill を使います。
+新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
 
 ## 演習
 
 ### ゴール
 
-- `<details>` でアコーディオンを作る
-- `<dialog>` で確認モーダルを作り、戻り値を取る
-- Popover API でアクションメニューを作る
+- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
+- スキーマから型を自動導出する
+- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 依存追加
 
 ```bash
-npm create vite@latest native-ui -- --template vanilla-ts
-cd native-ui
-npm install
+npm install zod @hookform/resolvers
 ```
 
-### 手順 2: index.html
+### 手順 2: スキーマ + 型を定義
 
-```html
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Native UI Demo</title>
-    <link rel="stylesheet" href="/src/style.css" />
-  </head>
-  <body>
-    <main>
-      <h1>ネイティブ UI のショーケース</h1>
-
-      <section>
-        <h2>1. details / summary</h2>
-        <details>
-          <summary>よくある質問 1</summary>
-          <p>答えをここに書きます。</p>
-        </details>
-        <details>
-          <summary>よくある質問 2</summary>
-          <p>複数あっても OK。</p>
-        </details>
-      </section>
-
-      <section>
-        <h2>2. dialog</h2>
-        <button id="open-dialog">削除する</button>
-        <p id="dialog-result">結果: -</p>
-
-        <dialog id="confirm">
-          <form method="dialog">
-            <p>本当に削除しますか？</p>
-            <menu>
-              <button value="cancel">キャンセル</button>
-              <button value="confirm" autofocus>削除</button>
-            </menu>
-          </form>
-        </dialog>
-      </section>
-
-      <section>
-        <h2>3. Popover</h2>
-        <button popovertarget="menu">メニュー</button>
-        <div id="menu" popover>
-          <button>アイテム 1</button>
-          <button>アイテム 2</button>
-          <button>アイテム 3</button>
-        </div>
-      </section>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-```
-
-### 手順 3: src/style.css
-
-```css
-body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
-main { max-width: 700px; margin: 0 auto; }
-section { margin-block: 32px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-
-details {
-  padding: 12px;
-  border: 1px solid #eee;
-  border-radius: 8px;
-  margin-bottom: 8px;
-}
-summary { cursor: pointer; font-weight: bold; }
-
-button { padding: 8px 16px; cursor: pointer; }
-
-dialog {
-  border: none;
-  border-radius: 8px;
-  padding: 24px;
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
-  min-width: 300px;
-}
-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
-  backdrop-filter: blur(2px);
-}
-menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
-
-[popover] {
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 8px;
-  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-[popover] button { text-align: left; background: none; border: none; padding: 8px; border-radius: 4px; }
-[popover] button:hover { background: #f3f4f6; }
-```
-
-### 手順 4: src/main.ts
+`src/contact-schema.ts`:
 
 ```ts
-const openBtn = document.getElementById("open-dialog") as HTMLButtonElement;
-const dialog = document.getElementById("confirm") as HTMLDialogElement;
-const result = document.getElementById("dialog-result")!;
+import { z } from "zod";
 
-openBtn.addEventListener("click", () => {
-  dialog.showModal();
+export const ContactSchema = z.object({
+  name: z
+    .string()
+    .min(1, "お名前は必須です")
+    .max(50, "50 文字以内で入力してください"),
+  email: z
+    .string()
+    .min(1, "メールは必須です")
+    .email("メールアドレスの形式が正しくありません"),
+  message: z
+    .string()
+    .min(10, "10 文字以上で入力してください")
+    .max(1000, "1000 文字以内で入力してください"),
 });
 
-dialog.addEventListener("close", () => {
-  result.textContent = `結果: ${dialog.returnValue}`;
+export type ContactFormValues = z.infer<typeof ContactSchema>;
+```
+
+### 手順 3: フォームを書き換え
+
+`src/ContactForm.tsx`:
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
+import { ContactSchema, type ContactFormValues } from "./contact-schema";
+
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  async function onSubmit(data: ContactFormValues) {
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
+
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name")}
+        />
+        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email")}
+        />
+        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          {...register("message")}
+        />
+        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
+  );
+}
+```
+
+### 手順 4: API レスポンス検証の例
+
+`src/api.ts`:
+
+```ts
+import { z } from "zod";
+
+const PostSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  body: z.string(),
+  userId: z.number().int(),
 });
+
+export type Post = z.infer<typeof PostSchema>;
+
+const PostListSchema = z.array(PostSchema);
+
+export async function fetchPosts(): Promise<Post[]> {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return PostListSchema.parse(data);   // 不正な構造なら ZodError
+}
 ```
 
-### 手順 5: 起動して確認
-
-```bash
-npm run dev
-```
-
-ブラウザで以下を確認します。
-
-1. **details**: タイトルをクリックで開閉。Tab でフォーカスが当たり Enter でも開閉する
-2. **dialog**: 「削除する」→ モーダルが出る。Escape で閉じる。「キャンセル / 削除」で `結果: cancel` or `結果: confirm` が下に表示される
-3. **popover**: 「メニュー」→ メニューが開く。**外側をクリック** で自動で閉じる（light dismiss）
+これで API レスポンスの構造が変わってもすぐ気付けます。
 
 ### 期待出力
 
-- details を開くとアイコンが回転しつつ中身が見える
-- dialog 表示時に裏側がグレーアウトし、Escape で閉じられる
-- dialog を「削除」で閉じると `結果: confirm` と表示
-- popover は JS ゼロで開閉する（`popovertarget` 属性だけで動く）
+- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
+- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
+- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
+- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
 
 ### 変える
 
-- `<dialog>` の中で `autofocus` を外すと、最初にフォーカスが当たる位置が変わる
-- `popover` を `popover="manual"` に変えると、外側クリックでは閉じなくなる
-- `details[open]` を CSS でデフォルト値にしたり、`::details-content` でアニメーションを付ける
-- dialog の `::backdrop` の背景色 / blur を変える
+- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
+- `z.string().email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
+- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
 
-### 自分で書く（任意）
+### 自分で書く
 
-- Todo アプリの「削除確認」を `<dialog>` で作る
-- プロフィールメニュー（アバターをクリックでメニュー）を Popover API で作る
-- FAQ ページを `<details>` で組み立てる
+- `password` と `passwordConfirm` の一致チェックを `refine` で書く
+- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
+- Server Actions（5 章）の入力を Zod で検証するパターンを 1 つ書いてみる
 
 ## まとめ
 
-- `<details>` / `<summary>` は JS ゼロの折りたたみ。`toggle` イベントで検知、`::details-content` でアニメーション可能
-- `<dialog>` はモーダル。`showModal()` / `close()` / `returnValue` の 3 点セットと `<form method="dialog">` で戻り値まで取れる
-- **フォーカストラップ / Escape / ARIA** が自動で付く
-- **Popover API** は非モーダル。アクションメニュー / tooltip / toast に使う
-- 「モーダル = dialog、非モーダル = popover」の役割分担
-- ネイティブ UI を使うと **バンドルが減り、アクセシビリティが自動** になる
-- 別のレッスンでは **Web Components** に進み、「HTML で自作タグを作る」話へ
+- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
+- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
+- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
+- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
+- `parse`（例外）/ `safeParse`（戻り値）の使い分け
+- **`z.infer<typeof schema>`** で型を自動導出
+- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
+- API レスポンス検証 / Server Actions 入力検証 にも同じスキーマを再利用
+- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
+- これで章 7 のフォーム 2 連作が完了。次は **状態管理の地図** に進む

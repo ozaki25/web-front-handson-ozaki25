@@ -1,404 +1,341 @@
-# lesson37: 型ガード（`typeof` / `in` / カスタム）
+# lesson37: デバッグに効く Console API
+
+<script setup>
+const demoJs = `
+const users = [
+  { id: 1, name: 'Alice', age: 28, role: 'admin' },
+  { id: 2, name: 'Bob', age: 34, role: 'user' },
+  { id: 3, name: 'Carol', age: 22, role: 'user' },
+];
+
+document.querySelector('#btn-log').addEventListener('click', () => {
+  console.log('log: 普通の出力', users[0]);
+});
+
+document.querySelector('#btn-warn').addEventListener('click', () => {
+  console.warn('warn: 注意喚起。まだ動くが気にしてほしいこと');
+});
+
+document.querySelector('#btn-error').addEventListener('click', () => {
+  console.error('error: 何か壊れた。スタックトレースも一緒に出る');
+});
+
+document.querySelector('#btn-table').addEventListener('click', () => {
+  console.table(users);
+});
+
+document.querySelector('#btn-group').addEventListener('click', () => {
+  console.group('リクエスト処理');
+  console.log('ユーザー認証');
+  console.log('データ取得');
+  console.groupEnd();
+});
+
+document.querySelector('#btn-time').addEventListener('click', () => {
+  console.time('sort');
+  const arr = Array.from({ length: 100000 }, () => Math.random());
+  arr.sort();
+  console.timeEnd('sort');
+});
+
+document.querySelector('#btn-count').addEventListener('click', () => {
+  console.count('ボタン押下回数');
+});
+
+document.querySelector('#btn-assert').addEventListener('click', () => {
+  const total = 100;
+  console.assert(total > 200, 'total が 200 を超えていない', { total });
+});
+`
+</script>
 
 ## ゴール
 
-- `typeof` 演算子でプリミティブ型のユニオンを絞り込める。
-- `in` 演算子でオブジェクトのプロパティの有無から型を絞り込める。
-- `Array.isArray` で「配列かどうか」を絞り込める。
-- `function isTodo(x: unknown): x is Todo` のような **ユーザー定義型ガード** を書ける。
-- 「`unknown` と `never`」で受けた `unknown` を、型ガードを通して具体的な型まで絞り込める。
+- `console.log` 以外の `warn` / `error` で深刻度を出し分けられる
+- `console.table` で配列やオブジェクトを表形式で眺められる
+- `console.group` / `groupEnd` で出力を階層化できる
+- `console.time` / `timeEnd` で処理時間を測れる
+- `console.count` / `assert` で回数や条件付き警告を出せる
+- DevTools の Console タブで、深刻度別のフィルタと検索ができる
 
 ## 解説
 
-### `unknown` からの接続
+### `console.log` 以外があることを知る
 
-「`unknown` と `never`」で、`unknown` で受けた値は **そのままでは何もできない** こと、「絞り込む道具」は本レッスンで扱うと予告しました。このレッスンはその続きです。
+`console.log` はよく使いますが、Console API にはもっと多くの仲間があります。適切なものを使うと **DevTools が自動的に見た目を区別してくれる**（色付け、スタックトレース、フィルタ）ので、デバッグの効率が段違いに上がります。
 
-`unknown` を扱うには、「この値は実際どの型なのか」を **実行時に確かめる** コードを書きます。TS はそのコードを読んで「このブロックの中では `unknown` ではなく具体的な型として扱ってよい」と判断してくれます。この「コードから型を絞り込む仕組み」を **型ガード** と呼びます。
+### 深刻度で使い分ける: `log` / `info` / `warn` / `error`
 
-### `typeof` 型ガード
+出力の「重み」を変えるだけの書き分けです。引数の渡し方は `log` と全部同じです。
 
-JS の `typeof` 演算子は、値のプリミティブな種類を文字列で返します。TS はこの `typeof` の結果を読み取って、**分岐の中で型を絞り込みます**。
+```js
+console.log("普通のログ");                 // 灰色や黒
+console.info("参考情報");                  // i アイコン（`log` と同等扱いのブラウザも多い）
+console.warn("削除されたプロパティを使っています"); // 黄色、三角アイコン
+console.error("API 呼び出しに失敗しました");  // 赤、スタックトレース付き
+```
 
-```ts
-function describe(value: string | number): string {
-  if (typeof value === "string") {
-    return `文字列: ${value.toUpperCase()}`;
-  }
-  return `数値: ${value.toFixed(2)}`;
+DevTools の Console タブ上部で **「Errors / Warnings / Info / Verbose」** のチェックを切り替えると、深刻度別に絞り込めます。本番や長時間実行で「エラーだけ見たい」場面でとても役立ちます。
+
+### 表形式で眺める: `console.table`
+
+配列やオブジェクトを **表** にしてくれます。ログに `JSON.stringify` を書かずとも、キーごとに列が揃った形で読めるようになります。
+
+```js
+const users = [
+  { id: 1, name: "Alice", age: 28 },
+  { id: 2, name: "Bob", age: 34 },
+];
+
+console.table(users);
+// id | name  | age
+// ---+-------+----
+//  1 | Alice | 28
+//  2 | Bob   | 34
+```
+
+第 2 引数に列名の配列を渡すと、その列だけ表示できます。
+
+```js
+console.table(users, ["name", "age"]);
+```
+
+API レスポンスや大量の state を眺めるときの定番です。
+
+### 出力を階層化する: `console.group` / `console.groupEnd`
+
+ログを入れ子にしてまとめられます。DevTools 上では折りたためるブロックになります。
+
+```js
+console.group("リクエスト処理");
+console.log("1. ユーザー認証");
+console.log("2. データ取得");
+console.group("データ変換");
+console.log("2-1. JSON パース");
+console.log("2-2. 整形");
+console.groupEnd();
+console.groupEnd();
+```
+
+一気に折りたたんで他のログから隠せるので、フロントエンドの画面更新のような「関連する複数ステップ」の追跡に向きます。最初から折りたたみたい場合は `console.groupCollapsed()` を使います。
+
+### 処理時間を測る: `console.time` / `console.timeEnd`
+
+同じラベルで `time` を呼び `timeEnd` を呼ぶと、その間の経過時間を出します。
+
+```js
+console.time("fetch-posts");
+const posts = await fetch("/api/posts").then((r) => r.json());
+console.timeEnd("fetch-posts"); // fetch-posts: 312ms
+```
+
+`console.timeLog("fetch-posts")` で **途中経過** を出すこともできます。長い処理を区切って計測したいときに便利です。
+
+### 回数を数える: `console.count`
+
+同じラベルで呼ぶたびにカウンタが上がります。「ここを何回通ったか」をざっくり知るのに便利です。
+
+```js
+function render() {
+  console.count("render 呼び出し");
+  // ...
 }
 
-console.log(describe("hello"));
-console.log(describe(3.14));
+render(); // render 呼び出し: 1
+render(); // render 呼び出し: 2
+render(); // render 呼び出し: 3
 ```
 
-出力:
+リセットしたい場合は `console.countReset("render 呼び出し")`。
 
+### 条件付きで警告する: `console.assert`
+
+第 1 引数が **偽のとき** だけ出力する関数です。「ここは常に真のはず」という前提を軽くチェックしたいときに使います。
+
+```js
+const total = 100;
+console.assert(total > 0, "total が 0 以下", { total });
+// total > 0 が真なので何も出ない
+
+console.assert(total > 200, "total が 200 を超えていない", { total });
+// 200 より小さいので Assertion failed の警告が出る
 ```
-文字列: HELLO
-数値: 3.14
-```
 
-- `if (typeof value === "string")` の中では `value` の型は `string` に絞られている。`.toUpperCase()` を呼べる。
-- その外（`if` を通らなかった側）では `number` に絞られている。`.toFixed(2)` を呼べる。
+エラーで止めたいわけではない（通してもアプリは壊れない）が、**本来ありえない状態** を検知したい場合の軽いガードに使います。本格的なチェックには `throw new Error(...)` を使ってください。
 
-`typeof` で判定できる文字列は `"string"` / `"number"` / `"boolean"` / `"bigint"` / `"symbol"` / `"function"` / `"undefined"` / `"object"` の 8 種類。ここで注意が必要なのは **`typeof null` が `"object"` になる** こと（JS の歴史的経緯）、そして **配列も `typeof` では `"object"`** になること。
+### スタックトレースを出す: `console.trace`
 
-### `Array.isArray` で配列を絞り込む
+その行までの呼び出し階層を出します。「どこから呼ばれた？」を追いたいときに。
 
-配列かどうかは `typeof` では判定できないので、専用の `Array.isArray` を使います。
-
-```ts
-function length(value: string | string[]): number {
-  if (Array.isArray(value)) {
-    return value.length; // ここでは string[]
-  }
-  return value.length;   // ここでは string
+```js
+function inner() {
+  console.trace("ここを通った");
 }
 
-console.log(length("hello"));         // 5
-console.log(length(["a", "b", "c"])); // 3
-```
-
-`Array.isArray(value)` が `true` のブロックでは `value` が `string[]`、それ以外では `string` として扱われる。
-
-### `in` 演算子で絞り込む
-
-オブジェクトの型のユニオンでは、`in` 演算子で「そのプロパティを持っているか」を見ることで絞り込めます。
-
-```ts
-type TodoItem = { kind: "todo"; text: string };
-type NoteItem = { kind: "note"; body: string };
-type Item = TodoItem | NoteItem;
-
-function render(item: Item): string {
-  if ("text" in item) {
-    return `TODO: ${item.text}`;
-  }
-  return `Note: ${item.body}`;
+function middle() {
+  inner();
 }
 
-console.log(render({ kind: "todo", text: "牛乳を買う" }));
-console.log(render({ kind: "note", body: "今日は良い天気" }));
+middle();
 ```
 
-出力:
+### スタイル付き出力: `%c`
 
-```
-TODO: 牛乳を買う
-Note: 今日は良い天気
-```
+第 1 引数の文字列に `%c` を入れ、第 2 引数以降に CSS を渡すと色付きのログになります。ライブラリが Console にロゴを出すのに使っているのを見たことがあるかもしれません。
 
-- `"text" in item` が `true` のブロックでは `item` の型が `TodoItem` に絞られる。`item.text` が使える。
-- `false` 側では `NoteItem` に絞られ、`item.body` が使える。
-
-`in` は「文字列 `"プロパティ名"` が、オブジェクトの中に存在するか」を見ます。共通で持っているプロパティ（ここでは `kind`）ではなく、**片方だけが持つプロパティ**（`text` や `body`）で見分けるのがコツです。
-
-なお、`kind` のような **「種類を表す共通プロパティ」** で分岐する方法もあります。こちらの書き方は別のレッスンで **判別共用体** として本格的に扱います。
-
-### ユーザー定義型ガード（`x is Todo`）
-
-組み込みの `typeof` や `in` で足りないときは、**自分で型ガード関数を書きます**。形は次の通り。
-
-```ts
-function isTodo(x: unknown): x is Todo {
-  // この関数が true を返したら、呼び出し側では x の型が Todo になる
-}
+```js
+console.log("%cデバッグモード", "color: white; background: steelblue; padding: 2px 6px; border-radius: 3px;");
 ```
 
-ポイントは戻り値型 `x is Todo` の部分。通常の戻り値型 `boolean` の代わりにこれを書くと、「`true` を返したら **呼び出し側の `x` の型を `Todo` に絞ってよい**」と TS に教えられます。これを **型述語**（type predicate）と呼びます。
+多用するとノイズになるので、「今だけ強調したい」1 行で使うくらいが丁度いいです。
 
-具体的に書くと次のようになります（`Todo` は「配列・ユニオン・リテラル型・オプショナル」で育てた `{ id: string; text: string; status: "open" | "done"; memo?: string }`）。
+### デモで触ってみる
 
-```ts
-import type { Todo } from "./types";
+下のデモで、各ボタンを押すごとに対応する Console API が呼ばれます。DevTools の Console タブを開いた状態でボタンを押してみてください。
 
-function isTodo(x: unknown): x is Todo {
-  if (typeof x !== "object" || x === null) return false;
-  const o = x as Record<string, unknown>;
-  if (typeof o.id !== "string") return false;
-  if (typeof o.text !== "string") return false;
-  if (o.status !== "open" && o.status !== "done") return false;
-  if (o.memo !== undefined && typeof o.memo !== "string") return false;
-  return true;
-}
-```
-
-- 最初の `typeof x !== "object" || x === null` で「そもそもオブジェクトか」を見る。`null` を除く理由は `typeof null === "object"` だから。
-- `x as Record<string, unknown>` は「プロパティアクセスのために一時的に型を付け替える」書き方。`Record<string, unknown>` は「任意の文字列キーを持ち、値は `unknown`」の型。これで `o.id` などを書けるようになるが、個々のプロパティはまだ `unknown` のままなので、この後 1 つずつ `typeof` で確認する。
-- 各プロパティを順に `typeof` で確認。全部通ったら `return true`。
-- `memo` は `?:` なので「あるなら `string`、ないなら `undefined`」を許す。
-
-この形の `isTodo` は **5 章 の「Route Handlers」で再び登場します**。サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのに、まさにこの関数を使い回せます。
-
-### 型ガードを通した `unknown` の扱い
-
-`isTodo` を使うと、`unknown` を安全に `Todo` として扱えます。
-
-```ts
-const raw: unknown = JSON.parse('{"id":"a1","text":"牛乳","status":"open"}');
-
-if (isTodo(raw)) {
-  console.log(raw.text); // ここでは raw は Todo 型
-} else {
-  console.log("Todo の形ではありません");
-}
-```
-
-- `if (isTodo(raw))` の中では `raw` の型が `unknown` から `Todo` に絞られている。`.text` や `.id` に安全にアクセスできる。
-- `else` 側では絞り込みが成立していないので、`raw` は `unknown` のまま。
-
-これが「`unknown` と `never`」で予告した「`unknown` を絞り込む具体的な方法」です。
+<LiveDemo
+  height="220px"
+  :html="`
+<p>DevTools の Console タブを開き、各ボタンを押してください。</p>
+<div>
+  <button id='btn-log' type='button'>log</button>
+  <button id='btn-warn' type='button'>warn</button>
+  <button id='btn-error' type='button'>error</button>
+  <button id='btn-table' type='button'>table</button>
+  <button id='btn-group' type='button'>group</button>
+  <button id='btn-time' type='button'>time / timeEnd</button>
+  <button id='btn-count' type='button'>count</button>
+  <button id='btn-assert' type='button'>assert</button>
+</div>
+  `"
+  :css="`
+button { margin: 4px 6px 4px 0; padding: 6px 12px; }
+  `"
+  :js="demoJs"
+/>
 
 ## 演習
 
 ### 途中から始める場合
 
-新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
-<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+<summary>出発点のコード</summary>
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson37</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>Console API 体験</h1>
+    <p>DevTools の Console タブを開いてリロードしてください。</p>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+// 空のまま
 ```
 
 </details>
 
-### 手順 1: `typeof` 型ガード
+### ゴール
 
-`src/main.ts` を次の内容に置き換える。
+- Console タブに、`log` / `warn` / `error` / `table` / `group` / `time` がすべて出ている
+- 深刻度別フィルタ（Errors / Warnings / Info）でメッセージが絞り込めることを確認する
 
-```ts
-function describe(value: string | number): string {
-  if (typeof value === "string") {
-    return `文字列: ${value.toUpperCase()}`;
-  }
-  return `数値: ${value.toFixed(2)}`;
+### 手順
+
+1. `script.js` を以下の内容にします。
+2. プレビューの DevTools の Console タブを開き、リロードします。
+3. 出力をフィルタで絞り込みながら眺めます。
+
+### `script.js` の完成形
+
+```js
+console.log("起動しました");
+console.info("Vite テンプレートで動いています");
+
+console.group("環境情報");
+console.log("URL:", location.href);
+console.log("言語:", navigator.language);
+console.log("ユーザーエージェント:", navigator.userAgent);
+console.groupEnd();
+
+console.warn("この warn は目立ちますが、アプリは動いています");
+console.error("この error は赤く出ます。試しに出しているだけです");
+
+const users = [
+  { id: 1, name: "Alice", role: "admin" },
+  { id: 2, name: "Bob", role: "user" },
+  { id: 3, name: "Carol", role: "user" },
+];
+console.table(users);
+
+console.time("重い処理");
+const arr = [];
+for (let i = 0; i < 100000; i++) {
+  arr.push(Math.random());
 }
+arr.sort();
+console.timeEnd("重い処理");
 
-console.log(describe("hello"));
-console.log(describe(3.14));
-```
-
-#### 期待出力
-
-```
-文字列: HELLO
-数値: 3.14
-```
-
-わざと絞り込み **なし** で呼ぼうとしてみる。
-
-```ts
-function describe(value: string | number): string {
-  return value.toUpperCase();
+function render() {
+  console.count("render 呼び出し");
 }
-```
+render();
+render();
+render();
 
-期待されるメッセージ:
+const total = 100;
+console.assert(total > 200, "total は 200 を超えているはず", { total });
 
-```
-Property 'toUpperCase' does not exist on type 'string | number'.
-  Property 'toUpperCase' does not exist on type 'number'.
-```
-
-`string | number` のままでは `string` 限定のメソッドが呼べない。`typeof` で絞ると呼べるようになることを実感する。確認できたら元に戻す。
-
-### 手順 2: `in` 演算子で分岐
-
-```ts
-type TodoItem = { kind: "todo"; text: string };
-type NoteItem = { kind: "note"; body: string };
-type Item = TodoItem | NoteItem;
-
-function render(item: Item): string {
-  if ("text" in item) {
-    return `TODO: ${item.text}`;
-  }
-  return `Note: ${item.body}`;
-}
-
-console.log(render({ kind: "todo", text: "牛乳を買う" }));
-console.log(render({ kind: "note", body: "今日は良い天気" }));
-```
-
-#### 期待出力
-
-```
-TODO: 牛乳を買う
-Note: 今日は良い天気
-```
-
-わざと `if` を外すとどうなるかも確認する。
-
-```ts
-function render(item: Item): string {
-  return `TODO: ${item.text}`;
-}
-```
-
-期待されるメッセージ:
-
-```
-Property 'text' does not exist on type 'Item'.
-  Property 'text' does not exist on type 'NoteItem'.
-```
-
-`Item` のままでは `.text` が `NoteItem` に存在しないため呼べない。`in` で絞ってから呼ぶのが正しい。確認できたら元に戻す。
-
-### 手順 3: `unknown` から `Todo` に絞り込むカスタム型ガード
-
-`src/types.ts` は「配列・ユニオン・リテラル型・オプショナル」で育てた形をそのまま使う。
-
-```ts
-// src/types.ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
-
-`src/main.ts` を次の内容に置き換える。
-
-```ts
-import type { Todo } from "./types";
-
-function isTodo(x: unknown): x is Todo {
-  if (typeof x !== "object" || x === null) return false;
-  const o = x as Record<string, unknown>;
-  if (typeof o.id !== "string") return false;
-  if (typeof o.text !== "string") return false;
-  if (o.status !== "open" && o.status !== "done") return false;
-  if (o.memo !== undefined && typeof o.memo !== "string") return false;
-  return true;
-}
-
-const raw1: unknown = JSON.parse(
-  '{"id":"a1","text":"牛乳を買う","status":"open"}'
+console.log(
+  "%c完了",
+  "color: white; background: steelblue; padding: 2px 8px; border-radius: 3px;",
 );
-const raw2: unknown = JSON.parse('{"id":"a2"}');
-const raw3: unknown = "just a string";
-
-function show(raw: unknown): void {
-  if (isTodo(raw)) {
-    console.log(`OK: ${raw.id} / ${raw.text} / ${raw.status}`);
-  } else {
-    console.log("NG: Todo の形ではありません");
-  }
-}
-
-show(raw1);
-show(raw2);
-show(raw3);
 ```
 
-#### 期待出力
+### 期待出力
 
-```
-OK: a1 / 牛乳を買う / open
-NG: Todo の形ではありません
-NG: Todo の形ではありません
-```
+- Console に `起動しました` から順に表示される
+- `環境情報` のグループが折りたためる状態で出る（左の ▶ で開閉）
+- `warn` は黄色系、`error` は赤系で、アイコンが違う
+- `users` が表形式で出る
+- `重い処理: 〜ms` の経過時間が出る
+- `render 呼び出し` のカウンタが 1 → 2 → 3 と増える
+- `Assertion failed: total は 200 を超えているはず` が警告として出る
+- 最後に `完了` が青背景の塊で出る
 
-- `raw1` は `Todo` の形に合致するので `if` に入る。
-- `raw2` は `text` が欠けているため弾かれる。
-- `raw3` はそもそも文字列なので弾かれる。
+### 変える
 
-### 手順 4: 型ガードなしで使おうとしてエラーを見る
-
-`show` の中で、型ガードを外して直接触ろうとしてみる。
-
-```ts
-function show(raw: unknown): void {
-  console.log(raw.text);
-}
-```
-
-期待されるメッセージ:
-
-```
-'raw' is of type 'unknown'.
-```
-
-`unknown` に対しては絞り込みなしでプロパティアクセスできない。確認できたら型ガード版に戻す。
-
-### 手順 5: `Array.isArray` を使う
-
-「`Todo[]` かどうか」を検証するには、まず配列であることを確かめ、次に各要素が `Todo` かを確かめます。
-
-```ts
-function isTodoArray(x: unknown): x is Todo[] {
-  if (!Array.isArray(x)) return false;
-  return x.every((item) => isTodo(item));
-}
-
-const raw4: unknown = JSON.parse(
-  '[{"id":"a1","text":"牛乳","status":"open"},{"id":"a2","text":"本","status":"done"}]'
-);
-const raw5: unknown = JSON.parse('[{"id":"a1"}]');
-
-if (isTodoArray(raw4)) {
-  console.log(`Todo 配列 (${raw4.length} 件)`);
-} else {
-  console.log("Todo 配列ではありません");
-}
-
-if (isTodoArray(raw5)) {
-  console.log(`Todo 配列 (${raw5.length} 件)`);
-} else {
-  console.log("Todo 配列ではありません");
-}
-```
-
-#### 期待出力
-
-```
-Todo 配列 (2 件)
-Todo 配列ではありません
-```
-
-- `Array.isArray(x)` で配列かどうかを先に確認。
-- 各要素に対して `isTodo` を呼び、**全部合格** したら `true` を返す。
-- 戻り値型 `x is Todo[]` と書いているので、`true` が返った後は呼び出し側で `Todo[]` として `.length` / `.map` 等が使える。
-
-### 変えてみる
-
-`Todo` の `status` に `"archived"` を足したとします（型は一時的に `"open" | "done" | "archived"` とする）。`isTodo` の中の `status` チェックを、3 値に対応するよう書き換える。
-
-```ts
-if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
-  return false;
-}
-```
-
-3 つ以上のリテラル値を許す形の書き方に慣れる。確認できたら、本編を壊さないように `Todo` 型も型ガードも元の 2 値に戻しておく。
+- Console タブの上部で「Errors」だけチェックし、`error` 以外が消えることを確認
+- `console.table(users)` を `console.table(users, ["name", "role"])` に変えて列を絞る
+- `console.group(...)` を `console.groupCollapsed(...)` に変え、最初から折りたたまれて表示されることを確認
+- `console.time("重い処理")` と `console.timeEnd("重い処理")` のあいだに `console.timeLog("重い処理", "途中経過")` を挟んでみる
 
 ### 自分で書く
 
-次の型ガードを自分で書く。
-
-1. `isUser(x: unknown): x is User`
-    - `User` 型は `{ id: string; name: string; age: number }` とする（「オブジェクトの型と type エイリアス」で `types.ts` に追加した形）。
-    - 戻り値の「`x is User`」を忘れない。
-2. `isUserArray(x: unknown): x is User[]`
-    - `isTodoArray` を参考に、`Array.isArray` と `.every` を組み合わせて書く。
-
-書けたら、`JSON.parse` で作った `unknown` を 3 パターン（正しい `User` / プロパティ欠け / そもそも配列でない）試し、期待通りに分岐することを確認する。
+- `fetch` で JSONPlaceholder（`https://jsonplaceholder.typicode.com/posts`）から記事一覧を取り、`console.table` で `id` / `title` の 2 列だけ表示する。ヒント: `fetch` は 2 章 の「fetch で API から取得する」で扱った形
+- 「重い処理」を `console.time` で 2 段階（`取得` / `整形`）に分割計測する
 
 ## まとめ
 
-- 型ガードは「**実行時の確認を通して、TS に型を絞り込ませる**」仕組み。
-- `typeof`: プリミティブ（`string` / `number` / `boolean` など）の判定。`typeof null === "object"` の落とし穴に注意。
-- `Array.isArray`: 配列かどうかの専用判定。
-- `in`: オブジェクトに特定のプロパティがあるかで判定。
-- **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。「`unknown` と `never`」で受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
-- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、5 章 の「Route Handlers」で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
-- 別のレッスンで、`kind` のような **「種類を表すプロパティ」で自動的に絞り込める** 書き方（判別共用体）を学ぶ。型ガード関数を書かなくても、`switch` だけで分岐できるようになる。
+- `console.log` / `info` / `warn` / `error` で深刻度を分ける（DevTools のフィルタに効く）
+- `console.table` で配列やオブジェクトを表形式に
+- `console.group` / `groupEnd`（`groupCollapsed`）で出力を折りたためる階層に
+- `console.time` / `timeEnd` / `timeLog` で経過時間を測る
+- `console.count` / `countReset` で呼び出し回数を数える
+- `console.assert(条件, メッセージ)` は条件が偽の時だけ出る軽いガード
+- `console.trace` でスタックトレース、`%c` + CSS で装飾
+- 2 章（JavaScript）はここで一区切り。本コースの残りの章（TypeScript / React / Next.js）でも、今回の API は日常的に使います

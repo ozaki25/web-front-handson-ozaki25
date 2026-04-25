@@ -1,420 +1,425 @@
-# lesson94: API モック — MSW（Mock Service Worker）
+# lesson94: セマンティック HTML とアクセシビリティの基礎
 
 ## ゴール
 
-- なぜテストで API モックが必要かを説明できる
-- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
-- `http.get` / `http.post` で HTTP ハンドラを書ける
-- `setupServer` で Vitest にモックを組み込める
-- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
-- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
+- なぜアクセシビリティ（a11y）に配慮するかを自分の言葉で説明できる
+- セマンティック HTML が a11y の土台になる理由を理解する
+- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）の役割を説明できる
+- 見出し階層（`<h1>`〜`<h6>`）を正しく並べられる
+- 画像の `alt` 属性とフォームの `<label>` の役割を説明できる
+- WCAG の **コントラスト比** の基準（AA / AAA）を知っている
 
 ## 解説
 
-### なぜテストで API モックが必要か
+### なぜアクセシビリティ（a11y）に配慮するか
 
-`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
+アクセシビリティ（accessibility、略して **a11y**）は「**すべてのユーザーがウェブを使える状態** にする」取り組みです。対象は次のような利用者です。
 
-- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
-- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
-- 速度が遅い（数百 ms × テスト数だけ待たされる）
-- オフラインで CI が動かない
+- **視覚に関するもの**: 全盲 / 弱視 / 色覚特性のある人（スクリーンリーダーを使う、拡大表示する、コントラストが低いと読めない）
+- **聴覚に関するもの**: 聴覚を使いにくい人（動画の字幕が必要）
+- **運動に関するもの**: マウスを使いにくい人（キーボードや音声コマンドで操作する）
+- **認知に関するもの**: 複雑な UI や素早い動きが苦手な人
 
-これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
+さらに **誰にとっても役立つ** 場面も多くあります。
 
-### MSW とは
+- スマホを片手で操作する状況（大きなタップ領域が欲しい）
+- 日差しの強い屋外（高コントラストが欲しい）
+- 満員電車で音が出せない（字幕が欲しい）
+- キーボード派の開発者（Tab で操作したい）
 
-**Mock Service Worker（MSW）** は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
+2026 年現在、**WCAG 2.2**（Web Content Accessibility Guidelines 2.2）が国際標準で、政府・公共機関や大企業のサイトでは AA 準拠が事実上の必須になっています。開発者の側でも「動くだけ」ではなく「みんなが使える」を最低ラインとして出荷するのが当たり前になってきました。
 
-特徴:
+### セマンティック HTML が土台
 
-- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
-- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
-- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
-- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
+**セマンティック HTML** とは「見た目ではなく **意味** を表す HTML を書く」ことです。タイトルには `<h1>`、本文の段落には `<p>`、ナビゲーションには `<nav>` のように、タグに役割を持たせます。
 
-### 他のモック手法との比較
+見た目だけなら `<div>` と CSS だけでも作れますが、**機械（ブラウザ / スクリーンリーダー / 検索エンジン / AI エージェント）には意味が伝わりません**。
 
-- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
-- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
-- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
+NG（見た目だけ）:
 
-複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
-
-### セットアップ
-
-「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
-
-```bash
-npm install -D msw
+```html
+<div class="big-text">記事タイトル</div>
+<div class="paragraph">本文...</div>
+<div class="link" onclick="go()">続きを読む</div>
 ```
 
-`src/mocks/handlers.ts` を作成（ハンドラ定義）:
+OK（意味を持たせる）:
 
-```ts
-import { http, HttpResponse } from "msw";
-
-export const handlers = [
-  // GET /api/posts
-  http.get("https://api.example.com/posts", () => {
-    return HttpResponse.json([
-      { id: 1, title: "1 件目" },
-      { id: 2, title: "2 件目" },
-    ]);
-  }),
-
-  // POST /api/posts
-  http.post("https://api.example.com/posts", async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
-  }),
-];
+```html
+<h1>記事タイトル</h1>
+<p>本文...</p>
+<a href="/next">続きを読む</a>
 ```
 
-`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
+スクリーンリーダーは `<h1>` を「見出しレベル 1」と読み上げます。`<a>` を「リンク」と説明します。`<div>` ではそれが起きません。
 
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
+**「a11y のために ARIA を足す」より前に、「セマンティック HTML を正しく書く」ことが 7〜8 割を占める** と覚えてください。
 
-export const server = setupServer(...handlers);
-```
+### ランドマーク要素でページを 5 つの場所に分ける
 
-`vitest.setup.ts` に追記（テスト全体のフック）:
+ページは大きく次の 5 つの **ランドマーク**（目印）に分けられます。スクリーンリーダーはこれらの要素を「ランドマーク一覧」で見せてくれるので、「ヘッダーに飛ぶ」「メイン本文に飛ぶ」が即座にできます。
 
-```ts
-import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
+| タグ | 役割 |
+|---|---|
+| `<header>` | ページ上部。サイトロゴやナビが入る |
+| `<nav>` | ナビゲーション。主要リンクをまとめる場所 |
+| `<main>` | ページの **メインコンテンツ**。1 ページに 1 つだけ |
+| `<aside>` | 補足情報・サイドバー |
+| `<footer>` | ページ下部。コピーライト・連絡先など |
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
+典型的な構成:
 
-これで:
+```html
+<body>
+  <header>
+    <h1>私のブログ</h1>
+    <nav>
+      <a href="/">ホーム</a>
+      <a href="/posts">記事一覧</a>
+      <a href="/about">自己紹介</a>
+    </nav>
+  </header>
 
-- 全テストの前にモックサーバを起動
-- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
-- 全テスト後にサーバを停止
-- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
+  <main>
+    <h2>今日の記事</h2>
+    <p>本文...</p>
+  </main>
 
-### 簡単なコンポーネントテスト
-
-`src/PostsList.tsx`:
-
-```tsx
-import { useEffect, useState } from "react";
-
-type Post = { id: number; title: string };
-
-export function PostsList() {
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("https://api.example.com/posts")
-      .then((res) => {
-        if (!res.ok) throw new Error("読み込み失敗");
-        return res.json();
-      })
-      .then(setPosts)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <p>エラー: {error}</p>;
-  if (posts === null) return <p>読み込み中...</p>;
-
-  return (
+  <aside>
+    <h2>関連記事</h2>
     <ul>
-      {posts.map((p) => (
-        <li key={p.id}>{p.title}</li>
-      ))}
+      <li><a href="/posts/1">別の記事</a></li>
     </ul>
-  );
-}
+  </aside>
+
+  <footer>
+    <p>&copy; 2026 オザキ</p>
+  </footer>
+</body>
 ```
 
-`src/PostsList.test.tsx`:
+`<header>` と `<footer>` はページ全体のもの以外に、`<article>` や `<section>` の中にも置けます（そのブロックのヘッダー / フッターになる）。
 
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { PostsList } from "./PostsList";
+### 見出し階層は飛ばさない
 
-describe("PostsList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<PostsList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
-  });
+`<h1>`〜`<h6>` は **必ず 1 つずつ降りていく** のが原則です。`<h1>` の次に急に `<h3>` を使うと、スクリーンリーダーの読み上げで「2 段下がった！何か抜けた？」と混乱します。
 
-  it("読み込みが終わると一覧を表示する", async () => {
-    render(<PostsList />);
-    expect(await screen.findByText("1 件目")).toBeInTheDocument();
-    expect(screen.getByText("2 件目")).toBeInTheDocument();
-  });
-});
+```html
+<!-- NG: h1 → h3 で h2 が飛んでいる -->
+<h1>記事タイトル</h1>
+<h3>サブセクション</h3>
+
+<!-- OK: h1 → h2 → h3 の順 -->
+<h1>記事タイトル</h1>
+<h2>章</h2>
+<h3>サブセクション</h3>
 ```
 
-`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
+また `<h1>` は **1 ページに 1 つ** が基本です（HTML5 の `<section>` 内でも `<h1>` を使える仕様はありますが、対応のばらつきがあるので本コースでは 1 ページ 1 個に統一します）。
 
-### 失敗ケースのテスト: `server.use` で一時上書き
+### 画像には `alt`、フォーム入力には `<label>`
 
-「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
+スクリーンリーダーは画像の中身を「見る」ことはできません。代わりに **`alt` 属性** のテキストを読み上げます。
 
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { PostsList } from "./PostsList";
+```html
+<!-- 情報を持つ画像: 内容を説明 -->
+<img src="/graph.png" alt="2026 年の売上グラフ。4 月で前年比 20% 増" />
 
-describe("PostsList のエラー", () => {
-  it("API が 500 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
-  });
-
-  it("API が 404 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 404 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
-  });
-});
+<!-- 装飾だけの画像: 空文字で OK（読み飛ばされる） -->
+<img src="/decoration.png" alt="" />
 ```
 
-`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
+`alt` を書かないと、スクリーンリーダーはファイル名（`graph.png`）を読み上げてしまい、意味を伝えられません。**飾りなら空文字、情報を持つなら説明文** が原則です。
 
-### POST のテスト
+フォームも同じで、`<input>` には **`<label>`** を必ず紐付けます。
 
-書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
+```html
+<!-- NG: input 単独はラベルなし -->
+<p>お名前</p>
+<input type="text" />
 
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { CreatePostForm } from "./CreatePostForm";
+<!-- OK: label と for / id で紐付ける -->
+<label for="name">お名前</label>
+<input id="name" type="text" />
 
-describe("CreatePostForm", () => {
-  it("送信すると新しい記事 ID が表示される", async () => {
-    const user = userEvent.setup();
-    render(<CreatePostForm />);
-
-    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
-  });
-});
+<!-- OK: label で input を包む -->
+<label>
+  お名前
+  <input type="text" />
+</label>
 ```
 
-`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
+`<label>` があると、スクリーンリーダーは「お名前、テキスト入力、空」のように読み上げます。ラベル部分をクリックすると入力欄にフォーカスが移るので、晴眼者にも扱いやすくなります。
 
-### 遅延を入れる: `delay`
+### コントラスト比: 見える色の組み合わせを選ぶ
 
-「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
+文字色と背景色のコントラストが低いと、弱視の人や日差しの強い環境では読めません。WCAG は **数値の基準** を定めています。
 
-```ts
-import { http, HttpResponse, delay } from "msw";
+| 対象 | AA（実用レベル） | AAA（高水準） |
+|---|---|---|
+| 通常のテキスト（〜18px） | 4.5:1 以上 | 7:1 以上 |
+| 大きなテキスト（18pt 太字 or 24px 以上） | 3:1 以上 | 4.5:1 以上 |
+| UI 部品の境界線・アイコン | 3:1 以上 | — |
 
-export const handlers = [
-  http.get("https://api.example.com/posts", async () => {
-    await delay(100);  // 100ms 遅らせる
-    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
-  }),
-];
+コントラスト比は **Chrome DevTools の Elements タブ** で確認できます。スタイルペインで色をクリックすると、自動で計算してくれます。Lighthouse の Accessibility スコアも 4.5:1 未満を警告してくれます。
+
+数字を自分で計算する必要はありません。実務では次のような定番ツールを使います。
+
+- Chrome DevTools（CSS の color プロパティをクリック）
+- WebAIM Contrast Checker（<https://webaim.org/resources/contrastchecker/>）
+- Figma のコントラストチェッカープラグイン
+
+ダークモードで `color: #808080` のような中間色を使うと、背景がダーク（`#1a1a1a`）でもライト（`#ffffff`）でもギリギリ読めない、という事故が起きがちです。ライト / ダーク双方でチェックする習慣をつけてください。
+
+### `lang` 属性で言語を明示する
+
+ページの言語を `<html lang="ja">` で指定します。スクリーンリーダーが適切な発音（日本語 / 英語）で読み上げるのに使われます。
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    ...
 ```
 
-これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
+本コースのこれまでの演習でもすべて `lang="ja"` を付けてきました。**サイトごとに 1 回設定するだけで良い** 基本です。
 
 ## 演習
 
 ### ゴール
 
-- MSW のセットアップを完了する
-- ハンドラ 3 種（成功 / エラー / 遅延）を書く
-- `useEffect` で fetch する小さなコンポーネントをテストする
-- `server.use` でテストごとにレスポンスを上書きできる
+- `<div>` だらけのページをセマンティック HTML に書き換える
+- 見出し階層を正しく並べ直す
+- 画像に適切な `alt` 属性を付ける
+- フォームに `<label>` を付ける
+- DevTools でコントラスト比を確認する
 
 ### 途中から始める場合
 
-「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
+このレッスンは独立しています。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開いて、下の出発点のコードを貼ってください。
 
-```bash
-npm install -D vitest @vitejs/plugin-react jsdom
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
-npm install -D msw
+<details>
+<summary>出発点のコード（`div` だらけの NG パターン）</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>a11y の練習</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="top">
+      <div class="logo">私のブログ</div>
+      <div class="menu">
+        <div onclick="location.href='/'">ホーム</div>
+        <div onclick="location.href='/posts'">記事一覧</div>
+      </div>
+    </div>
+
+    <div class="body">
+      <div class="title">今日の記事</div>
+      <div class="para">本文です。本文です。本文です。</div>
+
+      <div class="sub">サブセクション</div>
+      <div class="para">サブ本文です。</div>
+
+      <img src="https://placehold.jp/300x200.png" />
+
+      <div class="form">
+        <div>お名前</div>
+        <input type="text" />
+        <div>メール</div>
+        <input type="email" />
+        <div onclick="submit()">送信</div>
+      </div>
+    </div>
+
+    <div class="bottom">
+      <div>&copy; 2026 オザキ</div>
+    </div>
+  </body>
+</html>
 ```
 
-`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
+**`style.css`**
 
-### 手順 1: モックサーバを構築
-
-`src/mocks/handlers.ts`:
-
-```ts
-import { http, HttpResponse, delay } from "msw";
-
-export const handlers = [
-  http.get("https://api.example.com/users", async () => {
-    await delay(50);
-    return HttpResponse.json([
-      { id: 1, name: "Alice" },
-      { id: 2, name: "Bob" },
-    ]);
-  }),
-];
+```css
+body {
+  font-family: sans-serif;
+  color: #cccccc;
+  background: #ffffff;
+  margin: 0;
+}
+.top, .bottom { background: #e0e0e0; padding: 16px; }
+.menu div { display: inline-block; margin-right: 12px; cursor: pointer; color: #4da6ff; }
+.title { font-size: 24px; font-weight: bold; }
+.sub { font-size: 18px; font-weight: bold; }
+.para { margin: 8px 0; }
+.body { padding: 16px; }
+.form div[onclick] { display: inline-block; background: #eeeeee; color: #aaaaaa; padding: 6px 12px; cursor: pointer; }
 ```
 
-`src/mocks/server.ts`:
+</details>
 
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
+### 手順
 
-export const server = setupServer(...handlers);
+1. `index.html` を **セマンティック HTML** に書き換えます（下の完成形を参照）。
+2. `style.css` の **コントラスト比** を上げて、文字が読みやすくなるよう修正します。
+3. DevTools で確認します。
+
+### `index.html` の完成形
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>a11y の練習</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>私のブログ</h1>
+      <nav>
+        <a href="/">ホーム</a>
+        <a href="/posts">記事一覧</a>
+      </nav>
+    </header>
+
+    <main>
+      <article>
+        <h2>今日の記事</h2>
+        <p>本文です。本文です。本文です。</p>
+
+        <h3>サブセクション</h3>
+        <p>サブ本文です。</p>
+
+        <img
+          src="https://placehold.jp/300x200.png"
+          alt="記事の挿絵（プレースホルダ画像）"
+          width="300"
+          height="200"
+        />
+      </article>
+
+      <section aria-labelledby="contact-heading">
+        <h2 id="contact-heading">お問い合わせ</h2>
+        <form>
+          <p>
+            <label for="name">お名前</label>
+            <input id="name" type="text" />
+          </p>
+          <p>
+            <label for="email">メール</label>
+            <input id="email" type="email" />
+          </p>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 オザキ</p>
+    </footer>
+  </body>
+</html>
 ```
 
-`vitest.setup.ts` に追記:
+変更点の理由:
 
-```ts
-import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
+- `<div class="top">` → `<header>`、`<div class="menu">` → `<nav>`、`<div class="body">` → `<main>`、`<div class="bottom">` → `<footer>` にしてランドマーク化
+- `<div class="title">` → `<h2>`、`<div class="sub">` → `<h3>` で見出し階層を明示（`<h1>` はサイトタイトルで使っている）
+- クリック可能な `<div>` を `<a>` / `<button type="submit">` に変更（キーボードで操作できるようになる）
+- `<img>` に `alt` / `width` / `height` を付与
+- `<input>` に `<label>` を紐付け
+- `<html lang="ja">` で言語を明示
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
+### `style.css` の完成形
 
-### 手順 2: コンポーネントを作る
+```css
+body {
+  font-family: sans-serif;
+  color: #1a1a1a;        /* #cccccc → #1a1a1a（コントラスト比を大幅に改善）*/
+  background: #ffffff;
+  margin: 0;
+}
 
-`src/UsersList.tsx`:
+header, footer {
+  background: #1e3a8a;   /* #e0e0e0 → #1e3a8a */
+  color: #ffffff;
+  padding: 16px;
+}
 
-```tsx
-import { useEffect, useState } from "react";
+header h1 {
+  margin: 0 0 8px 0;
+}
 
-type User = { id: number; name: string };
+nav a {
+  color: #ffffff;        /* #4da6ff → #ffffff（青背景に白文字）*/
+  margin-right: 16px;
+}
 
-export function UsersList() {
-  const [users, setUsers] = useState<User[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
 
-  useEffect(() => {
-    fetch("https://api.example.com/users")
-      .then((res) => {
-        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
-        return res.json();
-      })
-      .then(setUsers)
-      .catch((e) => setError(e.message));
-  }, []);
+button[type="submit"] {
+  background: #1e3a8a;   /* #eeeeee → 濃い青 */
+  color: #ffffff;        /* #aaaaaa → 白 */
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
 
-  if (error) return <p role="alert">{error}</p>;
-  if (users === null) return <p>読み込み中...</p>;
-
-  return (
-    <ul>
-      {users.map((u) => (
-        <li key={u.id}>{u.name}</li>
-      ))}
-    </ul>
-  );
+button[type="submit"]:focus {
+  outline: 3px solid #60a5fa;  /* フォーカスリングを明示 */
+  outline-offset: 2px;
 }
 ```
 
-### 手順 3: テストを書く
-
-`src/UsersList.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { UsersList } from "./UsersList";
-
-describe("UsersList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<UsersList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
-  });
-
-  it("読み込みが終わるとユーザーを並べる", async () => {
-    render(<UsersList />);
-
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("Bob")).toBeInTheDocument();
-  });
-
-  it("エラー時はエラーメッセージを表示する", async () => {
-    server.use(
-      http.get("https://api.example.com/users", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
-
-    render(<UsersList />);
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
-  });
-});
-```
-
-### 手順 4: 実行
-
-```bash
-npm run test
-```
-
-3 件すべて緑になれば成功です。
-
 ### 期待出力
 
-```
- PASS  src/UsersList.test.tsx (3)
-   PASS  最初は読み込み中を表示する
-   PASS  読み込みが終わるとユーザーを並べる
-   PASS  エラー時はエラーメッセージを表示する
+- ページ上部の見出しが大きく表示され、下のナビが横に並ぶ
+- 本文の見出しが 2 段階に階層化されて表示される
+- 画像が表示される（`alt` はマウスオーバーで一部のブラウザで表示される）
+- フォームの「お名前」「メール」をクリックすると入力欄にフォーカスが移る
+- Tab キーで「ホーム」リンク → 「記事一覧」リンク → お名前入力 → メール入力 → 送信ボタンと順に移動できる
+- 送信ボタンにフォーカスを移すと、太い青のフォーカスリングが見える
 
- Test Files  1 passed (1)
-      Tests  3 passed (3)
-```
+### 確認ポイント（DevTools）
+
+Chrome の DevTools で以下を確認します。
+
+1. **Elements タブ**: `<h1>` `<h2>` `<h3>` が見出し階層として並んでいる。`<main>` `<header>` `<footer>` `<nav>` がランドマークとして使われている
+2. **Lighthouse タブ**: 「Accessibility」を単独で選んでレポートを生成。スコアが 90 以上になる
+3. **コントラスト比**: Elements で `body` の `color` をクリックすると、自動で計算された `Contrast ratio` が右側に出る。AA（4.5:1 以上）を満たしていることを確認
 
 ### 変える
 
-- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
-- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
-- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
+- `body` の `color` を `#808080` に変えてみる。Lighthouse で「Background and foreground colors do not have a sufficient contrast ratio」の警告が出ることを確認
+- `<h2>` を削って、いきなり `<h3>` から始めてみる。Lighthouse が「Heading elements are not in a sequentially-descending order」と警告する
+- `<img>` の `alt` を消してみる。Lighthouse が「Image elements do not have `[alt]` attributes」と警告する
 
 ### 自分で書く
 
-- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
-- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
-- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
+- `<main>` の下に「記事一覧」セクションを追加し、`<section>` でくるむ。各記事は `<article>` にして、`<h3>` のタイトル + `<p>` の要約を 3 件並べる
+- フォームの `<input>` に `required` を付け、送信ボタンにキーボードで Tab → Enter で送信できることを確認する
 
 ## まとめ
 
-- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
-- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
-- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
-- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
-- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
-- テストごとに `server.use(...)` でハンドラを上書きできる
-- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
-- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知
-- 別のレッスンでは **Playwright で E2E テスト** に進む。MSW は E2E でも同じハンドラを使い回せる
+- アクセシビリティは「誰でも使える」状態を目指すこと。WCAG 2.2 が 2026 年の国際標準
+- **セマンティック HTML が a11y の土台**。`<div>` + `role=...` より `<nav>` / `<main>` / `<h1>` のような意味のあるタグを優先
+- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）でページを整理
+- 見出しは `<h1>` → `<h2>` → `<h3>` の順に飛ばさず降りる。`<h1>` はページに 1 つ
+- 画像には `alt`、フォームには `<label>` を必ず
+- コントラスト比は本文 **4.5:1** 以上が AA（実用レベル）
+- `<html lang="ja">` で言語を明示
+- 別のレッスンでは **ARIA 属性とキーボード操作** を扱い、セマンティック HTML で足りないときの補い方に進む

@@ -1,107 +1,118 @@
-# lesson51: Context API で多層バケツリレー回避
+# lesson51: React ってなに？
 
 ## ゴール
 
-- 多段階の props リレー（prop drilling）を Context で置き換えられる
-- `createContext` / `Provider` / `useContext` の 3 点セットの形を覚える
-- Context の型を付けられる
-- Context を使うべきでない場面を理解する
+- React が何を解決する道具なのかを、自分の言葉で説明できる
+- Vite / npm / `package.json` / `npm run dev` の役割をざっくり理解する
+- StackBlitz の React + Vite（TypeScript）テンプレートから、自分の文字を画面に出せる
 
 ## 解説
 
-### バケツリレー問題
+### ここまでの立ち位置
 
-「親子コンポーネントの連携」で学んだように、props は「親 → 子」の一方通行でした。これが深い階層になると、**途中のコンポーネントが使わない値を、ただ下に渡すためだけに受け取る** 状況が生まれます。
+2 章 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。2 章 の仕上げの「TODO アプリを作る」では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
 
-```
-App (theme を持つ)
- └─ Layout (theme を受け取って Header に渡すだけ)
-     └─ Header (theme を受け取って Nav に渡すだけ)
-         └─ Nav (theme を受け取って ThemeToggle に渡すだけ)
-             └─ ThemeToggle (ここで初めて theme を使う)
-```
+そこまでできるのなら、React はなぜ必要なのでしょうか。
 
-`Layout` / `Header` / `Nav` は `theme` を **自分では使わない** のに、props として受け取って子に渡しています。バケツをリレーするように値を運ぶだけの中間層が増え、型定義も面倒になります。これを **prop drilling**（バケツリレー問題）と呼びます。
+### React が解決すること
 
-### Context の考え方
+素の JS で画面を書き換えるコードを思い出してください。例えば「TODO を 1 件追加する」ためには、次のような手順が必要でした。
 
-Context は、「ある範囲のコンポーネントツリー全体から参照できる共有値」を作る仕組みです。途中のコンポーネントは関与せず、値を使いたいコンポーネントが **直接** Context から取り出せます。
+1. 新しい `<li>` 要素を `document.createElement` で作る
+2. その中に文字を入れる
+3. 削除ボタンを作って `<li>` の中にくっつける
+4. `<ul>` に `appendChild` で追加する
 
-```
-App
- └─ ThemeProvider (value={theme})   ← ここに値を提供
-     └─ Layout
-         └─ Header
-             └─ Nav
-                 └─ ThemeToggle ← useContext(ThemeContext) で直接読む
-```
+「画面をこう変えたい」という気持ちから遠い、**手順の羅列**になりがちです。項目数が増えたり、削除・並び替え・ハイライトなど状態の種類が増えると、どの DOM をどう更新するかを一つずつ書かないといけません。バグも混入しやすいです。
 
-中間層はノータッチで、`ThemeToggle` だけが Context を読みます。
+React の発想はこうです。
 
-### 3 点セット
+> **画面（UI）を「今の状態」から計算される結果として書く**
 
-Context は次の 3 つをセットで使います。
+コードの書き方は「今、TODO 配列がこうなっているなら、画面はこういう形です」と宣言するだけ。追加・削除で配列が変わると、React が「前の画面」と「新しい画面」を比べて、**変わった箇所だけ** DOM に反映してくれます。
 
-1. `createContext<型>(初期値)` で Context を作る
-2. `<Context.Provider value={値}>` で配下に値を提供する
-3. 使いたい側で `useContext(Context)` で値を取り出す
+### 「仮想 DOM」という言葉は使わない
+
+古い記事では「仮想 DOM」という言葉で説明されていることがあります。本コースでは次のような現代的な表現を使います。
+
+- React は UI を「JS のツリー」として保持している
+- 状態が変わるたびに、新しいツリーを作って前のツリーと比較する
+- 差があった部分だけ、本物の DOM に反映する
+
+要は「全部書き換えるのではなく、変化した差分だけ反映する」仕組みだと覚えておけば十分です。
+
+### コンポーネントという単位
+
+React では、画面を**コンポーネント**という部品に分けて組み立てます。コンポーネントは「JSX を返す関数」です。
 
 ```tsx
-import { createContext, useContext, useState } from "react";
-
-// (1) 作る
-type Theme = "light" | "dark";
-const ThemeContext = createContext<Theme>("light");
-
-// (2) 提供する
-function App() {
-  const [theme, setTheme] = useState<Theme>("light");
-  return (
-    <ThemeContext.Provider value={theme}>
-      <Child />
-    </ThemeContext.Provider>
-  );
-}
-
-// (3) 読む
-function Child() {
-  const theme = useContext(ThemeContext);
-  return <p>現在のテーマ: {theme}</p>;
+function Hello() {
+  return <h1>Hello, React</h1>;
 }
 ```
 
-### Context の型と初期値
+この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。JSX の詳しい書き方は別のレッスンで扱います。
 
-`createContext<型>(初期値)` の初期値は、**Provider で包まれていないときに使われる値** です。「包み忘れたらこれを使う」という保険です。
+### Vite / npm / `package.json` の最低限
 
-今回のテーマ切替では、値だけでなく「切り替える関数」も一緒に配りたいので、オブジェクトで型を作ります。
+素の JS なら `<script defer src="./script.js">` と書けば動きました。React + TypeScript では、TS を JS に変換したり、開発中に保存するとブラウザを自動更新したりする仕組みが必要です。その仕組みをまとめて提供してくれるのが **Vite**（ヴィート） です。
 
-```ts
-type Theme = "light" | "dark";
+Vite は次の 2 つを担います。
 
-type ThemeContextValue = {
-  theme: Theme;
-  toggleTheme: () => void;
-};
+- **開発サーバー**: ファイルを保存するたびに画面を自動更新（`npm run dev`）
+- **ビルド**: 本番公開用に最適化したファイルを出力（`npm run build`）
+
+そして Vite 本体や React 本体などの「外部ライブラリ」をダウンロード・管理する道具が **npm**（Node Package Manager） です。npm は `package.json` というファイルを見て、「このプロジェクトはどのライブラリを使っていて、どのコマンドで起動するか」を判断します。
+
+`package.json` の `scripts` セクションだけ見れば、とりあえず十分です。例えば次のような形です。
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  }
+}
 ```
 
-### Context を使うべきでないケース
+`npm run dev` と打つと、npm は `scripts.dev` に書かれているコマンド（ここでは `vite`）を実行します。Vite が開発サーバーを立ち上げて、ブラウザで表示できる状態になります。
 
-Context は便利ですが、何でも入れていい仕組みではありません。
+### StackBlitz なら自動で走る
 
-| 場面 | 向く / 向かない |
-| --- | --- |
-| テーマ、ログインユーザー情報、言語設定 | 向く（変化が少なく、広く参照される） |
-| フォーム入力のリアルタイム値 | 向かない（頻繁に変わる） |
-| 大規模な state 全体 | 向かない（外部ストア管理の領域） |
+StackBlitz の React + Vite テンプレートを開くと、次のことが自動で起きます。
 
-**頻繁に変わる値** を Context に入れると、Provider 配下のすべての `useContext` 利用コンポーネントが再レンダリングされます。小さなアプリなら気になりませんが、大きくなると性能上の負荷になります。
+1. `npm install`（`package.json` に書かれたライブラリをダウンロード）
+2. `npm run dev`（Vite 開発サーバーを起動）
+3. プレビューエリアに画面が表示される
 
-そうした用途（TODO アプリ全体の状態管理など）では Zustand / Redux など専用のライブラリが使われますが、**本コースでは扱いません**。今回は「テーマ切替」という変化の少ない題材に絞ります。
+本コースでは `npm install` や `npm run dev` を **知っておく程度** でよく、コマンドを手で打つことはほとんどありません。それでも「StackBlitz の裏では Vite が動いている」「設定は `package.json` に書かれている」ことだけ頭に入れておくと、後で応用が利きます。
 
-### TODO の Context 化は扱わない
+### `App.tsx` の位置
 
-「カスタムフック」で `useTodos` カスタムフックを作り、「TODO アプリを React で作る」の発展枠で「`useTodos` を Context でアプリ全体に提供する」パターンに触れます。本レッスンでは **テーマ切替のみ** を扱い、TODO の Context 化には踏み込みません。
+Vite の React + TS テンプレートでは、画面の入口となるファイルが 2 つあります。
+
+- `src/main.tsx`: React を起動する（ここは基本触らない）
+- `src/App.tsx`: 画面の中身を書く（本コースではここを中心に触る）
+
+`main.tsx` の中で `<App />` をブラウザに流し込んでいます。イメージとしてはこうです。
+
+```tsx
+// src/main.tsx（テンプレートに最初から入っている）
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+```
+
+`StrictMode` は「開発中に問題を見つけやすくするラッパー」です。今は気にしなくてよいです。
+
+本コースで意識的に編集するのは、基本的に `src/App.tsx` です。
 
 ## 演習
 
@@ -111,240 +122,73 @@ Context は便利ですが、何でも入れていい仕組みではありませ
 
 ### ゴール
 
-- アプリ全体でテーマ（`"light" | "dark"`）を Context で共有する
-- 深い階層の `ThemeToggle` から、props を経由せずにテーマを切り替える
-- 中間層のコンポーネント（`Layout` / `Header` / `Nav`）が props を受け取らないことを確認する
+- StackBlitz の React + Vite（TS）テンプレートから新しいプロジェクトを起動する
+- `src/App.tsx` を編集して「Hello, React」とあなたの名前を画面に表示する
+- `package.json` を開いて `scripts.dev` の値を確認する
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/ThemeContext.tsx` を作成
-3. `src/Layout.tsx` / `src/Header.tsx` / `src/Nav.tsx` / `src/ThemeToggle.tsx` を作成
-4. `src/App.tsx` を書き換える
-5. `src/App.css` を書き換える
-
-### `src/ThemeContext.tsx`
-
-```tsx
-import { createContext, useContext, useState } from "react";
-import type { ReactNode } from "react";
-
-export type Theme = "light" | "dark";
-
-type ThemeContextValue = {
-  theme: Theme;
-  toggleTheme: () => void;
-};
-
-const ThemeContext = createContext<ThemeContextValue | null>(null);
-
-type ThemeProviderProps = {
-  children: ReactNode;
-};
-
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>("light");
-
-  function toggleTheme() {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
-  }
-
-  return (
-    <ThemeContext.Provider value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext.Provider>
-  );
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (ctx === null) {
-    throw new Error("useTheme は ThemeProvider の中で使ってください");
-  }
-  return ctx;
-}
-```
-
-- Context の初期値を `null` にしておき、`useTheme` で「`null` ならエラー」をチェックしています。これで「Provider で包み忘れた」ときに、はっきりエラーメッセージが出ます
-- Provider はよく使う形なので、`ThemeProvider` という関数コンポーネントとしてラップしています
-- `useTheme` という **カスタムフック** にしておくと、使う側が `useContext(ThemeContext)` と書かずに済みます（カスタムフックは「カスタムフック」で深掘りします）
-
-### `src/ThemeToggle.tsx`
-
-```tsx
-import { useTheme } from "./ThemeContext";
-
-export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
-
-  return (
-    <button type="button" onClick={toggleTheme} className="theme-toggle">
-      現在: {theme} (クリックで切替)
-    </button>
-  );
-}
-```
-
-深い階層のコンポーネントが、props を **一切受け取らず** に Context からテーマを読み出して切り替えています。
-
-### `src/Nav.tsx`
-
-```tsx
-import { ThemeToggle } from "./ThemeToggle";
-
-export function Nav() {
-  return (
-    <nav className="nav">
-      <span>メニュー</span>
-      <ThemeToggle />
-    </nav>
-  );
-}
-```
-
-`Nav` はテーマのことを知りません。`ThemeToggle` を置くだけです。
-
-### `src/Header.tsx`
-
-```tsx
-import { Nav } from "./Nav";
-
-export function Header() {
-  return (
-    <header className="header">
-      <h1>Context API のデモ</h1>
-      <Nav />
-    </header>
-  );
-}
-```
-
-### `src/Layout.tsx`
-
-```tsx
-import type { ReactNode } from "react";
-import { Header } from "./Header";
-import { useTheme } from "./ThemeContext";
-
-type LayoutProps = {
-  children: ReactNode;
-};
-
-export function Layout({ children }: LayoutProps) {
-  const { theme } = useTheme();
-
-  return (
-    <div className={`layout ${theme}`}>
-      <Header />
-      <main className="main">{children}</main>
-    </div>
-  );
-}
-```
-
-`Layout` は `theme` の値を **見た目を変えるために** 読みますが、props としては受け取っていません。Context から直接取り出しています。
+1. ブラウザで [https://stackblitz.com/](https://stackblitz.com/) を開く
+2. トップ画面の「Start a new project」セクションから、**Vite のロゴ付きの react-ts** （あるいは「React + Vite + TS」「React TypeScript Vite」などと表記） のテンプレートを選ぶ
+   - 旧 Create React App（CRA）ベースの「React」テンプレートも並んでいることがあるが、本コースでは **必ず「Vite」側** を選ぶ
+   - 「Vanilla TypeScript」「Next.js」は今回は選ばない
+3. 直接次の URL を開いても同じテンプレートが立ち上がる → [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts)
+4. 左のファイルツリーから `src/App.tsx` を開く
+5. 中身を下記の内容に書き換える
+6. 右のプレビューで確認する
 
 ### `src/App.tsx`
 
 ```tsx
-import { ThemeProvider } from "./ThemeContext";
-import { Layout } from "./Layout";
-import "./App.css";
-
 function App() {
+  const userName = "Alice";
   return (
-    <ThemeProvider>
-      <Layout>
-        <p>このページは Context からテーマを受け取って見た目を変えます。</p>
-        <p>右上のボタンで light / dark を切り替えてみてください。</p>
-      </Layout>
-    </ThemeProvider>
+    <div>
+      <h1>Hello, React</h1>
+      <p>こんにちは、{userName} さん</p>
+    </div>
   );
 }
 
 export default App;
 ```
 
-`App` は `<ThemeProvider>` で全体を包むだけです。`theme` を各コンポーネントに props として渡していません。
-
-### `src/App.css`
-
-```css
-.layout {
-  min-height: 100vh;
-  transition: background-color 200ms, color 200ms;
-}
-
-.layout.light {
-  background-color: #fff;
-  color: #222;
-}
-
-.layout.dark {
-  background-color: #202020;
-  color: #eee;
-}
-
-.header {
-  padding: 12px 16px;
-  border-bottom: 1px solid currentColor;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.header h1 {
-  font-size: 1.2rem;
-  margin: 0;
-}
-
-.nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.main {
-  padding: 16px;
-}
-
-.theme-toggle {
-  padding: 6px 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  border: 1px solid currentColor;
-  background-color: transparent;
-  color: inherit;
-}
-```
-
-背景色と文字色を `.light` / `.dark` クラスで切り替えています。クラス名は `Layout` が `theme` を見て付けています。
+`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です（詳しくは別のレッスン）。
 
 ### 期待出力
 
-- 画面右上に「現在: light (クリックで切替)」ボタンが表示される
-- 画面全体が白背景・黒文字（light テーマ）で表示される
-- ボタンを押すと「現在: dark (クリックで切替)」に変わり、画面全体が黒背景・白文字に切り替わる
-- もう一度押すと light に戻る
-- `Nav` / `Header` コンポーネントは props を 1 つも受け取っていないのにテーマ切替が動く
+プレビューに次の 2 行が表示されます。
+
+```
+Hello, React
+こんにちは、Alice さん
+```
+
+見出しの `Hello, React` が `<h1>` の大きな文字、`こんにちは、Alice さん` が `<p>` の通常の大きさで並びます。
 
 ### 変える
 
-- `App.tsx` で `<ThemeProvider>` の行を削除してみます。`useTheme` の中で `throw new Error(...)` が発動し、画面がエラー表示になります。「Provider を必ず外側に置く」必要性を体感する演習です。確認したら元に戻します。
-- `ThemeContext.tsx` の `createContext<ThemeContextValue | null>(null)` を `createContext<ThemeContextValue>({ theme: "light", toggleTheme: () => {} })` のように「ダミーのデフォルト値」に変えることもできます。こうすると Provider 無しでもエラーは出ませんが、「包み忘れ」に気づけなくなる欠点があります。本コースでは `null` + チェック方式を推奨します。
-- `ThemeToggle` を `Header` の直下に移動しても、変わらず動くことを確認します。Context は **ツリーのどこに置いても** Provider の配下なら届きます。
+- `const userName = "Alice";` の `"Alice"` をあなたの名前に書き換えて保存する。保存するとプレビューが自動で更新されることを確認する
+- `<h1>Hello, React</h1>` を `<h1>Hello, 世界</h1>` に変えて保存。これも即反映されるはず
 
 ### 自分で書く
 
-- `useTheme` の戻り値に `isDark: boolean` を追加してみてください（`theme === "dark"` で計算する）。`ThemeToggle` の文言を `isDark ? "Dark" : "Light"` のように切り替えると、より実用的な見た目になります（本コース本体は絵文字なしで統一しています。お好みで差し替えてください）。
-- 別の Context として `LangContext`（`"ja" | "en"` を持つ）を追加し、`Header` の見出しを言語で切り替える演習もおすすめです。Context を **複数使う** 形に慣れます。
+- 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
+- 変数の型は今は書かなくてよい（3 章 でやった型注釈は、次の lesson で必要に応じて使う）
+
+### `package.json` を覗く小タスク
+
+1. 左のファイルツリーから `package.json` を開く
+2. `"scripts"` の中を見つける
+3. `"dev": "vite"` のような行があることを確認する
+
+StackBlitz が自動で走らせているのは、この `vite` コマンドです。手元で同じことをやるなら、ターミナルで `npm install` → `npm run dev` と打つ流れになります。
 
 ## まとめ
 
-- Context は「ツリーの途中を通さずに値を共有する」仕組み
-- `createContext` / `<Provider value>` / `useContext` の 3 点セットで使う
-- 初期値を `null` にして、カスタムフックでチェックすると Provider 包み忘れに気づきやすい
-- テーマ、ログインユーザー、言語設定のように **変化が少なく広く参照される値** に向く
-- 頻繁に変わる値や大規模 state には不向き。外部ライブラリ（Zustand / Redux 等）の領域だが本コースでは扱わない
-- TODO を Context 化する応用は「TODO アプリを React で作る」の発展枠で扱う
-- 別のレッスンで `useRef` で DOM を直接触る方法を学ぶ
+- React は「画面を今の状態から計算する」発想の道具。差分だけを DOM に反映する
+- 画面は**コンポーネント**（JSX を返す関数）の組み合わせで作る
+- Vite は開発サーバーとビルドを担当し、`npm run dev` で起動する
+- `package.json` の `scripts` セクションに、起動やビルドのコマンドがまとまっている
+- StackBlitz を使う限り、`npm install` も `npm run dev` も自動で走る。コマンドは知っておく程度で OK
+- 編集するのは基本的に `src/App.tsx`

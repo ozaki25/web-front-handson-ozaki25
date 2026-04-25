@@ -9,7 +9,7 @@
 - 既存コードでハマらないための注意点（Rules of React）を押さえる
 
 ::: tip 前提
-このレッスンは lesson54「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson54 / 55 を確認してください。
+このレッスンは lesson64「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson64 / 55 を確認してください。
 :::
 
 ## 解説
@@ -36,7 +36,7 @@ const onClick = useCallback(
 const Memoed = React.memo(Child);
 ```
 
-3 つとも本来 **「Reactが効率の良い動作をするためのヒント」**。けれど、現実は:
+3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
 
 - **書き忘れ**でパフォーマンス劣化
 - **依存配列のミス**でバグ
@@ -456,7 +456,7 @@ export default function CompiledComponent() { /* ... */ }
 
 ### 変える
 
-- 既存コード（lesson54 / lesson57 の React アプリなど）に Compiler を入れる
+- 既存コード（lesson64 / lesson67 の React アプリなど）に Compiler を入れる
 - React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
 - 大量レンダリング（1000 行のリスト）で差を観察
 
@@ -464,7 +464,7 @@ export default function CompiledComponent() { /* ... */ }
 
 - 既存プロジェクトで `useMemo` / `useCallback` を **すべて削除** して動作する範囲を試す
 - `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
-- ベンチマーク（lesson96 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
+- ベンチマーク（lesson101 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 
 ## まとめ
 

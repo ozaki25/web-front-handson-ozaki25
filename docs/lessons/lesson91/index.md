@@ -1,216 +1,185 @@
-# lesson91: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
+# lesson91: HTTP キャッシュ
 
 ## ゴール
 
-- Chrome DevTools 内蔵の **Lighthouse** で a11y スコアを計測できる
-- **axe DevTools** 拡張で詳細な違反をチェックできる
-- 自動チェックでは拾えない領域（文脈・操作感）を **スクリーンリーダー**（VoiceOver / NVDA）で確認できる
-- CI に **axe-core**（`@axe-core/playwright` など）を組み込む発想を理解する
-- 「自動チェック + 手動チェック + 実ユーザー」の 3 段構えが必要な理由を説明できる
+- ブラウザがリソースをキャッシュしている場所（メモリ / ディスク）を説明できる
+- `Cache-Control` の主要ディレクティブ（`public` / `private` / `max-age` / `no-cache` / `no-store` / `immutable`）の違いを説明できる
+- 強キャッシュ（期限内はサーバーに聞かない）と 弱キャッシュ（サーバーに聞くが中身は省略）の違いを説明できる
+- `ETag` / `Last-Modified` と `304 Not Modified` の関係を説明できる
+- キャッシュ起因で「新しいデプロイが反映されない」古典的なハマりを避ける実務パターンを知る
 
 ## 解説
 
-### チェックの 3 段構え
+### そもそもキャッシュはなぜ要るか
 
-a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は 3〜4 割で、残りは **文脈** に依存します。たとえば:
+ブラウザがリソース（HTML / CSS / JS / 画像）を取りに行くのは、毎回遅くてトラフィックもかかります。一度取ったものを **同じなら再利用する** のがキャッシュです。効き方の強い順に、次の 3 段階があると覚えると整理しやすいです。
 
-- `alt="画像"` と書いてあっても、画像の本当の内容を表していなければ機械は気づけない
-- ボタンラベルが `aria-label="保存"` でも、「何を保存するのか」が文脈に合ってなければ機械は気づけない
-- キーボードで Tab 順序が「技術的に通る」でも、論理的な順序として使いづらい場合がある
+1. **強キャッシュ**: サーバーに問い合わせもしない。ローカルのキャッシュから即配る
+2. **弱キャッシュ**（条件付きリクエスト）: サーバーに「変わってますか？」だけ聞く。変わってなければ `304 Not Modified` が返り、ボディは送られてこない
+3. **キャッシュなし**: 毎回フルで取りに行く
 
-実務では次の 3 段階でチェックします。
+どのモードになるかは、レスポンスヘッダ `Cache-Control` / `ETag` / `Last-Modified` で決まります。
 
-1. **自動**: Lighthouse / axe DevTools → 開発中の基本ラインを自動検知
-2. **手動**: キーボードだけで操作してみる / スクリーンリーダーで読み上げる → 体験として正しいか
-3. **実ユーザー**: 可能ならアクセシビリティ利用者に触ってもらう → リアルなフィードバック
+### `Cache-Control` の主要ディレクティブ
 
-本レッスンでは 1 と 2 を一通り触ります。
+サーバーがレスポンスヘッダに **`Cache-Control: ...`** を付けて「このリソースはどう扱っていいか」をブラウザに伝えます。代表的なものを並べます。
 
-### 1. Lighthouse: 基本ラインを自動で
+| ディレクティブ | 意味 |
+|---|---|
+| `public` | 誰でも（ブラウザ / 中間キャッシュ / CDN）キャッシュしてよい |
+| `private` | ブラウザ本体だけキャッシュしてよい。CDN には持たせない |
+| `max-age=N` | N 秒間は新鮮。その間はサーバーに聞かない（強キャッシュ） |
+| `s-maxage=N` | 中間キャッシュ（CDN 等）向けの max-age。ブラウザは無視 |
+| `no-cache` | 毎回サーバーに問い合わせ（弱キャッシュは効く）。ボディは返ってこないこともある |
+| `no-store` | 一切キャッシュしない。毎回フルで取り直し |
+| `must-revalidate` | 期限が切れたら **必ず** 再検証（古いキャッシュを出さない） |
+| `immutable` | 期限内は絶対に変わらない。リロードでも再検証しない |
+| `stale-while-revalidate=N` | 期限切れから N 秒はそのまま返して、裏で再検証 |
 
-Chrome DevTools 内蔵の **Lighthouse** タブは、その場でページを監査して 4 つのカテゴリ（Performance / Accessibility / Best Practices / SEO）を 0〜100 の点数で返します。
+混乱しやすいのは `no-cache` と `no-store` です:
 
-手順:
+- **`no-cache`**: キャッシュ **は** する。ただし使う前に毎回サーバーに聞く
+- **`no-store`**: キャッシュ **しない**
 
-1. Chrome でチェックしたいページを開く
-2. DevTools（`F12`）→ **Lighthouse** タブ
-3. Categories で **Accessibility** だけ選択（他もまとめて出しても良い）
-4. Device は Desktop / Mobile どちらかを選び、**Analyze page load** をクリック
-5. レポートが出る。Accessibility のスコアが 100 / 90 / 80 ... のように点数化される
+名前と挙動が逆に見えるので、都度仕様を見に行く癖を付けるのが安全です。
 
-典型的な違反の例:
+### 強キャッシュ: `max-age` の世界
 
-- Background and foreground colors do not have a sufficient contrast ratio（コントラスト不足）
-- Image elements do not have `[alt]` attributes（alt 欠落）
-- Form elements do not have associated labels（label 欠落）
-- Heading elements are not in a sequentially-descending order（見出し階層の飛び）
-- Buttons do not have an accessible name（アクセシブルネーム欠落）
-- `[aria-*]` attributes do not match their roles（ARIA の誤用）
+レスポンスにこういうヘッダが付いていたとします。
 
-Lighthouse は **違反ごとに該当の DOM ノード** を示してくれるので、クリックすれば Elements タブにジャンプして直すだけです。
-
-**スコア 100 が目標ですが、それが a11y 完璧の意味ではない** 点に注意してください。Lighthouse が拾うのは機械的な項目だけです。
-
-### 2. axe DevTools: より細かく診断
-
-Lighthouse より **詳細な違反情報** が欲しいときは、Chrome 拡張の **axe DevTools**（<https://www.deque.com/axe/devtools/>）を使います。無料版でも十分に使えます。
-
-インストール後:
-
-1. Chrome 拡張からインストール
-2. DevTools に **axe DevTools** タブが追加される
-3. **Scan ALL of my page** を押す
-4. Critical / Serious / Moderate / Minor の優先度別に違反が一覧される
-5. 各違反に「なぜ違反か」「どう直すか」のガイドリンク付き
-
-Lighthouse との違い:
-
-- axe DevTools は **Deque**（a11y 専門会社）が提供。業界標準の axe-core エンジンを使う
-- 違反の説明が詳しく、**修正方法のコード例** まで載っている
-- Lighthouse は axe-core の一部を内蔵している。つまり **axe DevTools の方が厳しめ**
-
-両方回して、Lighthouse で基本を見て、axe で細部を詰めるのが定番です。
-
-### 3. キーボード手動チェック
-
-ここからは **人間の目と手でしか分からない** 領域です。次を試してください。
-
-1. マウスから手を離す
-2. Tab キーだけでページを最初から最後まで操作する
-3. 次を確認する:
-   - **フォーカスリングが常に見える** か（どこにフォーカスがあるか分かるか）
-   - **Tab の順序が論理的** か（画面上の自然な流れと一致しているか）
-   - すべての **操作可能な要素** に Tab で到達できるか（マウスでしかクリックできない部分はないか）
-   - **モーダル**が開いたとき、Tab がモーダル内で巡回し、Esc で閉じられるか
-   - **キーボードの罠** がないか（Tab を押してもフォーカスが進まない場所はないか）
-
-「フォーカスが見えない」は最頻発の違反です。CSS で `outline: none` を書いていないか、`:focus-visible` で代替を用意しているか、再確認しましょう。
-
-### 4. スクリーンリーダー手動チェック
-
-スクリーンリーダーは **OS 付属（VoiceOver）や無料（NVDA）** が使えます。自分で触ってみると、文章だけでは分からない体験が一気に分かります。
-
-#### macOS: VoiceOver
-
-- 起動: `Cmd + F5`（または `Touch ID` を 3 回連打）
-- 停止: もう一度 `Cmd + F5`
-- ページ読み上げ: `Ctrl + Option + A`
-- 次の見出しへ移動: `Ctrl + Option + Cmd + H`
-- ランドマーク一覧: `Ctrl + Option + U`（ローター）
-
-初めての場合、読み上げスピードが速すぎると感じます。システム設定 → アクセシビリティ → VoiceOver で速度を遅くできます。
-
-#### Windows: NVDA（無料）
-
-- <https://www.nvaccess.org/download/> からダウンロード
-- 起動後、Web ページを開くと自動で読み上げ開始
-- 次の見出しへ: `H`
-- 次のランドマークへ: `D`
-- 読み上げ停止: `Ctrl`
-
-#### 何を確認するか
-
-- **ページを開いた瞬間に何が読まれるか**（最初の見出しか、関係ないテキストか）
-- ナビゲーションで **「メインコンテンツにスキップ」** できるか（`<main>` ランドマークがあるか）
-- フォームで **ラベルと入力欄が正しく紐付いている** か
-- **アイコンボタンの名前** が読まれるか（`aria-label` 未設定だと「ボタン」としか読まれない）
-- **動的更新**（通知メッセージなど）が `aria-live` で自動通知されるか
-
-「セマンティック HTML とアクセシビリティの基礎」「ARIA 属性とキーボード操作」で作った演習ページで試してみると、これまで配置した属性が効いているのが体感できます。
-
-### 5. CI に組み込む: `@axe-core/playwright`
-
-手動チェックだけでは、**デグレ**（一度直した違反が再発すること）を防げません。E2E テストで axe を回して CI に組み込むと、PR の段階で自動検知できます。
-
-```ts
-// e2e/a11y.spec.ts
-import { test, expect } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
-
-test("トップページに a11y 違反がない", async ({ page }) => {
-  await page.goto("http://localhost:3000/");
-  const results = await new AxeBuilder({ page }).analyze();
-  expect(results.violations).toEqual([]);
-});
+```
+Cache-Control: public, max-age=3600
 ```
 
-「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。
+これは「このリソースを **1 時間**（3600 秒）は新鮮とみなす」という意味です。この間はブラウザは **サーバーに一切問い合わせずに** ローカルのキャッシュを使います。
 
-> React のユニットテストレベルなら `jest-axe` や `vitest-axe` が使えます。コンポーネント単体の違反チェックに向きます。
+DevTools の Network タブで見ると、`Size` 列が **`(memory cache)`** や **`(disk cache)`** になり、サーバーに行かなかったことが表示されます。
 
-### まとめの「チェックリスト」
+```
+Size        Status
+(disk cache) 200
+```
 
-デプロイ前に以下を確認すれば、機械的には OK ラインに届きます（最低限）。
+`max-age` が切れるまでは、コードをいじってデプロイし直しても **古いファイルが配られ続けます**。これがキャッシュ起因の「デプロイしたのに反映されない」問題の典型です。
 
-- [ ] Lighthouse Accessibility スコアが 90 以上
-- [ ] axe DevTools の Critical / Serious が 0
-- [ ] マウスを使わず Tab だけで全機能を操作できる
-- [ ] Tab を押したときに常にフォーカスリングが見える
-- [ ] モーダルが Esc で閉じ、フォーカスが元に戻る
-- [ ] スクリーンリーダーでページを開いた最初の読み上げが自然
+### 弱キャッシュ: `304 Not Modified` の世界
+
+`max-age` が切れた、または `no-cache` が付いているリソースは、ブラウザがサーバーに **「これ、まだ有効？」** と確認しに行きます。この確認のために使うのが `ETag` と `Last-Modified` です。
+
+レスポンスに `ETag` が付いていたら、ブラウザは次回のリクエストに `If-None-Match` ヘッダで同じ値を送ります。
+
+```
+# 初回レスポンス
+HTTP/1.1 200 OK
+Cache-Control: no-cache
+ETag: "abc123"
+Content-Type: image/png
+...（画像ボディ）
+
+# 2 回目のリクエスト
+GET /logo.png HTTP/1.1
+If-None-Match: "abc123"
+
+# サーバーのレスポンス
+HTTP/1.1 304 Not Modified
+（ボディは空）
+```
+
+サーバーは「変わってない」と分かれば **ボディを送らずに 304 だけ返す** ので、通信量はほぼゼロになります。ブラウザは手元のキャッシュを使います。
+
+`Last-Modified` の場合は `If-Modified-Since` ヘッダで日時を送り返します。考え方は同じです。`ETag` のほうが識別が厳密で、現代では主流です。
+
+### 実務での定番パターン: 「ハッシュ付きファイル名 + immutable」
+
+Web アプリの CSS / JS は「ビルドのたびに中身が変わる可能性があるが、変わったときは URL も変えておく」という運用が主流です。
+
+```
+/assets/main.CEDo5b9P.css
+/assets/main.8c29f6e4.js
+```
+
+`CEDo5b9P` のようなハッシュ（コード内容から計算した識別子）をファイル名に入れておき、**中身が変われば URL も変わる** ようにします。すると、サーバーは次のヘッダを安全に付けられます。
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+1 年間（31536000 秒）は絶対に変えないと宣言します。`immutable` は「リロードされても再検証しない」という追加の念押しです。
+
+中身を更新したければ、ビルド時にハッシュが変わって **別の URL** になるので、HTML から参照される URL もそれに合わせて書き換わります。古いキャッシュは持ち続けてもらってよく、新しい URL は新規リクエストとして取りに行くだけです。
+
+一方 **HTML 自体** は `no-cache` または短い `max-age` にしておきます。HTML が古いキャッシュを使うと、新しいハッシュ入りの `<link>` / `<script>` タグに切り替わらないためです。
+
+### Vercel / VitePress など現代のホスティングは既定が賢い
+
+Vercel を使うと、静的アセットには自動で `immutable` が付き、HTML には短いキャッシュが付く形になっています。VitePress のビルド出力もハッシュ付きファイル名です。本コースのような教材サイトでは **設定を触らなくてもキャッシュ運用は成立** しています。
+
+とはいえ、仕組みを知らないと「トップだけ更新されて中ページが古い」「CSS だけ反映されない」といった症状に遭遇したときに原因が分からなくなるので、`Cache-Control` の値を読めるようになっておくことは重要です。
+
+### デバッグのコツ
+
+キャッシュまわりの調査では次を覚えておいてください。
+
+- **DevTools の Disable cache**: Network タブを開いているあいだ、キャッシュを無効化できる。開発中はオンにしておくと安心
+- **Hard reload**: `Ctrl+Shift+R` / `Cmd+Shift+R` で強制再読込（キャッシュを無視）
+- **Application → Clear storage**: 特定のサイトのキャッシュ・ストレージを一括削除
+- **Network タブの Size 列**: `(memory cache)` / `(disk cache)` / 実サイズ で、どこから来たか判断
+- **Network タブで行をクリック → Headers**: `Cache-Control` / `ETag` の実際の値を確認
 
 ## 演習
 
 ### ゴール
 
-- ローカル or 公開 Web サイト 1 ページに対して Lighthouse を実行する
-- axe DevTools をインストールして違反を眺める
-- キーボードだけで 1 つのサイトを操作する体験をする
-- （任意）スクリーンリーダーを起動してページを読み上げさせる
+- 実際のサイトのレスポンスヘッダから `Cache-Control` / `ETag` を読み取る
+- 強キャッシュ・弱キャッシュ・キャッシュなしを切り替えたときの Network タブの見え方の違いを体感する
+- `curl` で条件付きリクエストを自分で送って `304` を取得する
 
-### 手順 1: Lighthouse を回す
+### 手順 1: DevTools で観察する
 
-1. Chrome で本コースの教材サイト、または自分が作ったポートフォリオを開きます
-2. DevTools（`F12`）→ **Lighthouse** タブ
-3. Categories で **Accessibility** だけチェックを残し、**Analyze page load** をクリック
-4. スコアが出るまで 10〜30 秒待ちます
-5. スコアと、違反があれば内容をメモします
+1. 本教材サイト（または任意の Web サイト）を開きます
+2. DevTools の Network タブを開き、リロードします
+3. 1 行クリックして `Headers` → `Response Headers` を確認します
+4. `Cache-Control` と `ETag` の値をメモします
+5. もう一度リロードします。同じ行の `Status` が `304` になる（または `Size` が `(disk cache)` になる）ことを確認します
+6. `Disable cache` にチェックを入れてリロードします。全行が `200` に戻り、Size が実サイズになることを確認します
 
-### 手順 2: axe DevTools を使う
+### 手順 2: `curl` で条件付きリクエストを送る
 
-1. Chrome Web Store で「axe DevTools」を検索してインストール
-2. DevTools に **axe DevTools** タブが出る
-3. **Scan ALL of my page** をクリック
-4. 結果ペインで違反一覧を眺めます。各違反をクリックすると詳細と該当 DOM が出ます
+`ETag` の挙動を手で確かめます。ターミナルで次を実行してください。
 
-### 手順 3: キーボードだけで操作する
+```bash
+# 1 回目: ETag を含むレスポンスヘッダを取る
+curl -I https://jsonplaceholder.typicode.com/posts/1
+```
 
-1. マウスをデスクから**物理的に離して** みる（誘惑を断つため）
-2. Tab キーだけで全リンク・全ボタンを順に通過する
-3. 「ここに行きたいが Tab で辿り着けない」ポイントがないか確認
-4. 見つかったら、Tab 順序の修正候補をメモ（原因は `tabindex` 誤設定 / 非インタラクティブな `<div>` をボタン代わりにしている、など）
+出力の中の `etag: "..."` の値をメモします。次にこの ETag を付けて 2 回目のリクエストを送ります。
 
-### 手順 4（任意）: スクリーンリーダー
+```bash
+# 2 回目: 先ほどの ETag を If-None-Match で送り返す
+curl -I https://jsonplaceholder.typicode.com/posts/1 \
+  -H 'If-None-Match: "W/\"xxxxxxxxxxxx\""'
+```
 
-Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストールして起動し、同じページを読ませてみます。
+`-H` で送る値は、1 回目の `etag:` の値をそのまま入れてください（バックスラッシュのエスケープが必要な場合もあります）。成功すると **`HTTP/2 304`** が返り、ボディは送られてきません。
 
-「何が読まれるか」より「何が読まれないか」に注目すると、見えてないラベルやランドマークが炙り出されます。
-
-### 期待出力
-
-- Lighthouse の Accessibility スコアが数字で出る（教材サイトは 90+ のはず）
-- axe DevTools の違反リストが 0 件 or Critical が 0 件
-- Tab だけで迷子にならずに全操作ができる
-- スクリーンリーダー体験で「どう読まれるか」の感覚が掴める
+手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
 
 ### 変える
 
-- 自分のポートフォリオやブログ（あれば）で同じ手順を試してみる。違反が出たら、「セマンティック HTML とアクセシビリティの基礎」と「ARIA 属性とキーボード操作」のレッスンに戻って該当 HTML を直す
-- Lighthouse の **Device** を Mobile に切り替えてみる。タップ領域の不足など、モバイル固有の違反が出る場合がある
-- `axe DevTools` の **Intelligent Guided Tests**（有料版機能）の存在を認識しておく。無料版の自動チェックで拾えないものを、人間をガイドしながら問診してくれる
+- DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
+- `Hard reload`（`Ctrl+Shift+R` / `Cmd+Shift+R`）を試す。`Disable cache` と同様だが、開発者ツールが閉じていてもキャッシュを無視できる
+- Network タブで `Throttling` を `Slow 4G` に。キャッシュから取っているときはほぼ無影響だが、キャッシュを無効にして比較すると体感差が大きい
 
 ### 自分で書く
 
-- `@axe-core/playwright` を使った E2E a11y テストのサンプルを読んで、雰囲気を掴む（実装は「テスト入門」で Playwright を導入するレッスンと合わせて）
-- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン（章 7「ESLint / Prettier / Biome」のレッスンで扱う予定）
+- 「`no-cache` と `no-store` の違いを 2 行で説明する」文章を書いてみる（本文を隠した状態で挑戦）
+- `Cache-Control: public, max-age=31536000, immutable` が付いたリソースをリロードしたとき、Network タブでどう見えるか予想し、実際に本サイトの `/assets/*.css` などで確認する
 
 ## まとめ
 
-- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは 3〜4 割しかカバーできない
-- **Lighthouse**: Chrome 内蔵。a11y スコアと違反一覧を即出せる
-- **axe DevTools**: Chrome 拡張。より詳細・厳しめ。Deque 提供の業界標準
-- 手動チェック: キーボードだけで操作 / スクリーンリーダーで読ませる
-- **VoiceOver**（macOS）/ **NVDA**（Windows 無料）でスクリーンリーダー体験
-- CI に `@axe-core/playwright` や `jest-axe` / `vitest-axe` を組み込むと、デグレ検知が自動化できる
-- `eslint-plugin-jsx-a11y` も併用すると書く段階で違反を捕まえられる
-- これで a11y の 3 レッスン（セマンティック HTML / ARIA とキーボード / 自動チェック）が完結。次のテーマに進んで、実務の周辺知識を積み上げる
+- キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
+- `Cache-Control` でモードを指定。`max-age` / `no-cache` / `no-store` / `immutable` が主役
+- `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
+- 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
+- DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く
+- 別のレッスンで、複数のリクエストを同時に投げる時に効いてくる **同時接続数と HTTP/2 / HTTP/3** の話に進む

@@ -1,166 +1,173 @@
-# lesson43: コンポーネントと props
+# lesson43: `interface` と `type` の使い分け
 
 ## ゴール
 
-- コンポーネントを分けて再利用できる
-- `type` で props の型を定義し、`import type` して使える
-- `children` を受け取って自由な中身を差し込めるコンポーネントが書ける
+- `interface` 宣言でオブジェクトの形に名前を付けられる。
+- `extends` で `interface` を継承して、既存の型を拡張できる。
+- `type` と `interface` の書き分けと、それぞれが得意とする場面を説明できる。
+- 本コースでは `type` を基本に使う方針を理解する。
 
 ## 解説
 
-### 2 章 の「分割代入とスプレッド」と同じ書き方
+### `interface` でオブジェクトの形に名前を付ける
 
-本題の前に、1 行で接続しておきます。
-
-2 章 の「分割代入とスプレッド」で学んだオブジェクトの分割代入を思い出してください。
+「オブジェクトの型と type エイリアス」では `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
 
 ```ts
-const user = { name: "Alice", age: 20 };
-const { name, age } = user; // 取り出す
-```
-
-React コンポーネントの props も、**全く同じ書き方**で値を取り出します。「2 章 の「分割代入とスプレッド」の再登場」と思ってください。
-
-```tsx
-function Greeting({ name }: GreetingProps) {
-  return <p>こんにちは、{name} さん</p>;
+interface User {
+  name: string;
+  age: number;
 }
+
+const alice: User = { name: "Alice", age: 20 };
 ```
 
-### props とは
+- `interface 名前 { ... }` の形。`type` と違い **末尾の `=` やセミコロンは書かない**。
+- 中身の書き方（プロパティ名と型、区切りのセミコロン）は `type` のオブジェクト型リテラルと同じ。
+- 慣習として大文字で始める（`User`、`Todo` など）。
 
-コンポーネントを関数として見たとき、props は **引数** です。呼び出し側から値を渡し、コンポーネントの中で使います。HTML タグに属性を付ける感覚で書けます。
+同じ型が必要な場所で呼び出せるのも `type` と同じです。
 
-```tsx
-<Greeting name="Alice" />
-<Greeting name="Bob" />
+```ts
+function printUser(user: User): void {
+  console.log(`${user.name} (${user.age})`);
+}
+
+printUser(alice);
 ```
 
-同じ `Greeting` コンポーネントを、`name` を変えながら何回でも使い回せます。
+型として見たときの振る舞いは、上のようなシンプルなオブジェクトの場合はほとんど `type` と同じです。違うのは **書き方** と **拡張の仕方**、そして **書けない型の種類** です。
 
-### 型付き props
+### `extends` で継承する
 
-TypeScript で書くときは、props の形を型で表します。3 章 の「オブジェクトの型と type エイリアス」で学んだ `type` エイリアスをそのまま使います。
+`interface` は `extends` で **別の `interface` を継承** できます。継承すると、元のプロパティを全部引き継いだうえで、新しいプロパティを足せます。
 
-```tsx
-type GreetingProps = {
+```ts
+interface User {
+  id: string;
+  name: string;
+}
+
+interface AdminUser extends User {
+  role: "admin";
+  permissions: string[];
+}
+
+const admin: AdminUser = {
+  id: "u001",
+  name: "Alice",
+  role: "admin",
+  permissions: ["read", "write"],
+};
+```
+
+- `AdminUser` は `User` のプロパティ（`id` と `name`）に加え、`role` と `permissions` を持つ。
+- `extends` の右にカンマで並べれば、**複数の `interface`** を継承することもできる。
+
+継承したプロパティを欠けさせるとエラーになります。
+
+```ts
+const admin: AdminUser = {
+  id: "u001",
+  role: "admin",
+  permissions: ["read", "write"],
+}; // name が足りない
+```
+
+```
+Property 'name' is missing in type '{ id: string; role: "admin"; permissions: string[]; }' but required in type 'AdminUser'.
+```
+
+### `type` でも同じことは書ける
+
+`type` エイリアスでも、**交差型** `&` を使えば継承に似たことが書けます。
+
+```ts
+type User = {
+  id: string;
   name: string;
 };
 
-function Greeting({ name }: GreetingProps) {
-  return <p>こんにちは、{name} さん</p>;
-}
+type AdminUser = User & {
+  role: "admin";
+  permissions: string[];
+};
 ```
 
-- `GreetingProps` は「`name` という string を持つオブジェクト」の型
-- `function Greeting({ name }: GreetingProps)` は「props（`GreetingProps`）を受け取り、その中の `name` を取り出して使う関数」
+`User & { ... }` は「`User` のプロパティ **かつ** `{ role, permissions }` のプロパティを両方持つ型」という意味。`interface extends` とほぼ同じ結果になります。
 
-オブジェクト分割代入と同じ書き方がそのまま効きます。
+### `type` だけが書けるもの
 
-### `import type` で型を別ファイルから持ってくる
+次のような型は `interface` では書けません。`type` 専用です。
 
-3 章 の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
+1. **ユニオン型**（`A | B`）
+
+    ```ts
+    type Id = string | number;
+    ```
+
+    `interface Id = string | number;` のようには書けない。
+
+2. **交差型**（`A & B`）
+
+    `interface` を `extends` で合成するのとは別に、既存の型同士を `&` で組み合わせるのは `type` の役目。
+
+3. **リテラル型 / プリミティブ型のエイリアス**
+
+    ```ts
+    type Status = "open" | "done";
+    type Age = number;
+    ```
+
+4. **Utility Types の結果に名前を付ける**
+
+    「Utility Types で仕上げる」で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
+
+    ```ts
+    type TodoDraft = Partial<Todo>;
+    ```
+
+このあたりは「`interface` はオブジェクトの形の宣言専用。それ以外の型操作は `type` で」と覚えておくとよいです。
+
+### 使い分けの指針
+
+両方書けるのでどちらを使うべきか迷いますが、本コースでは次の方針で進めます。
+
+- **基本は `type`** に統一する
+  - オブジェクト型・ユニオン・交差・Utility Types を **同じ書き方（`type ...=`）で書ける** ので、読者側の認知コストが低い。
+  - 3 章 で `status: "open" | "done"` のようなユニオン・リテラル型が多用されるため、`type` で書けない場面は実質ない。
+- `interface` は「存在を知っている」状態にする
+  - 外部ライブラリの型定義（`@types/...`）では `interface` が多用される。読めるようにしておく必要がある。
+  - 将来チームで書く際に `interface` を選ぶ流儀もある。読み書きの両方できるようにしておけば困らない。
+
+要するに「どちらも書けるようになってから、本コースでは `type` で揃える」という立ち位置です。
+
+### 宣言マージについて（本編では扱わない）
+
+`interface` には「同じ名前の `interface` を複数書くとプロパティが合体する」 **宣言マージ** という挙動があります。
 
 ```ts
-// src/types.ts
-import type { ReactNode } from "react";
-
-export type GreetingProps = {
+interface User {
   name: string;
-  age?: number;
-  children?: ReactNode;
-};
-```
-
-```tsx
-// src/Greeting.tsx
-import type { GreetingProps } from "./types";
-```
-
-- `import type { ... }` は「**型だけ** を持ってくる」という書き方
-- ビルド後の JS には残らない（実行時のコストはゼロ）
-- `ReactNode` は `react` パッケージから import する。`React.ReactNode` のように名前空間経由で書くこともできるが、新しい Vite テンプレート（自動 JSX ランタイム前提）では名前空間経由だと「`React` が見つからない」エラーが出やすいので、**個別に import する形に統一する**
-
-### オプショナルプロパティ `?`
-
-`age?: number` は「`age` は省略しても OK」という意味です。書く側は `<Greeting name="Alice" />` でも `<Greeting name="Alice" age={20} />` でも動きます。省略された場合、`age` の値は `undefined` になります。
-
-### `children`（コピペで与える `ReactNode`）
-
-コンポーネントのタグの**中身**を受け取りたいことがあります。例えばこう書きたい。
-
-```tsx
-<Card>
-  <h2>タイトル</h2>
-  <p>本文</p>
-</Card>
-```
-
-`Card` の中身（`<h2>` と `<p>`）を、`Card` の中の好きな場所にはめ込みたい。この「中身」を受け取る特別な props の名前が **`children`** です。
-
-型は `ReactNode` を使います（`react` パッケージから `import type` する）。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
-
-```tsx
-import type { ReactNode } from "react";
-
-type CardProps = {
-  title: string;
-  children?: ReactNode;
-};
-
-function Card({ title, children }: CardProps) {
-  return (
-    <div className="card">
-      <h2>{title}</h2>
-      <div className="card-body">{children}</div>
-    </div>
-  );
 }
-```
 
-使う側は、タグの中に何でも書けます。
-
-```tsx
-<Card title="お知らせ">
-  <p>本日は休業です。</p>
-</Card>
-```
-
-### コンポーネントの作り方（ファイル分割）
-
-コンポーネントが増えてきたら、1 ファイル 1 コンポーネントに分けます。
-
-```tsx
-// src/Greeting.tsx
-import type { GreetingProps } from "./types";
-
-export function Greeting({ name, age, children }: GreetingProps) {
-  return (
-    <div>
-      <p>こんにちは、{name} さん</p>
-      {age !== undefined && <p>{age} 歳です</p>}
-      {children}
-    </div>
-  );
+interface User {
+  age: number;
 }
+
+// ここで User は { name: string; age: number; } と同等
 ```
 
-- ファイル名はコンポーネント名に合わせる（大文字始まり）
-- **コンポーネント名は必ず大文字始まり**（`Greeting` / `Card`）。小文字で書くと JSX が通常の HTML タグとして解釈されてしまう
-- `export function ...` で名前付きエクスポートするのが本コースの基本形
-
-`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。条件表示の詳しい話は「条件で出し分ける」で扱います。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
+便利に見えますが、読み手が「どこでマージされているか」を追わなければならず、意図しない衝突も起こりえます。本コースでは **この機能は使いません**。`type` に統一する方針と合わせて、「1 つの型は 1 つの宣言で書く」と覚えておいてください。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
-<summary>出発点のファイル（3 章 の <code>types.ts</code> を再掲）</summary>
-
-**`src/types.ts`**
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
 ```ts
 export type Todo = {
@@ -169,124 +176,192 @@ export type Todo = {
 };
 ```
 
-このレッスン本体では `Todo` 型自体は使いませんが、以降のレッスンで再利用するのでここで用意しておいても構いません。
-
 </details>
 
-### ゴール
+### 手順 1: `interface Todo` で書き直す
 
-- `Greeting` コンポーネントを別ファイルに切り出し、`App` から 3 パターンで呼び出す
-- 型 `GreetingProps` を `types.ts` に置き、`import type` で使う
-- `children` に JSX を差し込めることを確認する
+これまでのレッスンで作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
 
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
-2. `src/types.ts` を新規作成
-3. `src/Greeting.tsx` を新規作成
-4. `src/App.tsx` を書き換える
-
-### `src/types.ts`
+`src/types.ts` を次のように書き換える。
 
 ```ts
-import type { ReactNode } from "react";
+// src/types.ts
+export interface Todo {
+  id: string;
+  text: string;
+}
+```
 
-export type GreetingProps = {
+`src/main.ts` はこれまでと同じで動くことを確認する。
+
+```ts
+import type { Todo } from "./types";
+
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+];
+
+function printTodo(todo: Todo): void {
+  console.log(`- [${todo.id}] ${todo.text}`);
+}
+
+for (const todo of todos) {
+  printTodo(todo);
+}
+```
+
+#### 期待出力
+
+```
+- [a1] 牛乳を買う
+- [a2] 本を返す
+```
+
+`type Todo = { ... }` を `interface Todo { ... }` に変えても、**使う側は何も書き換えずに動く** ことを確認する。`import type { Todo }` もそのまま使える。
+
+### 手順 2: わざとプロパティを欠けさせてエラーを見る
+
+`main.ts` に次の行を足す。
+
+```ts
+const broken: Todo = { id: "a3" };
+```
+
+期待されるメッセージ:
+
+```
+Property 'text' is missing in type '{ id: string; }' but required in type 'Todo'.
+```
+
+エラーの文面は `type` のときと同じく「`Todo` 型に `text` が足りない」と出る。`interface` か `type` かは、エラーメッセージの見え方にほぼ影響しない。確認できたらこの行は消す。
+
+### 手順 3: `interface AdminUser extends User` を書く
+
+`src/types.ts` に `User` と `AdminUser` を追記する。
+
+```ts
+// src/types.ts
+export interface Todo {
+  id: string;
+  text: string;
+}
+
+export interface User {
+  id: string;
   name: string;
-  age?: number;
-  children?: ReactNode;
+}
+
+export interface AdminUser extends User {
+  role: "admin";
+  permissions: string[];
+}
+```
+
+`src/main.ts` の末尾に次のコードを追加する。
+
+```ts
+import type { AdminUser } from "./types";
+
+const admin: AdminUser = {
+  id: "u001",
+  name: "Alice",
+  role: "admin",
+  permissions: ["read", "write"],
+};
+
+console.log(`${admin.name}: ${admin.role} / ${admin.permissions.join(", ")}`);
+```
+
+#### 期待出力
+
+```
+- [a1] 牛乳を買う
+- [a2] 本を返す
+Alice: admin / read, write
+```
+
+### 手順 4: 継承したプロパティを欠けさせる
+
+`admin` オブジェクトから `name` を消してみる。
+
+```ts
+const admin: AdminUser = {
+  id: "u001",
+  role: "admin",
+  permissions: ["read", "write"],
 };
 ```
 
-### `src/Greeting.tsx`
+期待されるメッセージ:
 
-```tsx
-import type { GreetingProps } from "./types";
-
-export function Greeting({ name, age, children }: GreetingProps) {
-  return (
-    <div className="greeting">
-      <p>こんにちは、{name} さん</p>
-      {age !== undefined && <p>{age} 歳です</p>}
-      {children}
-    </div>
-  );
-}
+```
+Property 'name' is missing in type '{ id: string; role: "admin"; permissions: string[]; }' but required in type 'AdminUser'.
 ```
 
-### `src/App.tsx`
+`User` から継承した `name` も、`AdminUser` を使う側では必須として扱われる。確認できたら元に戻す。
 
-```tsx
-import { Greeting } from "./Greeting";
-import "./App.css";
+### 手順 5: `interface` で書けないものを試す
 
-function App() {
-  return (
-    <>
-      <h1>Greeting デモ</h1>
+`interface` ではユニオン型を書けないことを確かめる。`types.ts` に次を足してみる。
 
-      {/* (1) 名前のみ */}
-      <Greeting name="Alice" />
-
-      {/* (2) 名前 + 年齢 */}
-      <Greeting name="Bob" age={25} />
-
-      {/* (3) 名前 + children にメッセージ */}
-      <Greeting name="Carol">
-        <p>今日はよい天気ですね。</p>
-      </Greeting>
-    </>
-  );
-}
-
-export default App;
+```ts
+export interface Id = string | number;
 ```
 
-### `src/App.css`
+赤線が出る。期待されるメッセージ:
 
-```css
-.greeting {
-  border: 1px solid #ccc;
-  padding: 8px 12px;
-  margin: 8px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
-
-@media (prefers-color-scheme: dark) {
-  .greeting {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
-}
+```
+'=' expected.
 ```
 
-### 期待出力
+構文エラーになる（`interface` の宣言構文は `interface 名前 { ... }` だけなので、`= 型` を書く場所がない）。確認できたら行ごと消して、`type` で書き直す。
 
-画面にカード風のブロックが 3 つ、縦に並びます。
+```ts
+export type Id = string | number;
+```
 
-1. `こんにちは、Alice さん`（1 行だけ）
-2. `こんにちは、Bob さん` / `25 歳です`（2 行）
-3. `こんにちは、Carol さん` / `今日はよい天気ですね。`（2 行、2 行目は `children` として渡した `<p>`）
+こちらは通る。
 
-### 変える
+### 変えてみる
 
-- `<Greeting name="Bob" age={25} />` の `age` を消して `<Greeting name="Bob" />` にすると、2 枚目のカードが 1 行だけになることを確認
-- `<Greeting name="Carol">` の中身を `<ul><li>りんご</li><li>みかん</li></ul>` に変えると、`children` がリストとして表示される
-- `name` を消して `<Greeting age={30} />` と書くと、TypeScript が赤線で「`name` が足りない」と教えてくれる（`name` は必須のため）
+`AdminUser` を `type` + 交差型で書き直して、挙動が同じことを確認する。
+
+```ts
+export type AdminUser = User & {
+  role: "admin";
+  permissions: string[];
+};
+```
+
+`main.ts` の呼び出し側を書き換える必要はない。`User & { ... }` の形でも `interface extends` でも、呼び出し側から見たら区別がつかない。
+
+確認できたら、以降のレッスンで使いやすいように **`Todo` を `type` に戻して** おく。
+
+```ts
+// src/types.ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。3 章 の以降の演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば後続レッスンとズレない。
 
 ### 自分で書く
 
-- `types.ts` に `type CardProps = { title: string; children?: ReactNode }` を追加（`ReactNode` は `react` から `import type`）
-- `src/Card.tsx` を作って、`title` を `<h2>` で、`children` を `<div>` で包んで表示する `Card` コンポーネントを実装
-- `App.tsx` で `Card` を 2 個使ってみる（中身は自由）
+次の型を **`type` + 交差型** と **`interface` + `extends`** の 2 通りで書き、両方が同じように使えることを確認する。
+
+- `Animal` 型: `{ name: string; legs: number; }`
+- `Dog` 型: `Animal` に `breed: string` を足した形
+
+書けたら、`Dog` 型の値を 1 件作って `name` と `breed` を Console に出す。どちらの書き方でも `main.ts` の呼び出し側が変わらないことを実感する。
 
 ## まとめ
 
-- props は「コンポーネントの引数」。オブジェクトの分割代入（2 章 の「分割代入とスプレッド」）で受け取る
-- 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
-- オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
-- `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
-- コンポーネント名は必ず大文字始まり
+- `interface 名前 { ... }` でオブジェクトの形に名前を付けられる。`type` とほぼ同じ使い方ができる。
+- `interface` は `extends` で継承できる。`type` は `&`（交差型）で同じことができる。
+- ユニオン型・リテラル型・Utility Types の結果に名前を付けるのは **`type` のみ** ができる。
+- 宣言マージという機能もあるが、本コースでは使わない。
+- **本コースは `type` を基本** に使う。読者として `interface` も読める状態にしておき、書くときは `type` に揃える。以降のレッスンの `types.ts` は `type Todo = { ... }` に戻しておく。
+- 別のレッスンで、`Todo` 型に配列・ユニオン・リテラル・オプショナルを足して育てる。

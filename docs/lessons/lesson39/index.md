@@ -1,226 +1,435 @@
-# lesson39: ジェネリクス入門
+# lesson39: Intl API で国際化の基礎
 
 ## ゴール
 
-- 「どんな型にも使える関数」を書くための仕組みである **ジェネリクス**（型パラメータ `<T>`）を理解する。
-- `first<T>(arr: T[]): T | undefined` を自分で書けて、数値配列でも文字列配列でも `Todo` 配列でも動かせる。
-- 呼び出し側で型パラメータを明示的に書かなくても、**型推論** が働いて正しい型になることを確認できる。
+- `Intl.DateTimeFormat` で日付・時刻をロケール別に整形できる
+- `Intl.NumberFormat` で通貨・パーセント・桁区切りを表示できる
+- `Intl.RelativeTimeFormat` で「3 分前」「2 日後」を書ける
+- `Intl.Collator` でロケールに従った文字列ソートができる
+- 多言語化ライブラリ（next-intl / react-i18next）の立ち位置を理解する
 
 ## 解説
 
-### 「どんな型でも受け入れる関数」を書きたい
+### 「国際化」と Intl API
 
-配列の先頭の要素を返す関数を書いてみます。数値配列なら次のように書けます。
+「国際化（i18n）」は **表示言語の切り替え** だけではありません。日付の書き方（`2026/04/25` vs `25/04/2026` vs `April 25, 2026`）、数値の桁区切り（`1,234,567` vs `1.234.567`）、通貨表記（`¥1,200` vs `$10.50`）、文字列ソート（日本語のかな順 / ドイツ語の ä の扱い）まで含みます。
 
-```ts
-function firstNumber(arr: number[]): number | undefined {
-  return arr[0];
+これらを自力で書くのは現実的ではありません。ブラウザと Node.js には **`Intl`** という組み込み API があり、ロケール（地域 + 言語）ごとの正しい整形を提供してくれます。**2026 年の現在、i18n の土台はこの `Intl`** です。
+
+### `Intl.DateTimeFormat`
+
+日付 / 時刻を **ロケール別** に整形します。
+
+```js
+const date = new Date("2026-04-25T10:30:00");
+
+new Intl.DateTimeFormat("ja-JP").format(date);
+// => "2026/04/25"
+
+new Intl.DateTimeFormat("en-US").format(date);
+// => "4/25/2026"
+
+new Intl.DateTimeFormat("de-DE").format(date);
+// => "25.4.2026"
+```
+
+#### オプションで細かく制御
+
+```js
+new Intl.DateTimeFormat("ja-JP", {
+  year: "numeric",
+  month: "long",
+  day: "numeric",
+  weekday: "long",
+}).format(date);
+// => "2026年4月25日土曜日"
+
+new Intl.DateTimeFormat("ja-JP", {
+  hour: "2-digit",
+  minute: "2-digit",
+  hour12: false,
+}).format(date);
+// => "10:30"
+```
+
+#### ユースケース
+
+- ユーザーの地域に合わせた日付表示
+- 「2026年4月25日」を「Apr 25, 2026」に切り替える
+
+#### `toLocaleString` の簡便版
+
+1 回限りの整形なら `date.toLocaleString("ja-JP", options)` でも同じことができます。同じものを何度も使うなら `Intl.DateTimeFormat` を **再利用** するほうが速いです（内部キャッシュが効く）。
+
+### `Intl.NumberFormat`
+
+数値を **桁区切り / 通貨 / パーセント / 単位** で整形します。
+
+#### 桁区切り
+
+```js
+new Intl.NumberFormat("ja-JP").format(1234567.89);
+// => "1,234,567.89"
+
+new Intl.NumberFormat("de-DE").format(1234567.89);
+// => "1.234.567,89"
+```
+
+ドイツ語圏では **カンマとピリオドが逆** になります。手書きだとこの種のバグを埋め込みがち。
+
+#### 通貨
+
+```js
+new Intl.NumberFormat("ja-JP", {
+  style: "currency",
+  currency: "JPY",
+}).format(1200);
+// => "￥1,200"
+
+new Intl.NumberFormat("en-US", {
+  style: "currency",
+  currency: "USD",
+}).format(10.5);
+// => "$10.50"
+```
+
+#### パーセント
+
+```js
+new Intl.NumberFormat("ja-JP", { style: "percent" }).format(0.425);
+// => "43%"（0.425 を百分率に）
+
+new Intl.NumberFormat("ja-JP", {
+  style: "percent",
+  minimumFractionDigits: 1,
+}).format(0.425);
+// => "42.5%"
+```
+
+#### 単位
+
+```js
+new Intl.NumberFormat("ja-JP", { style: "unit", unit: "kilometer" }).format(20);
+// => "20 km"
+
+new Intl.NumberFormat("ja-JP", {
+  style: "unit",
+  unit: "kilometer-per-hour",
+}).format(120);
+// => "120 km/h"
+```
+
+#### コンパクト表記
+
+```js
+new Intl.NumberFormat("en", { notation: "compact" }).format(1500000);
+// => "1.5M"
+
+new Intl.NumberFormat("ja", { notation: "compact" }).format(15000);
+// => "1.5万"
+```
+
+「フォロワー数 1.5M」「売上 1.5万円」のような表示にそのまま使えます。
+
+### `Intl.RelativeTimeFormat`
+
+「3 日前」「5 分後」のような相対時間を整形します。
+
+```js
+const rtf = new Intl.RelativeTimeFormat("ja", { numeric: "auto" });
+
+rtf.format(-3, "day");  // => "3 日前"
+rtf.format(5, "minute"); // => "5 分後"
+rtf.format(-1, "day");  // => "昨日"（numeric: "auto" なら言い換える）
+rtf.format(0, "day");   // => "今日"
+```
+
+```js
+const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
+
+rtf.format(-3, "day");  // => "3 days ago"
+rtf.format(-1, "day");  // => "yesterday"
+rtf.format(5, "minute"); // => "in 5 minutes"
+```
+
+`numeric: "always"` にすると「yesterday」が「1 day ago」に戻ります。
+
+#### 経過秒から呼び出すヘルパー
+
+```js
+function timeAgo(dateString, lang = "ja") {
+  const date = new Date(dateString);
+  const diffSec = Math.round((date.getTime() - Date.now()) / 1000);
+  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
+
+  const units = [
+    ["year", 31536000],
+    ["month", 2592000],
+    ["day", 86400],
+    ["hour", 3600],
+    ["minute", 60],
+    ["second", 1],
+  ];
+  for (const [unit, sec] of units) {
+    if (Math.abs(diffSec) >= sec || unit === "second") {
+      return rtf.format(Math.round(diffSec / sec), unit);
+    }
+  }
+}
+
+timeAgo("2026-04-24T10:00:00"); // => "1 日前"
+```
+
+SNS や通知センターの「3 時間前」実装がこれだけで終わります。
+
+### `Intl.Collator`
+
+「**ロケールに従った文字列ソート**」を提供します。普通の `.sort()` は Unicode コードポイント順なので、かな / アクセント付き文字が期待通りに並びません。
+
+```js
+const items = ["りんご", "バナナ", "Apple", "みかん"];
+
+items.sort(); // コードポイント順（英大文字が先に来る）
+// => ["Apple", "バナナ", "みかん", "りんご"]
+
+items.sort(new Intl.Collator("ja").compare);
+// => ["Apple", "バナナ", "みかん", "りんご"]（日本語の並び）
+```
+
+ドイツ語の `ä` は `a` と同等に扱ってほしい（"apple" と "Äpfel" が隣に来る）など、**ロケールごとの期待** が違います。`Intl.Collator` はその差を吸収します。
+
+```js
+const words = ["apple", "Äpfel", "banana"];
+words.sort(new Intl.Collator("de").compare);
+// => ["apple", "Äpfel", "banana"]（ドイツ語なら ä は a 扱い）
+```
+
+### `Intl.ListFormat`
+
+「A、B、C」のようなリスト整形。
+
+```js
+const lf = new Intl.ListFormat("ja", { style: "long", type: "conjunction" });
+lf.format(["りんご", "バナナ", "みかん"]);
+// => "りんご、バナナ、およびみかん"
+
+new Intl.ListFormat("en", { type: "conjunction" }).format(["a", "b", "c"]);
+// => "a, b, and c"
+```
+
+`type: "disjunction"` なら「A、B、または C」「a, b, or c」になります。
+
+### `Intl.PluralRules`
+
+「1 item / 2 items」のような **単数 / 複数の語形変化** の判定を返します。
+
+```js
+const pr = new Intl.PluralRules("en");
+pr.select(1); // => "one"
+pr.select(2); // => "other"
+
+function itemLabel(n) {
+  const cat = pr.select(n);
+  return cat === "one" ? `${n} item` : `${n} items`;
 }
 ```
 
-- 配列が空なら `arr[0]` は `undefined` なので、戻り値の型は `number | undefined`。
-- 文字列配列でも同じことをしたい場合、`firstString(arr: string[]): string | undefined` をもう 1 つ書く必要がある。
-- `Todo` 配列でも同じことをしたくなったら、さらにもう 1 つ。
+ロシア語のように「1 / 2〜4 / 5 以上」で形が変わる言語もサポートします。ライブラリを使う時も内部で `Intl.PluralRules` が活躍しています。
 
-明らかに繰り返しです。中身の処理はどれも `return arr[0];` で同じ。違うのは **配列の要素の型と戻り値の型だけ**。
+### i18n ライブラリとの関係
 
-### ジェネリクス: 型を引数として受け取る
+Intl API は **土台** を提供しますが、「翻訳文字列の辞書管理 / ページ単位の言語切り替え / 翻訳キーの補完」はカバーしません。そこで i18n ライブラリが登場します。
 
-関数が **値** を引数で受け取るのと同じように、TS は **型** を引数で受け取れます。これを **ジェネリクス**（総称型）と呼びます。
+| ライブラリ | 位置付け |
+|---|---|
+| `next-intl` | Next.js App Router 向け。サーバー / クライアント両対応。2026 年の Next.js 一押し |
+| `react-i18next` | React 汎用。老舗で機能が豊富 |
+| `lingui` | マクロで翻訳キーを自動抽出 |
+| `paraglide` | コンパイル時に翻訳を最小バンドル化 |
 
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
+これらは **中で Intl API を呼んでいる** ので、Intl API を知っておくと **学習が早く**、**ライブラリを使わず直接呼ぶ判断** もできます（小規模な表示なら Intl だけで十分）。
+
+#### next-intl の最小例（参考）
+
+```tsx
+// app/[locale]/page.tsx
+import { useTranslations, useFormatter } from "next-intl";
+
+export default function Page() {
+  const t = useTranslations();
+  const format = useFormatter();
+  return (
+    <div>
+      <h1>{t("title")}</h1>
+      <p>{format.dateTime(new Date(), { dateStyle: "long" })}</p>
+      <p>{format.number(1234.5, { style: "currency", currency: "JPY" })}</p>
+    </div>
+  );
 }
 ```
 
-- `<T>`: 関数名の直後に書く **型パラメータ**。`T` は「まだ決まっていない型」の仮の名前。
-- 慣習的に `T`（Type の頭文字）を使う。複数あれば `T, U, V` や `TKey, TValue` のように付ける。
-- 引数 `arr: T[]`: 「`T` の配列」。
-- 戻り値 `T | undefined`: 「`T`、または空配列のときは `undefined`」。
-
-この関数を呼び出すとき、`T` には **呼び出したときの値の型が自動で入ります**。
-
-```ts
-const n = first([1, 2, 3]);         // T = number、n は number | undefined
-const s = first(["a", "b", "c"]);   // T = string、s は string | undefined
-```
-
-これが **型推論** です。呼び出し側が `<number>` のように書かなくても、渡した値の型から TS が決めてくれます。
-
-### 明示的に書くこともできる
-
-型推論に任せず、呼び出し側で `<型>` を明示することもできます。
-
-```ts
-const n = first<number>([1, 2, 3]);
-```
-
-普段は型推論に任せるほうが読みやすいですが、推論の結果が期待と違うときや、配列が空で推論のヒントがないときには明示します。
-
-```ts
-const empty = first([]); // T = never と推論されてしまう
-const empty2 = first<number>([]); // T = number と明示
-```
-
-### 型パラメータは「使う側が決める」
-
-ジェネリクスは「関数を書く側」ではなく「関数を使う側」が型を決める仕組みです。`first` の実装は `T` が何であるかを知りません。だから `T` の中身（`.toUpperCase()` や `.toFixed()` など）を呼ぶことはできません。
-
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0].toUpperCase(); // エラー
-}
-```
-
-```
-Property 'toUpperCase' does not exist on type 'T'.
-```
-
-「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。この「中身に触らず通すだけの関数」が、ジェネリクスが最も活きる形です。
-
-### `Array.prototype.map` もジェネリクス
-
-実は2 章 で使った `map` / `filter` も TS の世界ではジェネリクス関数です。`map` は「`T[]` を受け取って、`(t: T) => U` の関数で変換して `U[]` を返す」という形で定義されています。ライブラリの内部ではこの形の型定義が大量に書かれていて、私たちは呼び出すだけで恩恵を受けています。
+内部で `Intl.DateTimeFormat` / `Intl.NumberFormat` が動いているだけです。
 
 ## 演習
 
-### 途中から始める場合
+### ゴール
 
-このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+- Intl API を使って「投稿の日時」「価格」「経過時間」を表示する小さなページを作る
 
-### 手順 1: `first` を書く
+### 手順 1: 新規プロジェクト
 
-`src/main.ts` の中身を以下に置き換える。
+```bash
+npm create vite@latest intl-sample -- --template vanilla-ts
+cd intl-sample
+npm install
+```
+
+### 手順 2: index.html
+
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Intl Demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
+  </head>
+  <body>
+    <main>
+      <h1>Intl API ショーケース</h1>
+
+      <label>
+        言語:
+        <select id="locale">
+          <option value="ja-JP">日本語</option>
+          <option value="en-US">English (US)</option>
+          <option value="de-DE">Deutsch</option>
+        </select>
+      </label>
+
+      <section>
+        <h2>日付</h2>
+        <p id="date"></p>
+      </section>
+
+      <section>
+        <h2>通貨</h2>
+        <p id="currency"></p>
+      </section>
+
+      <section>
+        <h2>経過時間</h2>
+        <p id="relative"></p>
+      </section>
+
+      <section>
+        <h2>リスト</h2>
+        <p id="list"></p>
+      </section>
+
+      <section>
+        <h2>ソート</h2>
+        <ul id="sort"></ul>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+```
+
+### 手順 3: src/style.css
+
+```css
+body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+main { max-width: 700px; margin: 0 auto; }
+section { margin-block: 16px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+label { display: block; margin-bottom: 16px; }
+select { padding: 4px 8px; }
+ul { margin: 0; padding-left: 20px; }
+```
+
+### 手順 4: src/main.ts
 
 ```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
+const localeSelect = document.getElementById("locale") as HTMLSelectElement;
+const dateEl = document.getElementById("date")!;
+const currencyEl = document.getElementById("currency")!;
+const relativeEl = document.getElementById("relative")!;
+const listEl = document.getElementById("list")!;
+const sortEl = document.getElementById("sort")!;
+
+const items = ["りんご", "Apple", "Äpfel", "banana", "みかん"];
+
+function render(locale: string) {
+  const now = new Date();
+
+  dateEl.textContent = new Intl.DateTimeFormat(locale, {
+    dateStyle: "full",
+    timeStyle: "short",
+  }).format(now);
+
+  const currency =
+    locale === "ja-JP" ? "JPY" : locale === "de-DE" ? "EUR" : "USD";
+  currencyEl.textContent = new Intl.NumberFormat(locale, {
+    style: "currency",
+    currency,
+  }).format(1234567.89);
+
+  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
+  relativeEl.textContent = [
+    rtf.format(-3, "day"),
+    rtf.format(5, "minute"),
+    rtf.format(-1, "year"),
+  ].join(" / ");
+
+  const lf = new Intl.ListFormat(locale, { type: "conjunction" });
+  listEl.textContent = lf.format(["りんご", "バナナ", "みかん"]);
+
+  const collator = new Intl.Collator(locale);
+  const sorted = [...items].sort(collator.compare);
+  sortEl.innerHTML = sorted.map((x) => `<li>${x}</li>`).join("");
 }
 
-const n = first([1, 2, 3]);
-const s = first(["a", "b", "c"]);
-const empty = first<number>([]);
-
-console.log(n);
-console.log(s);
-console.log(empty);
+localeSelect.addEventListener("change", () => render(localeSelect.value));
+render("ja-JP");
 ```
 
-#### 期待出力
+### 手順 5: 起動して確認
 
-```
-1
-a
-undefined
+```bash
+npm run dev
 ```
 
-- `n` は `1`（数値）。
-- `s` は `"a"`（文字列）。
-- `empty` は `undefined`（空配列なので 0 番目がない）。
+ブラウザで言語を切り替えて観察します。
 
-エディタで `n` にマウスを乗せると `const n: number | undefined` と表示される。`s` は `const s: string | undefined`。型が正しく推論されていることを確認する。
+### 期待出力
 
-### 手順 2: `Todo` 配列でも動くことを確認する
+| ロケール | 日付例 | 通貨例 | 経過時間 |
+|---|---|---|---|
+| `ja-JP` | 2026年4月25日土曜日 10:30 | ￥1,234,568 | 3 日前 / 5 分後 / 昨年 |
+| `en-US` | Saturday, April 25, 2026 at 10:30 AM | $1,234,567.89 | 3 days ago / in 5 minutes / last year |
+| `de-DE` | Samstag, 25. April 2026 um 10:30 | 1.234.567,89 € | vor 3 Tagen / in 5 Minuten / letztes Jahr |
 
-`src/main.ts` を次の形に書き換える（`types.ts` は「配列・ユニオン・リテラル型・オプショナル」で作ったものをそのまま使う）。
+リストとソート順もロケールに追従します。
 
-```ts
-import type { Todo } from "./types";
+### 変える
 
-function first<T>(arr: T[]): T | undefined {
-  return arr[0];
-}
+- `Intl.DateTimeFormat` の `dateStyle` を `"long"` / `"medium"` / `"short"` に切り替えて差を見る
+- `Intl.NumberFormat` の `notation: "compact"` を追加して `1,500,000 → 1.5M` の挙動を確認
+- `Intl.Collator` の `sensitivity: "base"` を付けて `apple` と `Äpfel` が等価になるか見る
+- `hour12: true` / `false` で時刻表記が切り替わる
 
-const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う", status: "open" },
-  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
-];
+### 自分で書く（任意）
 
-const topTodo = first(todos);
-
-if (topTodo) {
-  console.log(`先頭の TODO: ${topTodo.text} (status: ${topTodo.status})`);
-} else {
-  console.log("TODO はありません");
-}
-```
-
-#### 期待出力
-
-```
-先頭の TODO: 牛乳を買う (status: open)
-```
-
-`topTodo` の型は `Todo | undefined` になっている（`if` で絞り込むと、中では `Todo` として `.text` や `.status` にアクセスできる）。
-
-### 手順 3: わざと型を間違えてエラーを見る
-
-`first` の中で `T` の中身を使おうとしてみる。
-
-```ts
-function first<T>(arr: T[]): T | undefined {
-  return arr[0].toUpperCase();
-}
-```
-
-期待されるメッセージ:
-
-```
-Property 'toUpperCase' does not exist on type 'T'.
-```
-
-続けて、呼び出し側で配列ではないものを渡してみる。
-
-```ts
-const n = first(123);
-```
-
-期待されるメッセージ:
-
-```
-Argument of type 'number' is not assignable to parameter of type 'unknown[]'.
-```
-
-「配列を渡してくれないと `T[]` にならない」と TS が止めてくれている。確認したら `first([1, 2, 3])` に戻す。
-
-### 変えてみる
-
-配列の最後の要素を返す `last` を書いてみる。
-
-```ts
-function last<T>(arr: T[]): T | undefined {
-  return arr[arr.length - 1];
-}
-
-console.log(last([1, 2, 3]));
-console.log(last(["a", "b", "c"]));
-console.log(last<number>([]));
-```
-
-期待出力:
-
-```
-3
-c
-undefined
-```
-
-### 自分で書く
-
-次の 2 つの関数をジェネリクスで書く。
-
-1. `second<T>(arr: T[]): T | undefined` — 配列の 2 番目の要素を返す（なければ `undefined`）。
-2. `wrapInArray<T>(value: T): T[]` — 値を 1 つ受け取り、それだけを入れた配列を返す。
-
-書けたら、数値・文字列・`Todo` の 3 パターンで呼び出し、期待通りの型が推論されていること（エディタでマウスオーバーして確認）と、期待通りの出力が出ることを確認する。
-
-`wrapInArray` のヒント: `function wrapInArray<T>(value: T): T[] { return [value]; }` で書ける。
+- 投稿一覧ページに **「3 時間前」「2 日前」** を表示する関数を `Intl.RelativeTimeFormat` で書く
+- 商品価格のリストを、ユーザーの `navigator.language` に従ったロケールで表示する
+- `Intl.DisplayNames` で国名 / 言語名をロケール別に表示する（例: `ja` で `"日本"`、`en` で `"Japan"`）
 
 ## まとめ
 
-- ジェネリクスは「関数が型を引数として受け取る仕組み」。`<T>` で仮の型名を宣言する。
-- `first<T>(arr: T[]): T | undefined` のように書くと、数値配列でも文字列配列でも `Todo` 配列でも、**同じ実装** で型安全に動く。
-- 呼び出し側では通常 `<型>` を書かず、型推論に任せる。空配列などで推論のヒントがないときだけ明示する。
-- 実装の中では `T` の中身に触れない（`T` が何かを知らないから）。「中身に触らず通すだけ」の関数がジェネリクスの得意分野。
-- 別のレッスンで、既にある型から新しい型を派生させる **Utility Types**（`Pick` / `Partial`）を学ぶ。`Todo` 型をさらに「一覧用」「下書き用」に派生させる。
+- **Intl API** は日付 / 数値 / 相対時間 / ソート / リスト整形を **ロケール別** に行う組み込み API
+- `Intl.DateTimeFormat` / `Intl.NumberFormat` / `Intl.RelativeTimeFormat` / `Intl.Collator` / `Intl.ListFormat` / `Intl.PluralRules` が主な構成要素
+- 何度も使う整形は **インスタンスを使い回す** ほうが速い
+- 多言語化ライブラリ（next-intl / react-i18next）は **Intl API の上に辞書管理** を載せたもの
+- 小規模な表示整形なら Intl だけで十分。本格的な翻訳管理があるなら next-intl など
+- 別のレッスンでは **tsconfig.json / package.json** に進み、プロジェクト設定の基礎を固める

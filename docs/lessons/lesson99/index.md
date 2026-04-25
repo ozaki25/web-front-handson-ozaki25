@@ -1,396 +1,420 @@
-# lesson99: Git の基本操作
+# lesson99: API モック — MSW（Mock Service Worker）
 
 ## ゴール
 
-- Git が「ファイルの履歴を残す」道具であることを説明できる
-- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
-- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
-- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
-- `.gitignore` でコミットしないファイルを除外できる
-- マージコンフリクトの解消手順を 1 度経験する
+- なぜテストで API モックが必要かを説明できる
+- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
+- `http.get` / `http.post` で HTTP ハンドラを書ける
+- `setupServer` で Vitest にモックを組み込める
+- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
+- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
 
 ## 解説
 
-### Git とは
+### なぜテストで API モックが必要か
 
-**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
+`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
 
-なぜ必要か:
+- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
+- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
+- 速度が遅い（数百 ms × テスト数だけ待たされる）
+- オフラインで CI が動かない
 
-- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
-- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
-- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
-- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
+これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
 
-2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
+### MSW とは
 
-### リポジトリ（repository）と作業ディレクトリ
+**Mock Service Worker**（MSW） は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
 
-- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
-- **作業ディレクトリ**: あなたが今編集しているファイル群
+特徴:
 
-### `git init` で履歴管理を開始
+- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
+- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
+- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
+- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
 
-新規プロジェクトを Git 管理下に置くには:
+### 他のモック手法との比較
 
-```bash
-mkdir my-project
-cd my-project
-git init
-```
+- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
+- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
+- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
 
-`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
+複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
 
-### 3 つのエリア（変更が辿る道）
+### セットアップ
 
-Git では変更が次の 3 段階を辿ります。
-
-```
-作業ディレクトリ          ステージング         リポジトリ（履歴）
-（編集中のファイル）  →  （add した変更）  →  （commit した変更）
-       │                      │                      │
-       └─ git add ─────────────                       │
-       └─ git commit -m "..." ────────────────────────┘
-```
-
-- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
-- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
-- **リポジトリ**: `git commit` で履歴に固定された状態
-
-### 基本コマンド
-
-#### `git status`: 今の状態を確認
+「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
 
 ```bash
-git status
+npm install -D msw
 ```
 
-未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
+`src/mocks/handlers.ts` を作成（ハンドラ定義）:
 
-#### `git add`: ステージングに追加
+```ts
+import { http, HttpResponse } from "msw";
 
-```bash
-git add file.txt        # 1 ファイル
-git add src/            # ディレクトリ全部
-git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
+export const handlers = [
+  // GET /api/posts
+  http.get("https://api.example.com/posts", () => {
+    return HttpResponse.json([
+      { id: 1, title: "1 件目" },
+      { id: 2, title: "2 件目" },
+    ]);
+  }),
+
+  // POST /api/posts
+  http.post("https://api.example.com/posts", async ({ request }) => {
+    const body = await request.json();
+    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
+  }),
+];
 ```
 
-#### `git commit`: 履歴に固定
+`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
 
-```bash
-git commit -m "ボタンの色を変更"
+```ts
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers";
+
+export const server = setupServer(...handlers);
 ```
 
-`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
+`vitest.setup.ts` に追記（テスト全体のフック）:
 
-#### `git log`: 履歴を見る
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./src/mocks/server";
 
-```bash
-git log              # 詳しく見る
-git log --oneline    # 1 行ずつ簡潔に
-git log --graph      # ブランチをグラフで
-git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
 ```
 
-#### `git diff`: 変更内容を見る
+これで:
 
-```bash
-git diff              # 作業ディレクトリ vs ステージング
-git diff --staged     # ステージング vs リポジトリ
-git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
+- 全テストの前にモックサーバを起動
+- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
+- 全テスト後にサーバを停止
+- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
+
+### 簡単なコンポーネントテスト
+
+`src/PostsList.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+
+type Post = { id: number; title: string };
+
+export function PostsList() {
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.example.com/posts")
+      .then((res) => {
+        if (!res.ok) throw new Error("読み込み失敗");
+        return res.json();
+      })
+      .then(setPosts)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p>エラー: {error}</p>;
+  if (posts === null) return <p>読み込み中...</p>;
+
+  return (
+    <ul>
+      {posts.map((p) => (
+        <li key={p.id}>{p.title}</li>
+      ))}
+    </ul>
+  );
+}
 ```
 
-### `.gitignore` でコミット対象を絞る
+`src/PostsList.test.tsx`:
 
-`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { PostsList } from "./PostsList";
 
-`.gitignore`（プロジェクトルート）:
+describe("PostsList", () => {
+  it("最初は読み込み中を表示する", () => {
+    render(<PostsList />);
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
 
-```
-# 依存パッケージ（巨大、再生成可能）
-node_modules/
-
-# ビルド成果物
-dist/
-build/
-
-# 環境変数（秘匿）
-.env
-.env.local
-
-# OS のメタファイル
-.DS_Store
-Thumbs.db
-
-# エディタ
-.vscode/
-.idea/
+  it("読み込みが終わると一覧を表示する", async () => {
+    render(<PostsList />);
+    expect(await screen.findByText("1 件目")).toBeInTheDocument();
+    expect(screen.getByText("2 件目")).toBeInTheDocument();
+  });
+});
 ```
 
-`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。
+`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
 
-### ブランチ: 並行作業の単位
+### 失敗ケースのテスト: `server.use` で一時上書き
 
-**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
+「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
 
-#### ブランチを作って切り替える
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { server } from "./mocks/server";
+import { PostsList } from "./PostsList";
 
-```bash
-# 旧来の書き方
-git branch feature/login
-git checkout feature/login
+describe("PostsList のエラー", () => {
+  it("API が 500 を返したらエラーを表示", async () => {
+    server.use(
+      http.get("https://api.example.com/posts", () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
 
-# 現代の書き方（Git 2.23 以降推奨）
-git switch -c feature/login   # -c は「create」
+    render(<PostsList />);
+
+    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
+  });
+
+  it("API が 404 を返したらエラーを表示", async () => {
+    server.use(
+      http.get("https://api.example.com/posts", () => {
+        return new HttpResponse(null, { status: 404 });
+      })
+    );
+
+    render(<PostsList />);
+
+    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
+  });
+});
 ```
 
-`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
+`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
 
-#### ブランチを切り替える
+### POST のテスト
 
-```bash
-git switch main
-git switch feature/login
+書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { CreatePostForm } from "./CreatePostForm";
+
+describe("CreatePostForm", () => {
+  it("送信すると新しい記事 ID が表示される", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostForm />);
+
+    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
+  });
+});
 ```
 
-`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
+`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
 
-#### ブランチを一覧
+### 遅延を入れる: `delay`
 
-```bash
-git branch          # ローカルブランチ
-git branch -a       # リモート含む全部
+「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
+
+```ts
+import { http, HttpResponse, delay } from "msw";
+
+export const handlers = [
+  http.get("https://api.example.com/posts", async () => {
+    await delay(100);  // 100ms 遅らせる
+    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
+  }),
+];
 ```
 
-### マージ: ブランチを統合
-
-`feature/login` での作業が終わったら、main に統合します。
-
-```bash
-git switch main
-git merge feature/login
-```
-
-これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
-
-### マージコンフリクト
-
-両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
-
-```
-<<<<<<< HEAD
-const message = "こんにちは";
-=======
-const message = "Hello";
->>>>>>> feature/login
-```
-
-このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
-
-```js
-const message = "Hello, こんにちは";  // 例: 両方を統合
-```
-
-その後:
-
-```bash
-git add path/to/conflicted-file.js
-git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
-```
-
-### リモートリポジトリ（GitHub / GitLab）
-
-`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
-
-#### リモートを追加
-
-GitHub で空の repo を作って、ローカルから紐付け:
-
-```bash
-git remote add origin https://github.com/your-name/your-repo.git
-```
-
-`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
-
-#### push: ローカル → リモート
-
-```bash
-git push -u origin main
-```
-
-`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
-
-#### pull: リモート → ローカル
-
-```bash
-git pull origin main
-```
-
-これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
-
-#### fetch: リモートの内容だけ取得
-
-```bash
-git fetch origin
-```
-
-リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
-
-### よくある初学者のつまずき
-
-1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
-2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
-3. **main で直接作業**: ブランチを切る習慣を最初から
-4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
-
-### 設定の基本
-
-最初の 1 回だけ:
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "you@example.com"
-git config --global init.defaultBranch main
-```
-
-これがないと commit で「誰が」が記録できません。
+これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
 
 ## 演習
 
 ### ゴール
 
-- ローカルで Git リポジトリを作って commit を 3 回打つ
-- ブランチを作って別の変更を入れ、main にマージする
-- わざとコンフリクトを起こして解消する
+- MSW のセットアップを完了する
+- ハンドラ 3 種（成功 / エラー / 遅延）を書く
+- `useEffect` で fetch する小さなコンポーネントをテストする
+- `server.use` でテストごとにレスポンスを上書きできる
 
 ### 途中から始める場合
 
-ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
-
-### 手順 1: リポジトリを初期化
+「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
 
 ```bash
-mkdir git-practice
-cd git-practice
-git init
+npm install -D vitest @vitejs/plugin-react jsdom
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
+npm install -D msw
 ```
 
-### 手順 2: ファイルを作って 1 回目の commit
+`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
 
-`README.md`:
+### 手順 1: モックサーバを構築
 
-```md
-# Git 練習用リポジトリ
+`src/mocks/handlers.ts`:
+
+```ts
+import { http, HttpResponse, delay } from "msw";
+
+export const handlers = [
+  http.get("https://api.example.com/users", async () => {
+    await delay(50);
+    return HttpResponse.json([
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" },
+    ]);
+  }),
+];
 ```
+
+`src/mocks/server.ts`:
+
+```ts
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers";
+
+export const server = setupServer(...handlers);
+```
+
+`vitest.setup.ts` に追記:
+
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./src/mocks/server";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+### 手順 2: コンポーネントを作る
+
+`src/UsersList.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+
+type User = { id: number; name: string };
+
+export function UsersList() {
+  const [users, setUsers] = useState<User[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.example.com/users")
+      .then((res) => {
+        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
+        return res.json();
+      })
+      .then(setUsers)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p role="alert">{error}</p>;
+  if (users === null) return <p>読み込み中...</p>;
+
+  return (
+    <ul>
+      {users.map((u) => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### 手順 3: テストを書く
+
+`src/UsersList.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { server } from "./mocks/server";
+import { UsersList } from "./UsersList";
+
+describe("UsersList", () => {
+  it("最初は読み込み中を表示する", () => {
+    render(<UsersList />);
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
+
+  it("読み込みが終わるとユーザーを並べる", async () => {
+    render(<UsersList />);
+
+    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
+
+  it("エラー時はエラーメッセージを表示する", async () => {
+    server.use(
+      http.get("https://api.example.com/users", () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+
+    render(<UsersList />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
+  });
+});
+```
+
+### 手順 4: 実行
 
 ```bash
-git add README.md
-git commit -m "README を追加"
+npm run test
 ```
 
-### 手順 3: ファイルを増やして 2 回目の commit
-
-`hello.txt`:
-
-```
-Hello, Git!
-```
-
-```bash
-git status              # 変更が見える
-git add hello.txt
-git commit -m "hello.txt を追加"
-git log --oneline       # 2 件の履歴が見える
-```
-
-### 手順 4: ブランチで作業
-
-```bash
-git switch -c feature/greeting
-# hello.txt を編集 → 「Hello, Git! こんにちは。」 に
-git add hello.txt
-git commit -m "挨拶を日本語追記"
-```
-
-### 手順 5: main に切り替えて、main 側でも変更
-
-```bash
-git switch main
-# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」 に
-git add hello.txt
-git commit -m "ビックリマーク追加"
-```
-
-これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
-
-### 手順 6: マージ → コンフリクト発生
-
-```bash
-git merge feature/greeting
-```
-
-エラーが出ます:
-
-```
-Auto-merging hello.txt
-CONFLICT (content): Merge conflict in hello.txt
-Automatic merge failed; fix conflicts and then commit the result.
-```
-
-`hello.txt` を開くと:
-
-```
-<<<<<<< HEAD
-Hello, Git!! ビックリマーク追加
-=======
-Hello, Git! こんにちは。
->>>>>>> feature/greeting
-```
-
-両方を取り込むよう手動で編集:
-
-```
-Hello, Git!! こんにちは。ビックリマーク追加
-```
-
-```bash
-git add hello.txt
-git commit               # エディタが開く → 自動メッセージのまま保存
-git log --oneline --graph
-```
-
-ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
+3 件すべて緑になれば成功です。
 
 ### 期待出力
 
 ```
-*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
-|\
-| * abcdef0 (feature/greeting) 挨拶を日本語追記
-* | fedcba9 ビックリマーク追加
-|/
-* 7654321 hello.txt を追加
-* 0987654 README を追加
+ PASS  src/UsersList.test.tsx (3)
+   PASS  最初は読み込み中を表示する
+   PASS  読み込みが終わるとユーザーを並べる
+   PASS  エラー時はエラーメッセージを表示する
+
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
 ```
 
 ### 変える
 
-- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
-- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
-- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
+- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
+- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
+- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
 
 ### 自分で書く
 
-- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
-- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
+- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
+- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
+- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
 
 ## まとめ
 
-- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
-- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
-- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
-- `.gitignore` で `node_modules` / `.env` 等を除外
-- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
-- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
-- リモート: `remote add origin URL` / `push` / `pull` / `fetch`
-- 別のレッスンでは **GitHub の PR とコードレビュー** に進む
+- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
+- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
+- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
+- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
+- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
+- テストごとに `server.use(...)` でハンドラを上書きできる
+- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
+- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知
+- 別のレッスンでは **Playwright で E2E テスト** に進む。MSW は E2E でも同じハンドラを使い回せる

@@ -1,385 +1,157 @@
-# lesson92: テスト入門 — Vitest でユニットテスト
+# lesson92: 同時接続数と HTTP/2 / HTTP/3
 
 ## ゴール
 
-- なぜテストを書くか、何が報われるかを自分の言葉で説明できる
-- Vitest をプロジェクトにセットアップできる
-- `describe` / `it` / `expect` の基本構文を読める・書ける
-- 純粋関数（純関数）のユニットテストを書ける
-- watch モードで「コードを直したらテストが即走る」体験を得る
-- テストピラミッド（ユニット 70% / 結合 20% / E2E 10%）の考え方を知る
+- ブラウザが **同じドメインに対して同時に張れる接続数** に上限があることを知る
+- HTTP/1.1 の問題（Head-of-Line ブロッキング / 接続数制限）を 1 行で説明できる
+- HTTP/2 の多重化（1 接続で複数リクエスト）で何が変わったか説明できる
+- HTTP/3 の QUIC で何がさらに変わったか（UDP ベース / パケロス耐性）を大まかに説明できる
+- 昔の定番テク「画像を 1 枚にまとめる（CSS スプライト）」が HTTP/2 時代には不要になった理由を説明できる
 
 ## 解説
 
-### なぜテストを書くか
+### HTTP/1.1 の時代の制約
 
-「テストは時間の無駄」と思うかもしれません。しかし実務では次のリターンがあります。
+HTTP/1.1 では、ブラウザはサーバーとの間に **TCP 接続を張って、リクエストとレスポンスを 1 往復しては次** という使い方をしていました。素直な仕組みですが、2 つの厄介な問題がありました。
 
-1. **デグレ防止**: 一度直したバグが、別の修正でまた壊れることを自動検知
-2. **リファクタリングの安心感**: テストが通っていれば、内部実装を大胆に書き換えられる
-3. **設計のフィードバック**: テストが書きにくいコードは、責務が混ざっている兆候。設計改善のシグナル
-4. **ドキュメント代わり**: テストが「この関数はこう動く」の生きた説明になる
+#### 同じドメインへの接続数の上限
 
-逆にテストが要らない / 後回しでよいケース:
+1 つの TCP 接続で一度に 1 つのリクエスト・レスポンスしか扱えないため、複数ファイルを取るには複数接続を張る必要があります。でも、ブラウザは **同じドメインに対して同時に張れる接続数を 6 本程度** に制限していました（Chrome / Firefox / Safari いずれも 6 が目安）。
 
-- 試作で捨てる前提のコード
-- 1 度だけ使うスクリプト
-- UI のピクセル単位の見た目（人間の目で確認する方が速い）
+つまり、1 つのページで 100 個の画像を読もうとすると、最初の 6 個だけが並行で走り、残り 94 個は **前のどれかが終わるのを待ち続ける** という状況になります。
 
-本コースは学習教材なのでテストは書いていませんが、**実務に出るときの必修科目** です。
+#### Head-of-Line ブロッキング
 
-### テストピラミッド
+TCP 接続はリクエストを **順番に** 処理します。仮に先頭のリクエストがサーバーでちょっと遅かった場合、同じ接続の後続のリクエストも **全部待たされる** 形になります。これを Head-of-Line（先頭行）ブロッキングと呼びます。
 
-テストには規模の違いがあります。
+#### 当時の定番「対策テク」
 
-| 種類 | 速度 | 安定 | 範囲 | 比率の目安 |
-|---|---|---|---|---|
-| ユニット | 速い（ms） | 安定 | 関数 1 つ | 70% |
-| コンポーネント / 結合 | 中間 | 中間 | コンポーネント / 複数モジュール | 20% |
-| E2E | 遅い（秒） | 不安定 | アプリ全体 | 10% |
+HTTP/1.1 時代、これらの制約を回避するために以下のようなテクニックが常識でした。
 
-ピラミッドの考え方は **「下が広く、上が狭い」** です。ユニットを多く書き、E2E は最重要パスだけに絞ります。E2E は「ログイン → 商品購入」のような **失敗するとビジネス的に致命的な経路** に投資する、というのが 2026 年の定番です。
+- **CSS スプライト**: 多数の小さなアイコン画像を 1 枚の大きな画像にまとめ、CSS の `background-position` で 1 枚から必要な部分だけ切り出して使う。リクエスト数を減らす
+- **画像のドメイン分散**: `img1.example.com` / `img2.example.com` のようにサブドメインを分けて、接続数制限を回避（各ドメインにつき 6 本なので、2 ドメインで 12 本張れる）
+- **JS / CSS の結合**（バンドル）: 複数ファイルを 1 つに連結
+- **インライン化**: 小さな画像を Data URL で HTML / CSS に埋め込み
 
-本レッスンと別のレッスンで、上から下まで順に触っていきます:
+これらは **現代（HTTP/2 以降）では逆に遅くなることが多い** 最適化です。なぜそうなったかを次から見ていきます。
 
-- 本レッスン (lesson92): **Vitest でユニットテスト** — 純粋関数のテスト
-- 次レッスン (lesson93): **Testing Library でコンポーネントテスト**
-- 次々レッスン (lesson94): **MSW で fetch モック**
-- その次 (lesson95): **Playwright で E2E テスト**
+### HTTP/2 の登場と「多重化」
 
-### Vitest とは
+HTTP/2（2015 年標準化）の最大の変更点は **多重化**（multiplexing） です。1 本の TCP 接続の上で、**複数のリクエスト・レスポンスを同時並行** に流せるようになりました。
 
-**Vitest** は Vite の上で動くテストランナーです。Jest（昔からある定番）と同じ書き方で、**Vite と同じ設定（TypeScript / JSX / 環境変数 / プラグイン）が自動で効く** のが大きな利点です。冷起動が Jest より一桁速いと言われています。
+```
+HTTP/1.1: [req1]→[res1]→[req2]→[res2]→[req3]→[res3]  （順に 1 つずつ）
 
-2026 年現在、新規プロジェクトでは **Vitest が第一候補** です。Jest は既存資産との互換のために残るケースが多いです。
-
-### Vitest のセットアップ
-
-新規 Vite プロジェクトに Vitest を入れるとき:
-
-```bash
-npm install -D vitest @vitejs/plugin-react jsdom
+HTTP/2:   [req1, req2, req3]─→1 本の接続の中で並行に処理→[res1, res2, res3]
 ```
 
-`vitest.config.ts` を作成:
+この仕組みで、HTTP/1.1 の「同じドメインへの接続数制限」は **実質無くなりました**。6 本の制限は「TCP 接続の数」の話なので、1 本の TCP 接続で何十ものリクエストを並行できる HTTP/2 では気にしなくてよくなります。
 
-```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+さらに次の改善も入っています。
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",  // ブラウザ風 DOM を提供（コンポーネントテスト用）
-    globals: true,         // describe / it / expect を import なしで使える
-    setupFiles: ["./vitest.setup.ts"], // 共通の前処理を書く場合
-  },
-});
-```
+- **ヘッダ圧縮**（HPACK）: 繰り返される `User-Agent` などを圧縮
+- **サーバープッシュ**: サーバーから先回りでリソースを送る（結局ほとんど使われなかったため、現在は事実上廃止）
+- **バイナリプロトコル**: テキストではなくバイナリフレームで効率化
 
-`package.json` に scripts を足す:
+HTTP/2 は HTTPS 上で動くのが標準で、Vercel や Netlify などの主要なホスティングは **デフォルトで HTTP/2** を使っています。本コースの教材サイトも HTTP/2 で配信されています（DevTools Network タブの Protocol 列で確認できます）。
 
-```json
-{
-  "scripts": {
-    "test": "vitest",
-    "test:run": "vitest run"
-  }
-}
-```
+### HTTP/2 でも残った問題: TCP レベルの Head-of-Line
 
-- `npm run test`: **watch モード** で起動。ファイル変更を検知して再実行
-- `npm run test:run`: 1 回だけ実行（CI 用）
+HTTP/2 はアプリケーション層（HTTP）の多重化は解決しましたが、下の **TCP 層で 1 つのパケットが失われると、そのあとの全パケットが待たされる** という Head-of-Line ブロッキングは残っていました。
 
-### 最小のテスト
+普通の有線 LAN ではほぼ問題になりませんが、**モバイル通信で電波が悪いとき** に影響が出ます。この問題を解決するのが次の HTTP/3 です。
 
-テストファイルは `*.test.ts` / `*.test.tsx` / `*.spec.ts` の命名で書きます。Vitest が自動で見つけて実行します。
+### HTTP/3 の登場: QUIC（UDP ベース）
 
-```ts
-// src/math.ts
-export function add(a: number, b: number): number {
-  return a + b;
-}
-```
+HTTP/3（2022 年標準化）は **TCP ではなく UDP 上** で動きます。その上に **QUIC** という新しい多重化プロトコルを載せる形です。
 
-```ts
-// src/math.test.ts
-import { describe, it, expect } from "vitest";
-import { add } from "./math";
+QUIC の特徴:
 
-describe("add", () => {
-  it("正の数を 2 つ足す", () => {
-    expect(add(2, 3)).toBe(5);
-  });
+- **パケットロスに強い**: 1 ストリームで損失があっても、他のストリームは独立して進む（TCP レベルの Head-of-Line ブロッキング解消）
+- **接続確立が速い**: TLS ハンドシェイクと一緒に行うことで往復を減らせる
+- **接続の移動が可能**: Wi-Fi からモバイル回線に切り替わっても、接続 ID で継続できる
 
-  it("負の数も足せる", () => {
-    expect(add(-1, -2)).toBe(-3);
-  });
+モバイルファーストや、電波状況が安定しない環境ではっきり速さに差が出ます。Cloudflare / Vercel など現代の CDN は HTTP/3 にも対応しており、対応ブラウザからは自動で HTTP/3 で配信されます。
 
-  it("0 を足すと変わらない", () => {
-    expect(add(10, 0)).toBe(10);
-  });
-});
-```
+### 「HTTP/2 時代には 1 枚画像にまとめなくていい」の意味
 
-3 つの基本構造:
+CSS スプライト（多数アイコンを 1 枚にまとめる）は、HTTP/1.1 では次のようなメリットがありました。
 
-- **`describe(名前, () => {...})`**: テストをグループ化
-- **`it(条件, () => {...})`**: 1 つのテストケース。`test(...)` でも同じ
-- **`expect(値).toBe(期待値)`**: アサーション（期待を表明）
+- リクエスト数が減る（接続数制限の回避）
+- TCP ハンドシェイクのオーバーヘッドが減る
 
-`globals: true` を有効にしているので、`import` を省いてもエラーにはなりませんが、**明示的に import するのが推奨** です（IDE の補完が効くため）。
+しかし HTTP/2 では:
 
-### よく使うアサーション
+- **1 接続で並行にいくつでも取れる** ので、10 個のアイコンを別々に取っても接続数コストはほぼゼロ
+- スプライト画像は **一括更新の負担が大きい**（1 個のアイコン差し替えで 1 枚全部再ダウンロード）
+- **キャッシュ効率が悪い**（差分更新できない）
+- 解像度別やダークモード別の切り出しが面倒
 
-```ts
-expect(value).toBe(5);              // === で比較（プリミティブ）
-expect(obj).toEqual({ a: 1 });      // 構造比較（オブジェクト / 配列）
-expect(arr).toContain("apple");     // 配列が要素を含むか
-expect(str).toMatch(/hello/);       // 文字列が正規表現にマッチするか
-expect(value).toBeNull();           // null かどうか
-expect(value).toBeUndefined();      // undefined かどうか
-expect(value).toBeTruthy();         // truthy（真値）か
-expect(value).toBeFalsy();          // falsy（偽値）か
-expect(fn).toThrow("エラーメッセージ"); // 関数が例外を投げるか
-expect(arr).toHaveLength(3);        // 配列 / 文字列の長さ
-```
+このため HTTP/2 時代には **個別のアイコンファイルをそのまま置いておく** ほうが、キャッシュ効率も開発しやすさも勝ります。バンドルも同じで、「全部 1 つに結合」より「ページ単位でコード分割」のほうがキャッシュが効く場面が多くなりました。
 
-`toBe` と `toEqual` の使い分けは要注意。
+### じゃあバンドルは不要？（実務の現在地）
 
-```ts
-expect({ a: 1 }).toBe({ a: 1 });    // NG: 別オブジェクトなので fail
-expect({ a: 1 }).toEqual({ a: 1 }); // OK: 構造が同じなので pass
-```
+「HTTP/2 でリクエスト数のコストが激減したのだから、バンドル自体不要では？」と思うかもしれません。実際は以下のバランスで運用されています。
 
-オブジェクト / 配列は `toEqual`、それ以外は `toBe` と覚えてください。
+- **たくさんの小さなファイル**: リクエスト 1 本あたりのヘッダ / 認証 / TLS のオーバーヘッドはゼロにはならない。あまりに細切れだと逆に遅い
+- **大きすぎる単一バンドル**: 1 つ直すだけで全部キャッシュ破棄される。分割しないと差分更新が効かない
 
-### `beforeEach` と `afterEach`
+現代のフレームワーク（Vite / webpack / Next.js / Remix）は **適切な粒度でコードを分割** しつつ、**チャンクには安定したハッシュ名** を付けてキャッシュさせる、という中間解を採用しています。Vite の `dist/assets/` の中身を見ると、機能や経路ごとに分かれた `.js` / `.css` が並んでいるのがわかります。
 
-各テストの前後に共通処理を入れたい場合に使います。
+### 確認してみよう
 
-```ts
-import { describe, it, expect, beforeEach, afterEach } from "vitest";
+今見ているページの通信がどのプロトコルで流れているかは、DevTools Network タブの **`Protocol`** 列で確認できます（列が出ていなければヘッダを右クリックして `Protocol` を表示）。
 
-describe("Counter", () => {
-  let count: number;
+- `h3` = HTTP/3
+- `h2` = HTTP/2
+- `http/1.1` = HTTP/1.1
 
-  beforeEach(() => {
-    count = 0;  // 各テスト前にリセット
-  });
-
-  it("増やすと 1 になる", () => {
-    count++;
-    expect(count).toBe(1);
-  });
-
-  it("リセット後も 0 から始まる", () => {
-    expect(count).toBe(0);  // beforeEach のおかげで毎回 0 から
-  });
-});
-```
-
-### 非同期コードのテスト
-
-`async / await` で書くと自然に通ります。
-
-```ts
-import { describe, it, expect } from "vitest";
-
-async function fetchUser(id: number) {
-  return new Promise((resolve) =>
-    setTimeout(() => resolve({ id, name: "Alice" }), 10)
-  );
-}
-
-describe("fetchUser", () => {
-  it("ユーザーを取得する", async () => {
-    const user = await fetchUser(1);
-    expect(user).toEqual({ id: 1, name: "Alice" });
-  });
-});
-```
-
-「Promise のテスト」を意識しなくても、関数を `async` にして `await` を書くだけで OK です。
-
-### watch モードで開発する
-
-`npm run test` で立ち上がる watch モードでは、
-
-- ファイル変更を検知して自動再実行
-- 失敗したテストを表示しっぱなしにして、対応するファイルを直すと即パス確認
-- キーボード操作で **filter**（特定のテストだけ実行）/ **rerun**（全部再実行）/ **quit** ができる
-
-開発しながらテストを書く / 直す体験は、watch モードがあるとないとで雲泥の差です。
+現代のホスティングは `h2` または `h3` になっているはずです。
 
 ## 演習
 
 ### ゴール
 
-- Vitest をセットアップできる
-- 「文字列を処理する関数」のユニットテストを 5 件書ける
-- watch モードで「直したら即通る」を体感する
+- 本教材サイトと、昔ながらの構成のサイトとで **Protocol 列** を見比べる
+- 1 つのドメインに対する Connection 数と、実際に走っているリクエスト数の関係を眺める
+- HTTP/1.1 で同時接続数がボトルネックになる様子を Throttling とシミュレーションで体感する（任意）
 
-### 途中から始める場合
+### 手順 1: プロトコルを見る
 
-新規 StackBlitz の Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-vanilla-ts>）を開きます。テンプレートには Vitest が入っていないので追加します。
+1. 本教材サイトを開き、DevTools の Network タブでリロードします
+2. 列ヘッダを右クリック → `Protocol` を有効にします
+3. 全リクエストの `Protocol` 列を眺めます。`h2` または `h3` になっているはずです
 
-### 手順 1: Vitest をインストール
+### 手順 2: 同じドメインへの同時リクエスト数を眺める
 
-ターミナル（StackBlitz の場合は下部の Terminal タブ）で:
+1. Network タブで `Domain` 列を有効にします（右クリック → Domain）
+2. 全行を Domain でソートします
+3. 同じドメインに対して **10 本以上のリクエストが同時に完了している** ことが見て取れます。HTTP/2 の多重化の恩恵です
 
-```bash
-npm install -D vitest
-```
+### 手順 3: Throttling で遅くしてみる（任意）
 
-> 注: 本レッスンはコンポーネントテストではないので `@vitejs/plugin-react` / `jsdom` は不要です。次のレッスンで足します。
+1. Network タブの Throttling を `Slow 4G` に切り替え
+2. リロード
+3. Timing タブで `Initial connection` の時間が伸びることを確認
+4. 元に戻す（`No throttling`）
 
-### 手順 2: 設定ファイルを作る
-
-プロジェクトルートに `vitest.config.ts` を作成:
-
-```ts
-import { defineConfig } from "vitest/config";
-
-export default defineConfig({
-  test: {
-    globals: true,
-  },
-});
-```
-
-`package.json` の `scripts` に以下を追加:
-
-```json
-{
-  "scripts": {
-    "test": "vitest"
-  }
-}
-```
-
-### 手順 3: テスト対象のコードを書く
-
-`src/string-utils.ts` を作成:
-
-```ts
-export function reverse(s: string): string {
-  return s.split("").reverse().join("");
-}
-
-export function isPalindrome(s: string): boolean {
-  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, "");
-  return cleaned === reverse(cleaned);
-}
-
-export function truncate(s: string, max: number): string {
-  if (s.length <= max) return s;
-  return s.slice(0, max) + "...";
-}
-```
-
-### 手順 4: テストを書く
-
-`src/string-utils.test.ts` を作成:
-
-```ts
-import { describe, it, expect } from "vitest";
-import { reverse, isPalindrome, truncate } from "./string-utils";
-
-describe("reverse", () => {
-  it("文字列を反転する", () => {
-    expect(reverse("hello")).toBe("olleh");
-  });
-
-  it("空文字は空文字のまま", () => {
-    expect(reverse("")).toBe("");
-  });
-});
-
-describe("isPalindrome", () => {
-  it("回文は true", () => {
-    expect(isPalindrome("racecar")).toBe(true);
-    expect(isPalindrome("level")).toBe(true);
-  });
-
-  it("回文でなければ false", () => {
-    expect(isPalindrome("hello")).toBe(false);
-  });
-
-  it("大文字小文字を無視する", () => {
-    expect(isPalindrome("RaceCar")).toBe(true);
-  });
-
-  it("記号と空白を無視する", () => {
-    expect(isPalindrome("A man, a plan, a canal: Panama")).toBe(true);
-  });
-});
-
-describe("truncate", () => {
-  it("最大長以内なら変えない", () => {
-    expect(truncate("hello", 10)).toBe("hello");
-  });
-
-  it("超えたら切り詰めて ... を付ける", () => {
-    expect(truncate("hello world", 5)).toBe("hello...");
-  });
-
-  it("ちょうどなら変えない", () => {
-    expect(truncate("hello", 5)).toBe("hello");
-  });
-});
-```
-
-### 手順 5: 実行
-
-```bash
-npm run test
-```
-
-Vitest が起動し、watch モードで全テストが走ります。すべて緑のチェックで pass すれば成功です。
-
-### 期待出力
-
-```
- PASS  src/string-utils.test.ts (10)
-   PASS  reverse (2)
-     PASS  文字列を反転する
-     PASS  空文字は空文字のまま
-   PASS  isPalindrome (4)
-     PASS  回文は true
-     PASS  回文でなければ false
-     PASS  大文字小文字を無視する
-     PASS  記号と空白を無視する
-   PASS  truncate (3)
-     PASS  最大長以内なら変えない
-     PASS  超えたら切り詰めて ... を付ける
-     PASS  ちょうどなら変えない
-
- Test Files  1 passed (1)
-      Tests  10 passed (10)
-```
-
-実際の Vitest 出力では緑のチェックマーク記号がそれぞれの行頭に付きます。すべて緑になれば OK です。
+HTTP/2 の多重化自体は、回線が遅くても 1 接続で済む利点がしっかり残ります。HTTP/1.1 のように 6 本の接続それぞれで TLS ハンドシェイクをやり直す必要がないぶん、モバイル環境ほど差が出やすい領域です。
 
 ### 変える
 
-- `truncate("hello world", 5)` の期待値を `"hello world"` に変えてみる。fail することを確認（fail 表示で「実際は何が返ったか」が示される）。元に戻す
-- `string-utils.ts` の `truncate` の `+ "..."` を消してみる。watch モードが即座に該当テストの fail を表示する。元に戻す
-- 新しい関数 `wordCount(s: string): number`（空白で区切った単語数を返す）を `string-utils.ts` に足し、テストも 3 件書く
+- 別のサイト（昔ながらの構成のブログや CMS）を開いて、`Protocol` 列を見比べる。`http/1.1` のサイトは減ってきているが、まだ見かける
+- 本教材サイトの `/assets/*.css` / `/assets/*.js` のファイル名を見比べる。**ハッシュが付いている**（例: `theme.CGtCztgT.js`）ことを確認。HTTP/2 + immutable キャッシュを前提にした現代的な命名
 
 ### 自分で書く
 
-- 配列を扱う関数を作ってテストを書く
-  - `unique<T>(arr: T[]): T[]`（重複を除いた配列）
-  - `chunk<T>(arr: T[], size: number): T[][]`（配列を size ごとに分割）
-- 各関数で **境界値**（空配列 / 1 要素 / size より小さい配列）も忘れずテストする
+- 「HTTP/1.1 時代に CSS スプライトが流行り、HTTP/2 時代に不要になった理由」を自分の言葉で 3-4 文でまとめる
+- `@vite-pwa/vitepress` が生成する `sw.js` を DevTools の Network タブで探す。プロトコルとキャッシュ制御ヘッダをメモする（この内容は「Cookie と Web セキュリティ」の後に置く予定の Service Worker 関連の補足に繋がります）
 
 ## まとめ
 
-- テストはデグレ防止 / リファクタリング安心 / 設計フィードバック / ドキュメント代わりの 4 つで報われる
-- テストピラミッド: ユニット 70% / 結合 20% / E2E 10% を目安
-- **Vitest** は Vite の上で動くテストランナー。Jest 互換の書き味で 10x 速い
-- 基本構造: `describe(名前, () => { it(条件, () => { expect(値).toBe(期待値) }) })`
-- アサーション: `toBe` はプリミティブ / `toEqual` はオブジェクト・配列
-- watch モードでファイル変更検知 → 即再実行で開発体験が大きく向上
-- 別のレッスンでは **Testing Library で React コンポーネントのテスト** に進む
+- HTTP/1.1 は「1 接続 = 1 リクエスト順次処理」で、同じドメインへの同時接続は 6 本程度の制限
+- CSS スプライト / ドメイン分散 / バンドル結合などの「リクエストを減らす」テクは、この制限が背景
+- HTTP/2 は 1 接続で複数リクエストを並行する多重化を導入。ドメイン分散やスプライトは意味を失った
+- HTTP/3 は UDP + QUIC で、パケットロスや回線切替に強く、モバイル環境で有利
+- 実務では「小さすぎず大きすぎない」粒度でコード分割し、ハッシュ付きファイル名でキャッシュさせるのが現代の定番
+- 別のレッスンで、Cookie と Web セキュリティ（HttpOnly / Secure / SameSite / CSRF / XSS）を扱う

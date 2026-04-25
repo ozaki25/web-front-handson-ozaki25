@@ -1,415 +1,339 @@
-# lesson102: React Hook Form の基本
+# lesson102: バンドルサイズの最適化とコード分割
 
 ## ゴール
 
-- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
-- RHF を `npm install` してフォームに導入できる
-- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
-- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
-- `formState.errors` でエラーメッセージを表示できる
-- `defaultValues` で初期値を入れる
-- `watch` / `setValue` / `reset` の使い分けを知る
+- バンドルサイズが LCP や INP に効く理由を説明できる
+- Vite のビルド出力を **Visualizer** で可視化できる
+- `import("...")` の **動的インポート** でコードを分割できる
+- `React.lazy` + `<Suspense>` でルート / コンポーネント単位の遅延読み込みができる
+- 「最初の 1 画面で **必要なコードだけ** を送る」考え方を持てる
+- Tree shaking が効く / 効かない書き方を区別できる
 
 ## 解説
 
-### 制御コンポーネントの限界
+### バンドルサイズと CWV の関係
 
-これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
+ブラウザは JS を **ダウンロード → パース → 実行** してから初めて画面を描画できます。バンドルが大きいと:
 
-```tsx
-const [name, setName] = useState("");
-const [email, setEmail] = useState("");
-const [message, setMessage] = useState("");
-// ...
-<input value={name} onChange={(e) => setName(e.target.value)} />
-<input value={email} onChange={(e) => setEmail(e.target.value)} />
-<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
-```
+- ダウンロードに時間がかかる → **LCP 悪化**
+- パース・実行で **メインスレッドが詰まる** → **INP 悪化**
+- 大きな `<script>` が `<body>` を遮る → **First Paint も遅延**
 
-シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
+特にモバイル + 遅い回線では 100KB 違うだけで体感が劇的に変わります。**「送らないコードが最速」** が鉄則です。
 
-- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
-- **コードが冗長**: state と setter の宣言が増える
-- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
-- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
+### バンドル分析: rollup-plugin-visualizer
 
-これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
-
-### React Hook Form とは
-
-RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
-
-- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
-- **少ないコード** で大きなフォームを書ける
-- **バリデーション + エラー管理** が組み込み
-
-2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
-
-### インストール
+Vite は **Rollup** をベースにビルドします。`rollup-plugin-visualizer` を入れると、ビルド成果物の中身を **木構造の図** で見られます。
 
 ```bash
-npm install react-hook-form
+npm install -D rollup-plugin-visualizer
 ```
 
-### 最小のフォーム
+`vite.config.ts`:
 
-`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,        // ビルド後に自動でブラウザで開く
+      filename: "stats.html",
+      gzipSize: true,    // gzip 圧縮後のサイズも表示
+      brotliSize: true,  // brotli 圧縮後のサイズも表示
+    }),
+  ],
+});
+```
+
+`npm run build` を実行すると `dist/` 出力後に `stats.html` がブラウザで開き、各依存パッケージのサイズが視覚的に分かります。意外なほど大きいライブラリ（例: `moment`、`lodash` 全部）が見つかることがあります。
+
+### よくある肥大化パターン
+
+| パターン | 解決策 |
+|---|---|
+| `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
+| `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
+| `framer-motion` 全部読み込み | `motion/react` の必要モジュールだけ |
+| Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
+| 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
+| アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
+
+「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
+
+### コード分割（Code Splitting）
+
+「最初の 1 画面で必要なコードだけ送る」を実現するのが **コード分割** です。アプリ全体を 1 つの大きなバンドルにせず、**画面 / 機能ごとに小さな chunk** に分けます。
+
+#### 1. 動的インポート `import("...")`
+
+JavaScript 標準の **動的 `import()`** を使うと、その行に到達するまでファイルを読み込みません。
+
+```ts
+// 静的 import: ビルド時に main bundle に含まれる
+import { heavyFunction } from "./heavy";
+
+// 動的 import: 実行時に必要になったら別 chunk として読み込む
+button.addEventListener("click", async () => {
+  const { heavyFunction } = await import("./heavy");
+  heavyFunction();
+});
+```
+
+ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
+
+### 2. React.lazy + `<Suspense>`
+
+React コンポーネントを動的に読み込むには `React.lazy` を使います。
 
 ```tsx
-import { useForm } from "react-hook-form";
+import { lazy, Suspense } from "react";
 
-type FormValues = {
-  name: string;
-  email: string;
-};
+// 通常の import
+// import { HeavyChart } from "./HeavyChart";
 
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
+// 動的 import + lazy
+const HeavyChart = lazy(() => import("./HeavyChart"));
 
-  function onSubmit(data: FormValues) {
-    console.log(data);
-  }
+function App() {
+  const [showChart, setShowChart] = useState(false);
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input id="name" {...register("name", { required: "必須です" })} />
-        {errors.name && <p role="alert">{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          {...register("email", { required: "必須です" })}
-        />
-        {errors.email && <p role="alert">{errors.email.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        送信
-      </button>
-    </form>
+    <div>
+      <button onClick={() => setShowChart(true)}>グラフを表示</button>
+      {showChart && (
+        <Suspense fallback={<p>グラフ読み込み中...</p>}>
+          <HeavyChart />
+        </Suspense>
+      )}
+    </div>
   );
 }
 ```
 
-主な要素:
+`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。
 
-- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
-- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
-- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
-- **`formState.errors`**: バリデーションエラーが格納される
-- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
+#### 3. Next.js でのコード分割
 
-### バリデーションオプション
+Next.js の App Router は **デフォルトで自動コード分割** をします。`app/posts/page.tsx` の中身は `/posts` を訪れた時だけ送られ、トップ `/` には含まれません。
 
-`register` の第 2 引数で各種ルールを指定できます。
+明示的に分割したい時は `next/dynamic` を使います:
 
 ```tsx
-{...register("password", {
-  required: "パスワードは必須です",
-  minLength: { value: 8, message: "8 文字以上で入力してください" },
-  maxLength: { value: 100, message: "100 文字以内で入力してください" },
-  pattern: {
-    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
-    message: "英字と数字を混ぜてください",
-  },
-})}
-```
+import dynamic from "next/dynamic";
 
-`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
-
-```tsx
-{...register("age", {
-  validate: (value) => {
-    if (value < 18) return "18 歳以上である必要があります";
-    if (value > 120) return "値が大きすぎます";
-    return true; // OK
-  },
-})}
-```
-
-### `defaultValues` で初期値
-
-編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
-
-```tsx
-const { register, handleSubmit } = useForm<FormValues>({
-  defaultValues: {
-    name: "Alice",
-    email: "alice@example.com",
-  },
+const Chart = dynamic(() => import("./Chart"), {
+  loading: () => <p>読み込み中...</p>,
+  ssr: false,  // クライアント側でだけ実行
 });
-```
 
-非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
-
-```tsx
-const { register, handleSubmit, reset } = useForm<FormValues>();
-
-useEffect(() => {
-  fetch("/api/me")
-    .then((r) => r.json())
-    .then((user) => reset(user));
-}, [reset]);
-```
-
-### `watch` で値を購読
-
-特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
-
-```tsx
-const { watch, register } = useForm<FormValues>();
-const subscribe = watch("subscribe");
-
-return (
-  <>
-    <label>
-      <input type="checkbox" {...register("subscribe")} />
-      購読する
-    </label>
-
-    {subscribe && (
-      <div>
-        <label>頻度</label>
-        <select {...register("frequency")}>
-          <option value="daily">毎日</option>
-          <option value="weekly">毎週</option>
-        </select>
-      </div>
-    )}
-  </>
-);
-```
-
-`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
-
-### `setValue` でプログラム的に値を設定
-
-```tsx
-const { setValue } = useForm<FormValues>();
-
-// 別のボタンや非同期処理から値を入れる
-setValue("name", "Bob");
-```
-
-「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
-
-### `reset` でフォームを初期化
-
-送信成功後にフォームを空にする:
-
-```tsx
-async function onSubmit(data: FormValues) {
-  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
-  reset();  // 入力をクリア
+export default function Page() {
+  return <Chart />;
 }
 ```
 
-### 送信中の表示
+`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
 
-`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
+### Tree Shaking の落とし穴
 
-```tsx
-const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
+**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
 
-return (
-  <button type="submit" disabled={isSubmitting}>
-    {isSubmitting ? "送信中..." : "送信"}
-  </button>
-);
+#### 効く書き方（named import）
+
+```ts
+import { format } from "date-fns";
+// 使うのは format だけ。他の関数はバンドルされない
 ```
 
-`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
+#### 効きにくい書き方
 
-### アクセシブルなエラー表示
-
-「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
-
-```tsx
-<input
-  id="email"
-  type="email"
-  aria-invalid={errors.email ? "true" : "false"}
-  aria-describedby={errors.email ? "email-error" : undefined}
-  {...register("email", { required: "メールは必須です" })}
-/>
-{errors.email && (
-  <p id="email-error" role="alert">
-    {errors.email.message}
-  </p>
-)}
+```ts
+import * as dateFns from "date-fns";
+dateFns.format(...);
+// すべての export を読み込む可能性が上がる
 ```
 
-これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
+```ts
+import _ from "lodash";
+// CommonJS の lodash は tree shaking が効かない。lodash 全部が含まれる
+```
+
+代替策:
+
+- `lodash` → `lodash-es`（ESM 版） or 個別関数 import（`import debounce from "lodash/debounce"`）
+- `moment` → `dayjs` / `date-fns`
+- 大きな UI ライブラリ → 個別パッケージ化されているものを選ぶ（Chakra UI v3、Radix UI のように）
+
+### `package.json` の `sideEffects: false`
+
+ライブラリ作者向けですが、自作のライブラリで Tree Shaking を効かせるには `package.json` に `sideEffects: false` を書きます。
+
+```json
+{
+  "name": "my-lib",
+  "sideEffects": false
+}
+```
+
+「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
 
 ## 演習
 
 ### ゴール
 
-- React + TS プロジェクトに RHF を導入する
-- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
-- 必須 / メールパターン / 最大長 のバリデーションを実装
-- 送信時に「送信中...」、成功で「送信しました！」を表示
+- 既存の Vite + React プロジェクトに `rollup-plugin-visualizer` を入れる
+- `stats.html` を見てバンドル内容を可視化する
+- `React.lazy` でページ単位のコード分割を体験する
+- ビルド前後でサイズの違いを比較する
 
 ### 途中から始める場合
 
-これまでに作ったフォーム関連レッスン（章 4 / 章 7 のフォーム関連）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
+新規 Vite + React + TypeScript テンプレートを作ります（StackBlitz でも可）。
 
 ```bash
-npm create vite@latest rhf-sample -- --template react-ts
-cd rhf-sample
+npm create vite@latest perf-sample -- --template react-ts
+cd perf-sample
 npm install
-npm install react-hook-form
+npm install -D rollup-plugin-visualizer
 ```
 
-### `src/ContactForm.tsx`
+### 手順 1: Visualizer を有効化
+
+`vite.config.ts`:
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,
+      filename: "dist/stats.html",
+      gzipSize: true,
+    }),
+  ],
+});
+```
+
+### 手順 2: わざと大きなコンポーネントを作る
+
+`src/HeavyChart.tsx`:
 
 ```tsx
-import { useForm } from "react-hook-form";
-import { useState } from "react";
-
-type FormValues = {
-  name: string;
-  email: string;
-  message: string;
-};
-
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
-
-  async function onSubmit(data: FormValues) {
-    // 実際は fetch で送信。ここでは 1 秒待つだけ
-    await new Promise((r) => setTimeout(r, 1000));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
-  }
+export function HeavyChart() {
+  // 実際のグラフライブラリの代わりに、大きな配列を生成
+  const data = Array.from({ length: 1000 }, (_, i) => ({
+    label: `点 ${i}`,
+    value: Math.sin(i / 50) * 100 + 100,
+  }));
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
-
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          aria-describedby={errors.name ? "name-error" : undefined}
-          {...register("name", {
-            required: "お名前は必須です",
-            maxLength: { value: 50, message: "50 文字以内で入力してください" },
-          })}
-        />
-        {errors.name && (
-          <p id="name-error" role="alert" style={{ color: "red" }}>
-            {errors.name.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          aria-describedby={errors.email ? "email-error" : undefined}
-          {...register("email", {
-            required: "メールは必須です",
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: "メールアドレスの形式が正しくありません",
-            },
-          })}
-        />
-        {errors.email && (
-          <p id="email-error" role="alert" style={{ color: "red" }}>
-            {errors.email.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          aria-describedby={errors.message ? "message-error" : undefined}
-          {...register("message", {
-            required: "メッセージは必須です",
-            minLength: { value: 10, message: "10 文字以上で入力してください" },
-          })}
-        />
-        {errors.message && (
-          <p id="message-error" role="alert" style={{ color: "red" }}>
-            {errors.message.message}
-          </p>
-        )}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
+    <div>
+      <h2>グラフ（モック）</h2>
+      <ul>
+        {data.slice(0, 20).map((d) => (
+          <li key={d.label}>
+            {d.label}: {d.value.toFixed(2)}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 ```
 
-### `src/App.tsx`
+### 手順 3: lazy で読み込む
+
+`src/App.tsx`:
 
 ```tsx
-import { ContactForm } from "./ContactForm";
+import { lazy, Suspense, useState } from "react";
+
+const HeavyChart = lazy(() =>
+  import("./HeavyChart").then((m) => ({ default: m.HeavyChart }))
+);
 
 export default function App() {
-  return <ContactForm />;
+  const [show, setShow] = useState(false);
+
+  return (
+    <main>
+      <h1>パフォーマンス演習</h1>
+      <button onClick={() => setShow(true)}>グラフを表示</button>
+
+      {show && (
+        <Suspense fallback={<p>読み込み中...</p>}>
+          <HeavyChart />
+        </Suspense>
+      )}
+    </main>
+  );
 }
 ```
 
+`HeavyChart` は **named export** なので `lazy` の中で `default` に変換しています。`export default function HeavyChart() {...}` にすれば変換は不要です。
+
+### 手順 4: ビルドして可視化
+
+```bash
+npm run build
+```
+
+ビルド完了後、自動で `stats.html` がブラウザで開きます。
+
+- 中央の大きなブロックが React 本体
+- 別の小さな chunk として `HeavyChart` のコードが分かれているはず
+- **Initial bundle**（最初に送られる JS）から `HeavyChart` が外れている
+
 ### 期待出力
 
-- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
-- メールに `abc` を入れて送信 → メール形式エラー
-- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
-- DevTools の Console に送信値が出る
+`dist/assets/` を見ると、複数の `.js` ファイルがあるはずです。
 
-`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
+```
+dist/
+├── index.html
+├── assets/
+│   ├── index-XXXXX.js     ← Initial bundle (App.tsx + React)
+│   └── HeavyChart-XXXXX.js ← lazy でロードされる別 chunk
+└── stats.html
+```
+
+開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
+
+- 最初に index-XXXXX.js が読み込まれる
+- 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
+
+の流れが見えます。
 
 ### 変える
 
-- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
-- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
-- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
+- `lazy` の動的 import を **静的 import** に戻してみる（`import { HeavyChart } from "./HeavyChart"`）。再ビルドすると `HeavyChart` のコードが Initial bundle に統合され、`stats.html` 上で 1 つの大きな塊になることを確認
+- `HeavyChart` の中身を増やしてみる（`Array.from({ length: 100000 }, ...)`）。バンドル内のサイズが目に見えて増える
+- `import * as dateFns from "date-fns"` を入れて、tree shaking が効いていない場合に何が起きるか観察（事前に `npm install date-fns`）
 
 ### 自分で書く
 
-- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
-- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
+- 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
+- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る
+
+### Next.js での実例
+
+教材サイトの章 5 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
+
+それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
 
 ## まとめ
 
-- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
-- **React Hook Form（RHF）** は ref ベースの非制御で軽量。大規模フォームの定番
-- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
-- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
-- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
-- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
-- `isSubmitting` で送信中の UI 制御
-- 別のレッスンでは **Zod** で型安全な複雑バリデーションに進み、サーバーとの連携も統一する
+- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
+- **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
+- 肥大化の典型（lodash 全部 import / moment / framer-motion 全部 / 画像 JS バンドル）を覚える
+- **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
+- Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
+- Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意
+- 別のレッスンでは画像 / フォントの最適化に進む（**LCP の最重要要因**）

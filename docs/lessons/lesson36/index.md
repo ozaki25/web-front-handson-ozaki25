@@ -1,326 +1,341 @@
-# lesson36: `unknown` と `never`
+# lesson36: URL と History API でページ遷移なしに URL を操作する
+
+<script setup>
+const demoUrlJs = `
+const urlInput = document.querySelector('#url-input');
+const parseBtn = document.querySelector('#parse-btn');
+const output = document.querySelector('#output');
+
+parseBtn.addEventListener('click', () => {
+  try {
+    const url = new URL(urlInput.value);
+    const params = [];
+    url.searchParams.forEach((value, key) => {
+      params.push(\`    \${key}: \${value}\`);
+    });
+    output.textContent = [
+      'origin:   ' + url.origin,
+      'pathname: ' + url.pathname,
+      'search:   ' + url.search,
+      'hash:     ' + url.hash,
+      'searchParams:',
+      params.length === 0 ? '    （なし）' : params.join('\\n'),
+    ].join('\\n');
+  } catch (error) {
+    output.textContent = 'URL として解釈できませんでした: ' + error.message;
+  }
+});
+`
+</script>
 
 ## ゴール
 
-- `any` を使うと TS の型チェックが無効化されること、本コースでは `any` を **原則禁止** にする方針を理解する。
-- 「型が分からない値」は `unknown` で受けられる。`unknown` のままでは **何もできない** 制約を体験する。
-- `never`（「起こり得ない」を表す型）の役割を知り、`switch` + `never` による **網羅性チェック** を書ける。
-- 具体的な型ガードで `unknown` を絞り込む書き方は 別のレッスン で扱うと理解する。
+- `URL` オブジェクトで URL を組み立て・分解できる
+- `URLSearchParams` でクエリ文字列を安全に扱える
+- `history.pushState` / `history.replaceState` でページ遷移なしに URL を書き換えられる
+- `popstate` イベントでブラウザの戻る / 進むに反応できる
+- SPA（Single Page Application）が「URL だけ変えて画面は同じ JS で描く」仕組みの下地を説明できる
 
 ## 解説
 
-### `any` とその問題点
+### URL はただの文字列ではない
 
-TS には、型チェックを **一時的にすべて無効にする** `any` という型があります。何を代入しても、何を呼び出しても、TS は何も警告しません。
+URL は文字列に見えますが、実際には **複数のパーツの集まり** です。素の文字列として連結・分解すると、エスケープ漏れや `?` と `&` の並び順ミスなどで簡単にバグります。モダン JS には専用の **`URL`** オブジェクトがあります。
 
-```ts
-let x: any = 123;
-x = "hello";        // OK
-x = { a: 1 };       // OK
-x.toUpperCase();    // 実行時エラーになるのに、TS は止めない
-x.bar.baz.qux();    // これも通ってしまう
+```js
+const url = new URL("https://example.com/articles/42?tag=css&sort=new#comments");
+
+console.log(url.origin);     // "https://example.com"
+console.log(url.pathname);   // "/articles/42"
+console.log(url.search);     // "?tag=css&sort=new"
+console.log(url.hash);       // "#comments"
+console.log(url.searchParams.get("tag")); // "css"
 ```
 
-`any` は JS の世界に戻るのと同じことです。コンパイルは通ってしまい、**実行してはじめて壊れていることに気付きます**。
+パーツの一覧:
 
-本コースでは **`any` は原則禁止** とします。既存ライブラリの型情報が不足している場合などに仕方なく使う場面はありますが、学習中は使う場面をゼロにして差し支えありません。
+| プロパティ | 取れるもの | 例 |
+|---|---|---|
+| `origin` | プロトコル + ホスト | `"https://example.com"` |
+| `pathname` | パス部分 | `"/articles/42"` |
+| `search` | `?` から始まるクエリ文字列 | `"?tag=css&sort=new"` |
+| `searchParams` | クエリを扱う `URLSearchParams` | （後述） |
+| `hash` | `#` から始まるアンカー | `"#comments"` |
+| `host` | ホスト + ポート | `"example.com"` |
 
-### `unknown`: 「型が分からない」を安全に受ける
+### 現在のページの URL を取る: `location`
 
-「型が分からない値」を受ける安全な代替が **`unknown`** です。`any` と違い、`unknown` はそのままでは **ほとんど何も操作できません**。
+今開いているページの URL は `window.location` から取れます。`location.href` を `URL` に渡せば、現在のページも同じ方法で解析できます。
 
-```ts
-let x: unknown = 123;
-x = "hello";   // 代入自体は何でも OK
-x = { a: 1 };  // OK
+```js
+console.log(location.href);         // 現在の完全な URL
+console.log(location.pathname);     // 現在のパス
+console.log(location.search);       // 現在のクエリ
 
-console.log(x.toUpperCase()); // エラー
+const current = new URL(location.href);
+console.log(current.searchParams.get("q")); // クエリの "q" を読む
 ```
 
-```
-'x' is of type 'unknown'.
-```
+### クエリ文字列を扱う: `URLSearchParams`
 
-`unknown` のままでは、プロパティアクセスもメソッド呼び出しもできません。**「使う前に型を絞り込め」** と TS が促してくれます。
+`?key=value&key2=value2` 形式のクエリを手で `split("&")` するのは、エスケープ処理が面倒で壊れやすいパターンの代表です。`URLSearchParams` を使えば安全です。
 
-この「絞り込む」具体的な方法は **別のレッスンで扱う型ガード** に委ねます。本レッスンでは、`unknown` が「絞り込まないと何もできない型」であることだけを体験します。
+```js
+const params = new URLSearchParams(location.search);
 
-### `unknown` の使いどころ
+console.log(params.get("q"));         // "react"
+console.log(params.has("page"));      // true / false
+console.log(params.getAll("tag"));    // 同じキーが複数あるとき、配列で全部取れる
 
-`unknown` が登場する典型は、**外から入ってくる値** です。
+params.set("page", "2");              // 値を上書き
+params.append("tag", "ssr");          // 同じキーで複数値を追加
+params.delete("sort");                // キーごと削除
 
-- `JSON.parse(text)` の戻り値
-- `fetch(...).then(r => r.json())` の戻り値
-- Server Actions / Route Handlers のリクエストボディ
-
-これらは実行時まで中身が何か分かりません。かつては `any` で受けていましたが、現在の TS では `unknown` で受けて、あとから型ガードで絞り込むのが基本形です。
-
-```ts
-const raw: unknown = JSON.parse('{"name":"Alice"}');
-// raw.name と書きたくても書けない。別のレッスンで絞り込み方を学ぶ。
+console.log(params.toString());       // "q=react&page=2&tag=css&tag=ssr"
 ```
 
-### `never`: 「起こり得ない」を表す型
+空から組み立てることもできます。
 
-`never` は「**値が存在しえない**」ことを表す型です。次のような場面で登場します。
+```js
+const params = new URLSearchParams();
+params.set("q", "日本語 OK");         // エンコードは自動（%E6%97%A5%... になる）
+params.set("limit", "10");
 
-- 関数が **例外しか投げない**、あるいは **無限ループで絶対に return しない** 場合の戻り値型
+const url = "https://example.com/search?" + params.toString();
+```
 
-    ```ts
-    function fail(message: string): never {
-      throw new Error(message);
-    }
-    ```
+`URLSearchParams` が自動で URL エンコード（スペースを `%20`、日本語を `%E3%81%82...` 等に変換）してくれるので、自分で `encodeURIComponent` を呼ぶ必要はありません。
 
-- `switch` の全ケースを処理し終えた後の残り物。これを使って **網羅性チェック** ができる。
+### `URL` と `URLSearchParams` を組み合わせる
 
-「`never` に値を代入しようとするとエラーになる」という性質を逆手にとると、「**ここに値が来たら漏れがある**」という警告を TS に書かせることができます。
+`URL` オブジェクトの `searchParams` は `URLSearchParams` そのものなので、両方を行き来できます。
 
-### 網羅性チェック（`switch` + `never`）
+```js
+const url = new URL("https://example.com/search");
 
-「配列・ユニオン・リテラル型・オプショナル」で学んだリテラル型のユニオンを `switch` で分岐するとき、**全ケースを処理したことを TS に検証させる** 書き方を紹介します。
+url.searchParams.set("q", "react");
+url.searchParams.set("page", "2");
 
-```ts
-type Status = "open" | "done" | "archived";
+console.log(url.toString());
+// "https://example.com/search?q=react&page=2"
+```
 
-function label(status: Status): string {
-  switch (status) {
-    case "open":
-      return "未完了";
-    case "done":
-      return "完了";
-    case "archived":
-      return "保管";
-    default: {
-      const _exhaustive: never = status; // ここに来たら網羅できていない
-      return _exhaustive;
-    }
-  }
+フォーム送信先の URL を動的に組み立てたり、`fetch` のエンドポイントにクエリを付けたりするときの定番です。
+
+### URL を解析する小さなデモ
+
+下のデモは URL を貼り付けると各パーツに分解します。`origin` / `pathname` / `search` / `hash` と、`searchParams` の中身を一覧で確認できます。
+
+<LiveDemo
+  height="320px"
+  :html="`
+<input id='url-input' type='text' value='https://example.com/search?q=react&tag=css&tag=ssr#comments' style='width: 100%;' />
+<div>
+  <button id='parse-btn' type='button'>分解する</button>
+</div>
+<pre id='output' style='background:#f1f5f9; padding:12px; border-radius:4px; white-space:pre-wrap; color:#1f2937;'></pre>
+  `"
+  :css="`
+body { padding: 16px; }
+input { padding: 6px 10px; font-family: monospace; }
+button { margin-top: 8px; padding: 6px 12px; }
+  `"
+  :js="demoUrlJs"
+/>
+
+### History API で URL を書き換える
+
+`URL` は「文字列としての URL」を扱う道具でした。**ブラウザが今表示している URL そのものを書き換える** には、`history` オブジェクトを使います。
+
+```js
+// URL を書き換える（履歴に追加される）
+history.pushState(null, "", "/articles/42?highlight=true");
+
+// URL を書き換える（履歴は追加しない。現在のエントリを差し替え）
+history.replaceState(null, "", "/articles/42");
+```
+
+重要なのは、`pushState` / `replaceState` を呼んでも **ページは再読み込みされない** 点です。アドレスバーの URL は変わりますが、JS の状態や DOM はそのままです。これが SPA（ページ遷移せずに画面を切り替える作り）の核になっています。
+
+第 2 引数は昔のブラウザで使われた title で、**現代では無視されます**。空文字 `""` を渡しておけば十分です。
+
+### 戻る / 進むに反応する: `popstate`
+
+ユーザーがブラウザの戻るボタンや進むボタンを押すと **`popstate`** イベントが飛びます。ここで URL を見て、画面の中身を描き直します。
+
+```js
+window.addEventListener("popstate", () => {
+  const url = new URL(location.href);
+  const id = url.searchParams.get("id");
+  // id に合わせて画面の内容を書き換える
+  render(id);
+});
+```
+
+`pushState` で「進んだ」履歴を、ユーザーが戻るボタンで戻ったときに `popstate` が発火する、という流れです。`pushState` を呼んだ **直後には** `popstate` は発火しない点に注意してください。
+
+### 定番の組み合わせ: URL に状態を同期する
+
+モーダルの開閉、検索条件、並び順、選択中のタブなど、**ユーザーが URL を共有したときに同じ画面を復元したい状態** は URL にも反映しておくのが定番です。
+
+```js
+function applyFilter(filter) {
+  // 画面を書き換える
+  renderList(filter);
+
+  // URL にも反映（履歴に残したい）
+  const url = new URL(location.href);
+  url.searchParams.set("filter", filter);
+  history.pushState(null, "", url);
 }
+
+window.addEventListener("popstate", () => {
+  const current = new URL(location.href).searchParams.get("filter") ?? "all";
+  renderList(current);
+});
 ```
 
-ポイントは `default` で `const _exhaustive: never = status;` と書いている部分です。
-
-- `Status` が `"open" | "done" | "archived"` のとき、上の 3 つの `case` で全部処理している。
-- `default` に到達する時点で `status` の型は **残りがない** ので `never` 型になる。
-- `never` 型の変数に代入できるのは `never` 型の値だけ。このとき `status` が `never` なので代入が通る。
-
-ここで `Status` に **新しいケースを足した** とします。
-
-```ts
-type Status = "open" | "done" | "archived" | "deleted";
-```
-
-すると `label` の `default` で、`status` の型は `"deleted"` が残っている状態（= `never` ではない）になります。
-
-```
-Type '"deleted"' is not assignable to type 'never'.
-```
-
-TS が `label` 関数の中で「`"deleted"` ケースを書き忘れている」と教えてくれます。新しい状態を追加したときに処理漏れを防ぐ、強力な仕組みです。
-
-### このレッスンで扱わないこと
-
-`unknown` を **どう絞り込むか**（`typeof` / `in` / カスタム型ガード）は、別のレッスンで扱います。ここでは「絞り込まないと何もできない」こと、そして「`never` で網羅性を検査できる」ことだけ押さえればじゅうぶんです。
+Next.js の App Router のような SPA フレームワークは、内部でこの `pushState` + `popstate` を使って「同じ HTML で URL を切り替える」挙動を実現しています。本レッスンで仕組みを押さえておくと、5 章 の Next.js ルーティングが驚かずに読めるようになります。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
-### 手順 1: `any` の危うさを確認する
+<details>
+<summary>出発点のコード</summary>
 
-`src/main.ts` の中身を以下に置き換える。
+**`index.html`**
 
-```ts
-let x: any = 123;
-x = "hello";
-console.log(x.toUpperCase()); // OK
-console.log(x.bar.baz.qux()); // TS は止めないが、実行するとクラッシュする
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson36</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>フィルタとページ</h1>
+    <div id="controls">
+      <button type="button" data-filter="all">すべて</button>
+      <button type="button" data-filter="open">未完了</button>
+      <button type="button" data-filter="done">完了</button>
+    </div>
+    <p>現在のフィルタ: <span id="current">all</span></p>
+    <p>現在の URL: <span id="current-url"></span></p>
+  </body>
+</html>
 ```
 
-エディタでは赤線が出ない。ビルドも通る。しかし実行すると次のような実行時エラーになる。
+**`style.css`**
 
-```
-TypeError: Cannot read properties of undefined (reading 'baz')
-```
+```css
+body { font-family: sans-serif; padding: 16px; color: #222; background: #fff; }
+button { padding: 6px 12px; margin-right: 6px; }
+button.active { background: #1f4e79; color: #fff; border-color: #1f4e79; }
+#current, #current-url { font-weight: bold; color: #1f4e79; }
 
-`any` を使うと、TS は「ある型として扱える」と信じ込んでしまう。**実行するまで壊れていることに気付けない** のがポイント。
-
-### 手順 2: `unknown` に置き換えて、エラーが出ることを確認する
-
-同じコードを `unknown` で書き直す。
-
-```ts
-let x: unknown = 123;
-x = "hello";
-console.log(x.toUpperCase());
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  button { color: #eaeaea; background: #2a2a2a; border: 1px solid #555; }
+  button.active { background: #9ecbff; color: #1a1a1a; border-color: #9ecbff; }
+  #current, #current-url { color: #9ecbff; }
+}
 ```
 
-期待されるメッセージ（`x.toUpperCase()` の行に赤線）:
+**`script.js`**
 
-```
-'x' is of type 'unknown'.
-```
-
-さらにプロパティアクセスも試す。
-
-```ts
-console.log(x.bar);
+```js
+// 空のまま
 ```
 
-期待されるメッセージ:
+</details>
 
-```
-'x' is of type 'unknown'.
-```
+### ゴール
 
-`unknown` は「中身が何か分からない」ので、プロパティにもメソッドにも触らせてくれない。`any` のように **実行してから壊れる** のではなく、**書いた瞬間に TS が止める**。
+- 「すべて / 未完了 / 完了」ボタンを押すと、URL のクエリが `?filter=all` / `?filter=open` / `?filter=done` に切り替わる
+- 切り替えはページ再読み込みなしで行われる
+- 戻る / 進むボタンで、前後のフィルタ状態に戻る
+- URL を直接貼り付けて開いた場合も、URL のクエリに合わせてボタンの見た目が変わる
 
-### 手順 3: `JSON.parse` の戻り値を受けてみる
+### 手順
 
-TS の型定義では `JSON.parse` の戻り値は `any` ですが、実務では安全のため `unknown` にキャストして受けるやり方があります。ここでは学習のため明示的に `unknown` で受けます。
+1. `script.js` を以下の内容にします。
+2. プレビューでボタンを順にクリックし、アドレスバーのクエリが変わるのを確認します。
+3. 戻るボタンで前のフィルタに戻ることを確認します。
+4. URL を `?filter=done` 付きで開き直し、「完了」ボタンがハイライトされることを確認します。
 
-```ts
-const raw: unknown = JSON.parse('{"name":"Alice","age":20}');
+### `script.js` の完成形
 
-console.log(raw.name);
-```
+```js
+const controls = document.querySelector("#controls");
+const currentLabel = document.querySelector("#current");
+const currentUrlLabel = document.querySelector("#current-url");
 
-期待されるメッセージ:
+function applyFilterFromUrl() {
+  const url = new URL(location.href);
+  const filter = url.searchParams.get("filter") ?? "all";
 
-```
-'raw' is of type 'unknown'.
-```
+  currentLabel.textContent = filter;
+  currentUrlLabel.textContent = location.href;
 
-`raw` を `unknown` 型で受けると、中身にアクセスする前に「絞り込み」が必要になる。この絞り込みを別のレッスンで `typeof` や `in` や自作の型ガード関数で書けるようになる。
-
-確認できたら `console.log(raw.name);` は消しておく（ビルドを通すため）。
-
-### 手順 4: `never` による網羅性チェック
-
-次のコードを `src/main.ts` に書く。
-
-```ts
-type Status = "open" | "done" | "archived";
-
-function label(status: Status): string {
-  switch (status) {
-    case "open":
-      return "未完了";
-    case "done":
-      return "完了";
-    case "archived":
-      return "保管";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
+  const buttons = controls.querySelectorAll("button");
+  buttons.forEach((btn) => {
+    if (btn.dataset.filter === filter) {
+      btn.classList.add("active");
+    } else {
+      btn.classList.remove("active");
     }
-  }
+  });
 }
 
-console.log(label("open"));
-console.log(label("done"));
-console.log(label("archived"));
+controls.addEventListener("click", (event) => {
+  const btn = event.target.closest("button");
+  if (btn === null) return;
+
+  const filter = btn.dataset.filter;
+
+  const url = new URL(location.href);
+  url.searchParams.set("filter", filter);
+  history.pushState(null, "", url);
+
+  applyFilterFromUrl();
+});
+
+window.addEventListener("popstate", () => {
+  applyFilterFromUrl();
+});
+
+applyFilterFromUrl();
 ```
 
-#### 期待出力
+### 期待出力
 
-```
-未完了
-完了
-保管
-```
+- 起動直後、URL は `?filter=...` を含まないが、表示は `all` で「すべて」ボタンがハイライト
+- 「未完了」を押すと、URL が `?filter=open` に変わり、ハイライトが「未完了」に移る。画面は再読み込みされない
+- 「完了」を押すと、URL が `?filter=done` に。戻るボタンで `?filter=open`、もう一度戻って初期状態に戻る
+- 現在の URL を別のタブで開き直すと、該当のフィルタが最初からハイライトされた状態で開く
 
-### 手順 5: ユニオンにケースを追加して、処理漏れを検出させる
+### 変える
 
-`Status` に `"deleted"` を追加する。
-
-```ts
-type Status = "open" | "done" | "archived" | "deleted";
-```
-
-`label` 関数の本体は変えない。すると `default` 節の `const _exhaustive: never = status;` に赤線が出る。
-
-期待されるメッセージ:
-
-```
-Type '"deleted"' is not assignable to type 'never'.
-```
-
-「`label` 関数で `"deleted"` のケースが処理されていない」と TS が教えてくれる。
-
-`case "deleted":` を追加して処理を書き足すと、エラーが消える。
-
-```ts
-function label(status: Status): string {
-  switch (status) {
-    case "open":
-      return "未完了";
-    case "done":
-      return "完了";
-    case "archived":
-      return "保管";
-    case "deleted":
-      return "削除済み";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
-}
-```
-
-これで `Status` が増えるたびに、処理を書き忘れたら TS が止めてくれる。
-
-### 変えてみる
-
-`never` を返す関数を試す。
-
-```ts
-function fail(message: string): never {
-  throw new Error(message);
-}
-
-const value: string = fail("ここでストップ");
-console.log(value); // ここには到達しない
-```
-
-実行すると例外で止まり、`console.log` の行は動かない。
-
-```
-Error: ここでストップ
-```
-
-`never` を戻り値とする関数は「呼んだら戻ってこない」ことを型レベルで表現している。
+- `history.pushState` を `history.replaceState` に書き換えて、戻るボタンでフィルタが戻らなくなることを確認。使い分けは「履歴に残したいか否か」
+- `url.searchParams.set("filter", filter)` の代わりに `url.hash = filter` にしてみる。アドレスバーが `#done` 形式になり、挙動が似て非なるものになることを確認（`hash` は `popstate` ではなく `hashchange` イベントで拾うのが本筋）
+- `url.searchParams.set(...)` を 2 回呼び、`"filter"` と `"sort"` を両方操作する。2 つのクエリが共存すること、片方だけ変えても他方が残ることを確認
 
 ### 自分で書く
 
-次のユニオン型と関数を書く。
-
-```ts
-type Shape =
-  | { kind: "circle"; radius: number }
-  | { kind: "square"; side: number };
-
-function area(shape: Shape): number {
-  // ...
-}
-```
-
-- `case "circle":` で `Math.PI * shape.radius ** 2` を返す。
-- `case "square":` で `shape.side ** 2` を返す。
-- `default:` で `const _exhaustive: never = shape;` を書く。
-
-書けたら、わざと `Shape` に `{ kind: "triangle"; base: number; height: number }` を追加して、`_exhaustive` に赤線が出ることを確認する。確認できたら追加分を元に戻す。
-
-ヒント: `switch (shape.kind)` で分岐する。このような「プロパティで種類を見分ける」形は「判別共用体」で **判別共用体** として本格的に扱う。
+- `controls` の下に `<input id="search" type="text" placeholder="検索語">` を追加し、入力のたびに `?q=入力値` を URL に反映する。ヒント: `addEventListener("input", ...)` + `history.replaceState`（毎文字で履歴に残さない方が UX が良い）
+- 現在の `filter` と `q` を合わせて「状態を URL から読む / 書く」関数を 1 つにまとめる（`readState()` と `writeState({ filter, q })` の 2 つに分解）
 
 ## まとめ
 
-- `any` は型チェックを無効化してしまうため、**本コースでは原則禁止**。
-- `unknown` は「型が分からない」を安全に受ける型。そのままでは **何もできない** 制約がある。
-- `unknown` の **具体的な絞り込み方**（`typeof` / `in` / カスタム型ガード）は 別のレッスン で扱う。
-- `never` は「起こり得ない」を表す型。`switch` の `default` で `const _: never = x;` と書くと、処理漏れを TS に検出してもらえる（網羅性チェック）。
-- リテラル型のユニオンが増えたとき、網羅性チェックが入っていれば **処理を書き忘れた場所が赤線で分かる**。安全にユニオンを育てていくための定番パターン。
+- URL は `URL` オブジェクトで分解・組み立てする。`origin` / `pathname` / `search` / `searchParams` / `hash`
+- クエリ文字列は `URLSearchParams` で扱い、エンコードは自動
+- `history.pushState(null, "", newUrl)` で **ページ再読み込みなし** に URL を書き換えられる。履歴に残したくないときは `replaceState`
+- ユーザーの戻る / 進むは `popstate` で検知し、URL から状態を読み直して画面を描き直す
+- この「URL と画面を同期させる」仕組みが SPA の基礎。5 章 の Next.js ルーティングもこの延長線上にある
+- 別のレッスンで、デバッグで便利な Console API（`table` / `group` / `time` など `log` 以外）を紹介する

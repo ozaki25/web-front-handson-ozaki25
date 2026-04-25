@@ -1,375 +1,332 @@
-# lesson35: 配列・ユニオン・リテラル型・オプショナル
+# lesson35: Web Storage で値をブラウザに保存する
+
+<script setup>
+const demoJs = `
+const input = document.querySelector('#note');
+const saveBtn = document.querySelector('#save');
+const loadBtn = document.querySelector('#load');
+const clearBtn = document.querySelector('#clear');
+const output = document.querySelector('#output');
+
+saveBtn.addEventListener('click', () => {
+  localStorage.setItem('demo-note', input.value);
+  output.textContent = 'localStorage に保存しました: ' + input.value;
+});
+
+loadBtn.addEventListener('click', () => {
+  const saved = localStorage.getItem('demo-note');
+  if (saved === null) {
+    output.textContent = '（まだ保存されていません）';
+  } else {
+    input.value = saved;
+    output.textContent = '読み込みました: ' + saved;
+  }
+});
+
+clearBtn.addEventListener('click', () => {
+  localStorage.removeItem('demo-note');
+  input.value = '';
+  output.textContent = '削除しました';
+});
+`
+</script>
 
 ## ゴール
 
-- 配列の型を `T[]` / `Array<T>` の 2 通りで書ける。
-- 「この型 **または** あの型」を表す **ユニオン型**（`|`）を書ける。
-- 「特定の値のみ許す」 **リテラル型** を書ける。
-- 省略可能なプロパティ `?:` を書ける。
-- 「オブジェクトの型と type エイリアス」の `Todo` 型に `status: "open" | "done"` と `memo?: string` を足して、育てた `Todo` 型で配列を扱える。
+- `localStorage` と `sessionStorage` でブラウザに値を保存・読み出しできる
+- 文字列しか保存できないことを理解し、オブジェクトや配列は `JSON.stringify` / `JSON.parse` 経由で扱える
+- `localStorage` と `sessionStorage` と Cookie の違いを 1 行で説明できる
+- 保存上限と、保存できない場合に備えた `try` / `catch` を書ける
 
 ## 解説
 
-### 配列の型
+### 3 つの保存場所
 
-2 章 で書いた配列に型を付けていきます。配列の型は 2 通りの書き方があります。どちらも意味は同じです。
+ブラウザにデータを保存する仕組みはいくつかあります。本レッスンでは最もよく使う **Web Storage** を中心に扱います。
 
-```ts
-const numbers: number[] = [1, 2, 3];
-const names: Array<string> = ["Alice", "Bob"];
+| 仕組み | 保持期間 | 容量の目安 | 送信 | 主な用途 |
+|---|---|---|---|---|
+| `localStorage` | タブを閉じても残る | 5〜10MB | しない | ユーザー設定、TODO、下書き |
+| `sessionStorage` | タブを閉じると消える | 5〜10MB | しない | 1 セッション限定のフォーム一時保存 |
+| Cookie | 有効期限次第 | 4KB 程度 | **毎リクエスト自動送信** | 認証、サーバー連携 |
+
+Cookie は **サーバーへ毎回自動で送られる** ため、セッション ID のようにサーバー側で読む必要がある値に使います。クライアント側だけで完結する保存は `localStorage` / `sessionStorage` が基本です。
+
+### `localStorage` の使い方
+
+API は 3 つ覚えれば十分です。
+
+```js
+// 保存
+localStorage.setItem("theme", "dark");
+
+// 読み出し
+const theme = localStorage.getItem("theme");
+console.log(theme); // "dark"
+
+// 削除
+localStorage.removeItem("theme");
+
+// 全部消す（同一オリジン内のすべての値）
+localStorage.clear();
 ```
 
-- `number[]`: 「数値の配列」。短くて読みやすいので普段はこちら。
-- `Array<number>`: 「`Array` という型に `number` を流し込んだもの」。ジェネリクス（「ジェネリクス入門」で扱う）の書き方。
+- キーも値も **文字列** です（後述）
+- 存在しないキーを `getItem` すると **`null`** が返ります
+- 同じキーで `setItem` すると上書きされます
 
-どちらも、中身の型が合わないとエラーになる。
+### `sessionStorage` も API は同じ
 
-```ts
-const numbers: number[] = [1, 2, "3"];
+`localStorage` と全く同じ API を持ちますが、**タブを閉じると消える** 点だけが違います。
+
+```js
+sessionStorage.setItem("step", "2");
+sessionStorage.getItem("step"); // "2"
 ```
 
-```
-Type 'string' is not assignable to type 'number'.
-```
+「タブを開いている間だけ保持したい」値（たとえば複数ページにまたがるウィザードの入力中データ）に向きます。ユーザー設定や TODO のように **次回訪問時も残したい** 値は `localStorage` を選びます。
 
-### ユニオン型 `|`
+### 文字列しか保存できない
 
-「文字列 **または** 数値」のように、複数の型のどれかを受け入れる型を **ユニオン型** と呼びます。
+Web Storage は **文字列だけ** を扱います。数値や真偽値を入れると、読み出したときには文字列に変わっています。
 
-```ts
-let id: string | number;
-id = "abc123"; // OK
-id = 42;        // OK
-id = true;      // エラー
-```
+```js
+localStorage.setItem("count", 5);
+localStorage.setItem("isOpen", true);
 
-```
-Type 'boolean' is not assignable to type 'string | number'.
+console.log(localStorage.getItem("count"));  // "5"  ← 文字列
+console.log(localStorage.getItem("isOpen")); // "true" ← 文字列
 ```
 
-ユニオン型の値を使うときは、どちらの型の操作でも共通して使える部分しか呼べません。例えば `string | number` に対しては文字列だけが持つ `.toUpperCase()` は呼べません。使い分けたいときは `typeof` で絞り込みます（このコースでは深追いしない）。
+数値として使いたい場合は `Number(...)`、真偽値は `value === "true"` のように自分で変換します。
 
-### リテラル型
+### オブジェクトや配列は JSON でくるむ
 
-TS では **値そのもの** を型として使えます。これを **リテラル型** と呼びます。
+配列やオブジェクトはそのまま入れても文字列化（`"[object Object]"` など）されてしまい、中身が失われます。**`JSON.stringify` / `JSON.parse` とセット** で使います。
 
-```ts
-let answer: "yes";
-answer = "yes"; // OK
-answer = "no";  // エラー
+```js
+const todos = [
+  { id: 1, text: "牛乳を買う", done: false },
+  { id: 2, text: "本を返す", done: true },
+];
+
+// 保存するときは文字列化
+localStorage.setItem("todos", JSON.stringify(todos));
+
+// 読み出すときは元の型に戻す
+const saved = localStorage.getItem("todos");
+const loaded = saved === null ? [] : JSON.parse(saved);
+
+console.log(loaded[0].text); // "牛乳を買う"
 ```
 
-```
-Type '"no"' is not assignable to type '"yes"'.
-```
+このパターンは TODO アプリや下書き保存などで頻繁に登場します。「JSON を読み書きする」と「try / catch でエラー処理」で扱った内容をそのまま使います。
 
-これだけだと使い道がありませんが、ユニオン型と組み合わせると強力です。
+### 失敗しうる場所
 
-```ts
-let status: "open" | "done" | "archived";
-status = "open";     // OK
-status = "done";     // OK
-status = "archived"; // OK
-status = "todo";     // エラー
-```
+Web Storage は **必ず成功する API ではありません**。次のケースで例外が飛ぶことがあります。
 
-```
-Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
-```
+1. **容量オーバー**: 上限を超えた `setItem` は `QuotaExceededError` で失敗します
+2. **プライベートブラウジング**: ブラウザによっては Web Storage が実質無効化され、`setItem` が失敗します
+3. **壊れた JSON**: 保存時と読み出し時で形が違うと `JSON.parse` が例外を投げます
 
-「この変数には `"open"` か `"done"` か `"archived"` のどれかしか入らない」ということが型で書けます。2 章 で文字列リテラルを比較していた部分（`if (status === "done")` など）が、typo まで含めて TS が守ってくれるようになります。
+安全に書くなら `try` / `catch` でくるみ、失敗時は既定値で乗り切ります。
 
-### オプショナルプロパティ `?:`
+```js
+function loadTodos() {
+  try {
+    const saved = localStorage.getItem("todos");
+    if (saved === null) return [];
+    return JSON.parse(saved);
+  } catch {
+    // 壊れていたら捨てて空で始める
+    return [];
+  }
+}
 
-オブジェクトのプロパティのうち「あってもなくてもよい」ものは、名前の後ろに `?` を付けます。
-
-```ts
-type User = {
-  name: string;
-  email?: string;
-};
-
-const alice: User = { name: "Alice" };                          // OK
-const bob: User = { name: "Bob", email: "bob@example.com" };    // OK
-```
-
-- `email?: string` は「`email` は省略してもよい。書くなら `string`」という意味。
-- 省略した場合、`user.email` の型は `string | undefined` になる（`undefined` も入りうる、ということ）。
-
-`undefined` が入りうるので、使う側では存在チェックが必要になります。
-
-```ts
-function printEmail(user: User): void {
-  if (user.email) {
-    console.log(user.email.toUpperCase());
-  } else {
-    console.log("メールなし");
+function saveTodos(todos) {
+  try {
+    localStorage.setItem("todos", JSON.stringify(todos));
+  } catch {
+    // 容量オーバー等。今回は何もしない
   }
 }
 ```
 
-`if (user.email)` を付けずに `user.email.toUpperCase()` とだけ書くと、TS が次のように止めます。
+### Cookie はクライアントから直接扱わないのが主流
 
-```
-'user.email' is possibly 'undefined'.
-```
+`document.cookie` という API で読み書きもできますが、**文字列連結と `;` 区切り** で扱う古い API で、実務では以下のいずれかで間接的に触ることが多いです。
 
-### `Todo` 型を育てる
+- ログイン認証などのセッション Cookie は、サーバーが `Set-Cookie` ヘッダで返すものを使う（クライアントでは触らない）
+- クライアントから操作する必要があれば、`js-cookie` のような小さなライブラリを使う
 
-「オブジェクトの型と type エイリアス」の `Todo` 型を次の形に育てます。
+本コースでは **クライアント側の保存は `localStorage` / `sessionStorage`** に統一します。Cookie は「サーバーとやり取りする値が自動で送られる仕組み」としてだけ覚えておけば十分です。
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
+### 小さなデモ
 
-- `status`: `"open"` か `"done"` のどちらか。必須。
-- `memo?`: 省略可能な自由記述のメモ。書くなら文字列。
+下のデモは `localStorage` の超最小例です。何か書いて「保存」を押し、ブラウザのタブを閉じて開き直しても、「読み込み」で復元できます。
 
-これで「未完了 / 完了」を型レベルで表せるようになり、`Todo[]` は「育った `Todo` の配列」になります。
+<LiveDemo
+  height="220px"
+  :html="`
+<input id='note' type='text' placeholder='メモを入力' />
+<div>
+  <button id='save' type='button'>保存</button>
+  <button id='load' type='button'>読み込み</button>
+  <button id='clear' type='button'>削除</button>
+</div>
+<p id='output'></p>
+  `"
+  :css="`
+input { padding: 6px 10px; width: 240px; }
+button { margin-right: 6px; padding: 6px 12px; }
+#output { color: #1f4e79; }
+  `"
+  :js="demoJs"
+/>
 
 ## 演習
 
 ### 途中から始める場合
 
-新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
-<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+<summary>出発点のコード</summary>
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson35</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>下書きメモ</h1>
+    <textarea id="memo" rows="6" cols="40" placeholder="ここに入力"></textarea>
+    <div>
+      <button id="clear" type="button">削除</button>
+      <span id="status"></span>
+    </div>
+  </body>
+</html>
+```
+
+**`style.css`**
+
+```css
+body { font-family: sans-serif; padding: 16px; color: #222; background: #fff; }
+textarea { display: block; padding: 8px; font-family: inherit; }
+button { margin-top: 8px; padding: 6px 12px; }
+#status { margin-left: 12px; color: #1f4e79; }
+
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  textarea { color: #eaeaea; background: #2a2a2a; border: 1px solid #555; }
+  #status { color: #9ecbff; }
+}
+```
+
+**`script.js`**
+
+```js
+// 空のまま
 ```
 
 </details>
 
-### 手順 1: 配列の型に慣れる
+### ゴール
 
-`src/main.ts` の中身を以下に置き換える。
+- ページを開いたときに、前回の入力内容が復元される
+- 入力するたびに自動で `localStorage` に保存される
+- 「削除」ボタンで保存内容を消せる
 
-```ts
-const numbers: number[] = [1, 2, 3];
-const names: Array<string> = ["Alice", "Bob", "Charlie"];
+### 手順
 
-for (const n of numbers) {
-  console.log(n);
+1. `script.js` を以下の内容にします。
+2. プレビューでテキストエリアに何か書き、タブを閉じて開き直します。
+3. 書いた内容が復元されることを確認します。
+
+### `script.js` の完成形
+
+```js
+const STORAGE_KEY = "memo-draft";
+
+const memo = document.querySelector("#memo");
+const clearBtn = document.querySelector("#clear");
+const status = document.querySelector("#status");
+
+function showStatus(text) {
+  status.textContent = text;
+  setTimeout(() => {
+    status.textContent = "";
+  }, 1500);
 }
 
-for (const name of names) {
-  console.log(name);
-}
-```
-
-#### 期待出力
-
-```
-1
-2
-3
-Alice
-Bob
-Charlie
-```
-
-わざと要素の型を間違えてみる。
-
-```ts
-const numbers: number[] = [1, 2, "3"];
-```
-
-期待されるメッセージ:
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-確認したら `[1, 2, 3]` に戻す。
-
-### 手順 2: ユニオン型とリテラル型
-
-```ts
-let id: string | number;
-
-id = "abc123";
-console.log(id);
-
-id = 42;
-console.log(id);
-```
-
-#### 期待出力
-
-```
-abc123
-42
-```
-
-次に `true` を代入してみる。
-
-```ts
-id = true;
-```
-
-期待されるメッセージ:
-
-```
-Type 'boolean' is not assignable to type 'string | number'.
-```
-
-続けて、リテラル型のユニオンを試す。
-
-```ts
-let status: "open" | "done" | "archived";
-status = "open";
-console.log(status);
-status = "done";
-console.log(status);
-status = "todo"; // typo わざと
-```
-
-期待されるメッセージ:
-
-```
-Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
-```
-
-確認したら `status = "todo";` の行を消すか、正しい値（`"archived"` など）に直す。
-
-### 手順 3: `Todo` 型を育てる
-
-`src/types.ts` を次の形に書き換える。
-
-```ts
-// src/types.ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
-
-`src/main.ts` を次の形に書き換える。
-
-```ts
-import type { Todo } from "./types";
-
-const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う", status: "open" },
-  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
-  { id: "a3", text: "ゴミを出す", status: "open" },
-];
-
-function printTodo(todo: Todo): void {
-  const mark = todo.status === "done" ? "x" : " ";
-  const memoText = todo.memo ? ` (memo: ${todo.memo})` : "";
-  console.log(`[${mark}] ${todo.text}${memoText}`);
-}
-
-for (const todo of todos) {
-  printTodo(todo);
-}
-```
-
-#### 期待出力
-
-```
-[ ] 牛乳を買う
-[x] 本を返す (memo: 駅前の図書館)
-[ ] ゴミを出す
-```
-
-`memo` を持つ項目だけ `(memo: ...)` が付き、完了しているものは `[x]`、未完了は `[ ]` になる。
-
-### 手順 4: 型のミスを見つけてもらう
-
-次の 3 つをそれぞれ試し、メッセージを確認する。確認したら元に戻す。
-
-```ts
-const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う", status: "todo" }, // typo
-];
-```
-
-```
-Type '"todo"' is not assignable to type '"open" | "done"'.
-```
-
-```ts
-const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う" }, // status が足りない
-];
-```
-
-```
-Property 'status' is missing in type '{ id: string; text: string; }' but required in type 'Todo'.
-```
-
-```ts
-function printTodo(todo: Todo): void {
-  console.log(todo.memo.toUpperCase());
-}
-```
-
-```
-'todo.memo' is possibly 'undefined'.
-```
-
-最後のパターンは、オプショナルプロパティが `undefined` になりうることを TS が警告してくれている例。`if (todo.memo)` を挟んでから `toUpperCase()` するのが正しい使い方。
-
-### 変えてみる
-
-`printTodo` の中で「未完了の TODO のテキストを大文字にして目立たせる」実装にしてみる。
-
-```ts
-function printTodo(todo: Todo): void {
-  if (todo.status === "open") {
-    console.log(`TODO: ${todo.text.toUpperCase()}`);
-  } else {
-    console.log(`DONE: ${todo.text}`);
+function loadMemo() {
+  try {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved !== null) {
+      memo.value = saved;
+    }
+  } catch {
+    // 読み込み不可 → 何もしない
   }
 }
+
+function saveMemo() {
+  try {
+    localStorage.setItem(STORAGE_KEY, memo.value);
+    showStatus("保存しました");
+  } catch {
+    showStatus("保存に失敗しました");
+  }
+}
+
+function clearMemo() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    memo.value = "";
+    showStatus("削除しました");
+  } catch {
+    showStatus("削除に失敗しました");
+  }
+}
+
+loadMemo();
+memo.addEventListener("input", saveMemo);
+clearBtn.addEventListener("click", clearMemo);
 ```
 
-期待出力:
+### 期待出力
 
-```
-TODO: 牛乳を買う
-DONE: 本を返す
-TODO: ゴミを出す
-```
+- 画面を開くと、前回入力した内容がテキストエリアに復元される
+- テキストエリアに入力するたびに「保存しました」が短く出る
+- 「削除」ボタンを押すと中身が空になり、「削除しました」が出る
+- タブを閉じて開き直しても、削除後は空のまま開く
+- DevTools の Application タブ → Local Storage で、`memo-draft` キーの値が変化する様子を確認できる
+
+### 変える
+
+- `localStorage.setItem` を `sessionStorage.setItem` に書き換えて、タブを閉じると値が消える挙動になることを確認
+- `STORAGE_KEY` を別の文字列（例: `"memo-v2"`）に変えて、以前の値と共存する（キーが違うと別物として扱われる）ことを確認
+- `saveMemo` 内の `localStorage.setItem` をあえて `localStorage.setItem(STORAGE_KEY, JSON.stringify({ text: memo.value, at: Date.now() }))` にして、読み出し側を `JSON.parse` 前提に書き換える。オブジェクトとしての保存パターンを体験する
 
 ### 自分で書く
 
-`Todo` 型の配列 `todos` に対して、次の 2 つの関数を書く。
-
-1. `countOpen(todos: Todo[]): number` — `status === "open"` の件数を返す。
-2. `filterDone(todos: Todo[]): Todo[]` — `status === "done"` のものだけを新しい配列で返す。
-
-呼び出して結果を Console に出す。使える道具は2 章 で学んだ `for...of`、`filter`、`length` など。どれを使っても構わない。
-
-### スコープ外の明記
-
-TS には「列挙型」を作る `enum` や、値を型に格上げする `as const` という機能もあります。**本コースでは扱いません**。理由は次の通り。
-
-- `"open" | "done"` のようなリテラル型ユニオンで、列挙型が担う用途のほとんどは代替できる。
-- `enum` はランタイムにコードを生成するため、`import type` で消せない副作用を持つ。
-- `as const` は学習コストに対してこのコースのゴール（Next.js で小さなアプリ）への寄与が薄い。
-
-使う場面に出会ったら、そのときに公式ドキュメントを読めば十分追いつけます。
+- 入力された内容が **10000 文字を超えたら** `showStatus("長すぎます")` を出して保存しない、という制限を加える。ヒント: `if (memo.value.length > 10000)` で分岐
+- ページに「テーマ切替」の `<button>` を足し、クリックするたびに `<body>` に `dark` クラスを付け外しする。付いているかどうかを `localStorage` に保存し、次回訪問時に復元する（「DOM を操作する」の `classList.toggle` と組み合わせ）
 
 ## まとめ
 
-- 配列の型は `T[]` / `Array<T>` の 2 通り。普段は `T[]`。
-- ユニオン型 `A | B` で「どちらでも受け入れる」が書ける。
-- リテラル型とユニオン型を組み合わせると、`"open" | "done"` のように「決まった値だけ許す」型が書ける。
-- `?:` で省略可能なプロパティを書ける。使う側では `undefined` を意識した分岐が必要。
-- `Todo` 型を `status` と `memo?` まで育てた。この形のまま「ジェネリクス入門」「Utility Types で仕上げる」でも使う。次章でも `import type` して再利用する。
-- `enum` / `as const` は本コースでは扱わない。
+- ブラウザ内保存は `localStorage`（残る）/ `sessionStorage`（タブを閉じると消える）/ Cookie（サーバー送信あり）
+- Web Storage は **文字列しか保存できない**。オブジェクトや配列は `JSON.stringify` / `JSON.parse` とセット
+- 3 つの基本 API: `setItem` / `getItem`（未保存は `null`）/ `removeItem`
+- 失敗するケース（容量オーバー、プライベートブラウジング、壊れた JSON）を `try` / `catch` で吸収する
+- Cookie は実務ではサーバー側が管理するのが主流。クライアントで扱う保存は Web Storage が基本
+- 別のレッスンで、URL と History API を使って「ページ内状態を URL にも反映する」方法を学ぶ

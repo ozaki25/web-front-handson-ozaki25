@@ -411,7 +411,7 @@ DevTools の Network タブで:
 ## まとめ
 
 - CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
-- **シンプルリクエスト** と **プリフライト（OPTIONS）** の 2 ルート
+- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
 - 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
 - **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
 - **Cookie の `SameSite=None; Secure`** とセットで考える

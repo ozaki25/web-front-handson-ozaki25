@@ -1,162 +1,446 @@
-# lesson15: 最初の JavaScript
-
-<script setup>
-const demoJs = `
-console.log('Hello, JavaScript');
-console.log('2 + 3 は', 2 + 3);
-`
-</script>
+# lesson15: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）
 
 ## ゴール
 
-- HTML に外部 JavaScript ファイルを読み込める
-- `console.log` で値を出力できる
-- `let` と `const` で変数を宣言できる
-- DevTools の Console パネルでログを確認できる
-- `<script defer>` を「外部 JS を読み込む標準の書き方」として身につける
+- `:has()` / `:is()` / `:where()` を使い分けられる
+- `@layer` でカスケードの優先度を意図的に管理できる
+- `@scope` でコンポーネント単位のスコープを書ける
+- `@container`（Container Queries）で「親の幅に応じた」レイアウトを書ける
+- View Transitions API で状態の切り替えを滑らかにアニメートできる
+- 「JS でやっていたこと」が CSS だけでできる範囲が広がっていることを体感する
 
 ## 解説
 
-### JavaScript はブラウザの中で動く
+ここまで章 1 で扱ってきた CSS は **2010 年代に固まった基本** が中心でした。一方、2022〜2025 年にかけて CSS は急速に進化しています。`:has()` の登場で「親セレクタが書ける」、`@container` で「メディアクエリの限界」が解消され、`@layer` で「優先度の暴走」を防げるようになりました。
 
-1 章 で書いてきた HTML と CSS は「何を置くか」と「どう見せるか」を担当します。ここから学ぶ JavaScript（以降 JS）は「動きをつける」担当です。ボタンを押したら何かが起きる、入力した内容に応じて画面が変わる、といった処理はすべて JS が担当します。
+「いま新しい CSS を書くなら最初から使ってよいもの」だけを集めたのがこのレッスンです。
 
-JS は基本的にブラウザの中で動くプログラミング言語です。HTML に JS を読み込ませると、ページを開いたときにブラウザが JS を実行してくれます。
+### :has() — 親セレクタ
 
-### JS を HTML に読み込む方法
+長年「CSS には親セレクタがない」と言われてきました。子の状態を見て親を装飾するには JavaScript を使うしかなかった。それが `:has()` で書けるようになりました。
 
-今回から、JS は `script.js` という別ファイルに書いて、HTML から読み込む形にします。HTML に直接書くより読みやすく、後で管理しやすくなります。
+#### 例 1: 画像を含む段落だけ余白を広げる
 
-読み込むタグは `<script>` です。本コースでは以下の形に固定します。
-
-```html
-<script defer src="./script.js"></script>
+```css
+p:has(img) {
+  margin-block: 2rem;
+}
 ```
 
-`defer` 属性を付けると、ブラウザは「HTML をすべて読み終えてから JS を実行する」という順序で動いてくれます。これを徹底しておくと、後のレッスンで `document.querySelector(...)` が `null` を返す事故（HTML より先に JS が走り、まだ存在しない要素を探してしまう）を防げます。
+#### 例 2: フォーカス中の入力を持つフォームに枠を出す
 
-### なぜ `defer` か（コラム）
+```css
+form:has(input:focus) {
+  outline: 2px solid #2563eb;
+}
+```
 
-`<script>` の書き方には昔からいくつかの流派があります。
+#### 例 3: チェック済みの input を持つ label を強調
 
-- `<head>` の中に `<script src="...">` だけ書く → HTML の解析が止まって遅くなる
-- `<body>` の末尾に `<script src="...">` を書く → 動くが、書く場所が散らばる
-- `<head>` の中に `<script defer src="...">` を書く → HTML の解析を止めず、解析完了後に実行される
-
-3 つ目の書き方が現在の推奨です。HTML が完成してから JS が動くため、DOM を探しに行く処理（「DOM を操作する」以降）でも安心して使えます。本コースではこの形だけを使います。
-
-### `console.log` と DevTools の Console
-
-`console.log(...)` は「この値をログに出す」命令です。ブラウザの DevTools にある「Console」パネルを開くと、そこにログが表示されます。画面には出ませんが、開発中の確認に最も使う命令です。
-
-DevTools の開き方は1 章 で学んだ Elements パネルと同じで、右クリック → 「検証」、または `F12` キーです。Elements の隣に Console タブがあります。
-
-下のデモは JS が実際に動いている最小例です。`console.log` の結果がページ下部の黒い領域に表示されます（本物の DevTools Console と同じ内容）。
+```css
+label:has(input:checked) {
+  background: #dbeafe;
+  font-weight: bold;
+}
+```
 
 <LiveDemo
-  height="200px"
-  :html="`<p>JS からの出力は下の黒い領域に出ます。</p>`"
-  :css="``"
-  :js="demoJs"
+  height="220px"
+  :html="`
+<form>
+  <label><input type='checkbox'> 利用規約に同意する</label>
+  <label><input type='checkbox'> ニュースレターを受け取る</label>
+  <input type='text' placeholder='フォーカスしてみて'>
+</form>
+  `"
+  :css="`
+form { display: grid; gap: 12px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+form:has(input:focus) { outline: 2px solid #2563eb; outline-offset: 2px; }
+label { padding: 8px; border-radius: 4px; }
+label:has(input:checked) { background: #dbeafe; font-weight: bold; }
+input[type=text] { padding: 8px; }
+  `"
+  :js="``"
 />
 
-### `let` と `const`
+これまで JS で「checkbox の change を listen → 親 label にクラス付与」と書いていたコードが、**CSS 1 行** に置き換わります。
 
-値に名前をつけておくしくみを変数と呼びます。JS では 2 つのキーワードを使い分けます。
+`:has()` は **2023 年末に全主要ブラウザで対応**し、2026 年の現在は安心して使えます。
 
-- `const`: 後から値を書き換えない変数。迷ったらまずこちら
-- `let`: 後から値を書き換える可能性がある変数
+### :is() / :where() — セレクタの共通化
 
-古い教材では `var` も出てきますが、本コースでは使いません。
+複数のセレクタに同じスタイルを当てたい時、これまで `,` で並べて書いていました。
 
-```js
-const userName = "Alice";
-let count = 0;
-count = count + 1;
+```css
+h1 a, h2 a, h3 a {
+  color: #2563eb;
+}
 ```
 
-`const` で宣言した変数に別の値を代入しようとすると、エラーになります。これは「うっかり書き換え」を防いでくれる仕組みです。
+`:is()` でまとめられます。
+
+```css
+:is(h1, h2, h3) a {
+  color: #2563eb;
+}
+```
+
+`:where()` は **書き方が同じで詳細度だけ 0** になる版です。リセット CSS など「他の指定に絶対勝たないでほしい」場面で使います。
+
+```css
+:where(button, input, select) {
+  all: unset;
+}
+/* 詳細度 0 なので、後から書くどんなスタイルにも負ける */
+```
+
+詳細度の暴走を意図的に避けられるのがポイントです。
+
+### @layer — カスケードを意図的に積む
+
+CSS の優先度（カスケード）は「詳細度」「宣言順」「`!important`」で決まりますが、規模が大きくなると **どのスタイルが勝つか読めなくなる** 問題が起きます。
+
+`@layer` は「優先度の階層」を **明示的に** 書く仕組みです。
+
+```css
+@layer reset, base, components, utilities;
+
+@layer reset {
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+}
+
+@layer base {
+  body { font-family: sans-serif; line-height: 1.6; }
+}
+
+@layer components {
+  .button {
+    background: #2563eb;
+    color: white;
+    padding: 8px 16px;
+    border-radius: 4px;
+  }
+}
+
+@layer utilities {
+  .mt-4 { margin-top: 1rem; }
+}
+```
+
+ルール:
+
+- **宣言順が優先度**。後ろの layer が勝つ
+- layer 内の詳細度は **layer 間の優先度に勝てない**
+- 「layer なし」の宣言は **すべての layer より強い**
+
+これで「なぜか utilities が効かない」事故が消えます。Tailwind CSS v4 もこの `@layer` を全面採用しています。
+
+### @scope — コンポーネント単位のスコープ
+
+「このカードの中の `a` だけスタイルを当てたい」を、深いネストや BEM クラス名なしで書けます。
+
+```html
+<article class="card">
+  <h2>タイトル</h2>
+  <a href="#">続きを読む</a>
+</article>
+
+<a href="#">外側のリンク</a>
+```
+
+```css
+@scope (.card) {
+  a {
+    color: #dc2626;
+    text-decoration: none;
+  }
+}
+```
+
+`.card` 内の `a` だけ赤くなり、外側の `a` には影響しません。
+
+範囲を **下限指定** で「ここから先は適用外」にもできます。
+
+```css
+@scope (.card) to (.card-actions) {
+  /* .card の中だが .card-actions より上の階層だけが対象 */
+}
+```
+
+`@scope` は 2024 年以降に Chrome / Safari / Firefox（160）で対応が進みました。CSS Modules や CSS-in-JS なしで「スコープ付き CSS」が書けます。
+
+### @container — Container Queries
+
+これまでのメディアクエリは **画面幅** にしか反応できませんでした。
+
+```css
+@media (min-width: 768px) {
+  /* 画面幅 768px 以上 */
+}
+```
+
+これだと「サイドバーに置いた時の Card」と「メインに置いた時の Card」を **同じ画面幅で違うレイアウト** にすることが難しい。`@container` は「**親要素の幅** で分岐できる」仕組みです。
+
+```css
+.card-list {
+  container-type: inline-size;
+}
+
+.card {
+  display: block;
+}
+
+@container (min-width: 600px) {
+  .card {
+    display: grid;
+    grid-template-columns: 200px 1fr;
+    gap: 16px;
+  }
+}
+```
+
+`.card-list` が 600px 以上の場所に置かれた時だけ、子の `.card` が横並びになります。**画面幅は無関係**。
+
+これで「**コンポーネントが置かれた場所** に応じて見た目が変わる」、真にレスポンシブな部品が書けます。
+
+### View Transitions API — 滑らかな遷移
+
+「state 変化や画面遷移をフェード / スライドで自然に」を **CSS のみ + JS 数行** で実現できます。
+
+#### 同一ページ内で（`document.startViewTransition`）
+
+```js
+const box = document.getElementById("box");
+const button = document.getElementById("toggle");
+
+button.addEventListener("click", () => {
+  // 対応していないブラウザは普通に変更だけする
+  if (!document.startViewTransition) {
+    box.classList.toggle("big");
+    return;
+  }
+  document.startViewTransition(() => {
+    box.classList.toggle("big");
+  });
+});
+```
+
+`startViewTransition` のコールバック内で DOM を変えると、変更前後の **スナップショットを自動で撮ってクロスフェード** してくれます。
+
+<LiveDemo
+  height="320px"
+  :html="`
+<button id='toggle'>切り替え</button>
+<div id='box'></div>
+  `"
+  :css="`
+button { padding: 8px 16px; margin-bottom: 16px; }
+#box { width: 100px; height: 100px; background: #2563eb; border-radius: 8px; }
+#box.big { width: 280px; height: 200px; background: #dc2626; }
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.5s; }
+  `"
+  :js="`
+const box = document.getElementById('box');
+const button = document.getElementById('toggle');
+button.addEventListener('click', () => {
+  if (!document.startViewTransition) {
+    box.classList.toggle('big');
+    return;
+  }
+  document.startViewTransition(() => {
+    box.classList.toggle('big');
+  });
+});
+  `"
+/>
+
+#### ページ間（cross-document, MPA）
+
+2024〜2025 年に対応が進み、**異なるページ間** でも View Transition が使えるようになりました。
+
+```css
+@view-transition {
+  navigation: auto;
+}
+```
+
+これを CSS に書くと、同一オリジン内のページ遷移が **自動でフェード** します。さらに「両ページに共通する要素」に名前を付けると、ページをまたいで **同じ要素が動く** 演出ができます。
+
+```css
+.hero-image {
+  view-transition-name: hero-image;
+}
+```
+
+ページ A の `.hero-image` から ページ B の `.hero-image` へ、自然にモーフィングします。Next.js の App Router でも `next/link` の遷移に乗ります。
+
+#### Safari / Firefox の状況
+
+- 同一ページ内: Chrome / Safari / Firefox で対応
+- ページ間: Chrome 系で先行。Safari は段階的、Firefox は対応中（2026 年現在）
+
+未対応ブラウザでは **遷移なしで普通に動く** だけなので、Progressive Enhancement として安心して書けます。
+
+### おまけ: 知っておくと得する 2026 のモダン CSS
+
+- **`@starting-style`**: 要素が表示される瞬間のスタイル。`display: none` から表示への transition が書ける
+- **Anchor Positioning**（`anchor()`）: ある要素を **別の要素** に紐付けて配置。tooltip / popover が JS なしで書ける
+- **`color-mix()`**: `color-mix(in oklch, blue 70%, white)` のような色合成
+- **CSS Nesting**: Sass のように `&` で入れ子。2024 年に全ブラウザ対応
+
+これらも現場で増えていく機能です。
 
 ## 演習
 
-### 途中から始める場合
-
-このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）から始められます。これまでのレッスンのコードは引き継ぎません。
-
 ### ゴール
 
-- `script.js` を作り、自分の名前を変数に入れてコンソールに表示する
+- `:has()` / `@container` / View Transitions API を **同じページに同居** させて動作を確認する
 
-### 手順
+### 手順 1: 新規プロジェクト
 
-1. StackBlitz の Vanilla（HTML + CSS + JS）テンプレートを開く
-2. `index.html` を以下の内容にする
-3. `script.js` を以下の内容にする
-4. プレビューを開き、DevTools の Console を開く
+```bash
+npm create vite@latest css-modern -- --template vanilla-ts
+cd css-modern
+npm install
+```
 
-### `index.html`
+### 手順 2: index.html
+
+`index.html` を以下に置き換えます。
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson15</title>
-    <script defer src="./script.js"></script>
+    <title>Modern CSS Demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <h1>lesson15: 最初の JavaScript</h1>
-    <p>DevTools の Console を開いてください。</p>
+    <main>
+      <h1>モダン CSS のショーケース</h1>
+
+      <section class="container">
+        <div class="card-list">
+          <article class="card"><h2>カード A</h2><p>説明文 A</p></article>
+          <article class="card"><h2>カード B</h2><p>説明文 B</p></article>
+        </div>
+      </section>
+
+      <section>
+        <button id="toggle">切り替え</button>
+        <div id="box"></div>
+      </section>
+
+      <section>
+        <form>
+          <label><input type="checkbox" /> 同意する</label>
+          <input type="text" placeholder="フォーカスしてみる" />
+        </form>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
 ```
 
-### `script.js`
+### 手順 3: src/style.css
 
-```js
-const userName = "Alice";
-let count = 0;
+```css
+@layer reset, base, components;
 
-console.log("Hello, JavaScript");
-console.log(name);
-console.log(count);
+@layer reset {
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+}
 
-count = count + 1;
-console.log(count);
+@layer base {
+  body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+  main { display: grid; gap: 32px; max-width: 800px; }
+  section { padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+}
+
+@layer components {
+  /* Container Queries */
+  .card-list {
+    container-type: inline-size;
+    display: grid;
+    gap: 16px;
+  }
+  .card { padding: 16px; background: #f3f4f6; border-radius: 8px; }
+  @container (min-width: 600px) {
+    .card-list { grid-template-columns: 1fr 1fr; }
+  }
+
+  /* :has() */
+  form:has(input:focus) { outline: 2px solid #2563eb; outline-offset: 2px; }
+  label:has(input:checked) { background: #dbeafe; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
+  form { display: grid; gap: 12px; }
+
+  /* View Transitions */
+  #box { width: 100px; height: 100px; background: #2563eb; border-radius: 8px; margin-top: 12px; }
+  #box.big { width: 100%; height: 200px; background: #dc2626; }
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation-duration: 0.5s;
+  }
+}
 ```
+
+### 手順 4: src/main.ts
+
+```ts
+const box = document.getElementById("box")!;
+const toggle = document.getElementById("toggle")!;
+
+toggle.addEventListener("click", () => {
+  if (!document.startViewTransition) {
+    box.classList.toggle("big");
+    return;
+  }
+  document.startViewTransition(() => {
+    box.classList.toggle("big");
+  });
+});
+```
+
+### 手順 5: 起動して確認
+
+```bash
+npm run dev
+```
+
+ブラウザで開いて以下を確認します。
+
+1. **`:has()`**: form 内の `input` をフォーカスすると form 全体に枠が出る。checkbox を ON にすると label の背景が変わる
+2. **`@container`**: ブラウザの `<section>` の幅を狭めるとカードが縦並びに、広げると横並びになる（**画面幅ではなく親要素の幅** で動くことを確認）
+3. **View Transitions**: 「切り替え」を押すと box の大きさと色がフェードしながら変化する
 
 ### 期待出力
 
-DevTools の Console に、上から順に次のように表示されます。
-
-```
-Hello, JavaScript
-Alice
-0
-1
-```
-
-画面には何も追加で表示されません（JS は Console にだけ書き出しています）。
+- フォームの input にフォーカスすると **青い枠** が出る
+- checkbox ON で label の背景が **薄い青** になる
+- ブラウザの幅を狭めるとカードが **縦並び**、広げると **2 列**
+- 「切り替え」ボタンで box が **フェードしながら** 拡大 / 縮小
 
 ### 変える
 
-- `userName` の中身を自分の名前に書き換える → Console の 2 行目が変わる
-- `count = count + 1;` の下にもう 1 行 `count = count + 1;` を足して `console.log(count);` を追加 → `2` が表示される
-- `const` で宣言した `userName` に別の値を代入する行を追加（例: `userName = "Bob";`）→ Console に赤字でエラーが出ることを確認（下記の注意を参照）
-
-**`const` への再代入を試したときの挙動について**: 再代入の行を加えると、スクリプト全体の実行が **途中で止まる** ことがある。最初の `console.log("Hello, JavaScript")` までしか出ず、その下の `console.log(userName)` などが出ないケースもある。これは環境によって「実行中のエラー」ではなく「パース段階でのエラー」扱いになるため。動作が変だと感じたら、足した 1 行を削除して元に戻せばよい。
-
-**変数名に `name` を使わない理由**: 今回は `userName` を使っている。ブラウザの `window` には組み込みで `window.name` というプロパティがあり、`const name = ...` を書くと環境によって衝突して予想外の挙動になる。他人のコードで `name` を見たときはこの落とし穴を思い出すとよい。
+- `@container (min-width: 600px)` を `(min-width: 400px)` に変えて分岐点を確認
+- `card-list` の `container-type` を消すと `@container` が効かなくなることを確認
+- `::view-transition-old/new` の `animation-duration` を `1.5s` にすると遷移がゆっくりになる
+- `@layer components` を `@layer reset` の前に動かすと優先度が変わる（`reset` が勝って `card` の余白が消える）
 
 ### 自分で書く
 
-- `const age = 20;` のような行を追加し、`console.log(age);` で値を表示する
-- `let message = "こんにちは";` と書き、後から `message = "さようなら";` に書き換えて 2 回 `console.log(message)` する
+- `:has(input[type="email"]:invalid)` で「メール形式が不正な input を含む form」に赤枠を出す
+- 2 ページ作って `@view-transition { navigation: auto; }` を CSS に追加し、ページ間遷移にフェードがかかることを確認
+- `view-transition-name: hero;` を付けた要素を 2 ページに置き、ページをまたいだ要素が **モーフィング** することを確認（Chrome 系推奨）
 
 ## まとめ
 
-- 外部 JS は `<head>` に `<script defer src="...">` で読み込む
-- `console.log(...)` は DevTools の Console にログを出す
-- 変数は `const`（書き換え不可）を基本にし、必要なときだけ `let` を使う
-- `<script defer>` は以降すべてのレッスンで標準形として使い続ける
+- `:has()` で **親セレクタ** が書ける。子の状態に応じた装飾を CSS だけで実現できる
+- `:is()` でセレクタを共通化、`:where()` は詳細度 0 で「弱い指定」を作る
+- `@layer` で **カスケードを意図的に積む**。Tailwind CSS v4 も採用
+- `@scope` で **コンポーネント単位のスコープ**。BEM や CSS Modules がなくても局所化できる
+- `@container` は **親要素の幅** で分岐。コンポーネント単位のレスポンシブが書ける
+- View Transitions API は `startViewTransition()` 1 つで状態遷移を滑らかにし、`@view-transition` でページ間にも拡張できる
+- 章 1「HTML / CSS」はここで一段落。**章 2「JavaScript」** へ進んでブラウザを動的に動かす方法に入る

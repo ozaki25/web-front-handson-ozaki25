@@ -1,461 +1,315 @@
-# lesson75: Vercel にデプロイする
+# lesson75: `next/image` で画像最適化
 
 ## ゴール
 
-- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できます。
-- そのリポジトリを Vercel に接続して、数十秒でデプロイできます。
-- 発行された `https://<project>.vercel.app` の URL をブラウザで開き、動作確認できます。
-- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえます。
+- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できます。
+- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を覚えます。
+- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを押さえます。
+- 5 章 の「ページを増やしてリンクで移動する」で `/about` に貼った `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
 
 ## 解説
 
-### 今までは「自分のブラウザでしか見えない」状態
+### なぜ `<img>` のままでは駄目なのか
 
-StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
+HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
 
-Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
+- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送されます。
+- **形式が古い**: JPG / PNG のまま配ると、WebP や AVIF に対応するブラウザでもその恩恵を受けられません。
+- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に全部読みに行きます（CLS や LCP の悪化）。
+- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動きます（CLS）。
 
-### 3 ステップの全体像
+`next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
 
-以下の 3 つのサービスを繋ぎます。
+- 表示サイズに応じた解像度を自動生成（`srcset`）
+- WebP / AVIF に自動変換（ブラウザが対応していれば）
+- 画面内に入ったときだけ読み込み（遅延読み込み）
+- `width` / `height` 必須にすることでレイアウトのガタつきを防ぐ
 
-1. **StackBlitz**: コードを書いている場所です。
-2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
-3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
+### 最小の使い方
 
-流れはこうです。
+```tsx
+import Image from "next/image";
+
+export default function Page() {
+  return (
+    <Image
+      src="/coffee.jpg"
+      alt="コーヒーの写真"
+      width={300}
+      height={200}
+    />
+  );
+}
+```
+
+- `import Image from "next/image"` でコンポーネントを読み込みます。
+- `src` はプロジェクト内の `public/` 直下のパス、または **登録済み** の外部 URL です。
+- `alt` は必須です。読み上げソフトと、画像が読み込めなかったときの代替テキストになります。
+- `width` と `height` はピクセル数を **数値** で書きます（CSS 単位の `px` は付けません）。
+
+### `width` / `height` は原則必須。ただし省略できる 2 つのケース
+
+`<Image>` は `width` / `height` を **原則必須** にします。レイアウトのガタつき（CLS）を防ぐためです。ただし、次の 2 ケースだけは省略できます。
+
+1. **静的 import の場合**
+   プロジェクト内の画像を `import` すると、Next.js がビルド時に画像のサイズを読み取って自動で埋めてくれます。
+   ```tsx
+   import heroImg from "./hero.png";
+
+   <Image src={heroImg} alt="ヒーロー画像" />
+   ```
+2. **`fill` を使う場合**
+   親要素いっぱいに広げる使い方です。親に `position: relative` と明示的なサイズが要ります。
+   ```tsx
+   <div style={{ position: "relative", width: 300, height: 200 }}>
+     <Image src="/coffee.jpg" alt="コーヒー" fill />
+   </div>
+   ```
+
+外部 URL を `src` に指定する場合は **静的 import できないので `width` / `height` を明示するか、`fill` で親サイズに従わせる** ことになります。
+
+### 外部ホストを使うには `remotePatterns`
+
+`<Image>` はセキュリティとキャッシュの都合で、**どの外部ホストからの画像を許可するか** を事前に宣言する必要があります。これが `next.config.ts` の `images.remotePatterns` です。
+
+未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
 
 ```
-StackBlitz → GitHub → Vercel → https://<project>.vercel.app
+Invalid src prop (https://placehold.jp/...) on `next/image`,
+hostname "placehold.jp" is not configured under images in your `next.config.js`
 ```
 
-一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
+書き方は次の通りです。
 
-### アカウントが 2 つ必要
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
 
-- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
-- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "placehold.jp", pathname: "/**" },
+    ],
+  },
+};
+
+export default nextConfig;
+```
+
+Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書いて 1 ファイルだけ許可することもできます。
+
+### `sizes` でレスポンシブ対応
+
+`<Image>` は可変サイズ（`width` が CSS で `100%` のような動的な値）で使うときに `sizes` を付けると、もっとも賢く `srcset` を切り替えてくれます。詳細は本レッスンの範囲外ですが、1 行だけ雰囲気を見せておきます。
+
+```tsx
+<Image
+  src="/coffee.jpg"
+  alt="コーヒー"
+  width={600}
+  height={400}
+  sizes="(max-width: 640px) 100vw, 300px"
+/>
+```
+
+スマホ幅では 100vw、それ以外では 300px で表示される、という意味です。本演習では使いませんが、覚えておくと役立ちます。
 
 ## 演習
 
 ### 途中から始める場合
 
-「小さなアプリを仕上げる」で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために「小さなアプリを仕上げる」の完成品を推奨します）。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。`/about` の画像を差し替える演習なので、最低限 `/about` ページと `<img>` が存在すれば構いません。
 
 <details>
-<summary>出発点のファイル</summary>
+<summary>出発点のファイル（`/about` 最小形）</summary>
 
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import "./globals.css";
-
-export const metadata = {
-  title: {
-    default: "TODO アプリ",
-    template: "%s | TODO アプリ",
-  },
-  description: "Next.js App Router の学習用 TODO アプリ",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 TODO アプリ</p>
-        </footer>
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
+**`app/about/page.tsx`**
 
 ```tsx
-export default function Page() {
+export default function AboutPage() {
   return (
     <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
     </>
   );
 }
 ```
 
-**`app/types.ts`**
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-**`app/actions.ts`**
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function getTodo(id: string): Promise<Todo | undefined> {
-  return todos.find((t) => t.id === id);
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-
-export async function deleteTodo(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
-  const index = todos.findIndex((t) => t.id === id);
-  if (index >= 0) {
-    todos.splice(index, 1);
-  }
-  revalidatePath("/todos");
-}
-```
-
-**`app/todos/TodoForm.tsx`**
-
-```tsx
-"use client";
-
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { addTodo, type AddTodoState } from "../actions";
-
-const initialState: AddTodoState = {};
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
-
-export function TodoForm() {
-  const [state, formAction, isPending] = useActionState(addTodo, initialState);
-
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
-      {state.error && <p className="error">{state.error}</p>}
-      {isPending && <p>通信中...</p>}
-    </form>
-  );
-}
-```
-
-**`app/todos/page.tsx`**
-
-```tsx
-import { listTodos, deleteTodo } from "../actions";
-import { TodoForm } from "./TodoForm";
-import Link from "next/link";
-
-export default async function TodosPage({
-  searchParams,
-}: PageProps<"/todos">) {
-  const { highlight } = await searchParams;
-  const todos = await listTodos();
-
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul className="todo-list">
-        {todos.map((todo) => (
-          <li
-            key={todo.id}
-            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
-          >
-            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
-            <form action={deleteTodo} style={{ display: "inline" }}>
-              <input type="hidden" name="id" value={todo.id} />
-              <button type="submit">削除</button>
-            </form>
-          </li>
-        ))}
-      </ul>
-      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
-    </>
-  );
-}
-```
-
-**`app/todos/[id]/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { getTodo } from "../../actions";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/todos/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const todo = await getTodo(id);
-  return {
-    title: todo ? `Todo: ${todo.text}` : "Todo not found",
-  };
-}
-
-export default async function TodoDetailPage({
-  params,
-}: PageProps<"/todos/[id]">) {
-  const { id } = await params;
-  const todo = await getTodo(id);
-
-  if (!todo) {
-    notFound();
-  }
-
-  return (
-    <>
-      <h1>Todo 詳細</h1>
-      <p>ID: {todo.id}</p>
-      <p>内容: {todo.text}</p>
-      <p>
-        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
-      </p>
-      <p>
-        <Link href="/todos">一覧に戻る</Link>
-      </p>
-    </>
-  );
-}
-```
-
-**`app/todos/[id]/not-found.tsx`**
-
-```tsx
-import Link from "next/link";
-
-export default function TodoNotFound() {
-  return (
-    <>
-      <h1>Todo が見つからない</h1>
-      <p>指定された ID の Todo は存在しない（または削除された）。</p>
-      <Link href="/todos">一覧に戻る</Link>
-    </>
-  );
-}
-```
-
-**`app/globals.css`**（共通 CSS + `.error` + `.todo-list` / `.todo-item--highlight`）
-
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
-
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
-
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
-
-.error {
-  color: #c00;
-  background: #ffe8e8;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-.todo-list {
-  list-style: none;
-  padding: 0;
-}
-
-.todo-item {
-  padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.todo-item--highlight {
-  background: #fff3a3;
-}
-
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
-  }
-  .site-header a {
-    color: #4ea2ff;
-  }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-  .error {
-    color: #ffb0b0;
-    background: #4a1d1d;
-  }
-  .todo-item {
-    border-bottom-color: #333;
-  }
-  .todo-item--highlight {
-    background: #665c1e;
-    color: #fff;
-  }
-}
-```
+Route Groups を使っていない出発点なので、本文中で `app/(public)/about/page.tsx` と書かれている箇所は `app/about/page.tsx` に読み替えてください。
 
 </details>
 
-なお、Vercel デプロイの手順自体（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。出発点の全量を貼らずに、素の hello-world テンプレートのまま手順 1〜5 を通して URL 発行まで体験するのも有効です。
-
 ### 前回のプロジェクトを開く
 
-「小さなアプリを仕上げる」で仕上げた StackBlitz の Next.js プロジェクトを開きましょう。
+5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
 
-### 手順 1: GitHub アカウントを用意
+### 手順 1: `next.config.ts` に `remotePatterns` を追加
 
-1. <https://github.com/> にアクセスします。
-2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
+プロジェクト直下に `next.config.ts`（または `next.config.mjs`）があります。StackBlitz テンプレートでは既に存在するはずです。なければ新規作成します。
 
-### 手順 2: StackBlitz から GitHub に保存
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
 
-1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
-2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
-3. 保存先のリポジトリ名を指定します。例: `my-next-todo`。
-4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
-5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-todo` が出ているはずです。
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "placehold.jp", pathname: "/**" },
+    ],
+  },
+};
 
-> うまく行かないとき: StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもある。本コース想定は前者。
+export default nextConfig;
+```
 
-### 手順 3: Vercel アカウントを作る
+保存すると、Next.js が設定を再読み込みします（StackBlitz ではターミナルに再起動のログが流れます）。
 
-1. <https://vercel.com/> にアクセスします。
-2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
-3. 必要なら Vercel にメール認証を済ませましょう。
+### 手順 2: `/about` の `<img>` を `<Image>` に置き換える
 
-### 手順 4: Vercel で新しいプロジェクトを作る
+`app/(public)/about/page.tsx`（「Route Groups で整理する」以前のままなら `app/about/page.tsx`）を開きます。「ページを増やしてリンクで移動する」で貼った 3 枚のカードの `<img>` を、`<Image>` に置き換えます。
 
-1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
-2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-todo` を **「Import」** します。
-   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-todo` のみ選択）。
-3. 設定画面が出ます。
-   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
-   - **Root Directory**: デフォルトのままにします。
-   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
-   - **Environment Variables**: 本コースでは使いません。空で OK です。
-4. 画面下の **「Deploy」** をクリックします。
-5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
+ファイル全体はこうなります。
 
-### 手順 5: 公開 URL を確認
+```tsx
+import Image from "next/image";
+import "./about.css";
 
-1. Vercel の「Dashboard」→ プロジェクト名（`my-next-todo`）をクリックします。
-2. 画面上部に **`https://my-next-todo-xxxx.vercel.app`** のような URL が出ています。
-3. クリックして開きます。
+export default function AboutPage() {
+  return (
+    <>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <Image
+              src="https://placehold.jp/300x200.png"
+              alt="コーヒーのプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <Image
+              src="https://placehold.jp/300x200.png"
+              alt="本のプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <Image
+              src="https://placehold.jp/300x200.png"
+              alt="散歩のプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </>
+  );
+}
+```
+
+変更点:
+
+- 1 行目に `import Image from "next/image";` を追加しました。
+- `<img src="..." alt="..." />` を 3 箇所とも `<Image ... width={300} height={200} />` に置き換えました。
+- `<Image>` は `width` と `height` を **数値**（中括弧） で書くことに注意してください（HTML の `<img width="300">` のような文字列ではありません）。
+
+### 手順 3: 画像サイズの CSS を見直す
+
+「ページを増やしてリンクで移動する」の `about.css` には次のような指定が入っていました。
+
+```css
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+```
+
+`<Image>` も内部的には `<img>` を生成するので、このスタイルはそのまま効きます。`width: 100%` でカードの幅に合わせて縮みます。`height: auto` を入れておくと、縮んでも縦横比が崩れません。
+
+ダークモードでの `filter` 調整などは不要です。「ページを増やしてリンクで移動する」時点の CSS のままで構いません。
 
 ### 期待出力
 
-- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ TODO アプリが表示されます。
-- 「TODO 一覧」で追加・削除・詳細遷移が動きます。
-- `/about` にアクセスすると自己紹介ページが出ます。
-- ナビの `<Link>` でページ遷移ができます。
-- URL を別のブラウザや友人に送っても、同じアプリが見えます。
+1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
+2. **DevTools → Network タブ** を開いて再読み込みします。
+3. `placehold.jp/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
+4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
+5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
 
-### 更新を反映する
+### 変えてみる
 
-GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
+1. 3 枚目のカードの `<Image>` に `priority` プロパティを付けて、遅延読み込みを止めてみましょう（`<Image src="..." alt="..." width={300} height={200} priority />`）。ページ表示のタイミングが少しだけ速くなる可能性があります（体感差は小さい）。
+2. `width={300} height={200}` を `width={600} height={400}` に変えると、同じ見た目のまま 2 倍の解像度のソースが配信されるようになります（ネットワークタブで URL の `w=` が変わるのを確認）。
+3. `public/` フォルダに自分の PNG 画像を 1 枚置いて、`import myImg from "../../../../public/my.png"` のように静的 import で `<Image src={myImg} alt="..." />` を書いてみましょう。`width` / `height` を **省略しても** 動くはずです（静的 import なので Next.js が自動でサイズを取る）。
 
-1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
-2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
-3. 数十秒待ちます。
-4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
-5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
+### スコープ外
 
-### よくある躓き
-
-- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
-- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
-- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
-- TODO を追加してもリロードすると消える → 次項の通り、サーバーレス環境ではインメモリ配列が保持されません。
-
-### 注意: 本番ではデータが保持されない
-
-本コースでは `app/actions.ts` の `const todos: Todo[] = []` という **メモリ上の配列** でデータを持っていました。
-
-- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
-- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。結果として、追加した直後は見えてもしばらく経つと消えて見える、といった動きになります。
-
-本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。本コースでは扱いませんが、次のステップとして「`actions.ts` の配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
+- LCP 最適化の深掘り、`priority` の本格活用、`placeholder="blur"` の `blurDataURL` 自動生成は本コースでは扱いません。
+- `localPatterns`（Next.js 15.3 で追加）などの発展設定は扱いません。
+- カスタムローダー（CDN 連携）も扱いません。
 
 ### 自分で書く
 
-1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。例: 「自己紹介 + TODO メモの練習アプリ」。
-2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
-3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
+`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.jp/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
 
 ## まとめ
 
-- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できます。
-- 初回の接続だけ手数がかかりますが、以後は Git に push すれば自動デプロイです。
-- 本コースの擬似永続化（インメモリ配列）は Vercel では保持されません。本番の永続化には DB が必要です（本コースでは扱いません）。
-- ここでコースは終わりです。Next.js（App Router）で「フォーム + データ表示 + ルーティング」の小さなアプリを自分で作り、公開するところまで辿り着きました。
-- 次に進みたい学習者へのおすすめ:
-  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
-  - 認証（NextAuth、Clerk など）を足して「自分の TODO」を作る
-  - スタイリングを Tailwind CSS や CSS Modules に寄せる
-  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る
+- `import Image from "next/image"` で `<Image>` コンポーネントを使えます。素の `<img>` より賢い画像表示ができます。
+- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
+- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
+- 「ページを増やしてリンクで移動する」の `<img>` を `<Image>` に差し替えたことで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられるようになりました。
+- 別のレッスンで、フォントの読み込みを `next/font` で最適化します。画像に続き「ブラウザがガタつかずに表示できる」状態を目指します。

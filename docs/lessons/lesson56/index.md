@@ -1,110 +1,214 @@
-# lesson56: React DevTools（Components / Profiler）
+# lesson56: イベントと配列のイミュータブル更新
 
 ## ゴール
 
-- React Developer Tools ブラウザ拡張をインストールできる
-- Components パネルでツリーと state / props を観察できる
-- Profiler パネルで再レンダリングの回数と所要時間を測定できる
-- 「useMemo で計算のメモ化」で書いた `useMemo` が本当にスキップしているかを確認できる
+- `onClick` など代表的なイベントハンドラを書ける
+- 配列の state を、新しい配列を作って更新する書き方（イミュータブル更新）ができる
+- 「末尾に追加 / 先頭に追加 / id で削除」の 3 パターンを実装できる
 
 ## 解説
 
-### React DevTools とは
+### 配列 state の注意点
 
-React 公式の **ブラウザ拡張機能** です。Chrome / Firefox / Edge で使えます。インストールすると、ブラウザ標準の DevTools に **2 つのパネル** が追加されます。
+「state で状態を持つ」でカウンター（数値）の state を扱いました。配列の state でも考え方は同じですが、**守らないといけないルール** が 1 つあります。
 
-- **Components**: React のコンポーネントツリーを可視化。各コンポーネントの state / props を見られる。値の書き換えもできる
-- **Profiler**: 再レンダリングを記録して、どのコンポーネントが何回再描画され、何 ms かかったかを測定
+> **直接 `push` や `splice` で書き換えない**。必ず「新しい配列」を作って渡す。
 
-素の JS のときは DevTools の Elements パネルで DOM を見れば十分でした。React では **JSX → DOM の間に「コンポーネントツリー」** があり、そのツリーを直接観察できるのが DevTools の強みです。
+```tsx
+const [todos, setTodos] = useState<Todo[]>([]);
 
-### インストール
+// NG: 元の配列を書き換えている
+todos.push(newTodo);
+setTodos(todos); // 同じ配列を渡しているので、React から見れば「変わっていない」
 
-1. Chrome ウェブストアで [React Developer Tools](https://chromewebstore.google.com/detail/fmkadmapgofadopljbjfkapdkoienihi) を検索してインストール（Firefox は Add-ons）
-2. React を使うサイトを開くと、拡張アイコンが有効（青）になる
-3. DevTools を開くと「Components」「Profiler」の 2 つのタブが現れる
+// OK: 新しい配列を作って渡す
+setTodos((prev) => [...prev, newTodo]);
+```
 
-### StackBlitz での制約（重要）
+これを「イミュータブル（immutable、書き換えない）更新」と呼びます。
 
-StackBlitz のプレビュー画面は **iframe の中で動いている** ため、DevTools が親ページ側を見てしまい、React ツリーが拾えないことがあります。
+理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
 
-回避策:
+スプレッド構文 `...`（2 章 の「分割代入とスプレッド」）は、このイミュータブル更新で頻出します。
 
-- プレビュー右上の **「Open in New Tab」ボタン** をクリックしてプレビューを **別タブ** で開く
-- 別タブで開いた画面で DevTools を起動すれば、React ツリーが正しく表示される
+### よく使う 3 パターン
 
-それでも拾えない場合の代替動線:
+#### (1) 末尾に追加
 
-- **CodeSandbox** で同じコードを開く（こちらはプレビューが同一オリジンで動くことが多い）
-- **ローカルで `npm run dev`** を走らせる（StackBlitz に HMR / DevTools が噛み合わない時の最終手段）
+```tsx
+setTodos((prev) => [...prev, newTodo]);
+```
 
-本コースはブラウザ完結を建前にしていますが、DevTools の挙動は環境差が出やすい領域です。うまく動かなければ本レッスンの演習はスキップしてもらって構いません（機能理解だけ押さえて先に進めます）。
+`[...prev, newTodo]` は「`prev` を広げて、最後に `newTodo` を足した新しい配列」。
 
-### Components パネルの使い方
+#### (2) 先頭に追加
 
-- 左に **コンポーネントツリー** が表示される（`<App>` → `<TodoInput>`、`<TodoList>` → ...）
-- コンポーネントをクリックすると、右側に **props / hooks（state）** が展開される
-- **state の値をその場で書き換え** もできる（デバッグに便利）
-- ツールバーの歯車 → General で「Highlight updates when components render.」を有効にすると、**再レンダリングした要素の周囲が一瞬光る** ようになる。これが最初の観察ツール
+```tsx
+setTodos((prev) => [newTodo, ...prev]);
+```
 
-### Profiler パネルの使い方
+順番を入れ替えるだけ。最新のものを上に表示したいときはこちら。
 
-1. Profiler タブを開く
-2. 左上の丸い **Record** ボタン（●）を押して記録開始
-3. 画面で操作（ボタンクリック、入力など）を何回か行う
-4. もう一度 Record ボタン（■）を押して記録停止
-5. 記録された **Commit** が一覧で表示される。各 Commit をクリックすると、その瞬間に再レンダリングされたコンポーネントとそれぞれの所要時間が見える
+#### (3) id で削除
 
-Profiler のキーポイント:
+```tsx
+setTodos((prev) => prev.filter((t) => t.id !== id));
+```
 
-- **灰色** のコンポーネント: 再レンダリングをスキップした
-- **色付き**（黄色〜赤）: 再レンダリングした（濃いほど時間がかかった）
-- 各コンポーネントにホバーすると「なぜ再レンダリングされたか」（props が変わった / state が変わった / 親が再レンダリングした など）も見える
+`filter`（2 章 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
+
+### イベントハンドラの型（コピペで与える）
+
+TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペで与える**ものとして覚えてください。意味は追い追い分かります。
+
+```tsx
+import type { MouseEvent, ChangeEvent, FormEvent } from "react";
+
+// ボタンのクリック
+function handleClick(e: MouseEvent<HTMLButtonElement>) {
+  /* ... */
+}
+
+// input の変化
+function handleChange(e: ChangeEvent<HTMLInputElement>) {
+  /* ... */
+}
+
+// フォームの送信
+function handleSubmit(e: FormEvent<HTMLFormElement>) {
+  /* ... */
+}
+```
+
+これらの型は `react` パッケージから `import type` で呼びます。`React.MouseEvent` のように名前空間経由で書くこともできますが、新しい JSX ランタイム（Vite の React + TS テンプレート）では名前空間経由だとエラーになる環境があるので、**個別に import する形に統一します**。
+
+とはいえ、**JSX の中にインラインで書くとき**は、型推論が効くので書かなくても OK です。
+
+```tsx
+<button onClick={(e) => console.log(e)}>
+  {/* e は MouseEvent<HTMLButtonElement> 型と自動推論される */}
+</button>
+```
+
+関数を別の場所で定義するときだけ、上の型をコピペして付けます。
+
+### スコープ外: オブジェクトの state 更新
+
+配列ではなく、**オブジェクト** を state に入れたときの更新（`setUser((prev) => ({ ...prev, age: 30 }))` など）も同じ発想でできます。ただし覚える量を分散させるため、本コースでは **「TODO アプリを React で作る」で扱います**。このレッスンでは配列更新だけに集中します。
 
 ## 演習
 
 ### 途中から始める場合
 
-「useMemo で計算のメモ化」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
 <summary>出発点のファイル</summary>
 
-**`src/App.tsx`**
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+本レッスンで `Todo` 型と配列 state を扱うので、このファイルを先に用意しておきます。
+
+</details>
+
+### ゴール
+
+- カウンターに「+1」「-1」「リセット」の 3 ボタンを実装
+- `Todo` の配列 state に対して「末尾に追加」「先頭に追加」「id で削除」の 3 パターンを実装
+- いずれの操作も、イミュータブル更新で行う
+
+### 手順
+
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
+2. `src/types.ts` を作成
+3. `src/App.tsx` を書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+### `src/App.tsx`
 
 ```tsx
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import type { Todo } from "./types";
 import "./App.css";
 
-const BIG_NUMBERS = Array.from({ length: 10000 }, (_, i) => i + 1);
-
 function App() {
-  const [multiplier, setMultiplier] = useState(1);
-  const [color, setColor] = useState<"red" | "blue">("blue");
+  const [count, setCount] = useState(0);
+  const [todos, setTodos] = useState<Todo[]>([
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "原稿を書く" },
+  ]);
 
-  const total = useMemo(() => {
-    console.log("computing total...");
-    return BIG_NUMBERS.reduce((a, b) => a + b, 0) * multiplier;
-  }, [multiplier]);
+  // ---- カウンター ----
+  function handlePlus() {
+    setCount((c) => c + 1);
+  }
+  function handleMinus() {
+    setCount((c) => c - 1);
+  }
+  function handleReset() {
+    setCount(0);
+  }
+
+  // ---- TODO ----
+  function addToEnd() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `末尾 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function addToTop() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `先頭 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [newTodo, ...prev]);
+  }
+
+  function removeById(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
 
   return (
     <>
-      <h1>useMemo のデモ</h1>
-
       <section className="box">
-        <h2>合計</h2>
-        <p style={{ color }}>total = {total.toLocaleString()}</p>
-        <button onClick={() => setMultiplier((m) => m + 1)}>
-          multiplier +1（合計が再計算される）
-        </button>
+        <h2>カウンター</h2>
+        <p>現在: {count}</p>
+        <button onClick={handlePlus}>+1</button>
+        <button onClick={handleMinus}>-1</button>
+        <button onClick={handleReset}>リセット</button>
       </section>
 
       <section className="box">
-        <h2>無関係な state</h2>
-        <p>現在の色: {color}</p>
-        <button onClick={() => setColor((c) => (c === "blue" ? "red" : "blue"))}>
-          色を切り替え（合計は再計算されないはず）
-        </button>
+        <h2>TODO</h2>
+        <div className="row">
+          <button onClick={addToEnd}>末尾に追加</button>
+          <button onClick={addToTop}>先頭に追加</button>
+        </div>
+        <ul>
+          {todos.map((todo) => (
+            <li key={todo.id}>
+              {todo.text}
+              <button onClick={() => removeById(todo.id)}>削除</button>
+            </li>
+          ))}
+        </ul>
       </section>
     </>
   );
@@ -113,7 +217,9 @@ function App() {
 export default App;
 ```
 
-**`src/App.css`**
+`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。2 章 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。
+
+### `src/App.css`
 
 ```css
 .box {
@@ -126,8 +232,13 @@ export default App;
 }
 
 .box button {
-  padding: 6px 10px;
+  margin-right: 8px;
+  padding: 4px 10px;
   cursor: pointer;
+}
+
+.row {
+  margin-bottom: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -139,74 +250,38 @@ export default App;
 }
 ```
 
-このコードをそのまま使って、Profiler で再計算スキップを観察します。
-
-</details>
-
-### ゴール
-
-- 「useMemo で計算のメモ化」の `useMemo` を使った「1 万件の合計」アプリで、Profiler を使って再計算スキップを確認する
-
-### 手順
-
-1. 「useMemo で計算のメモ化」の StackBlitz プロジェクトを開く（もしくは新規に作って「useMemo で計算のメモ化」のコードを貼る）
-2. プレビューを「Open in New Tab」で別タブに開く
-3. 別タブで DevTools を開き、Components と Profiler のタブが表示されていることを確認
-
-### ステップ 1: Components パネルで観察
-
-1. Components タブを選ぶ
-2. 左に `<App>` のツリーが出る。クリックしてみる
-3. 右に `State` 欄で `multiplier: 1` / `color: "blue"` のような値が見える
-4. ツールバー歯車 → General → 「Highlight updates when components render.」を有効化
-5. 画面の「multiplier +1」ボタンを押す → 該当エリアが一瞬枠で囲まれるのが見える
-6. 「色を切り替え」を押す → これも枠で囲まれる。ただし実際には内部の計算は走っていない（次のステップで確認）
-
-### ステップ 2: Profiler でスキップ確認
-
-1. Profiler タブを選ぶ
-2. 左上の Record ボタン（●）を押す（赤に変わる）
-3. 画面で以下を 1 回ずつ押す:
-   - 「multiplier +1」
-   - 「色を切り替え」
-   - 「色を切り替え」
-4. 停止ボタン（■）を押す
-5. Commit タブに 3 件の Commit が記録されているはず
-
-各 Commit を見ると:
-
-- 1 件目（multiplier +1）: `useMemo` の中身が再計算される
-- 2 件目・3 件目（色切り替え）: `useMemo` は再計算されない（灰色表示になる / `total` の値が前回と同じ参照のまま）
-
 ### 期待出力
 
-- Console に `computing total...` が **1 回目（multiplier +1）だけ** 出る
-- Profiler で「色を切り替え」に対応する Commit では、`App` 全体の再レンダリング時間が小さい
-- Components の state 欄で `multiplier` と `color` の値が変わっていくのが見える
-
-これで「`useMemo` が本当に効いている」ことを視覚的に確認できます。
+- 画面上部に「カウンター」ボックス。`+1` を 3 回押すと 3、`-1` を 1 回押すと 2、`リセット` で 0 に戻る
+- 下に「TODO」ボックス。
+  - 初期状態で `牛乳を買う` と `原稿を書く` の 2 件が並ぶ
+  - `末尾に追加` を 2 回押すと、`末尾 3` / `末尾 4` が一番下に追加される
+  - `先頭に追加` を 1 回押すと、`先頭 5` が一番上に追加される
+  - 各行の `削除` ボタンで、その行だけが消える
 
 ### 変える
 
-- 「useMemo で計算のメモ化」の `useMemo` を外してみる → Profiler の同じ操作で、色切り替え時にも Console に `computing total...` が出るようになる
-- 「色切り替え」を連打して Profiler で記録 → `useMemo` なしと `useMemo` あり で合計時間を比べる
+- `removeById` を次のように書き換えると、**バグ** が起きる。試してから元に戻すこと
+  ```tsx
+  function removeById(id: string) {
+    const index = todos.findIndex((t) => t.id === id);
+    todos.splice(index, 1); // NG: 元の配列を破壊している
+    setTodos(todos); // React から見ると変化していない
+  }
+  ```
+  クリックしても削除されない（実際は配列が変わっているのに、React は「同じ配列」と見て再レンダリングしない）
+- `addToEnd` の `setTodos((prev) => [...prev, newTodo])` を `setTodos((prev) => [newTodo, ...prev])` に書き換えると、動作が `addToTop` と同じになる
 
-### 自分で書く（挑戦）
+### 自分で書く
 
-- これまでのレッスンで作った `useTodos` 版の TODO アプリに Profiler をかけ、TODO を 50 件ほど追加して削除ボタンを押したときに `TodoList` がどのくらい時間を使うかを観察する
-- 必要なら `TodoItem` を `React.memo` で包み、`useCallback` で `onDelete` / `onToggle` を安定化して、Profiler で再度計測する
-
-### 環境トラブル時
-
-- DevTools に Components / Profiler が出ない → 拡張が無効、または別タブで開いていない
-- Profiler が「No profiling data...」と出続ける → Record ボタンを押した **後** に操作しているか確認
-- StackBlitz で動かない → CodeSandbox / ローカル実行に切り替え、または本レッスンをスキップ
+- 「逆順」ボタンを追加し、クリックで配列を逆順にする（**新しい配列を作る**）
+  - ヒント: `setTodos((prev) => [...prev].reverse())`（`.reverse()` 単体は元の配列を書き換える破壊的メソッド。スプレッドでコピーしてから呼ぶ）
+- 「全消し」ボタンを追加し、クリックで空配列にする
+  - ヒント: `setTodos([])`
 
 ## まとめ
 
-- React DevTools はブラウザ拡張としてインストールする必要がある
-- Components パネル: ツリー / state / props を直接観察できる
-- Profiler パネル: 再レンダリングの回数・時間を測定できる
-- `useMemo` が本当に効いているかは Profiler で確認するのが確実
-- StackBlitz の iframe では動作が不安定。別タブ / CodeSandbox / ローカル実行で回避
-- 以降のレッスンでも「DevTools で確認する」指示が自然に出せるようになる
+- 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
+- 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
+- イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
+- **オブジェクトの state 更新は「TODO アプリを React で作る」で扱う**。このレッスンでは配列に集中

@@ -1,316 +1,331 @@
-# lesson49: 条件で出し分ける
-
-<script setup>
-const closeScript = '<' + '/script>'
-const demoHtml =
-  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
-  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
-  '<div id="root"></div>'
-
-const demoJs = `
-// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
-// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
-const h = React.createElement;
-const { useState } = React;
-
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [unread, setUnread] = useState(0);
-
-  return h(
-    'div',
-    null,
-    // (1) 三項演算子: 2 択の切り替え
-    isLoggedIn
-      ? h('p', null, 'ようこそ、Alice さん')
-      : h('p', null, 'ゲストさん、こんにちは'),
-    h(
-      'button',
-      { onClick: () => setIsLoggedIn(v => !v), style: { marginRight: '8px' } },
-      isLoggedIn ? 'ログアウト' : 'ログイン'
-    ),
-    h('hr'),
-    // (2) && で「あるときだけ出す」
-    h('p', null, '未読: ' + unread),
-    unread > 0 &&
-      h('p', { style: { color: '#b91c1c', fontWeight: 'bold' } }, unread + ' 件の未読があります'),
-    h('button', { onClick: () => setUnread(c => c + 1), style: { marginRight: '8px' } }, '+1'),
-    h('button', { onClick: () => setUnread(0) }, '既読にする')
-  );
-}
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(h(App));
-`
-</script>
+# lesson49: Utility Types で仕上げる
 
 ## ゴール
 
-- `&&` / 三項演算子 / 早期 return の 3 パターンを使い分けて、状態に応じた表示切り替えができる
-- それぞれの使いどころを説明できる
+- 既にある型から新しい型を派生させる **Utility Types** という仕組みを理解する。
+- `Partial<T>` で「全プロパティが省略可能」な型を作れる。
+- `Pick<T, K>` で「特定のプロパティだけ取り出した」型を作れる。
+- `Todo` 型から `TodoDraft`（下書き）と `TodoSummary`（一覧用）を派生させ、関数で使い分けられる。
 
 ## 解説
 
-### JSX は式だから、分岐も式で書く
+### 「似ているけど少しだけ違う型」問題
 
-「JSX を書く」で触れたとおり、JSX の `{ ... }` に書けるのは **式** だけです。`if` 文は書けません。なので、条件で出し分けるときも**式の形**を使います。
+3 章 を通じて、TODO 1 件を表す `Todo` 型をここまで育ててきました。
 
-よく使うのは次の 3 つです。
-
-1. `条件 && <JSX />`
-2. `条件 ? <A /> : <B />`
-3. 関数の先頭で `if` を使って早期 return
-
-### (1) `&&` で「あるときだけ出す」
-
-「条件が真のときだけ表示する / 偽なら何も出さない」は `&&` が定番です。
-
-```tsx
-{
-  isLoggedIn && <p>ログイン中</p>;
-}
-```
-
-- `isLoggedIn` が `true` なら `<p>ログイン中</p>` が評価されて表示される
-- `isLoggedIn` が `false` なら `false` が評価結果になり、JSX としては何も描画されない
-
-#### `&&` の落とし穴（数値 0）
-
-`&&` の左側には **本当に真偽値** を置くようにしてください。数値の `0` を書くと、そのまま `0` が画面に表示されてしまいます。
-
-```tsx
-{
-  count && <p>{count} 件あります</p>;
-}
-// count が 0 だと、画面に「0」という数字が出てしまう
-```
-
-件数のような**数値**で判定したいときは、明示的に真偽値に変換します。
-
-```tsx
-{
-  count > 0 && <p>{count} 件あります</p>;
-}
-```
-
-`string` や `Todo[]` は `length === 0` を意識しつつ、迷ったら三項演算子を使うとより安全です。
-
-### (2) 三項演算子で「A か B か」
-
-「ログイン中なら A、ログアウト中なら B を表示」のように **2 択** で切り替えたいときは三項演算子が素直です。
-
-```tsx
-{
-  isLoggedIn ? <p>ログイン中</p> : <a href="/login">ログインへ</a>;
-}
-```
-
-- `isLoggedIn` が `true` なら左側、`false` なら右側が表示される
-
-3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次の 3 番目の方が読みやすいです。
-
-### (3) 早期 return
-
-関数の**一番上**で条件判定して、不要な場合は `return` してしまう書き方です。
-
-```tsx
-type MessageProps = {
+```ts
+export type Todo = {
+  id: string;
   text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+ここで次のような場面を想像します。
+
+- **下書き**: ユーザーが「新規作成」ボタンを押した直後。まだ `id` も `text` も決まっていない。
+- **一覧用の要約**: 一覧画面では `id` と `text` だけ表示すればよい。`status` や `memo` は詳細画面でだけ使う。
+
+これらは `Todo` に似ていますが、「全部必須ではない」「一部しか使わない」という違いがあります。そのたびに別の `type` を手で書くと、`Todo` を変更したときに派生型もすべて追従させる必要があり、ズレが生まれます。
+
+TS には「既にある型から **自動で** 新しい型を作る」道具が用意されています。それが **Utility Types**（ユーティリティ型）です。
+
+### `Partial<T>`: 全プロパティをオプショナルにする
+
+`Partial` は「`T` のすべてのプロパティを省略可能（`?:` 付き）にした型」を作ります。
+
+```ts
+type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
 };
 
-function Message({ text }: MessageProps) {
-  if (text.length === 0) {
-    return null; // null を返すと「何も描画しない」
-  }
-  return <p>{text}</p>;
-}
+type TodoDraft = Partial<Todo>;
+// 展開すると次と同じ:
+// type TodoDraft = {
+//   id?: string;
+//   text?: string;
+//   status?: "open" | "done";
+//   memo?: string;
+// }
 ```
 
-- `null` を `return` すると、そのコンポーネントは **何も描画しない**
-- 条件が多い場合は、三項や `&&` を重ねるより圧倒的に読みやすい
+`TodoDraft` は「下書き」にぴったりです。まだ `id` が決まっていなくても、`text` だけ入力された状態でも受け入れられる。
 
-ローディング中専用のスピナー、エラー時専用のメッセージ、3 択以上の状態分岐など、分岐ごとに違う大きな JSX を返したい場合に使うとスッキリします。
-
-### 小さなコンポーネントに分ける発想
-
-条件が重なってきたら、「サブコンポーネントに切り出す」ことも考えます。
-
-```tsx
-function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
-  if (isLoggedIn) {
-    return <p>ようこそ！</p>;
-  }
-  return <a href="/login">ログイン</a>;
-}
-
-// 呼び出し側
-<UserStatus isLoggedIn={isLoggedIn} />;
+```ts
+const draft1: TodoDraft = {};                           // OK
+const draft2: TodoDraft = { text: "牛乳を買う" };         // OK
+const draft3: TodoDraft = { text: "本を返す", memo: "" }; // OK
 ```
 
-1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは以降のレッスンで使っていきます。
+オプショナル版になったので、使う側では `undefined` を意識する必要があります（「配列・ユニオン・リテラル型・オプショナル」で扱った通り）。
 
-### 動きを見てみる
+### `Pick<T, K>`: プロパティを選んで取り出す
 
-下のデモでボタンを押すと、三項演算子と `&&` の 2 パターンで表示が切り替わる様子を確認できます。「ログイン」を押すと挨拶文が差し替わり、`+1` を押して未読が 1 以上になったときだけ赤字の警告が現れます。
+`Pick` は「`T` の中から指定したプロパティだけを取り出した型」を作ります。
 
-<LiveDemo
-  height="320px"
-  :html="demoHtml"
-  :js="demoJs"
-/>
+```ts
+type TodoSummary = Pick<Todo, "id" | "text">;
+// 展開すると次と同じ:
+// type TodoSummary = {
+//   id: string;
+//   text: string;
+// }
+```
+
+- 第 1 引数に元の型、第 2 引数に取り出したいプロパティ名のユニオン（`"id" | "text"`）。
+- 取り出したプロパティは、元の型の必須 / オプショナルをそのまま引き継ぐ。
+- 指定していないプロパティは含まれない。
+
+一覧画面のコンポーネントが「`id` と `text` しか使わない」と宣言したいとき、`Todo` 全体を受け取る代わりに `TodoSummary` で受け取れば、余計な情報を意識せずに済みます。
+
+### Utility Types が嬉しいのは「追従」してくれること
+
+`Todo` 型に新しいプロパティ（例えば `dueDate: string`）が増えたとします。
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+  dueDate: string; // 追加
+};
+```
+
+このとき:
+
+- `TodoDraft = Partial<Todo>` は自動的に `dueDate?: string` を含む型に更新される。
+- `TodoSummary = Pick<Todo, "id" | "text">` は影響を受けない（`dueDate` は含まないと指定しているから）。
+
+`type TodoDraft = { id?: string; text?: string; ... }` と手で書いていたら、`dueDate?` を追加し忘れる事故が起きます。Utility Types はこれを仕組みで防ぎます。
+
+### その他の Utility Types（コラム）
+
+TS には他にも Utility Types があります。代表的なものを名前だけ紹介します。
+
+- `Readonly<T>`: すべてのプロパティを読み取り専用にする。
+- `Record<K, V>`: キーと値の型を指定したオブジェクト型を作る（`Record<string, number>` など）。
+- `Omit<T, K>`: `Pick` の逆で「指定したプロパティ **以外**」を取り出す。
+- `Required<T>`: `Partial` の逆で「全プロパティを必須にする」。
+
+**このコースでは `Partial` と `Pick` の 2 つだけ** を使います。他は「必要になったときに TS の公式ドキュメントを検索すればすぐ使える」程度に覚えておけば十分です。名前と「こういう用途がある」だけ頭の片隅にあればよい、という距離感です。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
-### ゴール
+<details>
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
-- ログイン / ログアウトの状態で表示を切り替える画面を作る
-- `&&` / 三項 / 早期 return の 3 パターンそれぞれを、別の箇所で 1 回ずつ書く
-
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` と `src/Message.tsx` を書く
-
-### `src/Message.tsx`
-
-```tsx
-type MessageProps = {
+```ts
+export type Todo = {
+  id: string;
   text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+</details>
+
+### 手順 1: `Todo` 型から派生型を作る
+
+「配列・ユニオン・リテラル型・オプショナル」の `src/types.ts` をそのまま使う。`src/main.ts` を次の形に書き換える。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoDraft = Partial<Todo>;
+type TodoSummary = Pick<Todo, "id" | "text">;
+
+const draft: TodoDraft = { text: "新しい TODO" };
+
+const summaries: TodoSummary[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+
+function printSummary(item: TodoSummary): void {
+  console.log(`- [${item.id}] ${item.text}`);
+}
+
+console.log("下書き:");
+console.log(draft);
+
+console.log("一覧:");
+for (const item of summaries) {
+  printSummary(item);
+}
+```
+
+#### 期待出力
+
+```
+下書き:
+{ text: '新しい TODO' }
+一覧:
+- [a1] 牛乳を買う
+- [a2] 本を返す
+- [a3] ゴミを出す
+```
+
+（`draft` の表示形式は環境により `{text: "新しい TODO"}` のように表示される場合もある。プロパティの中身が同じであれば OK。）
+
+### 手順 2: 派生型の嬉しさを確かめる
+
+次のように、`TodoDraft` にはどのプロパティも必須ではないことを確認する。
+
+```ts
+const d1: TodoDraft = {};
+const d2: TodoDraft = { text: "メモだけ" };
+const d3: TodoDraft = { id: "a1", status: "open" };
+```
+
+いずれも赤線が出なければ OK。
+
+次に、`TodoSummary` には `status` を入れられないことを確認する。
+
+```ts
+const s: TodoSummary = { id: "a1", text: "牛乳を買う", status: "open" };
+```
+
+期待されるメッセージ:
+
+```
+Object literal may only specify known properties, and 'status' does not exist in type 'TodoSummary'.
+```
+
+`TodoSummary` は `id` と `text` しか持たない型として派生させたので、`status` を入れようとすると TS が止めてくれる。
+
+### 手順 3: `Partial` で「更新関数」を書く
+
+`Partial<Todo>` は「一部のプロパティだけ変える」という更新のときにも便利。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoDraft = Partial<Todo>;
+
+function updateTodo(todo: Todo, patch: TodoDraft): Todo {
+  return { ...todo, ...patch };
+}
+
+const original: Todo = {
+  id: "a1",
+  text: "牛乳を買う",
+  status: "open",
 };
 
-export function Message({ text }: MessageProps) {
-  // 早期 return: 空文字なら何も描画しない
-  if (text.length === 0) {
-    return null;
-  }
-  return <p className="message">{text}</p>;
+const updated = updateTodo(original, { status: "done", memo: "牛乳コーナー" });
+
+console.log(original);
+console.log(updated);
+```
+
+#### 期待出力
+
+```
+{ id: 'a1', text: '牛乳を買う', status: 'open' }
+{ id: 'a1', text: '牛乳を買う', status: 'done', memo: '牛乳コーナー' }
+```
+
+- 元の `original` は変わらない（イミュータブル更新。4 章 で React と組み合わせて再登場）。
+- `patch` に `id` や `text` を含めてもよいし、含めなくてもよい。`Partial<Todo>` だから。
+
+### 手順 4: 元の型を変えて追従を体験する
+
+`src/types.ts` に `dueDate` プロパティを **一時的に** 追加してみる。
+
+```ts
+// src/types.ts（一時的な変更）
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+  dueDate: string;
+};
+```
+
+`src/main.ts` を見ると、`const original: Todo = { ... }` のところで赤線が出るはず。
+
+期待されるメッセージ:
+
+```
+Property 'dueDate' is missing in type '{ id: string; text: string; status: "open"; }' but required in type 'Todo'.
+```
+
+一方、`TodoSummary`（`Pick<Todo, "id" | "text">`）で作っていた `summaries` のほうは何も言われない。`dueDate` は `TodoSummary` の範囲外だから。
+
+これが **派生型が自動で追従する** 効果。確認できたら `dueDate` の追加は取り消して元に戻す。
+
+### 変えてみる
+
+`TodoSummary` に `status` も含めた新しい型 `TodoListItem` を派生させてみる。
+
+```ts
+type TodoListItem = Pick<Todo, "id" | "text" | "status">;
+
+const items: TodoListItem[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done" },
+];
+
+for (const item of items) {
+  const mark = item.status === "done" ? "x" : " ";
+  console.log(`[${mark}] ${item.text}`);
 }
 ```
 
-### `src/App.tsx`
+期待出力:
 
-```tsx
-import { useState } from "react";
-import { Message } from "./Message";
-import "./App.css";
-
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [unread, setUnread] = useState(0);
-  const [memo, setMemo] = useState("");
-
-  return (
-    <>
-      <h1>条件表示のデモ</h1>
-
-      <section className="box">
-        <h2>(A) 三項演算子: ログイン状態で切り替え</h2>
-        {isLoggedIn ? (
-          <p>ようこそ、Alice さん</p>
-        ) : (
-          <p>ゲストさん、こんにちは</p>
-        )}
-        <button onClick={() => setIsLoggedIn((v) => !v)}>
-          {isLoggedIn ? "ログアウト" : "ログイン"}
-        </button>
-      </section>
-
-      <section className="box">
-        <h2>(B) && で「あるときだけ出す」</h2>
-        <p>未読: {unread}</p>
-        {unread > 0 && <p className="alert">{unread} 件の未読があります</p>}
-        <button onClick={() => setUnread((c) => c + 1)}>+1</button>
-        <button onClick={() => setUnread(0)}>既読にする</button>
-      </section>
-
-      <section className="box">
-        <h2>(C) 早期 return: Message コンポーネント</h2>
-        <input
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          placeholder="空のままだと表示されない"
-        />
-        <Message text={memo} />
-      </section>
-    </>
-  );
-}
-
-export default App;
 ```
-
-### `src/App.css`
-
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
-
-.box button {
-  margin-right: 8px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.alert {
-  color: #b3261e;
-  font-weight: bold;
-}
-
-.message {
-  background-color: #eaf6ff;
-  padding: 6px 10px;
-  border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
-  .alert {
-    color: #ff7a6d;
-  }
-  .message {
-    background-color: #13344d;
-    color: #eee;
-  }
-}
+[ ] 牛乳を買う
+[x] 本を返す
 ```
-
-### 期待出力
-
-- (A) ボタン「ログイン」を押すと、見出し下のメッセージが `ゲストさん、こんにちは` → `ようこそ、Alice さん` に変わる。ボタンの文言も `ログアウト` に変わる
-- (B) `+1` ボタンを押すと「未読」の数字が増え、**1 以上になると初めて** 「N 件の未読があります」が赤文字で現れる。`既読にする` を押すと数字が 0 になり、警告文も消える
-- (C) 入力欄に文字を入れると、下に水色背景の `<p>` が現れる。空にすると `<p>` ごと消える（`null` を返している）
-
-### 変える
-
-- (B) の条件を `unread > 0 &&` から `unread &&` に書き換えて、未読 0 のときに **画面に `0` が表示される** 現象を再現する。確認したら戻す
-- (A) の三項を `&&` と `||` の組み合わせに書き換えてみる（余裕があれば）
-- (C) の `if (text.length === 0)` を `if (text === "")` に変えても同じ動きになることを確認
 
 ### 自分で書く
 
-- 「ステータス」の state を `"offline" | "loading" | "online"` のユニオン型で作る
-- 値に応じて、`offline → 灰色の丸`、`loading → 黄色の丸 + "接続中..."`、`online → 緑の丸 + "接続済み"` を表示する
-- 3 択なので、早期 return か、または `switch` で `if ... return` を 3 本重ねる形がおすすめ
-- ヒント: `const [status, setStatus] = useState<"offline" | "loading" | "online">("offline");`
+`Todo` 型から、次の 2 つの派生型を自分で書く。
+
+1. `TodoWithoutMemo` — `memo` を含まない型。ヒント: `Pick` で `"id" | "text" | "status"` を選ぶ。
+2. `TodoPatch` — すべて省略可能な型（`TodoDraft` と同じ中身でよいので、`Partial<Todo>` を使う）。
+
+それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
+
+## 3 章 のまとめと次章への予告
+
+### 3 章 で作ったもの
+
+- `src/types.ts` に `Todo` 型を定義した（`id`、`text`、`status`、`memo?`）。
+- `Partial<Todo>` で下書き用の `TodoDraft`、`Pick<Todo, "id" | "text">` で一覧用の `TodoSummary` を派生させた。
+- `export type` / `import type` で型を別ファイルから使い回す形を身につけた。
+
+### 次章で何が起きるか
+
+**4 章（React）の「コンポーネントと props」以降で、この `Todo` 型を `import type` してそのまま使います**。
+
+- 「コンポーネントと props」: コンポーネントに型付き `props` を渡すときの `types.ts` として再登場。
+- 「配列を描画する」: 配列描画の題材として `Todo[]` をそのまま渡す。
+- 「TODO アプリを React で作る」: React 版 TODO アプリの型の基盤として、育てた `Todo` 型がそのまま使われる。
+
+つまり、ここまで書いてきた `types.ts` は **この先ずっと生き続けるファイル** です。StackBlitz のプロジェクトは章ごとに作り直しても、`types.ts` の中身はそのままコピーして持っていくのが基本の流れになります。
+
+### コラム: その他の Utility Types
+
+`Readonly<T>` / `Record<K, V>` / `Omit<T, K>` / `Required<T>` などは本コースでは扱いません。必要な場面に出会ったら TS 公式ドキュメント（<https://www.typescriptlang.org/docs/handbook/utility-types.html>）の該当項目を読めば、基本の使い方はすぐ身につきます。Utility Types はどれも「既にある型から別の型を作る」という同じ考え方の延長線上にあります。
 
 ## まとめ
 
-- JSX の中に書けるのは式だけ。条件分岐も **式の形** で書く
-- `&&`: あるときだけ出す（ただし数値 0 に注意）
-- 三項演算子: 2 択の切り替え
-- 早期 return（`return null` を含む）: 3 択以上 / それぞれが大きいとき
-- 条件が増えてきたら **コンポーネント分割** も選択肢
+- Utility Types は「既にある型から新しい型を派生させる道具」。手で別の `type` を書く代わりに、仕組みで自動追従させる。
+- `Partial<T>`: すべて省略可能にする。下書きや更新の差分に使える。
+- `Pick<T, K>`: 特定のプロパティだけ取り出す。一覧用の軽い型に使える。
+- `Todo` 型から `TodoDraft` と `TodoSummary` を派生させた。この `Todo` 型は4 章 の「コンポーネントと props」以降で React の props として `import type` して再利用する。
+- 他の Utility Types（`Readonly` / `Record` / `Omit` / `Required` など）は本コースでは扱わない。必要になったら公式ドキュメントを参照する。

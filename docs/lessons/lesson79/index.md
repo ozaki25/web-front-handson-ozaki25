@@ -1,368 +1,276 @@
-# lesson79: Metadata API で SEO を整える
+# lesson79: Server Actions の最小形
 
 ## ゴール
 
-- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
-- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
-- `generateMetadata` で動的にタイトルや説明文を組み立てられる
-- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
-- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
+- `<form action={fn}>` に **関数** を渡してサーバー側で処理できることを理解します。
+- `"use server"` の配置ルール（ファイル先頭 or 関数先頭、async 必須、Client 内には書けない）を覚えます。
+- `FormData.get("...")` で送信値を取り出し、サーバー側の配列に追加できます。
+- `revalidatePath` の仕組みを図で把握し、送信後に一覧が自動更新される流れを追えます。
 
 ## 解説
 
-### 「SEO を整える」とは
+### `preventDefault` が要らなくなる
 
-SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
+2 章 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（4 章）でも `onSubmit` の中で同じことをしていました。
 
-- `<title>`: ブラウザタブの文字、検索結果の見出し
-- `<meta name="description">`: 検索結果の説明文
-- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
-- `<link rel="icon">`: タブの左に出る favicon
+React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React が送信イベントを **自動で止めて** その関数を呼んでくれます。結果として、以下の対比になります。
 
-これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
+| 書き方 | 送信のデフォルトを止める |
+|---|---|
+| 2 章 の素の JS | `event.preventDefault()` を手書き |
+| 4 章 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
+| **本レッスンの `<form action={fn}>`** | **React が自動で止める** |
 
-### Metadata API の 2 系統
+`preventDefault` という呼び出しが消えることに注目しておきましょう。
 
-書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
+### Server Actions とは
 
-1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
-2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
+`<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
 
-### 静的 `metadata` export
+- クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
+- 戻り値はありません（あっても無視されます。戻り値を使いたいときは別のレッスンの `useActionState`）。
+- 関数は **必ず `async`** です。
 
-`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
+### `"use server"` の配置ルール
 
-```tsx
-// app/about/page.tsx
-import type { Metadata } from "next";
+Server Action であることを示すには、次のどちらかの場所に `"use server"` と書きます。
 
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
+1. **ファイル先頭に書く**: そのファイル内で `export` されている **async 関数すべて** が Server Action になります。最もよく使う形です。
+   ```ts
+   // app/actions.ts
+   "use server";
 
-export default function AboutPage() {
-  return <h1>About</h1>;
-}
+   export async function addTodo(formData: FormData) {
+     // サーバー側で動く
+   }
+
+   export async function deleteTodo(id: string) {
+     // これも Server Action
+   }
+   ```
+
+2. **関数の先頭行に書く**: その関数だけが Server Action になります。Server Component の中にインラインで定義する場合に使います。
+   ```tsx
+   export default async function Page() {
+     async function addTodo(formData: FormData) {
+       "use server";
+       // この関数だけ Server Action
+     }
+     return <form action={addTodo}>...</form>;
+   }
+   ```
+
+ルール:
+
+- **必ず async 関数** です。同期関数に `"use server"` は書けません。
+- **Client Component の中（`"use client"` のファイル内）には書けません**。Client から使いたいときは、別ファイルで `"use server"` を書いて `import` します。
+- `"use server"` を書いたファイルからの **`export` は async 関数だけ** にするのが安全です。値（普通の `const`）や非 async 関数を `export` するとビルド時に警告やエラーが出ることがあります。
+- 例外として **型の `export type`** は問題ありません（TypeScript の型情報はビルド後の JS には残らないためです）。
+
+本コースでは **(1) のファイル先頭パターン** を使います（分離が分かりやすいためです）。
+
+### データの保存先（本コースでの割り切り）
+
+本コースではデータベースは使いません。代わりに、`app/actions.ts` のモジュールトップレベルに **ただの配列** を置いて、擬似的な永続化とします。
+
+**開発時（dev）の注意**: StackBlitz や `next dev` では、`app/actions.ts` を編集するたびにモジュールが再評価され、`const todos: Todo[] = []` が初期化し直されて中身が消えます。動作確認のコツは「**追加したら actions.ts を編集しない**」です。本物の永続化が必要な場合は DB を使うのが正攻法です。
+
+```ts
+// app/actions.ts
+"use server";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
 ```
 
-Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
+- サーバーのプロセスが生きている間は `todos` が残ります（同じプロセス内の呼び出しは同じ配列を共有します）。
+- **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（「Vercel にデプロイする」末尾でも再度注意を書きます）。
 
-### 動的 `generateMetadata`
+### `revalidatePath` の仕組み
 
-URL から情報を取ってタイトルを作るときに使います。
+Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッシュされます。Server Action が配列を変更しても、そのままではキャッシュされた古い画面が残ります。
 
-```tsx
-// app/posts/[id]/page.tsx
-import type { Metadata } from "next";
+`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** されます。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画されます。
 
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  const post = await res.json();
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
+```mermaid
+sequenceDiagram
+  participant Browser as ブラウザ
+  participant Page as /todos page.tsx (Server)
+  participant Action as addTodo (Server Action)
+  participant Store as todos 配列
 
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
+  Browser->>Page: アクセス
+  Page->>Store: 配列を読む
+  Store-->>Page: [] (空)
+  Page-->>Browser: 空の一覧
+
+  Browser->>Action: <form action> で送信
+  Action->>Store: push(new)
+  Action->>Page: revalidatePath('/todos')
+  Note right of Page: キャッシュ無効化
+  Action-->>Browser: 完了
+  Browser->>Page: 再レンダリング(自動)
+  Page->>Store: 配列を読む
+  Store-->>Page: [new]
+  Page-->>Browser: 更新された一覧
 ```
-
-- `generateMetadata` は非同期関数にできます
-- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
-- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
-- 戻り値は `Metadata` 型のオブジェクト
-
-`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
-
-### `title.template` でサイト全体を揃える
-
-記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
-
-```tsx
-// app/layout.tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-};
-```
-
-- `default`: ページ側でタイトルを書いていないときに使う既定値
-- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
-
-ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
-
-### Open Graph を足す
-
-SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
-
-```tsx
-export const metadata: Metadata = {
-  title: "My Next Site",
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
-```
-
-最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
-
-### favicon / apple-touch-icon は **ファイル配置だけで OK**
-
-Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
-
-- `app/favicon.ico` → `<link rel="icon">`
-- `app/icon.png` / `app/icon.svg` → 同上
-- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
-
-`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
-
-### Server Component の前提
-
-`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
 
 <details>
-<summary>出発点のファイル</summary>
+<summary>出発点のファイル（TODO の最小出発点）</summary>
 
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
+**`app/todos/page.tsx`**（空でもよい。本文の手順 3 で全量置き換えます）
 
 ```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-**`app/about/page.tsx`**
-
-```tsx
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
-```
-
-</details>
-
-### ゴール
-
-- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
-- `app/about/page.tsx` に静的 metadata を追加する
-- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
-- ブラウザタブの文字が各ページで変わることを確認する
-
-### 手順
-
-1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
-2. `app/about/page.tsx` に静的 `metadata` export を追加
-3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
-4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
-
-### 主要ファイルの完成形
-
-**`app/layout.tsx`**
-
-```tsx
-import type { Metadata, ReactNode } from "next";
-import Link from "next/link";
-
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-注: `ReactNode` は本来 `react` から import しますが、上の例ではシンプルさのため `next` からの型 import にまとめています。実案件では `import type { ReactNode } from "react";` に分けて書いても構いません。
-
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
-
-**`app/about/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const res = await fetch(
-    `https://jsonplaceholder.typicode.com/posts/${id}`,
-    { cache: "force-cache" }
-  );
-  if (!res.ok) {
-    return {
-      title: "記事が見つかりません",
-    };
-  }
-  const post: Post = await res.json();
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  const res = await fetch(
-    `https://jsonplaceholder.typicode.com/posts/${id}`,
-    { cache: "force-cache" }
-  );
-  const post: Post = await res.json();
-
+export default function TodosPage() {
   return (
     <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
     </>
   );
 }
 ```
 
+`app/types.ts` と `app/actions.ts` は、本文の手順 1・手順 2 で新規作成するので事前準備は不要です。
+
+</details>
+
+### 前回のプロジェクトを開く
+
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
+
+### 手順 1: `Todo` 型を用意
+
+3 章 で決めた `Todo` 型を、Next.js プロジェクトでも再利用します。`app/types.ts` を作ります。
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+### 手順 2: `app/actions.ts` を作る
+
+先頭に `"use server"` を書きます。モジュールトップレベルに配列とアクションを書きます。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+// 戻り値の型（3 章 「判別共用体」そのもの）
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
+
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
+}
+```
+
+ポイント:
+
+- `"use server"` はファイルの **1 行目** に書きます。
+- `const todos: Todo[] = []` が「永続化の代わり」です。サーバーが生きている間だけ保持されます。
+- `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
+- `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
+- `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
+- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体**（discriminated union） そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は別のレッスンで `useActionState` と結合するとき効きます。
+
+### 手順 3: `/todos` を本物のページにする
+
+`app/todos/page.tsx` を書き換えます。
+
+```tsx
+import { addTodo, listTodos } from "../actions";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+ポイント:
+
+- このファイルは Server Component です（`"use client"` を書きません）。
+- `<form action={addTodo}>` に関数を直接渡しています。
+- `event.preventDefault()` も `onSubmit` も書いていません。React が自動で止めます。
+- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（1 章 で学んだ `name` 属性がここで効いています）。
+
 ### 期待出力
 
-ブラウザで次のように動きます。
+1. `/todos` を開くと、入力欄・追加ボタン・空の `<ul>` が見えます。
+2. 「買い物」と入力して「追加」を押す → `<ul>` に「買い物」が 1 件追加されます。
+3. 「課題」を入力して追加 → 2 件目として「課題」が追加されます。
+4. ブラウザの DevTools → Network タブを見ると、送信時に POST が飛び、200 で返ってきています。
+5. **リロードしても消えません**（サーバープロセスが生きているためです）。ただし StackBlitz を開き直したり、プロジェクトを再起動すると配列がリセットされ、すべて消えます。
 
-1. `/` を開く → タブのタイトルが `My Next Site`
-2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
-3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
-4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
+### 変えてみる
 
-### 変える
+1. `addTodo` の中で `console.log("addTodo", text)` を追加しましょう。StackBlitz のターミナル側にログが出ることを確認します（Server Actions はサーバーで動く証拠です）。
+2. `revalidatePath("/todos")` をコメントアウトして、追加ボタンを押すとどうなるか試しましょう。一覧が更新されなくなります（手動で再読み込みすると更新されます）。確認したら戻します。
+3. `<input>` の `placeholder` を自分の好きなテキストに変えましょう。
 
-- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
-- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
-- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
+### スコープ外
+
+- 送信中のボタン無効化、空入力エラー表示は 別のレッスン で追加します。本レッスンでは最小形に集中します。
+- `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
 
 ### 自分で書く
 
-- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
-- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
-- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
+`/memo` という別ページを作り、`addMemo`（サーバー側に `const memos: string[] = []` を持つ）で「メモを追加して下に並べる」だけの最小アプリを作ってみましょう。`types.ts` や `actions.ts` は新しく別ファイルで作っても、既存の `actions.ts` に追記しても構いません。
 
 ## まとめ
 
-- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
-- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
-- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
-- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
-- `metadata` / `generateMetadata` は Server Component 側でだけ書く
-- 別のレッスンで、ページの待ち時間をより良く見せる **Loading UI と Streaming** を扱う
+- `<form action={fn}>` に関数を渡すと、React が自動で送信を止めて `fn` を呼びます。`preventDefault` は要りません。
+- Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
+- データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
+- `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
+- 別のレッスンで、送信中の状態表示とエラー表示を `useActionState` / `useFormStatus` で追加します。`addTodo` のシグネチャもそこで少し変えます。
+
+### コラム: `revalidateTag`
+
+`revalidatePath` はパス単位で無効化します。もっと細かく、「`fetch` にタグを付けておき、その **タグ** だけ無効化する」方法もあります。
+
+```ts
+// 読み込み側: タグを付ける
+await fetch(url, { next: { tags: ["todos"] } });
+
+// Server Action 側: タグで無効化
+import { revalidateTag } from "next/cache";
+revalidateTag("todos");
+```
+
+複数ページで同じデータを使っているときに便利です。本コースでは扱いませんが、実務では頻出です。

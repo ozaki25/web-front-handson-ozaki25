@@ -1,117 +1,172 @@
-# lesson26: 非同期処理の基本
+# lesson26: 配列の変換
 
 <script setup>
 const demoJs = `
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const users = [
+  { name: 'Alice', age: 20 },
+  { name: 'Bob',   age: 15 },
+  { name: 'Carol', age: 30 },
+];
 
-async function main() {
-  console.log('start');
-  await wait(1000);
-  console.log('1 秒後');
-  await wait(1000);
-  console.log('さらに 1 秒後（計 2 秒）');
-  console.log('end');
-}
+const names  = users.map((u) => u.name);
+const adults = users.filter((u) => u.age >= 20);
+const first  = users.find((u) => u.age >= 20);
 
-main();
+console.log('map   (名前だけ):', names);
+console.log('filter(成人だけ):', adults);
+console.log('find  (最初の成人):', first);
+console.log('元の配列は変わらない:', users);
 `
 </script>
 
 ## ゴール
 
-- 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
-- `async` / `await` を使って「結果を待ってから続ける」書き方ができる
-- Promise を「まだ完了していない結果を表す箱」として直感的に理解する
+- `map` で配列の各要素を変換した新しい配列を作れる
+- `filter` で条件に合う要素だけを残した新しい配列を作れる
+- いずれも元の配列を変えない（新しい配列を返す）ことを理解する
 
 ## 解説
 
-### 同期と非同期
+### 「全部変換する」`map`
 
-ここまで書いてきた処理は、上から順にすぐ実行されていました。これを **同期処理** と呼びます。
-
-```js
-console.log("A");
-console.log("B");
-console.log("C");
-// 出力: A → B → C
-```
-
-一方で、「ネットワーク通信」「一定時間待つ」など、**時間がかかる処理** もあります。こうした処理は、途中で止まらず後続のコードを先に進めておく仕組みになっています。これを **非同期処理** と呼びます。
+`map` は配列の各要素に関数を適用して、結果を並べた **新しい配列** を返します。
 
 ```js
-console.log("A");
-setTimeout(() => {
-  console.log("B");
-}, 1000);
-console.log("C");
-// 出力: A → C → （1秒後に）B
+const numbers = [1, 2, 3, 4];
+const doubled = numbers.map((n) => n * 2);
+
+console.log(doubled); // [2, 4, 6, 8]
+console.log(numbers); // [1, 2, 3, 4] （元は変わらない）
 ```
 
-`setTimeout(関数, ミリ秒)` は「指定時間後に関数を呼ぶ」ブラウザの機能です。1 秒待っている間に `C` が先に出る、というのが非同期の挙動です。
+- `配列.map((要素) => 新しい値)`
+- 戻り値は **同じ長さの新しい配列**
+- 元の配列は変わらない
 
-### Promise というもの
-
-非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise（プロミス）** という仕組みがあります。
-
-- `fetch` は「結果そのもの」ではなく「Promise」を返す
-- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
-- Promise は「いつか結果が入る箱」
-- 結果を取り出すには「箱が埋まるのを待つ」必要がある
-
-本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
-
-### `async` / `await`
-
-関数の前に `async` と書き、Promise を返す処理の前に `await` と書くと、「結果が返ってくるのを待ってから続きを実行」できます。
+オブジェクトの配列でもよく使います。
 
 ```js
-async function main() {
-  console.log("start");
-  await wait(1000);   // 1 秒待つ
-  console.log("end"); // 1 秒後に実行される
-}
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+];
 
-main();
+const names = users.map((user) => user.name);
+console.log(names); // ["Alice", "Bob"]
 ```
 
-- `async function` は「中で `await` を使える関数」
-- `await Promise` は「その Promise の結果が返るまで待つ」
-- `await` は `async function` の中でしか使えない
+### 「条件で絞り込む」`filter`
 
-### `wait(ms)` 関数（コピペで使う）
-
-「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
+`filter` は条件を満たす要素だけを残した **新しい配列** を返します。
 
 ```js
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const numbers = [1, 2, 3, 4, 5];
+const evens = numbers.filter((n) => n % 2 === 0);
+
+console.log(evens);   // [2, 4]
+console.log(numbers); // [1, 2, 3, 4, 5]
 ```
 
-この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
+- `配列.filter((要素) => 条件)`
+- 条件が `true` の要素だけが残る
+- 戻り値は **同じかそれより短い新しい配列**
+- 元の配列は変わらない
 
-下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
+オブジェクトの配列で絞り込む例。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
+// [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
+```
+
+下のデモで、同じ配列に対して `map` / `filter` / `find` がそれぞれどんな結果を返すかを並べて比較できます。元の配列は変わらない点にも注目してください。
 
 <LiveDemo
-  height="240px"
-  :html="`<p>await が実際に時間を待つ様子:</p>`"
+  height="260px"
+  :html="`<p>同じ配列に対する map / filter / find の結果:</p>`"
   :css="``"
   :js="demoJs"
 />
 
-### 次への橋渡し
+### `for...of` との違い
 
-**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば別のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+「繰り返し処理」の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
 
-「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
+- 「変換 / 絞り込み」という **意図が名前で伝わる**
+- 結果が新しい配列で返るので、元の配列を壊さない
+- 1 行で書けて短い
+
+特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
+
+### 「1 件だけ取り出す」`find`
+
+`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const found = users.find((user) => user.age >= 20);
+console.log(found); // { name: "Alice", age: 20 }
+
+const missing = users.find((user) => user.age >= 100);
+console.log(missing); // undefined
+```
+
+- `配列.find((要素) => 条件)`
+- 戻り値は **1 件の要素**（配列ではない）
+- 該当がなければ `undefined`
+- `filter` と違って、見つけた時点で走査を打ち切る
+
+ID で目的の 1 件を取り出すような場面でよく使います。
+
+```js
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+];
+
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target); // { id: "a2", text: "本を返す" }
+```
+
+5 章 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
+
+### チェーン（つなげて書く）
+
+`map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+
+console.log(adultNames); // ["Alice", "Carol"]
+```
+
+「成人だけ絞り込んでから、名前だけ取り出す」という流れが素直に書けます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「これまでに作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -125,88 +180,61 @@ function wait(ms) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson25</title>
-    <script type="module" src="./main.js"></script>
+    <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson25: import / export</h1>
-    <ul id="list"></ul>
+    <h1>lesson25: 分割代入とスプレッド</h1>
   </body>
 </html>
 ```
 
-**`storage.js`**
+**`script.js`**
 
 ```js
-const STORAGE_KEY = "module-todos";
+// 演習 A: 分割代入
+const user = { name: "Alice", age: 20, city: "Tokyo" };
 
-export function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error);
-    return [];
-  }
-}
+const { name, age } = user;
+console.log(name);
+console.log(age);
 
-export function saveTodos(todos) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
-```
+const colors = ["red", "green", "blue"];
+const [first, second] = colors;
+console.log(first);
+console.log(second);
 
-**`render.js`**
+// 演習 B: スプレッド
+const copy = { ...user };
+console.log(copy);
 
-```js
-export function renderTodos(listElement, todos) {
-  listElement.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    listElement.appendChild(li);
-  }
-}
-```
+const updated = { ...user, age: 21 };
+console.log(updated);
+console.log(user);
 
-**`main.js`**
+const a = [1, 2];
+const b = [3, 4];
+const merged = [...a, ...b];
+console.log(merged);
 
-```js
-import { loadTodos, saveTodos } from "./storage.js";
-import { renderTodos } from "./render.js";
-
-const list = document.querySelector("#list");
-
-let todos = loadTodos();
-
-if (todos.length === 0) {
-  todos = [
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "本を読む" },
-    { id: "a3", text: "掃除する" },
-  ];
-  saveTodos(todos);
-}
-
-renderTodos(list, todos);
+const todos = ["牛乳を買う", "本を読む"];
+const added = [...todos, "ジョギング"];
+console.log(added);
+console.log(todos);
 ```
 
 </details>
 
 ### ゴール
 
-- `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る
+- ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
+- ユーザー配列から「名前だけ」の配列を作る
+- 2 つを組み合わせて「成人の名前だけ」の配列を作る
+- ID で TODO の 1 件を取り出す（`find`）
 
 ### 手順
 
 1. `index.html` のタイトルを `lesson26` に変える
-2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
+2. `script.js` を以下に書き換える
 
 ### `index.html`
 
@@ -220,7 +248,7 @@ renderTodos(list, todos);
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson26: 非同期処理の基本</h1>
+    <h1>lesson26: 配列の変換</h1>
   </body>
 </html>
 ```
@@ -228,60 +256,76 @@ renderTodos(list, todos);
 ### `script.js`
 
 ```js
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+  { name: "Dave", age: 17 },
+];
 
-async function main() {
-  console.log("start");
-  await wait(1000);
-  console.log("1 秒経過");
-  await wait(1000);
-  console.log("2 秒経過");
-  await wait(1000);
-  console.log("3 秒経過");
-  console.log("end");
-}
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
 
-main();
+const names = users.map((user) => user.name);
+console.log(names);
 
-console.log("main を呼んだ後のコード");
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+console.log(adultNames);
+
+const numbers = [1, 2, 3, 4, 5];
+const doubled = numbers.map((n) => n * 2);
+const evens = numbers.filter((n) => n % 2 === 0);
+console.log(doubled);
+console.log(evens);
+console.log(numbers);
+
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target);
+
+const missing = todos.find((todo) => todo.id === "zzz");
+console.log(missing);
 ```
 
 ### 期待出力
 
-Console に、1 秒ごとに以下が順に追加されます。
-
 ```
-start
-main を呼んだ後のコード
-1 秒経過
-2 秒経過
-3 秒経過
-end
+[{name: "Alice", age: 20}, {name: "Carol", age: 30}]
+["Alice", "Bob", "Carol", "Dave"]
+["Alice", "Carol"]
+[2, 4, 6, 8, 10]
+[2, 4]
+[1, 2, 3, 4, 5]
+{id: "a2", text: "本を返す"}
+undefined
 ```
 
-ポイント:
-
-- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
-- `main` の内部は `await` があるので、順番に待ちながら進む
-- 合計で「約 3 秒」かけて順番にログが出る
+最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
 
 ### 変える
 
-- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
-- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
-- `main()` の呼び出しを削除すると、何も実行されないことを確認
+- `filter` の条件を `user.age < 20` に変えて「未成年」を取り出す
+- `map` を `(user) => user.age` に変えて「年齢だけ」の配列を作る
+- チェーンの `filter` と `map` の順番を入れ替えるとどうなるか考える（先に `map` で名前にしてしまうと `user.age` が使えなくなる）
 
 ### 自分で書く
 
-- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
-- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
+- 数値配列 `[10, 25, 7, 42, 3]` から「10 以上のものだけ」を残す → `[10, 25, 42]`
+- 文字列配列 `["apple", "banana", "cherry"]` から「すべて大文字に変えた新しい配列」を作る（ヒント: `s.toUpperCase()`）→ `["APPLE", "BANANA", "CHERRY"]`
+- TODO の配列 `[{ id: "1", text: "A" }, { id: "2", text: "B" }, { id: "3", text: "C" }]` から `id: "2"` だけを除いた新しい配列を作る（`filter` を使う）
 
 ## まとめ
 
-- 同期は「上から順にすぐ実行」、非同期は「時間がかかる処理を待たずに先へ進む」
-- 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
-- `async` 関数の中で `await Promise` すると、結果が返るまで待てる
-- `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
-- **戻り値が Promise の関数・メソッドには `await` が必要**。別のレッスンの `fetch` / `response.json()` で実例を扱う
+- `map` は「同じ長さの新しい配列を作る」変換
+- `filter` は「条件で絞り込んだ新しい配列を作る」抽出
+- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
+- どれも元の配列は変えない
+- チェーンすると複数の処理を 1 行でつなげられる
+- **`find` は5 章 の「動的ルート」（詳細取得、URL の `id` から 1 件取り出す）で再登場する**
+- **`map` は4 章 の「配列を描画する」で JSX の配列を作る形で再登場する**

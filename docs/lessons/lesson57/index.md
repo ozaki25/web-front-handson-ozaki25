@@ -1,168 +1,125 @@
-# lesson57: TODO アプリを React で作る
-
-4 章 の仕上げです。2 章 の「TODO アプリを作る」で素の JS + DOM で作った TODO アプリを、4 章 で学んだ React + TS に全面移植します。さらに **localStorage で保存・復元する螺旋** を閉じます。4 章 で扱わなかった **オブジェクト state のイミュータブル更新** もここで扱います。
-
-想定時間は **60〜120 分** です。焦らず段階的に組み立てましょう。
+# lesson57: useReducer で複雑な state
 
 ## ゴール
 
-- 2 章 の「TODO アプリを作る」の TODO アプリを React + TS に移植し、3 つのコンポーネント（`TodoInput` / `TodoList` / `TodoItem`）に分割できます。
-- 3 章 の `Todo` 型を `import type` して使えます。
-- `useState` の **初期値関数** を使って localStorage から復元できます。
-- `useEffect` で localStorage に保存できます。
-- オブジェクト state のイミュータブル更新（`setX(prev => ({ ...prev, ... }))`）が書けます。
-- 初期値関数を使わない **誤実装の書き戻しバグ** を体験してから、正しい形に直せます。
+- `useReducer` で複数の操作をまとめた state 管理が書ける
+- reducer 関数の形 `(state, action) => newState` を理解する
+- action の型を判別共用体で書ける
+- reducer は純粋関数でなければならないことを理解する
 
 ## 解説
 
-### 2 章 の「TODO アプリを作る」で作ったものを思い出す
+### 最初に: 再接続
 
-2 章 の「TODO アプリを作る」で、素の HTML + JS + localStorage で TODO アプリを作りました。構成は次のようなものでした。
+この `Action` 型は3 章 の「判別共用体」で学んだ **判別共用体** そのものです。`type` プロパティで種類を見分ける形、`switch` での分岐、網羅性チェック、すべてそのまま使います。3 章 の「判別共用体」で書いた `TodoState` の代わりに、今回は「どういう更新をしたいか」を表すオブジェクトを同じ仕組みで表現します。
 
-- `<input>` と「追加」ボタン、`<ul>` の一覧、各 `<li>` に「削除」ボタン
-- `todos` という配列を JS で持つ
-- 追加: 配列に push → 画面を描き直す
-- 削除: 配列から filter → 画面を描き直す
-- localStorage に保存・復元
+### なぜ useState だけだと辛くなるか
 
-これを React で書き直すとどう変わるでしょうか。主な違いは次の 3 点です。
-
-1. **配列を `useState` で持つ**: 自分で `render()` を呼ばなくても、`setTodos` を呼べば自動で描き直されます。
-2. **コンポーネントに分割する**: 入力欄、一覧、1 件、の 3 つに分けて見通しを良くします。
-3. **配列の更新はイミュータブル**: `push` / `splice` は使わず、新しい配列を作ります（「イベントと配列のイミュータブル更新」で学びました）。
-
-### 使う型（3 章 の `Todo`）
-
-3 章 の「TypeScript ってなに？」〜「オブジェクトの型と type エイリアス」で `types.ts` に次の型を育ててきました。
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
-
-今回は `status` と `memo` は使いません（統合ですが、必要最小限にとどめます）。実装中は `id` と `text` だけ参照します。
-
-### コンポーネント分割の設計
-
-今回は 3 つに分けます。
-
-```
-App
-├── TodoInput   ← 入力欄 + 追加ボタン
-└── TodoList    ← 一覧全体
-    └── TodoItem (todos.length 個)   ← 1 行
-```
-
-各コンポーネントの props は次のとおりです。
-
-```ts
-// TodoInput の props
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-// TodoList の props
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-};
-
-// TodoItem の props
-type TodoItemProps = {
-  todo: Todo;
-  onDelete: (id: string) => void;
-};
-```
-
-**状態の持ち主** は一番上の `App` です。`TodoInput` は「追加しました」を `onAdd` で伝えるだけ。`TodoList` と `TodoItem` は描画と削除イベントの伝達だけを担います（「親子コンポーネントの連携」で学んだ state lifting の応用です）。
-
-### localStorage と `useEffect` の組み合わせ（ここで注意が必要）
-
-素直に書くと次のようにしたくなります。
+「イベントと配列のイミュータブル更新」で作った TODO は、`setTodos` を呼ぶパターンが 3 種類ありました。
 
 ```tsx
-// NG: 誤った実装
-const [todos, setTodos] = useState<Todo[]>([]);
+// 追加
+setTodos((prev) => [...prev, newTodo]);
 
-useEffect(() => {
-  const saved = localStorage.getItem("todos");
-  if (saved) setTodos(JSON.parse(saved));
-}, []);
+// 削除
+setTodos((prev) => prev.filter((t) => t.id !== id));
 
-useEffect(() => {
-  localStorage.setItem("todos", JSON.stringify(todos));
-}, [todos]);
+// 完了切替（今回追加したい）
+setTodos((prev) =>
+  prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+);
 ```
 
-一見正しそうに見えます。でも **この書き方には落とし穴があります**。
+今はまだ読めますが、操作が増えるにつれて「`setTodos` の書き方が画面のあちこちに散る」「同じ処理を別の場所でも書きたくなる」という問題が出てきます。
 
-初回レンダリング直後のタイミングを追うと、
+`useReducer` は、**state の更新ロジックを 1 箇所に集める** 仕組みです。画面側は「こういう操作をしたい」という **action** を投げるだけになります。
 
-1. `useState([])` で `todos = []`（空配列）で初期化されます
-2. 初回レンダリング完了
-3. 2 つ目の `useEffect`（保存用）が動く → `localStorage.setItem("todos", "[]")` で **localStorage を空配列で上書きしてしまう**
-4. 1 つ目の `useEffect`（読み込み用）が動く → もう遅い
-
-つまり **ページを開くたびに一度 `localStorage` が空になります**。以後のセッションで追加した内容は保存されますが、タブを開き直すと毎回 `todos` が空にリセットされる（ように見える）のです。
-
-#### 解決策: `useState` の初期値関数
-
-この問題を一番シンプルに避ける書き方が **`useState` の初期値関数** です。
+### useReducer の形
 
 ```tsx
-// OK: 正しい実装
-const [todos, setTodos] = useState<Todo[]>(() => {
-  try {
-    const saved = localStorage.getItem("todos");
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
+import { useReducer } from "react";
+
+const [state, dispatch] = useReducer(reducer, initialState);
+```
+
+- 第 1 引数: **reducer 関数** `(state, action) => newState`
+- 第 2 引数: **初期 state**
+- 戻り値: `[今の state, dispatch 関数]`
+
+`dispatch(action)` を呼ぶと、React が内部で `reducer(現在の state, action)` を実行し、その戻り値を新しい state として保持します。
+
+### reducer 関数の中身
+
+reducer は「今の state」と「action」を受け取って「次の state」を返すだけの関数です。
+
+```tsx
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "increment":
+      return { count: state.count + 1 };
+    case "decrement":
+      return { count: state.count - 1 };
+    case "reset":
+      return { count: 0 };
   }
-});
-
-useEffect(() => {
-  localStorage.setItem("todos", JSON.stringify(todos));
-}, [todos]);
+}
 ```
 
-`useState(initialValue)` の `initialValue` に **関数を渡す** と、その関数は **コンポーネントの初回レンダリングのときだけ** 実行されます。ここで `localStorage` から読み込みます。
+ポイントは 3 つです。
 
-- 初回レンダリングで `todos` にはすでに復元済みの配列が入っています
-- その後 `useEffect([todos])` が動きますが、そのときの `todos` は復元済みなので同じ内容を書き戻すだけです
-- 空配列で上書きするバグは起きません
+1. **新しいオブジェクト / 配列を返す**（イミュータブル更新、これまでと同じ原則）
+2. **副作用を起こさない**（ログ出力、`localStorage`、`fetch` などは書かない）
+3. **同じ入力には同じ出力**（乱数や `Date.now()` も使わない）
 
-`try` / `catch` で囲んでいるのは、`localStorage` に不正な JSON が保存されていた場合（何かの事故で壊れた場合）に `JSON.parse` が例外を投げるためです。2 章 の「fetch で API から取得する」で学んだ `try` / `catch` の復習になっています。
+これを **純粋関数** と呼びます。reducer は純粋関数でなければなりません。
 
-### オブジェクト state のイミュータブル更新
+### 純粋関数の原則と Strict Mode
 
-「イベントと配列のイミュータブル更新」では配列の state 更新（`[...prev, newItem]` など）を扱いました。オブジェクトを state にするときも同じ発想が必要になります。
+React の Strict Mode は、開発時に reducer を **意図的に 2 回呼びます**。副作用を書いてしまうと 2 回走って気づけるようにする仕組みです。「reducer 内で `console.log` したら 2 回出た」ときは、Strict Mode が純粋関数違反を検出している合図です。
+
+### action の型は判別共用体で
+
+action は「操作の種類」を表すオブジェクトです。`type` というプロパティで種類を見分けます。3 章 の「判別共用体」で学んだ判別共用体が、そのまま action の型になります。
+
+```ts
+type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
+```
+
+`switch (action.type)` で分岐すると、TypeScript は各ブランチで「この action にはどのプロパティがあるか」を正確に絞り込んでくれます。`case "add"` の中では `action.text` が見え、`case "delete"` の中では `action.id` が見える、という形です。
+
+### dispatch を呼ぶ側
+
+画面側（コンポーネントの JSX）からは `dispatch(action)` を呼ぶだけです。
 
 ```tsx
-type Settings = { theme: "light" | "dark"; fontSize: number };
-const [settings, setSettings] = useState<Settings>({ theme: "light", fontSize: 16 });
-
-// NG: 直接書き換えは効かない
-settings.theme = "dark";
-setSettings(settings); // 同じオブジェクトなので React は変化を検知できない
-
-// OK: 新しいオブジェクトを作って渡す
-setSettings((prev) => ({ ...prev, theme: "dark" }));
+dispatch({ type: "add", text: "牛乳を買う" });
+dispatch({ type: "delete", id: "abc" });
+dispatch({ type: "toggle", id: "abc" });
 ```
 
-`prev => ({ ...prev, ... })` のパターンは今後も頻出します。今回の TODO では直接使いませんが、演習の末尾でこの形に触れます。
+「追加ロジック」「削除ロジック」は reducer 側に集まっているので、画面側は「何をしたいか」だけを伝えれば済みます。
+
+### useState と useReducer の使い分け
+
+| 状況 | おすすめ |
+| --- | --- |
+| 値が 1 つの単純な state | `useState` |
+| 複数の関連する更新パターン | `useReducer` |
+| 次の state が前の state に強く依存する | `useReducer` |
+
+画面の中で「いくつも `setX` を並べる」のがしんどくなったら `useReducer` の出番です。
 
 ## 演習
 
 ### 途中から始める場合
 
-「カスタムフック」までで作ったプロジェクト（`useTodos` カスタムフックを含む）があればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンはステップ 1 から新規に組み直す前提でも進められるように書いていますが、`useTodos` を先に持っていると `App.tsx` をそのフックベースに差し替える形で学べます。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` を新しい形（`done` 付き + `Action` 型）に書き換えて進めます。
 
 <details>
-<summary>出発点のファイル（<code>useTodos</code> 版）</summary>
+<summary>出発点のファイル</summary>
 
 **`src/types.ts`**
 
@@ -170,461 +127,358 @@ setSettings((prev) => ({ ...prev, theme: "dark" }));
 export type Todo = {
   id: string;
   text: string;
-  done: boolean;
 };
-```
-
-**`src/useTodos.ts`**
-
-```ts
-import { useState } from "react";
-import type { Todo } from "./types";
-
-export function useTodos() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  const addTodo = (text: string) => {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    setTodos((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), text: trimmed, done: false },
-    ]);
-  };
-
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const toggleTodo = (id: string) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    );
-  };
-
-  return { todos, addTodo, deleteTodo, toggleTodo };
-}
-```
-
-**`src/TodoInput.tsx`**
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    onAdd(text);
-    setText("");
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="やることを入力"
-      />
-      <button type="submit">追加</button>
-    </form>
-  );
-}
-```
-
-**`src/TodoList.tsx`**
-
-```tsx
-import type { Todo } from "./types";
-
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-  onToggle: (id: string) => void;
-};
-
-export function TodoList({ todos, onDelete, onToggle }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p>TODO はまだありません。</p>;
-  }
-
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          <label>
-            <input
-              type="checkbox"
-              checked={todo.done}
-              onChange={() => onToggle(todo.id)}
-            />
-            <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
-              {todo.text}
-            </span>
-          </label>
-          <button type="button" onClick={() => onDelete(todo.id)}>
-            削除
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
 ```
 
 **`src/App.tsx`**
 
 ```tsx
-import { useTodos } from "./useTodos";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
+import { useState } from "react";
+import type { Todo } from "./types";
+import "./App.css";
 
-export default function App() {
-  const { todos, addTodo, deleteTodo, toggleTodo } = useTodos();
+function App() {
+  const [count, setCount] = useState(0);
+  const [todos, setTodos] = useState<Todo[]>([
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "原稿を書く" },
+  ]);
+
+  function handlePlus() {
+    setCount((c) => c + 1);
+  }
+  function handleMinus() {
+    setCount((c) => c - 1);
+  }
+  function handleReset() {
+    setCount(0);
+  }
+
+  function addToEnd() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `末尾 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function addToTop() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `先頭 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [newTodo, ...prev]);
+  }
+
+  function removeById(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
 
   return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO（useTodos 版）</h1>
-      <TodoInput onAdd={addTodo} />
-      <TodoList todos={todos} onDelete={deleteTodo} onToggle={toggleTodo} />
-    </main>
+    <>
+      <section className="box">
+        <h2>カウンター</h2>
+        <p>現在: {count}</p>
+        <button onClick={handlePlus}>+1</button>
+        <button onClick={handleMinus}>-1</button>
+        <button onClick={handleReset}>リセット</button>
+      </section>
+
+      <section className="box">
+        <h2>TODO</h2>
+        <div className="row">
+          <button onClick={addToEnd}>末尾に追加</button>
+          <button onClick={addToTop}>先頭に追加</button>
+        </div>
+        <ul>
+          {todos.map((todo) => (
+            <li key={todo.id}>
+              {todo.text}
+              <button onClick={() => removeById(todo.id)}>削除</button>
+            </li>
+          ))}
+        </ul>
+      </section>
+    </>
   );
 }
+
+export default App;
 ```
 
-本レッスンでは、ステップ 6 〜 8 で `App.tsx` を localStorage 連携版に書き換えます。`TodoItem` コンポーネント（本レッスンで切り出すもの）と `TodoList` を入れ替える部分は本文の手順どおりに進めてください。`useTodos` を使わず `App.tsx` で直接 state を持つ構成で進める場合は、本文ステップ 1 からの指示に従って新規に組めば OK です。
+本レッスンでは `types.ts` を書き換え、`src/todosReducer.ts` を新規作成し、`App.tsx` を `useReducer` 版に入れ替えて進めます。
 
 </details>
 
-### 到達する完成形
+### ゴール
 
-<div style="font-family:system-ui, sans-serif; max-width:480px; margin:8px 0;">
-  <div style="font-weight:600; margin-bottom:12px;">私の TODO</div>
-  <div style="display:flex; gap:8px; margin-bottom:16px;">
-    <input style="flex:1; padding:8px 12px; border:1px solid #cbd5e1; background:#f8fafc;" placeholder="新しい TODO を入力" readonly />
-    <button style="padding:8px 16px; border:1px solid #1e40af; background:#1e40af; color:white;" disabled>追加</button>
-  </div>
-  <ul style="list-style:none; padding:0; margin:0;">
-    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #e2e8f0;">
-      <span>牛乳を買う</span>
-      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
-    </li>
-    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #e2e8f0;">
-      <span>引き継ぎドキュメントを書く</span>
-      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
-    </li>
-    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0;">
-      <span>本を返す</span>
-      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
-    </li>
-  </ul>
-</div>
+- これまでの TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する
+- 3 種類の action `add` / `delete` / `toggle` を実装する
+- 完了済みの TODO は見た目（取り消し線）で区別する
 
-- 入力して「追加」を押すと一覧末尾に追加されます
-- 各項目の「削除」ボタンで、その 1 件だけが消えます
-- ページをリロード（タブを閉じて開き直し）しても、追加した TODO は残っています
-- 入力欄が空のまま「追加」を押してもエラーにはせず、単に追加しません（`.trim()` が空ならスキップ）
+### 手順
 
-### ステップ 1: StackBlitz で React + Vite（TS）テンプレートを開く
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/types.ts` を作成
+3. `src/todosReducer.ts` を作成
+4. `src/App.tsx` を書き換える
+5. `src/App.css` を書き換える
 
-StackBlitz のトップから「React + Vite + TypeScript」を選びます（もしくは「useEffect の基本」までで作ったプロジェクトをそのまま使っても構いません。本レッスンは新規プロジェクトの方が整理しやすいです）。`npm install` と `npm run dev` は自動で実行されます。
-
-### ステップ 2: `types.ts` で `Todo` 型を用意する
-
-`src/types.ts` を新規作成します。3 章 で育てた型の最小版を書きます。
+### `src/types.ts`
 
 ```ts
 export type Todo = {
   id: string;
   text: string;
+  done: boolean;
 };
+
+export type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
 ```
 
-3 章 の「配列・ユニオン・リテラル型・オプショナル」で追加した `status` と `memo` は今回は使わないので省略します。5 章 で Server Actions 版に移植するときに拡張します。
+`Todo` の `done` プロパティで「完了済みかどうか」を表します。`Action` は 3 種類の操作を判別共用体で列挙しています。
 
-### ステップ 3: `TodoInput` コンポーネントを作る
+### `src/todosReducer.ts`
 
-`src/TodoInput.tsx` を新規作成します。
+```ts
+import type { Todo, Action } from "./types";
+
+export function todosReducer(state: Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add": {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        done: false,
+      };
+      return [...state, newTodo];
+    }
+    case "delete": {
+      return state.filter((todo) => todo.id !== action.id);
+    }
+    case "toggle": {
+      return state.map((todo) =>
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
+      );
+    }
+  }
+}
+```
+
+- `case` ごとに新しい配列を返しています（イミュータブル更新）
+- `toggle` は該当 `id` の行だけ新しいオブジェクトで差し替え、それ以外はそのまま
+- ブロック `{ ... }` で囲っているのは、`case` の中で `const` を宣言するためです（変数のスコープを閉じる慣習）
+
+### `src/App.tsx`
 
 ```tsx
-import { useState } from "react";
+import { useReducer, useState } from "react";
 import type { FormEvent } from "react";
+import { todosReducer } from "./todosReducer";
+import type { Todo } from "./types";
+import "./App.css";
 
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-export function TodoInput({ onAdd }: TodoInputProps) {
+function App() {
+  const [todos, dispatch] = useReducer(todosReducer, [] as Todo[]);
   const [text, setText] = useState("");
 
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
     const trimmed = text.trim();
     if (trimmed.length === 0) return;
-    onAdd(trimmed);
+    dispatch({ type: "add", text: trimmed });
     setText("");
   }
 
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="text"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder="新しい TODO を入力"
-      />
-      <button type="submit">追加</button>
-    </form>
+    <>
+      <h1>useReducer 版 TODO</h1>
+
+      <form onSubmit={handleSubmit} className="box">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="やることを入力"
+        />
+        <button type="submit">追加</button>
+      </form>
+
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li key={todo.id} className={todo.done ? "done" : ""}>
+            <label>
+              <input
+                type="checkbox"
+                checked={todo.done}
+                onChange={() => dispatch({ type: "toggle", id: todo.id })}
+              />
+              {todo.text}
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "delete", id: todo.id })}
+            >
+              削除
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
+
+export default App;
 ```
 
-「フォームと制御コンポーネント」で扱った制御コンポーネントの形です。`onSubmit` で `preventDefault()` を呼んでいます（5 章 の「Server Actions の最小形」の Server Actions ではこれが不要になります）。空文字列は追加しません。
+- `useReducer(todosReducer, [] as Todo[])` で、初期値は空配列
+- `dispatch({ type: "add", text })` で追加
+- `dispatch({ type: "toggle", id })` でチェックの切替
+- `dispatch({ type: "delete", id })` で削除
+- 画面側には更新ロジックが一切なく、「どういう操作をしたいか」だけを書いています
 
-### ステップ 4: `TodoItem` コンポーネントを作る
+### `src/App.css`
 
-`src/TodoItem.tsx` を新規作成します。
-
-```tsx
-import type { Todo } from "./types";
-
-type TodoItemProps = {
-  todo: Todo;
-  onDelete: (id: string) => void;
-};
-
-export function TodoItem({ todo, onDelete }: TodoItemProps) {
-  return (
-    <li>
-      <span>{todo.text}</span>
-      <button type="button" onClick={() => onDelete(todo.id)}>
-        削除
-      </button>
-    </li>
-  );
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
 }
-```
 
-`import type` で `Todo` 型を取り込んでいます（3 章 の「オブジェクトの型と type エイリアス」の形）。`onDelete(todo.id)` で親に削除要求を渡します。
+.box input {
+  padding: 6px;
+  margin-right: 8px;
+}
 
-### ステップ 5: `TodoList` コンポーネントを作る
+.box button {
+  padding: 4px 10px;
+  cursor: pointer;
+}
 
-`src/TodoList.tsx` を新規作成します。
+.todo-list {
+  list-style: none;
+  padding-left: 0;
+  color: #222;
+}
 
-```tsx
-import type { Todo } from "./types";
-import { TodoItem } from "./TodoItem";
+.todo-list li {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
 
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-};
+.todo-list li.done label {
+  text-decoration: line-through;
+  color: #888;
+}
 
-export function TodoList({ todos, onDelete }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p>TODO はまだありません。</p>;
+.todo-list li button {
+  margin-left: auto;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
   }
-
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <TodoItem key={todo.id} todo={todo} onDelete={onDelete} />
-      ))}
-    </ul>
-  );
+  .todo-list {
+    color: #eee;
+  }
+  .todo-list li.done label {
+    color: #888;
+  }
 }
 ```
 
-「配列を描画する」の `.map` + `key` パターンです。`key={todo.id}` を忘れないでください。`todos.length === 0` のときの早期 return は「条件で出し分ける」で学んだ条件表示の形です。
+### 期待出力
 
-### ステップ 6: `App.tsx` で全体を組み立てる（最初はバグあり版）
+- 画面に入力欄と「追加」ボタン、その下に TODO 一覧
+- 入力して「追加」を押すと、一覧末尾に行が追加される（`done: false` の状態）
+- 各行のチェックボックスを押すと取り消し線が付き、もう一度押すと戻る
+- 「削除」ボタンでその行だけが消える
+- 空文字のまま「追加」を押しても何も起きない
 
-`src/App.tsx` を次のように書きます。**意図的にバグのある版** から始めて、次のステップで直します。
+### 変える
 
-```tsx
-import { useState, useEffect } from "react";
-import type { Todo } from "./types";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-
-export default function App() {
-  // NG: このバグあり版では useState([]) にして useEffect で後から読み込む
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("todos");
-    if (saved) setTodos(JSON.parse(saved));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
+- `todosReducer` の `case "toggle"` を、意図的に壊してみます。次のように書き換えると、`toggle` を押しても画面が更新されません。
+  ```ts
+  case "toggle": {
+    const todo = state.find((t) => t.id === action.id);
+    if (todo) todo.done = !todo.done; // NG: 元のオブジェクトを書き換えている
+    return state; // 同じ配列参照を返している
   }
+  ```
+  確認したら元に戻します。reducer も **新しい配列・新しいオブジェクトを返す** 原則は守ります。
+- `case "add"` の中に `console.log("added")` を入れて、Strict Mode が有効なとき（`main.tsx` で `<StrictMode>` に包まれているとき）に 2 回出力されることを確認します。reducer は純粋関数として扱われるため、開発時に 2 回呼ばれても副作用は出ないはず、という検査です。
 
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
-  }
+### 自分で書く
 
-  return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
-    </main>
-  );
-}
-```
+- 「全部完了にする」「全部未完了に戻す」を action として追加します。
+  - `type: "completeAll"` と `type: "uncompleteAll"` を `Action` 型に足す
+  - reducer にそれぞれの `case` を書く（`state.map((t) => ({ ...t, done: true }))` など）
+  - 画面にボタンを 2 つ追加して `dispatch` する
+- 「完了済みだけ一括削除」も追加してみてください（`type: "deleteCompleted"`）。
 
-`crypto.randomUUID()` はブラウザ組み込みで、衝突しない ID 文字列を返します（`"xxxxxxxx-xxxx-..."` 形式）。
+### 発展: 網羅性チェック（折りたたみ）
 
-**期待出力**（バグあり版）: TODO を何件か追加できます。削除もできます。ただし、ブラウザのタブを閉じて開き直す、または F5 でリロードすると、**前回追加した TODO が消えている** ことがあります。
+::: details never を使った網羅性チェック
 
-### ステップ 7: バグを体験する
+3 章 の「unknown と never」で登場した `never` 型を使うと、**action の case を書き忘れたときにコンパイルエラーにできます**。
 
-**実行前の準備**（重要）: このバグの再現には **StrictMode を一時的に外す** 必要があります。React の StrictMode は、開発時に `useEffect` を意図的に 2 回実行して副作用の問題を検出する仕組みで、オンのままだと「バグが出たり出なかったり」して観察しづらいためです。
+`todosReducer.ts` の `switch` に `default` を足します。
 
-`src/main.tsx` を開き、`<StrictMode>` で包んでいる行を一時的に外します。
+```ts
+import type { Todo, Action } from "./types";
 
-```tsx
-// src/main.tsx
-import { createRoot } from "react-dom/client";
-import App from "./App";
-
-createRoot(document.getElementById("root")!).render(<App />);
-```
-
-学習目的で外しただけなので、ステップ 8 で正しい実装に直したら元に戻して構いません。もう 1 つの確認方法として、プレビュー右上の「Open in New Tab」でプレビューを別タブに開き、そのタブを閉じて再度開く、も安定した再現になります（StrictMode の開発時 2 重実行よりも、タブのライフサイクルに沿った再現の方が確実です）。
-
-実際に以下を試しましょう。
-
-1. 「牛乳を買う」を追加
-2. DevTools（F12）→ Application タブ → Local Storage → プロジェクト URL → `todos` キーを確認。`["{\"id\":\"...\",\"text\":\"牛乳を買う\"}"]` のような文字列が入っています
-3. プレビューを別タブで開き、そのタブを閉じて、もう一度開く（または StackBlitz プレビューの再読み込みボタンを押す）
-4. **画面は空**。でも Local Storage をもう一度見ると、`todos` キーの値は `[]`（空配列）になっています
-
-**何が起きたか**:
-
-1. ページ読み込み → `useState<Todo[]>([])` で `todos` が空配列で初期化
-2. 初回レンダリング完了
-3. 保存用の `useEffect([todos])` が動く → 空配列を `localStorage` に書き込む（**ここで上書き!**）
-4. 読み込み用の `useEffect([])` が動く → localStorage にはもう空配列しかない
-5. `setTodos([])`（空配列をセット、もともと空だから何も変わらない）
-
-つまり **起動のたびに空配列で上書きする** ので、永続化が機能していないのです。
-
-### ステップ 8: `useState` の初期値関数で直す
-
-`App.tsx` の先頭部分を次のように書き換えます。
-
-```tsx
-import { useState, useEffect } from "react";
-import type { Todo } from "./types";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-
-export default function App() {
-  const [todos, setTodos] = useState<Todo[]>(() => {
-    try {
-      const saved = localStorage.getItem("todos");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
+export function todosReducer(state: Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add": {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        done: false,
+      };
+      return [...state, newTodo];
     }
-  });
-
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
+    case "delete": {
+      return state.filter((todo) => todo.id !== action.id);
+    }
+    case "toggle": {
+      return state.map((todo) =>
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
+      );
+    }
+    default: {
+      // すべての case を処理していれば、ここに来る action は never 型になる
+      const _exhaustive: never = action;
+      return _exhaustive;
+    }
   }
-
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
-  }
-
-  return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
-    </main>
-  );
 }
 ```
 
-変更点:
+試しに `Action` 型に新しいケース（例: `{ type: "clear" }`）を足してみてください。`default` の `_exhaustive: never = action` の行で「`action` が `{ type: "clear" }` 型で never に代入できない」というエラーが出ます。これを **網羅性チェック** と呼びます。
 
-- `useState([])` の `[]` の代わりに **関数** を渡しています（`() => { ... }`）。この関数は初回レンダリングのときだけ実行されます
-- `try` / `catch` で `JSON.parse` の失敗（不正なデータが保存されていた場合）を拾います
-- 読み込み用の `useEffect` を削除しました（初期値関数に吸収されました）
+action の種類が増えたとき、対応を忘れた場所を TypeScript に教えてもらえるようになります。実務では必ず付けると言ってよい定型です。
 
-一度 DevTools で Local Storage の `todos` を削除してから試すと分かりやすいです。
-
-**期待出力**（正しい版）:
-
-1. 「牛乳を買う」「本を返す」を追加
-2. タブを閉じる / F5 リロード
-3. 一覧に 2 件残っている
-
-### ステップ 9: オブジェクト state のイミュータブル更新（追加演習）
-
-おまけ演習として、「画面の設定」を state で持つ例を作ります。`App.tsx` に次を足します。
-
-```tsx
-type Settings = { showCount: boolean };
-
-// App コンポーネント内
-const [settings, setSettings] = useState<Settings>({ showCount: true });
-
-// 末尾の JSX 内、<h1> の横などに追加
-<label>
-  <input
-    type="checkbox"
-    checked={settings.showCount}
-    onChange={(event) =>
-      setSettings((prev) => ({ ...prev, showCount: event.target.checked }))
-    }
-  />
-  件数を表示
-</label>
-{settings.showCount && <p>合計 {todos.length} 件</p>}
-```
-
-`setSettings((prev) => ({ ...prev, showCount: ... }))` で、新しいオブジェクトを作って渡しています。`prev` を直接書き換えません。これがオブジェクト state の基本形です。
-
-**期待出力**: チェックボックスをオン / オフすると「合計 N 件」の表示が切り替わります。
-
-### ステップ 10: 最低限のスタイルを当てる
-
-好みで、`App.tsx` の `<main>` にインラインスタイルを入れていますが、これを `src/App.css` などに切り出しても構いません。Flexbox や `gap` を使って、入力欄と追加ボタンを横並びにすると見やすくなります。1 章 の知識で十分対応できる範囲なので、時間があれば見た目を整えてみましょう。
+:::
 
 ## まとめ
 
-4 章 の統合ポイントです。
-
-- 2 章 の「TODO アプリを作る」の素の JS + DOM の TODO が、React + TS + コンポーネント分割 + localStorage + `useEffect` で書き直せました
-- 3 章 の `Todo` 型を `import type` して、props にも state にも使っています
-- `useState` の初期値関数で **localStorage 書き戻しバグ** を避けました
-- オブジェクト state のイミュータブル更新（`prev => ({ ...prev, ... })`）を体験しました
-
-次は5 章、**Next.js** です。TODO アプリはここからさらに進化します。
-
-- 5 章 の「ページを増やしてリンクで移動する」で1 章 の自己紹介ページを `/about` として復活させます
-- 5 章 の「Server Component でデータを取得する」でデータ取得を Server Component に任せます（ブラウザ側 `fetch` + `useEffect` の罠を避けられます）
-- 5 章 の「Server Actions の最小形」で **Server Actions** を使い、今回書いた `onSubmit` + `preventDefault()` の代わりに `<form action={serverAction}>` で送信をサーバーに届けます
-- 5 章 の「小さなアプリを仕上げる」で TODO アプリが一覧 + 詳細 + 追加フォームを備えた「実用っぽい」形になります
-
-本レッスンの成果物（`App.tsx` / `TodoInput.tsx` / `TodoList.tsx` / `TodoItem.tsx` / `types.ts`）は、5 章 の「Server Actions の最小形」で Server Actions 版に書き換えるときの **出発点** になります。StackBlitz のプロジェクトは残しておくか、ローカルにコピーしておきましょう。
+- `useReducer(reducer, initialState)` で state の更新ロジックを 1 箇所にまとめられる
+- reducer は `(state, action) => newState` の形、**純粋関数**（副作用禁止、イミュータブル更新）
+- action は判別共用体で型付け（`type` プロパティで見分ける、3 章 の「判別共用体」の形）
+- 画面からは `dispatch(action)` を呼ぶだけ
+- 複数の関連更新があるとき、`useState` より見通しが良くなる
+- Strict Mode では reducer が 2 回呼ばれる。純粋関数なら結果は同じになる
+- 次は「フォームと制御コンポーネント」のフォームに進み、その後「親子コンポーネントの連携」で親子連携、「Context API」で Context を学ぶ

@@ -1,331 +1,198 @@
-# lesson40: Utility Types で仕上げる
+# lesson40: TypeScript ってなに？
 
 ## ゴール
 
-- 既にある型から新しい型を派生させる **Utility Types** という仕組みを理解する。
-- `Partial<T>` で「全プロパティが省略可能」な型を作れる。
-- `Pick<T, K>` で「特定のプロパティだけ取り出した」型を作れる。
-- `Todo` 型から `TodoDraft`（下書き）と `TodoSummary`（一覧用）を派生させ、関数で使い分けられる。
+- TypeScript（以下 TS）が何を解決する言語なのか、JavaScript（以下 JS）との違いを自分の言葉で説明できる。
+- プリミティブ型（`string` / `number` / `boolean`）の変数に **型注釈** を付けられる。
+- わざと間違った値を入れて、エディタの赤線と `tsc` の型エラーを自分の目で確認できる。
 
 ## 解説
 
-### 「似ているけど少しだけ違う型」問題
+### この章で使う環境
 
-3 章 を通じて、TODO 1 件を表す `Todo` 型をここまで育ててきました。
+この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。<https://stackblitz.com/> のトップページに並ぶテンプレートカードから **TypeScript** と書かれたもの（TS のロゴ）を選んでください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。カードが見当たらないときは検索ボックスに `typescript` と入れるか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開きます。
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
+テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の3 章 のレッスンでは、この `main.ts` を書き換えていきます。
+
+### JS だけだと何が困るのか
+
+2 章 までに書いてきた JS では、変数にどんな値でも入れられました。
+
+```js
+let age = 20;
+age = "二十歳"; // 何の警告もなく通る
 ```
 
-ここで次のような場面を想像します。
+小さなファイルなら困りません。しかし人数やファイルが増え、関数が関数を呼ぶようになると、次のような事故が起き始めます。
 
-- **下書き**: ユーザーが「新規作成」ボタンを押した直後。まだ `id` も `text` も決まっていない。
-- **一覧用の要約**: 一覧画面では `id` と `text` だけ表示すればよい。`status` や `memo` は詳細画面でだけ使う。
+- 数値を期待している関数に、うっかり文字列を渡してしまう。
+- オブジェクトのプロパティ名を typo したのに、そのまま `undefined` が流れて画面が壊れる。
+- 自分以外の人が書いた関数に、何を渡せばよいか分からない。
 
-これらは `Todo` に似ていますが、「全部必須ではない」「一部しか使わない」という違いがあります。そのたびに別の `type` を手で書くと、`Todo` を変更したときに派生型もすべて追従させる必要があり、ズレが生まれます。
+これらは **実行してみるまで分からない** 種類のバグです。しかもブラウザで動かしてはじめて「`undefined is not a function`」のようなメッセージに出会うので、原因の追跡に時間がかかります。
 
-TS には「既にある型から **自動で** 新しい型を作る」道具が用意されています。それが **Utility Types**（ユーティリティ型）です。
+### TS は「書いた瞬間にチェックしてくれる JS」
 
-### `Partial<T>`: 全プロパティをオプショナルにする
+TypeScript は、JavaScript に **型**（かた） の仕組みを足した言語です。値や変数に「これは文字列」「これは数値」というラベルを付けておくと、コンパイラ（`tsc`）やエディタが、書いた直後に「その操作はラベルに合っていない」と教えてくれます。
 
-`Partial` は「`T` のすべてのプロパティを省略可能（`?:` 付き）にした型」を作ります。
+- 型のチェックは **実行する前** に行われる。これを **静的型付け** と呼ぶ。
+- 型のチェックを通った TS コードは、最終的に JS に変換（コンパイル）されてブラウザで動く。ブラウザは TS を直接は読めない。
+- 型の情報はコンパイル後の JS には残らない。**実行時の速度は JS と変わらない**。
 
-```ts
-type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
+ざっくり言うと、TS は「書いた直後に typo と型の食い違いを指摘してくれる JS」です。
 
-type TodoDraft = Partial<Todo>;
-// 展開すると次と同じ:
-// type TodoDraft = {
-//   id?: string;
-//   text?: string;
-//   status?: "open" | "done";
-//   memo?: string;
-// }
-```
+### 型注釈の書き方
 
-`TodoDraft` は「下書き」にぴったりです。まだ `id` が決まっていなくても、`text` だけ入力された状態でも受け入れられる。
+変数を宣言するときに、変数名の後ろに `: 型名` を付けます。これを **型注釈**（type annotation） と呼びます。
 
 ```ts
-const draft1: TodoDraft = {};                           // OK
-const draft2: TodoDraft = { text: "牛乳を買う" };         // OK
-const draft3: TodoDraft = { text: "本を返す", memo: "" }; // OK
+const userName: string = "Alice";
+const age: number = 20;
+const isAdmin: boolean = false;
 ```
 
-オプショナル版になったので、使う側では `undefined` を意識する必要があります（「配列・ユニオン・リテラル型・オプショナル」で扱った通り）。
+- `string`: 文字列（`"hello"`、`` `template` ``、`'single'` すべて含む）
+- `number`: 数値（整数も小数も区別しない）
+- `boolean`: 真偽値（`true` / `false`）
 
-### `Pick<T, K>`: プロパティを選んで取り出す
+型注釈は **変数名の直後にコロン**、そのあとに型名、という順番です。JS の代入 (`=`) とは位置が違うので混同しないようにします。
 
-`Pick` は「`T` の中から指定したプロパティだけを取り出した型」を作ります。
+### 書かなくても型は付く（型推論）
+
+毎回型を書くのは面倒です。TS は右辺を見て型を自動で決めてくれます。これを **型推論**（type inference） と呼びます。
 
 ```ts
-type TodoSummary = Pick<Todo, "id" | "text">;
-// 展開すると次と同じ:
-// type TodoSummary = {
-//   id: string;
-//   text: string;
-// }
+const userName = "Alice"; // userName は string 型と推論される
+const age = 20;        // age は number 型と推論される
 ```
 
-- 第 1 引数に元の型、第 2 引数に取り出したいプロパティ名のユニオン（`"id" | "text"`）。
-- 取り出したプロパティは、元の型の必須 / オプショナルをそのまま引き継ぐ。
-- 指定していないプロパティは含まれない。
+型推論で十分なときは型注釈を省略するのが普通です。このレッスンでは学習目的であえて型注釈を書き、間違った値を入れたらどうなるかを体験します。
 
-一覧画面のコンポーネントが「`id` と `text` しか使わない」と宣言したいとき、`Todo` 全体を受け取る代わりに `TodoSummary` で受け取れば、余計な情報を意識せずに済みます。
+### エラーの出方は 2 段階
 
-### Utility Types が嬉しいのは「追従」してくれること
+型が合っていないとき、TS は次の 2 か所でエラーを教えてくれます。
 
-`Todo` 型に新しいプロパティ（例えば `dueDate: string`）が増えたとします。
+1. **エディタ上の赤い波線**: StackBlitz のコード画面で該当箇所に赤線が出る。マウスを乗せるとメッセージが出る。
+2. **`tsc` のコンパイルエラー**: ターミナルで `tsc` を実行する（テンプレートでは通常自動で走る）と、ファイル名・行番号付きでエラーが一覧表示される。
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-  dueDate: string; // 追加
-};
+どちらも同じ内容です。エディタの赤線は「書いている最中に教えてくれる」、`tsc` は「保存 / ビルドのタイミングで全ファイルまとめて確認してくれる」くらいの違いです。
+
+典型的なエラーメッセージは例えばこうなります。
+
+```
+Type 'string' is not assignable to type 'number'.
 ```
 
-このとき:
-
-- `TodoDraft = Partial<Todo>` は自動的に `dueDate?: string` を含む型に更新される。
-- `TodoSummary = Pick<Todo, "id" | "text">` は影響を受けない（`dueDate` は含まないと指定しているから）。
-
-`type TodoDraft = { id?: string; text?: string; ... }` と手で書いていたら、`dueDate?` を追加し忘れる事故が起きます。Utility Types はこれを仕組みで防ぎます。
-
-### その他の Utility Types（コラム）
-
-TS には他にも Utility Types があります。代表的なものを名前だけ紹介します。
-
-- `Readonly<T>`: すべてのプロパティを読み取り専用にする。
-- `Record<K, V>`: キーと値の型を指定したオブジェクト型を作る（`Record<string, number>` など）。
-- `Omit<T, K>`: `Pick` の逆で「指定したプロパティ **以外**」を取り出す。
-- `Required<T>`: `Partial` の逆で「全プロパティを必須にする」。
-
-**このコースでは `Partial` と `Pick` の 2 つだけ** を使います。他は「必要になったときに TS の公式ドキュメントを検索すればすぐ使える」程度に覚えておけば十分です。名前と「こういう用途がある」だけ頭の片隅にあればよい、という距離感です。
+「文字列型は数値型には代入できない」という意味です。実際に出してみるのは演習で行います。
 
 ## 演習
 
 ### 途中から始める場合
 
-新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-<details>
-<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+### 手順 1: テンプレートを開く
+
+1. <https://stackblitz.com/> を開き、トップページのテンプレートカードから **TypeScript**（Vanilla TS、TS ロゴ付き）を選ぶ。見当たらないときは検索ボックスに `typescript` と入力するか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開く。
+2. `src/main.ts` を開く。中身はサンプルが入っているので、すべて消す。
+3. プレビュー横のコンソールも見えるようにしておく（DevTools の Console、または StackBlitz 下部のターミナル）。
+
+### 手順 2: 型注釈付きの変数を書く
+
+`src/main.ts` の中身を以下に置き換える。
 
 ```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
+const userName: string = "Alice";
+const age: number = 20;
+const isAdmin: boolean = false;
+
+console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
 ```
 
-</details>
+保存するとプレビューが再読み込みされる。ブラウザの DevTools の Console に次のように出れば成功。
 
-### 手順 1: `Todo` 型から派生型を作る
+```
+Alice は 20 歳です。管理者: false
+```
 
-「配列・ユニオン・リテラル型・オプショナル」の `src/types.ts` をそのまま使う。`src/main.ts` を次の形に書き換える。
+### 手順 3: わざと型を間違えてエラーを見る
+
+次のコードに書き換える。
 
 ```ts
-import type { Todo } from "./types";
+const userName: string = "Alice";
+const age: number = "二十歳"; // わざと文字列を入れる
+const isAdmin: boolean = false;
 
-type TodoDraft = Partial<Todo>;
-type TodoSummary = Pick<Todo, "id" | "text">;
-
-const draft: TodoDraft = { text: "新しい TODO" };
-
-const summaries: TodoSummary[] = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-  { id: "a3", text: "ゴミを出す" },
-];
-
-function printSummary(item: TodoSummary): void {
-  console.log(`- [${item.id}] ${item.text}`);
-}
-
-console.log("下書き:");
-console.log(draft);
-
-console.log("一覧:");
-for (const item of summaries) {
-  printSummary(item);
-}
+console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
 ```
 
 #### 期待出力
 
+- `"二十歳"` の下に **赤い波線** が引かれる。
+- マウスを乗せると次のようなメッセージが出る。
+
 ```
-下書き:
-{ text: '新しい TODO' }
-一覧:
-- [a1] 牛乳を買う
-- [a2] 本を返す
-- [a3] ゴミを出す
+Type 'string' is not assignable to type 'number'.
 ```
 
-（`draft` の表示形式は環境により `{text: "新しい TODO"}` のように表示される場合もある。プロパティの中身が同じであれば OK。）
+- StackBlitz 下部のターミナル（または Problems タブ）にも同じエラーが出る。
 
-### 手順 2: 派生型の嬉しさを確かめる
+これが **静的型付けが実行前にエラーを教えてくれる** 体験です。2 章 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
 
-次のように、`TodoDraft` にはどのプロパティも必須ではないことを確認する。
+### 手順 4: 変えてみる
+
+次の 3 つをそれぞれ試し、どんなメッセージが出るか見比べる。エラーを確認したら元に戻すこと。
+
+1. `const isAdmin: boolean = "yes";`
+2. `const age: number = true;`
+3. `const userName: string = 123;`
+
+期待される代表的なメッセージは次の通り。
+
+```
+Type 'string' is not assignable to type 'boolean'.
+Type 'boolean' is not assignable to type 'number'.
+Type 'number' is not assignable to type 'string'.
+```
+
+型名のところだけ入れ替わっているのが分かる。
+
+### 手順 5: 型推論に任せてみる
+
+型注釈を消しても、右辺から型が決まることを確認する。
 
 ```ts
-const d1: TodoDraft = {};
-const d2: TodoDraft = { text: "メモだけ" };
-const d3: TodoDraft = { id: "a1", status: "open" };
+const userName = "Alice";
+const age = 20;
+const isAdmin = false;
+
+age = "二十歳"; // ここで赤線が出るはず
 ```
 
-いずれも赤線が出なければ OK。
-
-次に、`TodoSummary` には `status` を入れられないことを確認する。
-
-```ts
-const s: TodoSummary = { id: "a1", text: "牛乳を買う", status: "open" };
-```
-
-期待されるメッセージ:
+`age` に型注釈は書いていないが、`20` が入っていたので TS は `number` 型と推論している。そこに文字列を入れようとすると、やはり次のようなメッセージが出る。
 
 ```
-Object literal may only specify known properties, and 'status' does not exist in type 'TodoSummary'.
+Type 'string' is not assignable to type 'number'.
 ```
 
-`TodoSummary` は `id` と `text` しか持たない型として派生させたので、`status` を入れようとすると TS が止めてくれる。
-
-### 手順 3: `Partial` で「更新関数」を書く
-
-`Partial<Todo>` は「一部のプロパティだけ変える」という更新のときにも便利。
-
-```ts
-import type { Todo } from "./types";
-
-type TodoDraft = Partial<Todo>;
-
-function updateTodo(todo: Todo, patch: TodoDraft): Todo {
-  return { ...todo, ...patch };
-}
-
-const original: Todo = {
-  id: "a1",
-  text: "牛乳を買う",
-  status: "open",
-};
-
-const updated = updateTodo(original, { status: "done", memo: "牛乳コーナー" });
-
-console.log(original);
-console.log(updated);
-```
-
-#### 期待出力
-
-```
-{ id: 'a1', text: '牛乳を買う', status: 'open' }
-{ id: 'a1', text: '牛乳を買う', status: 'done', memo: '牛乳コーナー' }
-```
-
-- 元の `original` は変わらない（イミュータブル更新。4 章 で React と組み合わせて再登場）。
-- `patch` に `id` や `text` を含めてもよいし、含めなくてもよい。`Partial<Todo>` だから。
-
-### 手順 4: 元の型を変えて追従を体験する
-
-`src/types.ts` に `dueDate` プロパティを **一時的に** 追加してみる。
-
-```ts
-// src/types.ts（一時的な変更）
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-  dueDate: string;
-};
-```
-
-`src/main.ts` を見ると、`const original: Todo = { ... }` のところで赤線が出るはず。
-
-期待されるメッセージ:
-
-```
-Property 'dueDate' is missing in type '{ id: string; text: string; status: "open"; }' but required in type 'Todo'.
-```
-
-一方、`TodoSummary`（`Pick<Todo, "id" | "text">`）で作っていた `summaries` のほうは何も言われない。`dueDate` は `TodoSummary` の範囲外だから。
-
-これが **派生型が自動で追従する** 効果。確認できたら `dueDate` の追加は取り消して元に戻す。
-
-### 変えてみる
-
-`TodoSummary` に `status` も含めた新しい型 `TodoListItem` を派生させてみる。
-
-```ts
-type TodoListItem = Pick<Todo, "id" | "text" | "status">;
-
-const items: TodoListItem[] = [
-  { id: "a1", text: "牛乳を買う", status: "open" },
-  { id: "a2", text: "本を返す", status: "done" },
-];
-
-for (const item of items) {
-  const mark = item.status === "done" ? "x" : " ";
-  console.log(`[${mark}] ${item.text}`);
-}
-```
-
-期待出力:
-
-```
-[ ] 牛乳を買う
-[x] 本を返す
-```
+（`const` なので「そもそも再代入できない」というエラーも同時に出る場合がある。その場合は `let age = 20;` に変えてから試す。）
 
 ### 自分で書く
 
-`Todo` 型から、次の 2 つの派生型を自分で書く。
+何も見ずに、次の条件を満たすコードを `src/main.ts` に書く。
 
-1. `TodoWithoutMemo` — `memo` を含まない型。ヒント: `Pick` で `"id" | "text" | "status"` を選ぶ。
-2. `TodoPatch` — すべて省略可能な型（`TodoDraft` と同じ中身でよいので、`Partial<Todo>` を使う）。
+- `string` 型の変数 `city` に自分が住んでいる都市名を入れる。
+- `number` 型の変数 `population` に適当な人口を入れる。
+- `boolean` 型の変数 `hasSea` に「海に面しているか」を入れる。
+- 3 つをテンプレートリテラルで繋げて `console.log` する。
 
-それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
-
-## 3 章 のまとめと次章への予告
-
-### 3 章 で作ったもの
-
-- `src/types.ts` に `Todo` 型を定義した（`id`、`text`、`status`、`memo?`）。
-- `Partial<Todo>` で下書き用の `TodoDraft`、`Pick<Todo, "id" | "text">` で一覧用の `TodoSummary` を派生させた。
-- `export type` / `import type` で型を別ファイルから使い回す形を身につけた。
-
-### 次章で何が起きるか
-
-**4 章（React）の「コンポーネントと props」以降で、この `Todo` 型を `import type` してそのまま使います**。
-
-- 「コンポーネントと props」: コンポーネントに型付き `props` を渡すときの `types.ts` として再登場。
-- 「配列を描画する」: 配列描画の題材として `Todo[]` をそのまま渡す。
-- 「TODO アプリを React で作る」: React 版 TODO アプリの型の基盤として、育てた `Todo` 型がそのまま使われる。
-
-つまり、ここまで書いてきた `types.ts` は **この先ずっと生き続けるファイル** です。StackBlitz のプロジェクトは章ごとに作り直しても、`types.ts` の中身はそのままコピーして持っていくのが基本の流れになります。
-
-### コラム: その他の Utility Types
-
-`Readonly<T>` / `Record<K, V>` / `Omit<T, K>` / `Required<T>` などは本コースでは扱いません。必要な場面に出会ったら TS 公式ドキュメント（<https://www.typescriptlang.org/docs/handbook/utility-types.html>）の該当項目を読めば、基本の使い方はすぐ身につきます。Utility Types はどれも「既にある型から別の型を作る」という同じ考え方の延長線上にあります。
+書き終わったら、わざとどれか 1 つの型注釈と値を食い違わせ、どんなエラーメッセージが出るかを確認してから元に戻す。
 
 ## まとめ
 
-- Utility Types は「既にある型から新しい型を派生させる道具」。手で別の `type` を書く代わりに、仕組みで自動追従させる。
-- `Partial<T>`: すべて省略可能にする。下書きや更新の差分に使える。
-- `Pick<T, K>`: 特定のプロパティだけ取り出す。一覧用の軽い型に使える。
-- `Todo` 型から `TodoDraft` と `TodoSummary` を派生させた。この `Todo` 型は4 章 の「コンポーネントと props」以降で React の props として `import type` して再利用する。
-- 他の Utility Types（`Readonly` / `Record` / `Omit` / `Required` など）は本コースでは扱わない。必要になったら公式ドキュメントを参照する。
+- TypeScript は JS に型を足した言語で、**実行する前に** 型の食い違いを教えてくれる。
+- 型注釈は `const 変数名: 型名 = 値` の形で書く。プリミティブ型は `string` / `number` / `boolean` の 3 つから。
+- 右辺から型が自動で決まる **型推論** もあるので、実務では型注釈を省略する場面も多い。
+- 型が合わないと、エディタの赤線と `tsc` の両方が `Type 'X' is not assignable to type 'Y'.` のような形で教えてくれる。
+- 別のレッスンで、関数の引数と戻り値に型を付ける。2 章 で書いた関数を TS 化していく。

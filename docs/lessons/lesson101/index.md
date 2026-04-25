@@ -1,342 +1,241 @@
-# lesson101: GitHub Actions で CI
+# lesson101: Core Web Vitals の 3 つの指標と Lighthouse
 
 ## ゴール
 
-- CI / CD の意味と価値を説明できる
-- GitHub Actions のワークフロー YAML の基本構造を読める
-- push / pull_request トリガーで Lint / Test / Build を自動実行できる
-- 失敗時の通知・ステータスバッジ・キャッシュの基本を知る
-- ブランチ保護ルールに **CI 必須** を組み合わせる
-- Vercel / Netlify の Preview Deployment が裏でやっていることを理解する
+- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
+- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
+- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
+- 75 パーセンタイル評価の意味を説明できる
+- DevTools の Performance パネルで CWV を計測できる
+- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
 
 ## 解説
 
-### CI / CD とは
+### Core Web Vitals とは
 
-- **CI**（Continuous Integration、継続的インテグレーション）: コードをリポジトリに統合する **そのたびに** 自動でビルド / テスト / Lint を回す仕組み
-- **CD**（Continuous Delivery / Deployment、継続的デリバリー / デプロイ）: 統合に成功したら自動でステージング / 本番にデプロイする仕組み
+**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
 
-CI が崩れたまま開発を続けると、**「どの変更で壊れたか分からない」** 状態になります。1 つの PR ごとに「壊れていない」を保証することで、main は常に動く状態を保てます。
+| 指標 | 何を測る | Good | Needs Improvement | Poor |
+|---|---|---|---|---|
+| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
+| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
+| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
 
-### GitHub Actions とは
+「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
 
-GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料で月 2,000 分**（執筆時点）使えます。
+### LCP: 最大コンテンツが見えるまで
 
-主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
+LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
 
-### 最小のワークフロー
+LCP が遅くなる主な原因:
 
-`.github/workflows/ci.yml`:
+1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
+2. **サーバーレスポンスが遅い**（TTFB が長い）
+3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
+4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
 
-```yaml
-name: CI
+主な対策:
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+- 画像最適化（次の `next/image` 系レッスン参照）
+- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
+- JS のコード分割（次のレッスン参照）
+- 重要な画像 / フォントを `<link rel="preload">` で先読み
 
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test:run
+### INP: 反応の遅さ
+
+INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+
+INP が悪くなる主な原因:
+
+1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
+2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
+3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
+
+対策:
+
+- イベントハンドラ内の処理を軽くする
+- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
+- 重い処理を **Web Worker** に逃がす
+- リスト描画は **仮想スクロール**（`react-window` 等）
+- `requestIdleCallback` で空き時間に処理
+
+### CLS: レイアウトのガタつき
+
+CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
+
+CLS が悪くなる主な原因:
+
+1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
+2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
+3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
+
+対策:
+
+- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
+- 動的挿入は **下から** か、placeholder で確保したスペースに収める
+- フォントは `next/font` のようなツールで先読み・サブセット化
+- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
+
+### しきい値は「75 パーセンタイル」で評価する
+
+Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
+
+評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
+
+### Lighthouse vs Real User Monitoring（RUM）
+
+CWV を計測する方法は 2 系統あります。
+
+#### Lighthouse（ラボデータ）
+
+Chrome DevTools 内蔵の Lighthouse（章 7「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
+
+- 利点: その場ですぐ計測できる、デプロイ前に確認できる
+- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
+
+主に **開発時のデバッグ** に向きます。
+
+#### RUM（フィールドデータ / 実ユーザー測定）
+
+実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
+
+- 利点: 本物のユーザー体験を反映
+- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
+
+代表的なツール:
+
+- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
+- **Google Search Console** — Core Web Vitals レポート
+- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
+- **web-vitals ライブラリ** + 任意の解析サービスへ送信
+
+Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
+
+### web-vitals ライブラリで RUM を仕込む
+
+自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
+
+```bash
+npm install web-vitals
 ```
 
-このファイルを **commit + push** すると、GitHub Actions タブに最初の実行が現れ、自動で:
+```ts
+// src/web-vitals.ts
+import { onLCP, onINP, onCLS } from "web-vitals";
 
-1. Ubuntu の仮想マシンを起動
-2. リポジトリを `checkout`
-3. Node.js 22 をセットアップ（npm キャッシュも有効化）
-4. `npm ci` で依存パッケージをインストール
-5. `npm run test:run` でテストを実行
+function sendToAnalytics(metric: { name: string; value: number; id: string }) {
+  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
+  console.log(metric);
+  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
+}
 
-### 構造を読む
-
-- **`name`**: ワークフローの表示名
-- **`on`**: トリガー条件
-  - `push.branches`: 指定ブランチへの push で実行
-  - `pull_request.branches`: 指定ブランチを **マージ先** にする PR で実行
-  - `schedule`: cron 式で定期実行
-  - `workflow_dispatch`: 手動実行
-- **`jobs`**: 並列実行できる仕事の単位
-- **`runs-on`**: 実行環境（`ubuntu-latest` / `macos-latest` / `windows-latest`）
-- **`steps`**: 順番に実行する処理
-  - `uses: actions/...@v4`: 既製のアクションを使う
-  - `run: ...`: シェルコマンドを実行
-
-### Lint / テスト / ビルドを並列で
-
-実用的には次のような構成です。
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run lint
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run test:run
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build
+onLCP(sendToAnalytics);
+onINP(sendToAnalytics);
+onCLS(sendToAnalytics);
 ```
 
-3 つの job が **並列で実行** されます。1 つでも fail すると全体が fail として扱われ、PR ページに赤い X が出ます。
+本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
 
-### キャッシュで速くする
+### DevTools の Performance パネルで計測
 
-`actions/setup-node@v4` の `cache: npm` を指定するだけで、`~/.npm` の中身がキャッシュされます。2 回目以降の `npm ci` が秒速で終わります。
+Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
 
-`pnpm` / `yarn` の場合も同様にキャッシュキーを指定できます。
+1. F12 → **Performance** タブ
+2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
+3. レポートが表示される
+   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
+   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
+   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
 
-### マトリクスで複数バージョンをテスト
-
-```yaml
-test:
-  runs-on: ubuntu-latest
-  strategy:
-    matrix:
-      node: [20, 22]
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: ${{ matrix.node }}, cache: npm }
-    - run: npm ci
-    - run: npm run test:run
-```
-
-これで Node 20 と 22 の両方で同じテストが走ります。複数 OS（`os: [ubuntu, macos, windows]`）も同様。
-
-### 環境変数とシークレット
-
-機密情報（API キー / Vercel トークン等）はリポジトリ設定の **Settings → Secrets and variables → Actions → New repository secret** に登録します。ワークフローからは:
-
-```yaml
-- run: deploy --token $VERCEL_TOKEN
-  env:
-    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
-```
-
-YAML やコードに **直接書くと公開されてしまう** ので絶対に避けます。
-
-### ステータスバッジ
-
-`README.md` の冒頭に CI バッジを貼ると、ブランチが「動く状態か」が一目で分かります。
-
-```md
-[![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
-```
-
-緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
-
-### ブランチ保護と CI 必須
-
-「GitHub の PR とコードレビュー」で設定したブランチ保護に **「Require status checks to pass before merging」** を追加し、`lint` / `test` / `build` の各 job を必須に指定します。
-
-これで:
-
-- CI が通っていない PR は **マージ ボタンが押せない**
-- 「テスト書いてあるけど動かしたら fail してた」が起きなくなる
-- 安心して main を信じられる
-
-### Vercel / Netlify との関係
-
-Vercel / Netlify の **Preview Deployment** は、内部で GitHub Actions と似た仕組みを動かしています。PR を作るたびに **そのブランチの内容で本物のサイトを一時デプロイ** してくれて、URL が PR にコメントされます。
-
-CI（GitHub Actions）と Preview Deployment は **役割が違う** ので両方使うのが普通です:
-
-- **CI**（Actions）: テストや Lint で「壊れてないか」を機械的に検証
-- **Preview Deployment**: 「本物の動作を人間がブラウザで確認」する場所
-
-本コースの教材サイトでも、PR を作ると Vercel が自動でプレビュー URL を作ってくれています。
-
-### Lighthouse CI で a11y / パフォーマンスを CI に
-
-「アクセシビリティの自動チェック」と「Core Web Vitals」で扱った **Lighthouse** を CI に組み込めます。
-
-```yaml
-- name: Lighthouse CI
-  uses: treosh/lighthouse-ci-action@v12
-  with:
-    urls: |
-      https://your-preview-url.vercel.app/
-    uploadArtifacts: true
-    temporaryPublicStorage: true
-```
-
-PR ごとに自動で Lighthouse が走り、スコアが下がったら警告できます。
-
-### 通知
-
-CI 失敗時に Slack / Discord / Email に通知する Action も豊富です。
-
-- `slackapi/slack-github-action`
-- `act10ns/slack`
-- 失敗時のみ通知する条件: `if: failure()`
-
-```yaml
-- name: Slack 通知
-  if: failure()
-  uses: slackapi/slack-github-action@v2
-  with:
-    payload: '{"text": "CI failed!"}'
-  env:
-    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
-```
-
-### よく使う公式アクション
-
-| アクション | 用途 |
-|---|---|
-| `actions/checkout@v4` | リポジトリを checkout |
-| `actions/setup-node@v4` | Node.js セットアップ |
-| `actions/cache@v4` | 任意のディレクトリをキャッシュ |
-| `actions/upload-artifact@v4` | テスト結果やビルド成果物を保存 |
-| `actions/download-artifact@v4` | 保存した成果物を取り出す |
-| `pnpm/action-setup` | pnpm セットアップ（Node とは別途） |
-
-`actions/checkout` のバージョンは年に数回更新されます。最新版は <https://github.com/marketplace?type=actions> で確認できます。
+DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
 
 ## 演習
 
 ### ゴール
 
-- 「GitHub の PR とコードレビュー」で作ったリポジトリに `.github/workflows/ci.yml` を追加する
-- PR を作って CI が走るのを確認する
-- ブランチ保護に CI 必須を追加する
+- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
+- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
+- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
 
-### 手順 1: テストスクリプトを用意
+### 手順 1: Lighthouse で CWV を計測
 
-リポジトリにテストが何もない場合、最小のものを足します。`package.json` の `scripts` に:
+1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
+2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
+3. レポートを確認:
+   - 全体スコア
+   - **Largest Contentful Paint**（LCP の値）
+   - **Cumulative Layout Shift**（CLS の値）
+   - **Interaction to Next Paint**（条件次第で出る）
 
-```json
-{
-  "scripts": {
-    "test:run": "echo 'テスト実行（プレースホルダ）'",
-    "lint": "echo 'Lint 実行（プレースホルダ）'",
-    "build": "echo 'Build 実行（プレースホルダ）'"
-  }
-}
-```
+### 手順 2: PageSpeed Insights で RUM を見る
 
-実プロジェクトでは Vitest / ESLint / Vite / Next.js のビルドコマンドを書きます。
+1. <https://pagespeed.web.dev/> にアクセス
+2. URL を入れて Analyze
+3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
+4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
 
-### 手順 2: ワークフローを書く
+実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
 
-`.github/workflows/ci.yml`（プロジェクトルートから見たパス）:
+### 手順 3: DevTools Performance で観察
 
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test:run
-      - run: npm run build
-```
-
-### 手順 3: ブランチで commit + push
-
-```bash
-git switch -c chore/ci
-mkdir -p .github/workflows
-# 上記 ci.yml を保存
-git add .github package.json
-git commit -m "chore: GitHub Actions で CI を追加"
-git push -u origin chore/ci
-```
-
-### 手順 4: PR を作って CI を観察
-
-GitHub のリポジトリ → PR を作成。
-
-PR ページに **「Some checks haven't completed yet」** が出て、しばらくすると **「All checks have passed」** に変わるはずです（プレースホルダなので即終わる）。**Details** リンクから個別の job ログを見られます。
-
-PR 内で右側の **Checks** タブを開くと、各 step ごとの所要時間とログが時系列で見られます。
-
-### 手順 5: ブランチ保護に CI 必須を追加
-
-リポジトリの **Settings → Branches → main → Edit rule**:
-
-- **Require status checks to pass before merging** にチェック
-- 検索ボックスに `ci` と入力 → 表示されたチェックを **必須** に登録
-- 保存
-
-これ以降、CI が成功していない PR はマージできなくなります。試しに `ci.yml` をわざと壊して push してみると、CI が fail して PR がマージできない状態になります（確認したら戻す）。
+1. Chrome で対象ページを開く
+2. F12 → **Performance** タブ
+3. 左上の **Record**（黒丸） を押す
+4. ページをリロード（`Ctrl + R`）
+5. ページが落ち着いたら **Stop**
+6. タイムラインで:
+   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
+   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
+   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
 
 ### 期待出力
 
-- PR ページに緑のチェック「All checks have passed」が出る
-- Actions タブにワークフロー実行履歴が並ぶ
-- ブランチ保護でマージボタンが無効化される（CI 失敗時）
+Lighthouse:
+
+- **Performance** スコアが 90 以上なら良好
+- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
+
+PageSpeed Insights:
+
+- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
 
 ### 変える
 
-- ジョブを 3 つに分割（lint / test / build）して並列実行に変える。CI 全体の時間が短くなる
-- `runs-on` を `windows-latest` に変えて Windows でも動くか確認（Vite / Next なら通常 OK）
-- `if: github.event_name == 'pull_request'` を追加して、特定の job を PR 時だけ実行
-- `actions/cache@v4` で `~/.cache/Cypress` などをキャッシュして E2E を速くする
+- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
+- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
+- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
 
-### 自分で書く
+### 自分で書く（任意）
 
-- README に CI バッジを貼る
-- Vercel デプロイのプレビュー URL を Lighthouse CI で計測するワークフローを足す（`treosh/lighthouse-ci-action@v12`）
-- Slack 通知を `if: failure()` で組み込む
+新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
+
+```bash
+npm create vite@latest cwv-sample -- --template vanilla-ts
+cd cwv-sample
+npm install web-vitals
+```
+
+`src/main.ts`:
+
+```ts
+import { onLCP, onINP, onCLS } from "web-vitals";
+
+onLCP(console.log);
+onINP(console.log);
+onCLS(console.log);
+
+document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
+```
+
+`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
 
 ## まとめ
 
-- **CI** は push / PR のたびに自動でビルド / テスト / Lint を回す仕組み
-- GitHub Actions は **`.github/workflows/*.yml`** に書くだけで動く
-- 構造: `on`（トリガー）→ `jobs`（並列の仕事）→ `steps`（順次のコマンド / アクション）
-- `actions/checkout` + `actions/setup-node` が定番の出発点。`cache: npm` で 2 回目以降が爆速
-- マトリクスで複数 OS / 複数 Node バージョンを並列テストできる
-- シークレットは **Settings → Secrets** に登録し、ワークフロー内で `secrets.NAME` を参照（具体的な記法は本文の YAML 例を参照）
-- ブランチ保護で **CI 必須** に設定すると安全
-- Vercel / Netlify の Preview Deployment は CI とは別の役割（実機確認）
-- Lighthouse CI / Slack 通知 / Artifact 保存などの拡張が豊富
-- これで章 7 の Git / GitHub 3 連作が完了。次は **フォーム深掘り（React Hook Form + Zod）** に進む
+- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
+- 2024 年 3 月に **FID は INP に置き換わった**
+- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
+- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
+- **PageSpeed Insights** が両方を一覧表示してくれる
+- DevTools の **Performance パネル** で詳細を時系列に見る
+- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託
+- 別のレッスンでは具体的な改善手段（**バンドルサイズ最適化 / コード分割 / 画像最適化**）に進む

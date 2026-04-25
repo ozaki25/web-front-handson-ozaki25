@@ -1,305 +1,396 @@
-# lesson65: `next/font` でフォント
+# lesson65: カスタムフック（`useTodos` に抽出）
+
+2 章 の「スコープとクロージャ」で `makeCounter()` / `makeFilter(status)` という関数を書きました。「関数が state を閉じ込める（クロージャ）」という形です。React のカスタムフックは **同じ仕組みを React の文脈で使う** 形と思ってください。2 章 の「スコープとクロージャ」の延長線上にあります。
 
 ## ゴール
 
-- Web フォントを `next/font/google` と `next/font/local` で読み込めます。
-- `font.className` をルートレイアウトの `<html>` や `<body>` に付けて、全ページに適用できます。
-- `display` のデフォルトが `"swap"` であること（システムフォント → Web フォントへ差し替わる）を理解できます。
-- 適用前と適用後の見た目の違いを目で確認できます。
+- 複数のフックを組み合わせたロジックを、再利用可能なカスタムフックに切り出せる
+- `use` プレフィックスの命名規則を守れる
+- フックのルール（トップレベルで呼ぶ、他のフックの中でだけ呼ぶ）を理解する
 
 ## 解説
 
-### `<link href="...">` でフォント読み込みの何が辛いか
+### カスタムフックとは
 
-素の HTML では、Google Fonts の使い方として次のように書くのが定番でした。
+カスタムフックは **「フックを使う関数」** を切り出したものです。`useState` / `useEffect` / 他のフックを組み合わせて、自前の「新しいフック」を作れます。
 
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">
-```
-
-これだと次の問題があります。
-
-- **外部ホストに毎回アクセス**: ユーザーのブラウザが `fonts.googleapis.com` と `fonts.gstatic.com` の 2 つに追加接続する。
-- **プライバシー**: Google にユーザーの IP が送られる（国・地域によっては規制対象）。
-- **フォントファイルが重い**: 全グリフが送られてしまう可能性がある。
-
-`next/font` はこれらを解決します。
-
-- **ビルド時に自サーバーへフォントファイルをコピー**（自ホスト化）。ユーザーは Google に直接アクセスしません。
-- 使っている文字だけを含む **サブセット** を自動生成します。
-- フォントの CSS 変数やクラス名を React 側から参照できるようにします。
-
-### `next/font/google` の使い方
+命名規則は 1 つだけ。**`use` で始まる関数名** にします。
 
 ```tsx
-import { Inter } from "next/font/google";
+function useTodos() {
+  const [todos, setTodos] = useState<Todo[]>([]);
 
-const inter = Inter({ subsets: ["latin"] });
+  const addTodo = (text: string) => {
+    setTodos((prev) => [...prev, { id: crypto.randomUUID(), text, done: false }]);
+  };
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
-  );
+  const deleteTodo = (id: string) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  return { todos, addTodo, deleteTodo };
 }
 ```
 
-- `next/font/google` から **使いたいフォント名を名前付き import** します（`Inter`、`Roboto`、`Noto_Sans_JP` など）。
-- 関数として呼び出し、`subsets` を指定します（`["latin"]` / `["japanese"]` など）。
-- 戻り値の `inter` は `{ className, style, variable }` を持つオブジェクトです。
-- `className` を `<html>` か `<body>` に付けると、そのフォントが配下全体に適用されます。
-
-### `display` のデフォルトは `"swap"`
-
-`next/font` の `display` オプションのデフォルトは **`"swap"`** です。**フォント読込中はシステムフォント（ゴシックなど）で表示し、Web フォントが届いたら差し替わる** 動きになります。
-
-- 初期表示が速い（FOIT = Flash of Invisible Text が起きにくい）
-- 代わりに、読み込み完了の瞬間にフォントが切り替わる FOUT（Flash of Unstyled Text）が起きる可能性がある
-
-本レッスンではこのデフォルトをそのまま使います。`display` を明示する必要はありません。
-
-### `next/font/local` の使い方
-
-ローカルの `.woff2` ファイルを使う場合は次のように書きます。
+これを使う側は、単に呼ぶだけ。
 
 ```tsx
-import localFont from "next/font/local";
-
-const myFont = localFont({
-  src: "./MyFont.woff2",
-});
+function App() {
+  const { todos, addTodo, deleteTodo } = useTodos();
+  // あとは好きに使う
+}
 ```
 
-本コースでは Google Fonts のみを扱うので `next/font/google` に集中します。`next/font/local` は存在だけ知っておきましょう。
+使う側のコンポーネントからは **state の管理が見えなくなり**、`useTodos` の戻り値だけを触る形になります。似た処理を 2 つのコンポーネントで使いたいときも、フック 1 つ書けば共有できます。
 
-### 日本語フォントの注意
+### 2 章 の「スコープとクロージャ」との対応
 
-日本語の Google Font（`Noto Sans JP` など）は、ラテン文字より **グリフ数が遥かに多い** ため、サブセットを指定しないと重くなりがちです。本演習では `Noto_Sans_JP` を使いつつ、全体には `Inter` を、見出しにだけ日本語フォントを当てる形を試します。
+2 章 の「スコープとクロージャ」で書いた `makeCounter()` を思い出してください。
 
-### `font.className` の正体
+```js
+function makeCounter() {
+  let count = 0;
+  return () => {
+    count = count + 1;
+    return count;
+  };
+}
 
-`next/font` の `className` は、**ビルド時に生成される固有のクラス名** です（見た目は `__className_abc123` のような自動生成の文字列になります）。中身は `font-family`、`font-weight`、`font-display: swap` などの CSS 宣言が自動的に書き込まれています。
+const counterA = makeCounter();
+const counterB = makeCounter();
+```
 
-学習者が自分で `@font-face { ... }` を書く必要はありません。`className` を付けるだけで完結します。
+`counterA` と `counterB` はそれぞれ **独立した `count` を閉じ込めた関数** でした。
+
+カスタムフックも発想は同じです。`useTodos()` を呼び出した **コンポーネントごとに、独立した `todos` state が用意される**。クロージャで変数を閉じ込める代わりに、React の state が閉じ込められる、という違いだけです。
+
+### フックのルール
+
+フックには **2 つのルール** があります。これは `useState` / `useEffect` / カスタムフック、すべてに共通です。
+
+1. **コンポーネントや他のフックの「トップレベル」でのみ呼ぶ**
+   - `if` の中、`for` の中、コールバックの中では呼ばない
+   - 理由: React はフックを呼ぶ順番で state を識別している。順番が変わると壊れる
+2. **React 関数（コンポーネントまたはカスタムフック）の中でだけ呼ぶ**
+   - 普通の JS 関数の中では呼べない
+
+カスタムフックは「フックを呼ぶ関数」なので、命名を `use` で始めると ESLint プラグインがこのルールを自動でチェックしてくれます。
+
+### なぜフックを切り出すのか
+
+単にコンポーネントを分けるのと違い、**state のロジックだけ** を切り出せます。UI は各コンポーネントが自由に書いて、state の振る舞いだけ共通化する、という分け方ができます。
+
+- `useTodos` は state 管理だけ
+- `TodoList` / `TodoInput` などの UI コンポーネントは表示だけ
+- 「TODO の件数を表示するバッジ」など別の UI を追加したくなっても、`useTodos` をもう 1 回呼ぶだけで state が手に入る
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/layout.tsx` に `next/font/google` の import と `className` を足すだけなので、前レッスンまでの資産が無くても動きます。
+「親子コンポーネントの連携」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` に `done` を追加し、`src/useTodos.ts` を新規作成してロジックを抽出します。
 
-### 前回のプロジェクトを開く
+<details>
+<summary>出発点のファイル（本レッスンで <code>done</code> を追加）</summary>
 
-これまでのプロジェクトを開き直しましょう。
+**`src/types.ts`**
 
-### 手順 1: 適用前の見た目を記録する
-
-まず、`/about` を開いてスクショを 1 枚撮っておきます（または目で覚えておきます）。これが「システムフォント」の状態です。
-
-ASCII 図で表すと次のような雰囲気です（ブラウザやフォント設定で変わります）。
-
-```
-+---------------------------------------+
-| Home | About | Todos                  |
-+---------------------------------------+
-|  自己紹介                             |  ← システムゴシック
-|  Web フロントエンドを学び中です。    |     角ばった一般的な表示
-|                                       |
-|  好きなもの                           |
-|  [画像] コーヒー                      |
-|  [画像] 本                            |
-|  [画像] 散歩                          |
-+---------------------------------------+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
 ```
 
-日本語は OS のシステムフォント（macOS なら Hiragino、Windows なら Yu Gothic、など）で表示されています。
-
-### 手順 2: `Inter` をルートレイアウトに適用
-
-`app/layout.tsx` を次のように書き換えます。
+**`src/TodoInput.tsx`**
 
 ```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { Inter } from "next/font/google";
-import "./globals.css";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata = {
-  title: "My Next App",
+type TodoInputProps = {
+  onAdd: (text: string) => void;
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed);
+    setText("");
+  }
+
   return (
-    <html lang="ja" className={inter.className}>
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
+    <form onSubmit={handleSubmit} className="todo-input">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
   );
+}
+```
+
+**`src/TodoList.tsx`**
+
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+};
+
+export function TodoList({ todos, onDelete }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p className="empty">まだタスクがありません</p>;
+  }
+
+  return (
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          {todo.text}
+          <button onClick={() => onDelete(todo.id)}>削除</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { useState } from "react";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
+
+function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function handleDelete(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  return (
+    <>
+      <h1>TODO（親子連携版）</h1>
+      <TodoInput onAdd={handleAdd} />
+      <TodoList todos={todos} onDelete={handleDelete} />
+    </>
+  );
+}
+
+export default App;
+```
+
+本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props を `onToggle` も受け取る形に拡張します。演習本体のコードがそのまま上書きになります。
+
+</details>
+
+### ゴール
+
+- ここまでの React レッスンで作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する
+- 戻り値は `{ todos, addTodo, deleteTodo, toggleTodo }` の 4 つ
+- `App` から `useTodos()` を呼び出して使う
+- **localStorage 連携は今回は扱わない**（次の「TODO アプリを React で作る」で畳み込む）
+
+### 手順
+
+1. 「親子コンポーネントの連携」か「useEffect の基本」の React プロジェクトをコピーして新規に開く（別プロジェクトでも可）
+2. `src/types.ts` は3 章 で作った `Todo` 型をそのまま使う
+3. `src/useTodos.ts` を新規作成（カスタムフック）
+4. `src/TodoInput.tsx`、`src/TodoList.tsx` は既存のままでよい
+5. `src/App.tsx` で `useTodos()` を呼び出す形に書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+```
+
+### `src/useTodos.ts`
+
+```ts
+import { useState } from "react";
+import type { Todo } from "./types";
+
+export function useTodos() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  const addTodo = (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    setTodos((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), text: trimmed, done: false },
+    ]);
+  };
+
+  const deleteTodo = (id: string) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const toggleTodo = (id: string) => {
+    setTodos((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+    );
+  };
+
+  return { todos, addTodo, deleteTodo, toggleTodo };
 }
 ```
 
 ポイント:
 
-- `import { Inter } from "next/font/google";` を追加。
-- `const inter = Inter({ subsets: ["latin"] });` をモジュール先頭に。
-- `<html>` の `className={inter.className}` を付与。
+- ファイル名は `useTodos.ts`（拡張子は `.ts` で OK、JSX を書かないので `.tsx` 不要）
+- `use` で始まる関数名
+- 戻り値はオブジェクトで 4 要素を返す
+- `addTodo` の中で `trim` して空文字を弾く（2 章 の「TODO アプリを作る」で覚えたロジック）
 
-保存すると、StackBlitz のビルドが走り、プレビューが更新されます。
-
-### 期待出力: 適用後の見た目
-
-もう一度 `/about` を開きます。今度は **欧文部分が Inter** で表示されます。日本語はまだシステムフォントのままです。
-
-ASCII 図で表すとこう変わります。
-
-```
-+---------------------------------------+
-| Home | About | Todos   ← Inter に変化 |
-+---------------------------------------+
-|  自己紹介                             |  ← 日本語はシステムフォント
-|  Web フロントエンドを学び中です。    |     Web → Web は Inter で表示
-|                                       |
-|  Cards                                |  ← ラテン文字は丸みのある Inter
-+---------------------------------------+
-```
-
-英字の「Home / About / Todos」、本文中の「Web」などの **ラテン文字が Inter に変わっている** ことを、適用前スクショと見比べて確認します。
-
-どこが違って見えるかのヒント:
-
-- Inter は可読性重視の現代的なサンセリフ。特に数字とアルファベットの字形（例: `a`、`g`、`1`、`4`）が、システムゴシックと見分けやすいです。
-- 字間（トラッキング）も少し広くなります。
-
-### 手順 3: 日本語は `Noto_Sans_JP` を見出しに当てる
-
-日本語の本文も Web フォントにしたい場合は、`Noto_Sans_JP` を併用します。ここでは「見出しだけ `Noto_Sans_JP`、本文は Inter + システム日本語フォント」の使い分けをやってみます。
-
-`app/layout.tsx` を次のように拡張します。
+### `src/TodoInput.tsx`
 
 ```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { Inter, Noto_Sans_JP } from "next/font/google";
-import "./globals.css";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-const inter = Inter({ subsets: ["latin"] });
-const notoJp = Noto_Sans_JP({
-  subsets: ["latin"],
-  weight: ["500", "700"],
-});
-
-export const metadata = {
-  title: "My Next App",
+type TodoInputProps = {
+  onAdd: (text: string) => void;
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onAdd(text);
+    setText("");
+  }
+
   return (
-    <html lang="ja" className={inter.className}>
-      <body>
-        <header className={`site-header ${notoJp.className}`}>
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
+    <form onSubmit={handleSubmit}>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
   );
 }
 ```
 
-ポイント:
+### `src/TodoList.tsx`
 
-- 2 つのフォントを同時に呼べます。
-- `Noto_Sans_JP` は **アンダースコア区切り** のインポート名です（ハイフン付きのフォント名はアンダースコアに置き換わります）。
-- `weight` を `["500", "700"]` に絞って、不要なウェイトをダウンロードさせません。
-- `className` は **テンプレートリテラルで複数合成** できます（`${notoJp.className}` をヘッダーだけに付与）。
+```tsx
+import type { Todo } from "./types";
 
-> `subsets` に `"japanese"` を指定すると日本語グリフも含まれますが、**ファイルが大きくなる** ので本演習では `"latin"` のみにし、日本語はシステムフォントに任せる割り切りにします。必要な読者は `subsets: ["latin", "japanese"]` を試してみてください。
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+  onToggle: (id: string) => void;
+};
 
-### 期待出力（再度の対比）
+export function TodoList({ todos, onDelete, onToggle }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p>TODO はまだありません。</p>;
+  }
 
-ブラウザで `/about` を開いて手順 2 との違いを見ます。
-
+  return (
+    <ul>
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          <label>
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => onToggle(todo.id)}
+            />
+            <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
+              {todo.text}
+            </span>
+          </label>
+          <button type="button" onClick={() => onDelete(todo.id)}>
+            削除
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
 ```
-+---------------------------------------+
-| Home | About | Todos   ← Noto Sans JP |
-+---------------------------------------+
-|  自己紹介   ← 本文は Inter + システム  |
-|  ...                                  |
-+---------------------------------------+
+
+### `src/App.tsx`
+
+```tsx
+import { useTodos } from "./useTodos";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+
+export default function App() {
+  const { todos, addTodo, deleteTodo, toggleTodo } = useTodos();
+
+  return (
+    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
+      <h1>私の TODO（useTodos 版）</h1>
+      <TodoInput onAdd={addTodo} />
+      <TodoList todos={todos} onDelete={deleteTodo} onToggle={toggleTodo} />
+    </main>
+  );
+}
 ```
 
-ヘッダーの文字が Noto Sans JP の統一感ある字形になり、本文と少し印象が変わります。ヘッダーの日本語は現時点では入っていないので、差分は欧文（Home / About / Todos）の字形で見ることになります。
+- `App` は state を直接持っていません
+- `useTodos()` を呼ぶだけで、state と操作関数が手に入る
+- `App` は「UI を組み立てるだけ」に役割が絞られた
 
-### 変えてみる
+### 期待出力
 
-1. `<html lang="ja" className={inter.className}>` を `<html lang="ja" className={notoJp.className}>` に変えて、全体が Noto Sans JP になった見た目を確認しましょう（字面が丸くなる）。
-2. `Inter` の呼び出しに `{ subsets: ["latin"], weight: ["400", "700"] }` を渡してみましょう。weight の指定で読み込まれるファイル数が変わります（DevTools → Network で確認）。
-3. いったん `className={inter.className}` を外して保存し、システムフォントに戻った見た目をもう一度目に焼き付けてから、付け直しましょう。切り替わりの一瞬（FOUT）が体感できることがあります。
+- 画面に入力欄 + 追加ボタン + 一覧
+- 追加すると一覧に増え、チェックボックスで完了状態切り替え、削除ボタンで消える
+- 機能は以前と変わらない。**コード構造が整理された** ことが今回のポイント
 
-### スコープ外
+### 変える
 
-- `variable` font の詳細、CSS 変数 (`--font-inter`) 連携は扱いません。
-- `display` の他の値（`"block"`、`"fallback"`、`"optional"`）は扱いません。デフォルト `"swap"` のみ。
-- 有料フォントサービス（Adobe Fonts など）との連携は扱いません。
+- `useTodos()` を **2 回呼び出す** とどうなるか試す:
+  ```tsx
+  const { todos } = useTodos();
+  const { todos: todos2 } = useTodos();
+  ```
+  それぞれ独立した state になる。2 章 の「スコープとクロージャ」の `counterA` / `counterB` と同じ形
+- `useTodos` の戻り値にカスタムな派生値を加える: `const doneCount = todos.filter((t) => t.done).length;` を計算して返す
 
 ### 自分で書く
 
-`Roboto` や `Lato` など別の Google Font を 1 つ選び、`<html>` に適用してみましょう。`import { Roboto } from "next/font/google"` のようにインポートし、`subsets: ["latin"]` を指定するだけです。字形の違いを `/about` の見出しや本文で観察します。
+- `useCounter(initial: number)` カスタムフックを作る
+- 戻り値は `{ count, increment, decrement, reset }`
+- ヒント: `const [count, setCount] = useState(initial);` と、`useState` の更新関数を使った 3 つの操作関数
+
+### 「TODO アプリを React で作る」への前振り
+
+- 今の `useTodos` は state をメモリに持つだけで、リロードすると消える
+- 次の「TODO アプリを React で作る」で `useTodos` に **localStorage 連携** を内蔵させ、「TODO アプリを React で作る」の「バグあり版 → 修正版」構造でバグを体験しながら整える
 
 ## まとめ
 
-- `next/font/google` から使いたいフォントを import し、`subsets` を指定して呼び出すだけでフォントの自動最適化が有効になります。
-- 戻り値の `className` を `<html>` や `<body>` に付けると、配下全体に適用されます。
-- `display` のデフォルトは **`"swap"`**（先にシステムフォントで描画し、読み込みが済んだら差し替わる FOUT 挙動）です。
-- 適用前のシステムフォントと適用後の Web フォントで、同じページの印象が大きく変わることを目で確認できました。
-- 別のレッスンで動的ルート `[id]` に進みます。フォントと画像は裏側で効き続けたまま、URL に応じたページを作っていきます。
+- カスタムフックは `use` で始まる関数。内部で他のフックを呼べる
+- state のロジックだけを切り出して、UI 側を身軽にできる
+- 2 章 の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
+- フックのルールは 2 つ: トップレベルで呼ぶ / React 関数（コンポーネントまたはフック）の中でだけ呼ぶ
+- localStorage 連携は次の「TODO アプリを React で作る」で扱う

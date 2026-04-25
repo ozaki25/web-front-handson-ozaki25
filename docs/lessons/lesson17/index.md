@@ -1,166 +1,98 @@
-# lesson17: 条件で分岐する
+# lesson17: 最初の JavaScript
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-const age = 20;
-
-if (age >= 20) {
-  console.log(age + ' 歳: 成人です');
-} else if (age >= 13) {
-  console.log(age + ' 歳: 10 代です');
-} else {
-  console.log(age + ' 歳: 子供です');
-}
-
-if (age >= 20 && age < 60) {
-  console.log('働き盛り');
-}
+console.log('Hello, JavaScript');
+console.log('2 + 3 は', 2 + 3);
 `
 </script>
 
 ## ゴール
 
-- `if` / `else if` / `else` で処理を分けられる
-- `===` / `!==` で等しい / 等しくないを判定できる
-- `&&` / `||` / `!` を組み合わせて条件を書ける
+- HTML に外部 JavaScript ファイルを読み込める
+- `console.log` で値を出力できる
+- `let` と `const` で変数を宣言できる
+- DevTools の Console パネルでログを確認できる
+- `<script defer>` を「外部 JS を読み込む標準の書き方」として身につける
 
 ## 解説
 
-### `if` の基本形
+### JavaScript はブラウザの中で動く
 
-```js
-if (条件) {
-  // 条件が true のときに実行される
-}
+1 章 で書いてきた HTML と CSS は「何を置くか」と「どう見せるか」を担当します。ここから学ぶ JavaScript（以降 JS）は「動きをつける」担当です。ボタンを押したら何かが起きる、入力した内容に応じて画面が変わる、といった処理はすべて JS が担当します。
+
+JS は基本的にブラウザの中で動くプログラミング言語です。HTML に JS を読み込ませると、ページを開いたときにブラウザが JS を実行してくれます。
+
+### JS を HTML に読み込む方法
+
+今回から、JS は `script.js` という別ファイルに書いて、HTML から読み込む形にします。HTML に直接書くより読みやすく、後で管理しやすくなります。
+
+読み込むタグは `<script>` です。本コースでは以下の形に固定します。
+
+```html
+<script defer src="./script.js"></script>
 ```
 
-条件が「真（`true`）」のときだけ、波かっこの中が実行されます。「偽（`false`）」なら飛ばされます。
+`defer` 属性を付けると、ブラウザは「HTML をすべて読み終えてから JS を実行する」という順序で動いてくれます。これを徹底しておくと、後のレッスンで `document.querySelector(...)` が `null` を返す事故（HTML より先に JS が走り、まだ存在しない要素を探してしまう）を防げます。
 
-### `else` と `else if`
+### なぜ `defer` か（コラム）
 
-「そうでないとき」は `else`、「別の条件も試したい」は `else if` を使います。
+`<script>` の書き方には昔からいくつかの流派があります。
 
-```js
-if (age >= 20) {
-  console.log("成人");
-} else if (age >= 13) {
-  console.log("中高生");
-} else {
-  console.log("それ以外");
-}
-```
+- `<head>` の中に `<script src="...">` だけ書く → HTML の解析が止まって遅くなる
+- `<body>` の末尾に `<script src="...">` を書く → 動くが、書く場所が散らばる
+- `<head>` の中に `<script defer src="...">` を書く → HTML の解析を止めず、解析完了後に実行される
 
-上から順に条件を見て、最初に `true` になったブロックだけが実行されます。どれも当てはまらなければ `else` が実行されます。
+3 つ目の書き方が現在の推奨です。HTML が完成してから JS が動くため、DOM を探しに行く処理（「DOM を操作する」以降）でも安心して使えます。本コースではこの形だけを使います。
 
-### 比較演算子
+### `console.log` と DevTools の Console
 
-| 演算子 | 意味 |
-| --- | --- |
-| `===` | 等しい |
-| `!==` | 等しくない |
-| `>` | 左が右より大きい |
-| `>=` | 左が右以上 |
-| `<` | 左が右より小さい |
-| `<=` | 左が右以下 |
+`console.log(...)` は「この値をログに出す」命令です。ブラウザの DevTools にある「Console」パネルを開くと、そこにログが表示されます。画面には出ませんが、開発中の確認に最も使う命令です。
 
-等しいかどうかは **必ず `===` と `!==`** を使います。`==` と `!=` は値の種類が違っても自動で変換して比較する古い演算子で、混乱の原因になるため本コースでは使いません。
+DevTools の開き方は1 章 で学んだ Elements パネルと同じで、右クリック → 「検証」、または `F12` キーです。Elements の隣に Console タブがあります。
 
-### 論理演算子
-
-複数の条件をつなぎたいときに使います。
-
-| 演算子 | 意味 |
-| --- | --- |
-| `&&` | 両方とも `true` のとき `true` |
-| `\|\|` | どちらかが `true` なら `true` |
-| `!` | `true` と `false` を反転 |
-
-```js
-if (age >= 13 && age <= 19) {
-  console.log("10 代");
-}
-
-if (name === "" || name === null) {
-  console.log("名前が未入力");
-}
-
-if (!isStudent) {
-  console.log("学生ではない");
-}
-```
-
-下のデモで、`age` の値を変えると条件分岐の結果が Console にどう出るかを体感できます。`age` を `12` / `20` / `70` に書き換えると出力が変わります。
+下のデモは JS が実際に動いている最小例です。`console.log` の結果がページ下部の黒い領域に表示されます（本物の DevTools Console と同じ内容）。
 
 <LiveDemo
-  height="180px"
-  :html="`<p>age の値を変えてデモのソースを書き換えて試してください。</p>`"
+  height="200px"
+  :html="`<p>JS からの出力は下の黒い領域に出ます。</p>`"
   :css="``"
   :js="demoJs"
 />
+
+### `let` と `const`
+
+値に名前をつけておくしくみを変数と呼びます。JS では 2 つのキーワードを使い分けます。
+
+- `const`: 後から値を書き換えない変数。迷ったらまずこちら
+- `let`: 後から値を書き換える可能性がある変数
+
+古い教材では `var` も出てきますが、本コースでは使いません。
+
+```js
+const userName = "Alice";
+let count = 0;
+count = count + 1;
+```
+
+`const` で宣言した変数に別の値を代入しようとすると、エラーになります。これは「うっかり書き換え」を防いでくれる仕組みです。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
-
-<details>
-<summary>出発点のコード</summary>
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson16</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson16: 値の種類</h1>
-  </body>
-</html>
-```
-
-**`script.js`**
-
-```js
-const userName = "Alice";
-const age = 20;
-const isStudent = true;
-const nickname = null;
-let score;
-
-console.log(userName);
-console.log(age);
-console.log(isStudent);
-console.log(nickname);
-console.log(score);
-
-const message = `あなたは ${userName} さんで、${age} 歳です`;
-console.log(message);
-
-const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
-console.log(summary);
-```
-
-</details>
+このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）から始められます。これまでのレッスンのコードは引き継ぎません。
 
 ### ゴール
 
-- 年齢を表す変数 `age` の値によって「成人 / 未成年」を分岐表示する
-- 年齢を変えて結果が切り替わることを確認する
+- `script.js` を作り、自分の名前を変数に入れてコンソールに表示する
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson17` に変える
-2. `script.js` を以下に書き換える
-3. Console で結果を確認する
+1. StackBlitz の Vanilla（HTML + CSS + JS）テンプレートを開く
+2. `index.html` を以下の内容にする
+3. `script.js` を以下の内容にする
+4. プレビューを開き、DevTools の Console を開く
 
 ### `index.html`
 
@@ -174,7 +106,8 @@ console.log(summary);
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson17: 条件で分岐する</h1>
+    <h1>lesson17: 最初の JavaScript</h1>
+    <p>DevTools の Console を開いてください。</p>
   </body>
 </html>
 ```
@@ -182,60 +115,48 @@ console.log(summary);
 ### `script.js`
 
 ```js
-const age = 20;
 const userName = "Alice";
-const isStudent = true;
+let count = 0;
 
-if (age >= 20) {
-  console.log(`${userName} さんは成人です`);
-} else {
-  console.log(`${userName} さんは未成年です`);
-}
+console.log("Hello, JavaScript");
+console.log(name);
+console.log(count);
 
-if (age >= 13 && age <= 19) {
-  console.log("10 代です");
-} else if (age >= 20 && age < 60) {
-  console.log("大人です");
-} else {
-  console.log("それ以外の年代です");
-}
-
-if (isStudent && age >= 20) {
-  console.log("成人の学生です");
-}
-
-if (!isStudent) {
-  console.log("学生ではありません");
-} else {
-  console.log("学生です");
-}
+count = count + 1;
+console.log(count);
 ```
 
 ### 期待出力
 
-`age = 20` の場合、Console には次のように表示されます。
+DevTools の Console に、上から順に次のように表示されます。
 
 ```
-Alice さんは成人です
-大人です
-成人の学生です
-学生です
+Hello, JavaScript
+Alice
+0
+1
 ```
+
+画面には何も追加で表示されません（JS は Console にだけ書き出しています）。
 
 ### 変える
 
-- `age` を `18` に変える → 「未成年です」「10 代です」「学生です」に変わる（「成人の学生です」の行は出なくなる）
-- `age` を `65` に変える → 「成人です」「それ以外の年代です」「学生です」になる（`isStudent` が `true` のまま）
-- `isStudent` を `false` に変える → 「学生ではありません」に切り替わる
-- `===` と `==`、`!==` と `!=` は本コースでは前者だけを使う。試しに `age == "20"` と書いてみると `true` になる（型が違うのに等しいと判定される）ので、その気持ち悪さだけ体験しておく
+- `userName` の中身を自分の名前に書き換える → Console の 2 行目が変わる
+- `count = count + 1;` の下にもう 1 行 `count = count + 1;` を足して `console.log(count);` を追加 → `2` が表示される
+- `const` で宣言した `userName` に別の値を代入する行を追加（例: `userName = "Bob";`）→ Console に赤字でエラーが出ることを確認（下記の注意を参照）
+
+**`const` への再代入を試したときの挙動について**: 再代入の行を加えると、スクリプト全体の実行が **途中で止まる** ことがある。最初の `console.log("Hello, JavaScript")` までしか出ず、その下の `console.log(userName)` などが出ないケースもある。これは環境によって「実行中のエラー」ではなく「パース段階でのエラー」扱いになるため。動作が変だと感じたら、足した 1 行を削除して元に戻せばよい。
+
+**変数名に `name` を使わない理由**: 今回は `userName` を使っている。ブラウザの `window` には組み込みで `window.name` というプロパティがあり、`const name = ...` を書くと環境によって衝突して予想外の挙動になる。他人のコードで `name` を見たときはこの落とし穴を思い出すとよい。
 
 ### 自分で書く
 
-- 変数 `score`（テストの点数）を作り、90 以上なら「A」、70 以上なら「B」、50 以上なら「C」、それ未満なら「D」と出すコードを書く
-- 変数 `hour`（0〜23）を作り、`6 <= hour && hour < 12` なら「おはよう」、`12 <= hour && hour < 18` なら「こんにちは」、そうでなければ「こんばんは」と出すコードを書く
+- `const age = 20;` のような行を追加し、`console.log(age);` で値を表示する
+- `let message = "こんにちは";` と書き、後から `message = "さようなら";` に書き換えて 2 回 `console.log(message)` する
 
 ## まとめ
 
-- `if` / `else if` / `else` で分岐を書く
-- 等しいかの判定は `===` / `!==`（`==` / `!=` は使わない）
-- 複数条件は `&&`（かつ）/ `||`（または）/ `!`（否定）を使い分ける
+- 外部 JS は `<head>` に `<script defer src="...">` で読み込む
+- `console.log(...)` は DevTools の Console にログを出す
+- 変数は `const`（書き換え不可）を基本にし、必要なときだけ `let` を使う
+- `<script defer>` は以降すべてのレッスンで標準形として使い続ける

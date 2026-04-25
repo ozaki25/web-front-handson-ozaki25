@@ -1,206 +1,469 @@
-# lesson71: Proxy で認証前処理
+# lesson71: 共通レイアウトを作る
 
 ## ゴール
 
-- `proxy.ts` を使ってリクエストに割り込める
-- 認証状態（Cookie）に応じてリダイレクトできる
-- Node.js ランタイムで動くことと、軽量処理に留めるべき理由を理解する
-- `matcher` で適用範囲を絞れる
+- `app/layout.tsx` の役割を理解し、全ページで共通のヘッダー・フッターを持てます。
+- `children` という props を受け取って、中に各ページの中身を差し込む仕組みを把握できます。
+- ルートレイアウトがデフォルトで Server Component であることを確認できます。
 
 ## 解説
 
-### Proxy とは
+### 同じ見た目を毎ページ書くのは大変
 
-**Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
+「ページを増やしてリンクで移動する」で 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
 
-> Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
+この「全ページで共通の外側」を 1 箇所に集めるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
 
-配置ルール:
+### `app/layout.tsx` の最小形
 
-- ファイル名は **`proxy.ts`（または `.js`）** 固定
-- 配置は **プロジェクトルート直下** または `src/` 直下（`app/` や `pages/` の横に置く）
-- 1 つのプロジェクトに 1 ファイルのみ
+StackBlitz の Next.js テンプレートには最初から `app/layout.tsx` が用意されています。中身は概ね次の形になっています。
 
-### 最小の proxy
+```tsx
+export const metadata = {
+  title: "My App",
+};
 
-```ts
-// proxy.ts
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-
-export function proxy(request: NextRequest) {
-  // ここに前処理を書く
-  return NextResponse.next(); // 通常通りページを表示
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="ja">
+      <body>{children}</body>
+    </html>
+  );
 }
 ```
 
-- 引数 `request` は `NextRequest`（通常の `Request` に Next.js 独自の機能を追加したもの）
-- export は **named `proxy` 関数** または **default export** のどちらかで書けます
-- 戻り値:
-  - `NextResponse.next()` → そのままページへ
-  - `NextResponse.redirect(url)` → リダイレクトする
-  - `NextResponse.rewrite(url)` → URL はそのままで別ページを表示（中身を差し替え）
+重要なのは次の点です。
 
-### `matcher` で適用範囲を絞る
+- **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
+- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（「ページを増やしてリンクで移動する」で「コピーしない」と言ったのはこのためです）。
+- `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
+- `LayoutProps<"/">` は Next.js 16 が自動生成する **グローバル型** です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` にルート別の型定義が生成されます。第 1 引数の `"/"` はこの `layout.tsx` が覆うルートのパスで、他のルート用レイアウトなら `LayoutProps<"/posts">` のように書きます。
+- `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
 
-デフォルトでは **すべてのリクエスト** で proxy が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
+### `children` の正体
 
-```ts
-export const config = {
-  matcher: ["/todos/:path*", "/admin/:path*"],
-};
-```
+`children` はこれまで4 章 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
 
-- `/todos/:path*` は `/todos` と `/todos/*` の全部にマッチ
-- 静的アセット（画像・CSS）など余計なものを避ける
+レイアウトの場合、Next.js が現在 URL に対応する `page.tsx` を自動で `children` に入れてくれます。学習者が直接 `<RootLayout>` を呼ぶことはありません。
 
-### Node.js ランタイムで動く
+- `/` にアクセス → `app/page.tsx` の JSX が `children` に入る
+- `/about` にアクセス → `app/about/page.tsx` の JSX が `children` に入る
+- `/todos` にアクセス → `app/todos/page.tsx` の JSX が `children` に入る
 
-Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
+### ルートレイアウトは Server Component
 
-重要な指針:
+`app/layout.tsx` の先頭に `"use client"` は付いていないので、これは **Server Component** として動きます。ヘッダーやフッターなど、クリックで動くような仕掛けがなければ Server Component のままで良いです。
 
-- **重い処理は proxy に書かない**。ユーザー認証の JWT 署名検証や細かい権限チェックは Server Components / Server Actions に寄せる
-- proxy は「Cookie が無ければログインへ飛ばす」のような **トラフィック制御** に絞る
+今回のようにナビ内の `<Link>` を並べるだけならイベントハンドラを使わないので、`"use client"` は不要です。
 
-「Route Handlers」と同じ Node.js ランタイム上で動きますが、**ページ本体の前に毎回走る** ぶん、オーバーヘッドが気になりやすい点に注意してください。
+### レイアウトは入れ子にできる（予告）
 
-### 本コースの範囲
-
-本レッスンでは **最小形の認証前処理** だけを扱います。
-
-- Cookie `auth` がある → 通す
-- Cookie `auth` が無い → `/login` にリダイレクト
-
-本格的な認証（NextAuth、JWT 検証、セッション管理）は扱いません。「認証のガワを書く感じ」を体験するだけです。
+実は `app/<path>/layout.tsx` を置くと、その配下のページだけに適用される追加のレイアウトが作れます。本コースでは **ルートレイアウト 1 枚** のみ使います（入れ子レイアウトは扱いません）。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`proxy.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
-### ゴール
+<details>
+<summary>出発点のファイル</summary>
 
-- `/todos` にアクセスしたとき、Cookie `auth` が無ければ `/login` にリダイレクトする
-- `/login` ページで「ログイン」ボタンを押すと Cookie が立って `/todos` に戻れる
-
-### 手順
-
-1. これまでのプロジェクトを開く（5 章 のここまでの成果を引き継ぐ）
-2. `proxy.ts` をプロジェクトルート直下に新規作成
-3. `app/login/page.tsx` を新規作成
-
-### `proxy.ts`（プロジェクトルート直下）
-
-```ts
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
-
-export function proxy(request: NextRequest) {
-  const auth = request.cookies.get("auth");
-
-  if (!auth) {
-    // /login にリダイレクト
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: ["/todos/:path*"],
-};
-```
-
-ポイント:
-
-- `request.cookies.get("auth")` で Cookie を読む
-- `NextResponse.redirect(loginUrl)` でリダイレクト
-- `matcher` で `/todos` 配下だけに適用（`/` や `/about` は素通り）
-
-### `app/login/page.tsx`（新規）
+**`app/page.tsx`**
 
 ```tsx
-"use client";
+import Link from "next/link";
 
-import { useRouter } from "next/navigation";
-
-export default function LoginPage() {
-  const router = useRouter();
-
-  function handleLogin() {
-    // Cookie をその場で立てる（max-age 1 時間）
-    document.cookie = "auth=1; path=/; max-age=3600";
-    // /todos に遷移
-    router.push("/todos");
-  }
-
+export default function Page() {
   return (
     <main>
-      <h1>ログイン</h1>
-      <p>
-        本格認証は本コースでは扱いません。下のボタンで Cookie を立てて `/todos`
-        にアクセスできるようにします。
-      </p>
-      <button type="button" onClick={handleLogin}>
-        ログイン
-      </button>
+      <h1>ようこそ</h1>
+      <nav>
+        <ul>
+          <li>
+            <Link href="/">Home</Link>
+          </li>
+          <li>
+            <Link href="/about">About</Link>
+          </li>
+          <li>
+            <Link href="/todos">Todos</Link>
+          </li>
+        </ul>
+      </nav>
     </main>
   );
 }
 ```
 
-ポイント:
+**`app/about/page.tsx`**
 
-- `"use client"` を付ける（`document.cookie` や `useRouter` を使うため）
-- ボタンクリックで `document.cookie` を直接書く
-- `useRouter().push("/todos")` で `/todos` に遷移
+```tsx
+import "./about.css";
+
+export default function AboutPage() {
+  return (
+    <>
+      <header className="site-header">
+        <h1>私の名前</h1>
+        <nav className="site-nav">
+          <a href="#about">自己紹介</a>
+          <a href="#likes">好きなもの</a>
+          <a href="#contact">問い合わせ</a>
+        </nav>
+      </header>
+
+      <main>
+        <section id="about">
+          <h2>自己紹介</h2>
+          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+        </section>
+
+        <section id="likes">
+          <h2>好きなもの</h2>
+          <div className="cards">
+            <article className="card">
+              <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+              <h3>コーヒー</h3>
+              <p>朝の 1 杯が欠かせない。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+              <h3>本</h3>
+              <p>技術書からエッセイまで。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+              <h3>散歩</h3>
+              <p>行き先を決めずに歩く。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="contact">
+          <h2>問い合わせ</h2>
+          <form>
+            <div>
+              <label htmlFor="name">お名前</label>
+              <input id="name" name="name" type="text" required />
+            </div>
+            <div>
+              <label htmlFor="email">メール</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+            <div>
+              <label htmlFor="message">メッセージ</label>
+              <textarea id="message" name="message" rows={4} required></textarea>
+            </div>
+            <button type="submit">送信</button>
+          </form>
+        </section>
+      </main>
+
+      <footer className="site-footer">
+        <p>&copy; 私の名前</p>
+      </footer>
+    </>
+  );
+}
+```
+
+**`app/about/about.css`**
+
+```css
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  background-color: #f9fafb;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e5e7eb;
+    background-color: #0b1220;
+  }
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.site-header {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-nav a {
+  color: #f9fafb;
+  margin-right: 16px;
+}
+
+.cards {
+  display: flex;
+  gap: 16px;
+}
+
+.cards .card {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cards .card {
+    background-color: #111827;
+    border-color: #374151;
+  }
+}
+
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.site-footer {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .cards {
+    flex-direction: column;
+  }
+}
+```
+
+**`app/todos/page.tsx`**
+
+```tsx
+export default function TodosPage() {
+  return (
+    <main>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
+    </main>
+  );
+}
+```
+
+</details>
+
+### 前回のプロジェクトを開く
+
+これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
+
+### 手順 1: ヘッダーとフッターをルートレイアウトに集める
+
+`app/layout.tsx` を以下に書き換えます。
+
+```tsx
+import Link from "next/link";
+import "./globals.css";
+
+export const metadata = {
+  title: "My Next App",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="ja">
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
+```
+
+### 手順 2: 共通 CSS
+
+`app/globals.css` を開き（StackBlitz テンプレートに既にあります）、末尾に以下を追加します。存在しなければ新規作成してください。
+
+```css
+.site-header ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding: 1rem;
+  background: #f5f5f5;
+}
+
+.site-header a {
+  text-decoration: none;
+  color: #0070f3;
+}
+
+.site-footer {
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  color: #555;
+}
+
+/* ダークモード色指定: 白背景前提にすると文字が読めなくなるため必ず上書き */
+@media (prefers-color-scheme: dark) {
+  .site-header ul {
+    background: #1f1f1f;
+  }
+  .site-header a {
+    color: #4ea2ff;
+  }
+  .site-footer {
+    border-top-color: #333;
+    color: #bbb;
+  }
+}
+```
+
+### 手順 3: 各ページからナビを消す
+
+`app/page.tsx` から `<nav>` のブロックを削除し、ページ固有の中身だけにします。
+
+```tsx
+export default function Page() {
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <p>このアプリについてはヘッダーのリンクから。</p>
+    </>
+  );
+}
+```
+
+`app/about/page.tsx` はこれまでのレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
+
+これまでの `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始めます）。
+
+```tsx
+import "./about.css";
+
+export default function AboutPage() {
+  return (
+    <>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </>
+  );
+}
+```
+
+これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになります。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整えます。
+
+`app/todos/page.tsx` も同様にページ固有の中身だけ残します。
+
+```tsx
+export default function TodosPage() {
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
+    </>
+  );
+}
+```
 
 ### 期待出力
 
-1. Cookie が何もない状態で `/todos` にアクセス → `/login` にリダイレクトされる
-2. 「ログイン」ボタンを押す → `/todos` に遷移、一覧が見える
-3. DevTools → Application → Cookies で `auth=1` が登録されているのが確認できる
-4. Cookie を削除してから `/todos` にアクセスし直す → また `/login` に戻される
+- どのページにアクセスしても、画面上部に「Home / About / Todos」のナビ、下部に「&copy; 2026 My Next App」のフッターが表示されます。
+- ナビをクリックするとページ本体だけが差し替わります（ヘッダー・フッターは再レンダリングされません）。
+- ブラウザタブのタイトルが「My Next App」になっています（`export const metadata` によります）。
 
-### 変える
+### 変えてみる
 
-- Cookie 名を `session` に変えて、`proxy.ts` と `login/page.tsx` の両方を追随する
-- `matcher` を `["/todos/:path*", "/admin/:path*"]` に増やして、`/admin/page.tsx` を作り、そちらでもリダイレクトが効くことを確認
-- `NextResponse.redirect` を `NextResponse.rewrite` に変えて挙動の違いを見る（URL が書き換わらないで表示が変わる）
-- `export function proxy(...)` を `export default function(...)` に書き換えて、どちらでも動くことを確認
+1. `metadata.title` を自分のアプリ名に変えて、タブ名が変わるのを確認しましょう。
+2. フッターの著作権表示を自分の名前に変えましょう。
+3. 試しに `app/about/layout.tsx` を作って、そこに `<h2>自己紹介セクション</h2>` を入れてみましょう。`/about` の中だけにそのタイトルが追加されることを確認したら、実験が終わったらそのファイルは削除します（本コースではルートレイアウト 1 枚運用）。
 
 ### 自分で書く
 
-- 「ログアウト」ボタンを `/login` に追加し、Cookie を消す:
-  ```ts
-  document.cookie = "auth=; path=/; max-age=0";
-  ```
-- `/todos` のページヘッダーに「ログイン中」と表示し、Cookie が無いとリダイレクトされるので逆に常に「ログイン中」しか出ないことを確認
-
-### Route Handlers との組み合わせ（発展）
-
-これまでのレッスンで作った `/api/todos` も、proxy で認証必須にできます。
-
-```ts
-export const config = {
-  matcher: ["/todos/:path*", "/api/todos/:path*"],
-};
-```
-
-これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「proxy で API も守れる」ことだけ押さえます。
-
-### Node.js ランタイムでの注意
-
-Next.js 16 から proxy は Node.js ランタイムで動くので、`fs` / `path` / ネイティブモジュールなどの Node API が使えます。ただし **proxy は毎リクエスト前に走る** ため、重い処理（DB 接続・大きな計算）は書かないでください。ファイル I/O や外部 API 呼び出しは Server Components / Server Actions / Route Handlers に寄せるのが原則です。
+`app/layout.tsx` を何も見ずに、`<html>` `<body>` `{children}` の最小構成から書き直してみましょう。ヘッダーとフッターを再度足して、見た目が崩れないことを確認します。
 
 ## まとめ
 
-- `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
-- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
-- `NextResponse.next` / `redirect` / `rewrite` で分岐
-- `matcher` で適用パスを絞る
-- Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
-- 本格認証は本コース外。擬似ログインで流れだけ掴む
+- `app/layout.tsx` は全ページ共通の外側の枠です。`<html>` と `<body>` はここだけに書きます。
+- `children` に現在のページ（`page.tsx`）の中身が自動で差し込まれます。
+- ルートレイアウトは何もしなければ Server Component です。ナビや文字を並べるだけなら `"use client"` は不要です。
+- 共通部分を 1 箇所に集めたので、ページを増やしても繰り返しコードが増えません。
+- このあとの「Server Component と Client Component」で、2 つの違いに踏み込みます。`useState` が必要な部品だけを Client にする使い分けを覚えましょう。

@@ -1,428 +1,489 @@
-# lesson95: E2E テスト — Playwright
+# lesson95: ARIA 属性とキーボード操作
 
 ## ゴール
 
-- E2E テストとユニット / コンポーネントテストの違いを説明できる
-- Playwright をプロジェクトにセットアップできる
-- `page.goto` / `page.getByRole` / `page.click` でブラウザ操作を書ける
-- Playwright の **`expect`** で UI の状態を検証できる
-- ヘッドレスモードと UI モード（`--ui`）の使い分けを知る
-- 失敗時のスクリーンショット / トレース / ビデオの仕組みを理解する
-- E2E は「ビジネスクリティカルな経路」だけに絞る判断軸を持てる
+- ARIA の **5 つの原則**（特にセマンティック HTML を優先）を理解する
+- よく使う ARIA 属性（`aria-label` / `aria-labelledby` / `aria-describedby` / `aria-expanded` / `aria-hidden` / `aria-live`）を使い分けられる
+- `role` 属性をどんな時に使うかを説明できる
+- キーボード操作（Tab / Shift+Tab / Enter / Space / Esc / 矢印キー）の標準パターンを知る
+- `tabindex` の 3 つの値（`0` / `-1` / 正の数値）の意味を説明できる
+- モーダルでのフォーカストラップ・フォーカスリングを消さない原則を守れる
 
 ## 解説
 
-### E2E テストの位置付け
+### ARIA の原則: セマンティック HTML を優先する
 
-これまでに学んだテストの違いを再確認します。
+ARIA（Accessible Rich Internet Applications）は、HTML だけでは表現しきれない意味をスクリーンリーダーに伝えるための **追加の属性** です。W3C が **ARIA の 5 つの原則** として次の「使うべきでない条件」を示しています（抜粋）。
 
-| 種類 | 範囲 | 速度 | 頻度 |
-|---|---|---|---|
-| ユニット (Vitest) | 関数 1 つ | 速い（ms） | 多い（70%） |
-| コンポーネント (RTL) | コンポーネント | 中間（数十 ms） | 中間（20%） |
-| E2E (Playwright) | アプリ全体 | 遅い（秒） | 少ない（10%） |
+1. **HTML 要素で表現できるなら、ARIA を使わない**。`<button>` が使えるなら `<div role="button">` は書かない
+2. **HTML の意味を ARIA で上書きしない**。`<h1 role="button">` のように `<h1>` を無理にボタンにしない
+3. **ARIA 付きの要素もキーボード操作可能に**。role を付けたら Tab で到達でき、Enter や Space で反応する必要がある
+4. **フォーカス可能な要素に `role="presentation"` や `aria-hidden="true"` を付けない**（触れなくなる）
+5. **インタラクティブな要素には、アクセシブルな名前を付ける**（画像ボタンなら `aria-label` を）
 
-E2E は **本物のブラウザを起動して、ユーザーが実際にやる操作の流れ全体を再現** します。「フォームに入力 → 送信 → 別ページに遷移 → 一覧に表示される」のような **複数画面にまたがる経路** を 1 つのテストで検証できます。
+つまり「**ARIA は最後の手段**」です。まずは `<button>` / `<nav>` / `<h1>` / `<label>` のような意味あるタグを使い、それでも足りないとき（複雑なウィジェット・動的更新・ネイティブ要素がないもの）だけ ARIA を足します。
 
-代償は速度と安定性です。E2E は本物のブラウザを起動するぶん遅く、ネットワーク事情で fail することもあります。だから「最重要パスだけ」に絞るのが鉄則です。
+### よく使う ARIA 属性
 
-### Playwright とは
+実務でよく書くのは以下です。全部を覚える必要はありません。
 
-**Playwright** は Microsoft 製の E2E テストフレームワークです。2026 年現在、Cypress と並ぶ二大選択肢で、新規プロジェクトでは Playwright が選ばれることが増えています。
+#### 1. `aria-label`: テキストが無い要素に名前を付ける
 
-特徴:
+アイコンだけのボタンにラベルを与えます。
 
-- Chromium / Firefox / WebKit（Safari エンジン）の **3 ブラウザを 1 つの API で** 操作できる
-- **自動待機**: 要素が現れるまで自動で待つので、`waitFor(...)` を書かなくてよい
-- **トレース・ビデオ・スクリーンショット** が失敗時に自動保存される
-- **codegen** で操作を録画してテストコードを生成できる
-- **UI モード**（`npx playwright test --ui`）で対話的にデバッグできる
-
-### セットアップ
-
-Vite + React プロジェクトに Playwright を追加します。
-
-```bash
-npm install -D @playwright/test
-npx playwright install   # ブラウザ本体（Chromium / Firefox / WebKit）をダウンロード
+```html
+<!-- 検索アイコンだけのボタン -->
+<button aria-label="検索">
+  <svg>...</svg>
+</button>
 ```
 
-> StackBlitz のブラウザ環境では `npx playwright install` でブラウザ本体を取れない場合があります。Playwright はローカル環境で動かすのが基本です。本レッスンは「読みながら手元で試す」前提で進めてください。
+スクリーンリーダーは「検索、ボタン」と読み上げます。`aria-label` がないと「ボタン」としか読まれず、何のボタンか分かりません。
 
-`playwright.config.ts` を作成（最小形）:
+#### 2. `aria-labelledby`: 他の要素をラベルにする
 
-```ts
-import { defineConfig } from "@playwright/test";
+すでに画面に表示されている見出しをラベルとして流用します。
 
-export default defineConfig({
-  testDir: "./e2e",
-  use: {
-    baseURL: "http://localhost:5173",  // Vite の開発サーバー
-    trace: "on-first-retry",            // 失敗時にトレースを保存
-  },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-  },
-});
+```html
+<section aria-labelledby="contact-heading">
+  <h2 id="contact-heading">お問い合わせ</h2>
+  <p>...</p>
+</section>
 ```
 
-`webServer` を書いておくと、テスト実行時に **自動で `npm run dev` を起動** してから E2E を回してくれます。手動で「サーバー起動 → 別ターミナルでテスト」をしなくて良くなります。
+この `<section>` は「お問い合わせ」というセクションだとスクリーンリーダーが認識します。「セマンティック HTML とアクセシビリティの基礎」の演習でも同じパターンを使いました。
 
-`package.json` に scripts を追加:
+#### 3. `aria-describedby`: 追加の説明を関連付ける
 
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
+入力欄にエラーメッセージや補足説明を結びつけます。
+
+```html
+<label for="password">パスワード</label>
+<input
+  id="password"
+  type="password"
+  aria-describedby="password-hint password-error"
+  aria-invalid="true"
+/>
+<p id="password-hint">8 文字以上、英数字混在</p>
+<p id="password-error">英字が含まれていません</p>
+```
+
+スクリーンリーダーはラベルに続いて hint と error も読み上げます。フォームのアクセシビリティで定番のパターンです。
+
+#### 4. `aria-expanded`: 開閉状態を伝える
+
+折りたたみ式 UI（アコーディオン / ドロップダウン）で、現在開いているかを伝えます。
+
+```html
+<button aria-expanded="false" aria-controls="menu">メニュー</button>
+<ul id="menu" hidden>
+  <li>項目 1</li>
+  <li>項目 2</li>
+</ul>
+```
+
+クリックで `aria-expanded` を `true` に切り替え、`hidden` 属性も外します。`aria-controls` は「このボタンがどの要素を操作するか」の関連付けです。
+
+#### 5. `aria-hidden`: スクリーンリーダーから隠す
+
+装飾的な要素（アイコン画像など）を読み上げから除外します。
+
+```html
+<button>
+  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">
+    <path d="M3 3h8v9H3z" fill="currentColor" />
+  </svg>
+  削除
+</button>
+```
+
+アイコンを画像的に添えるだけで、隣に「削除」というテキストがある場合、アイコンは読ませずテキストだけ読ませたい、というケースです。
+
+> 注意: **フォーカス可能な要素** に `aria-hidden="true"` を付けてはいけません（原則 4）。フォーカスは当たるのに読み上げられない、という矛盾状態が起きます。
+
+#### 6. `aria-live`: 動的に変化する場所を伝える
+
+JS で中身が変わる領域を、スクリーンリーダーに「変化があったら読み上げてね」と伝えます。
+
+```html
+<div aria-live="polite" id="status"></div>
+
+<script>
+  // ボタン押下で「保存しました」に差し替えると、
+  // スクリーンリーダーが自動でその変化を読み上げる
+  document.getElementById('status').textContent = '保存しました';
+</script>
+```
+
+値は 3 種類:
+
+- `polite`: 今の読み上げが終わってから通知。普通はこれ
+- `assertive`: 今の読み上げを割り込んで即通知。緊急通知のみ
+- `off`: 通知しない（省略と同じ）
+
+チャットの新着通知や、フォーム送信後の成功メッセージで使います。
+
+### `role` 属性: 要素に別の役割を与える
+
+HTML にぴったりの要素がないとき、`role` で役割を付与します。ただし **HTML で書けるものは HTML を優先** です。
+
+```html
+<!-- OK: HTML にタブを表す要素がないので role で補う -->
+<div role="tablist">
+  <button role="tab" aria-selected="true">タブ 1</button>
+  <button role="tab" aria-selected="false">タブ 2</button>
+</div>
+
+<!-- NG: button があるのに div + role -->
+<div role="button" tabindex="0" onclick="handleClick()">送信</div>
+<!-- → 素直に <button>送信</button> で良い -->
+```
+
+よく使う role:
+
+- `role="button"` / `role="link"` / `role="checkbox"` など（**原則 HTML 要素を優先**）
+- `role="tablist"` / `role="tab"` / `role="tabpanel"`（タブ UI）
+- `role="dialog"` / `role="alertdialog"`（モーダル。後述）
+- `role="alert"`（`aria-live="assertive"` 相当、即時通知）
+- `role="status"`（`aria-live="polite"` 相当、穏やかな通知）
+
+最近は `<dialog>` タグ（HTML 標準）で済むケースも増えたので、まず `<dialog>` を検討するのが正攻法です（「ネイティブ UI 要素」の別のレッスンで扱う予定）。
+
+### キーボード操作の標準パターン
+
+マウスを使わずに操作できるのは、スクリーンリーダー利用者だけでなく **効率重視の開発者や、運動機能に制約のあるユーザー** にとっても重要です。ブラウザと OS が標準で提供している挙動を壊さないのが基本です。
+
+| キー | 標準の挙動 |
+|---|---|
+| **Tab** | フォーカスを次の操作可能要素へ |
+| **Shift + Tab** | フォーカスを前の操作可能要素へ |
+| **Enter** | リンクならページ遷移、ボタンなら実行 |
+| **Space** | ボタンを実行（チェックボックスのトグル、スクロール） |
+| **Esc** | モーダル・メニュー・ドロップダウンを閉じる |
+| **矢印キー** | ラジオグループ内の移動、タブの切り替え、メニュー内の移動 |
+
+これらを **自分で実装する必要は普通ありません**。`<button>` や `<a>` を使えばブラウザが自動でやってくれます。**独自コンポーネントを作るときだけ** 自分で実装します（ARIA Authoring Practices（<https://www.w3.org/WAI/ARIA/apg/patterns/>）に各パターンが載っています）。
+
+### `tabindex` の 3 つの値
+
+`tabindex` 属性で Tab 順序を制御できます。覚えるのは 3 パターンだけです。
+
+```html
+<!-- 1. tabindex="0": Tab 順序に加える。通常の順番で到達可能に -->
+<div tabindex="0" role="button">カスタムボタン</div>
+
+<!-- 2. tabindex="-1": プログラムから focus() できるが、Tab ではスキップ -->
+<div tabindex="-1" id="modal">...</div>
+<!-- JS で modal.focus() は可能。Tab 巡回には入らない -->
+
+<!-- 3. 正の数値（tabindex="1", "2" ...）: 使わない -->
+<button tabindex="5">...</button>
+<!-- NG: 自然な順序を壊すので避ける -->
+```
+
+**`tabindex` の正の数値は原則使わない** のが鉄則です。DOM の登場順に従うのが一番自然で、壊れにくいからです。
+
+### フォーカスを「見えるようにする」
+
+キーボード操作でフォーカスがどこにあるか分からないと、ユーザーは迷子になります。ブラウザはデフォルトでフォーカス時に枠（フォーカスリング）を表示します。**これを CSS で消してはいけません**。
+
+```css
+/* NG: フォーカスリングを完全に消す */
+button:focus {
+  outline: none;  /* 絶対にダメ */
+}
+
+/* OK: デフォルトより目立つリングに差し替える */
+button:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
 }
 ```
 
-### 最小の E2E テスト
+`:focus-visible` は「キーボード操作でフォーカスが来た時だけ」反応する擬似クラスで、マウスクリック時には出ません。これで「マウス派にはリングが見えず邪魔にならない」「キーボード派には明確に見える」を両立できます。
 
-`e2e/home.spec.ts`:
+### モーダルのフォーカストラップ
 
-```ts
-import { test, expect } from "@playwright/test";
+モーダル（ダイアログ）を開いたら、**モーダルの中だけで Tab が巡回する** ようにします。背景のボタンに Tab で飛べてしまうと、スクリーンリーダー利用者は「モーダルを開いたはずが、なぜか元のページに戻っている」という混乱が起きます。
 
-test("トップページに見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-});
+手動で実装するのは煩雑なので、**`<dialog>` タグの `showModal()` を使う** のが最も簡単です（ブラウザがフォーカストラップを自動で行います）。
 
-test("About リンクをクリックすると /about に移動する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
-});
+```html
+<dialog id="my-dialog">
+  <h2>確認</h2>
+  <p>削除しますか？</p>
+  <button type="button" onclick="this.closest('dialog').close()">キャンセル</button>
+  <button type="button" onclick="handleConfirm()">OK</button>
+</dialog>
+
+<button onclick="document.getElementById('my-dialog').showModal()">
+  開く
+</button>
 ```
 
-ポイント:
+`<dialog>.showModal()` を呼ぶと:
 
-- `page.goto("/")` で baseURL（`http://localhost:5173`）に対して相対パスで遷移
-- `page.getByRole(...)` は React Testing Library と **同じセレクタ思想**（アクセシビリティロール優先）
-- `expect(...).toBeVisible()` 等は **自動で待ってくれる**（要素が出るまで最大 5 秒待つ）
-- すべて `await` を付けて呼ぶ（非同期）
+- モーダルが表示される
+- フォーカスがモーダル内に入り、Tab で外に出られなくなる
+- Esc キーで自動的に閉じる
+- 閉じるとフォーカスが元のトリガー要素に戻る
 
-Playwright と Testing Library のクエリ API はほぼ同じ書き味です。両方を使うチームでは認知コストが下がる利点があります。
-
-### よく使う操作
-
-```ts
-// 遷移
-await page.goto("/login");
-
-// クリック
-await page.getByRole("button", { name: "送信" }).click();
-
-// 入力
-await page.getByLabel("お名前").fill("Alice");
-await page.getByPlaceholder("検索").fill("React");
-
-// セレクト
-await page.getByLabel("地域").selectOption("Tokyo");
-
-// チェックボックス
-await page.getByLabel("同意する").check();
-
-// キーボード
-await page.keyboard.press("Enter");
-await page.getByLabel("検索").press("Enter");
-```
-
-### よく使うアサーション
-
-```ts
-// 要素が見える / 見えない
-await expect(page.getByText("ようこそ")).toBeVisible();
-await expect(page.getByText("エラー")).not.toBeVisible();
-
-// テキストを含む
-await expect(page.locator("h1")).toHaveText("こんにちは、Alice さん");
-
-// URL の確認
-await expect(page).toHaveURL("/dashboard");
-await expect(page).toHaveURL(/\/posts\/\d+/);
-
-// 値が入っている
-await expect(page.getByLabel("名前")).toHaveValue("Alice");
-
-// 件数
-await expect(page.getByRole("listitem")).toHaveCount(3);
-```
-
-すべて **自動リトライ付き**。「fetch が終わってから出る要素」を待たなくても、`expect(...).toBeVisible()` 自体が最大 5 秒間繰り返しチェックします。
-
-### UI モードで開発する
-
-`npm run e2e:ui` を起動すると、Playwright の UI モードが立ち上がります。
-
-- テスト一覧から個別に実行できる
-- 各ステップの **ブラウザの状態をタイムライン** で確認できる
-- 失敗時の **DOM スナップショット** をクリックで遡れる
-- 「locator picker」で画面要素を選ぶと、推奨セレクタが自動生成される
-
-最初に E2E を書く時は **UI モード必須** です。「どこでクリックすればいいか」「次の状態は何か」を見ながら書けるので、習得が一気に楽になります。
-
-### Codegen で操作を録画
-
-ゼロからテストを書くのは大変です。Playwright には **画面操作を録画してコードを生成する** 機能があります。
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、人間が普通にサイトを操作します。クリック・入力・遷移のたびに、対応する Playwright コードが横のパネルに自動で出てきます。それをコピペして整形すれば、テストの叩き台が一気にできます。
-
-複雑な経路でも、まずは codegen で粗い形を作ってから手で詰めるワークフローが定番です。
-
-### 失敗時の証拠保存
-
-`playwright.config.ts` に `trace: "on-first-retry"` を書いておくと、失敗時に **トレース** が自動保存されます。トレースには:
-
-- 各ステップで送信されたリクエスト
-- DOM スナップショット
-- スクリーンショット
-- ビデオ
-
-が入っており、`npx playwright show-trace trace.zip` で UI モードと同じインターフェースで再生できます。**CI で起きた fail を後から再現できる** のが強みです。
-
-### MSW を E2E でも使う（軽く紹介）
-
-MSW のハンドラは E2E でも流用できます。Playwright の `page.route(...)` でブラウザ側の fetch を MSW Service Worker 経由で横取りする構成にすれば、ユニット / コンポーネント / E2E の **3 層で同じモックレスポンス** を使い回せます。
-
-設定はやや複雑なので本コースでは触れませんが、本格運用ではこのパターンを取ると「ハンドラ定義の二重管理」が無くせる点だけ覚えておいてください。
-
-### E2E はどこに書くか
-
-E2E は遅いので、**書くべき経路** を絞ります。実務でよく投資されるのは:
-
-1. **ログイン → サインイン関連**
-2. **メイン購入 / 課金フロー**
-3. **新規登録 → 重要な初回操作**
-4. **データを書き換える系（CRUD）の代表的な 1 経路**
-
-「すべての画面を網羅する」ような E2E は壊れまくり、メンテコストで死にます。**ビジネスが止まる経路だけ** を 20〜30 ケースくらい用意して守るのが現実解です。
+React のモーダルライブラリ（Radix UI の Dialog、Headless UI など）も内部的に同じ作法を守っています。自作する前に既存実装を検討するのがおすすめです。
 
 ## 演習
 
 ### ゴール
 
-- 簡単な Vite + React アプリを起動状態にする
-- Playwright をセットアップする
-- 「トップから About ページに遷移」「フォーム入力 → 送信」の 2 経路を E2E でテストする
-- UI モードで動きを観察する
+- アイコンボタンに `aria-label` を付ける
+- 折りたたみ式メニューに `aria-expanded` / `aria-controls` を付ける
+- 動的メッセージに `aria-live` を付ける
+- フォーカスリングを明示的にスタイル（`:focus-visible` で）
+- `<dialog>` で最小のモーダルを作り、フォーカストラップを体験する
 
 ### 途中から始める場合
 
-ローカル環境で `create-vite` で React + TS テンプレートを作ります（StackBlitz では Playwright のブラウザ本体を取得できないため、ローカル前提）。
+独立したレッスンです。新規 StackBlitz の Vanilla テンプレートを開いて、下のコードを貼ってください。
 
-```bash
-npm create vite@latest my-e2e-sample -- --template react-ts
-cd my-e2e-sample
-npm install
+<details>
+<summary>出発点のコード</summary>
+
+**`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ARIA とキーボード操作</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <h1>ARIA 演習</h1>
+    <p>Tab キーで操作してみてください。</p>
+  </body>
+</html>
 ```
 
-### 手順 1: アプリにページを 2 つ追加（ライブラリなしの最小ルーティング）
+**`style.css`**
 
-`src/App.tsx` をシンプルに書き換え。`location.pathname` で表示を切り替えるだけの自家製ルーティングを使います（学習用に最小化）。
+```css
+body { font-family: sans-serif; padding: 16px; color: #1a1a1a; background: #fff; }
+```
 
-```tsx
-import { useState } from "react";
+</details>
 
-export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
+### 手順
 
-  function go(to: string) {
-    window.history.pushState({}, "", to);
-    setPath(to);
-  }
+1. `index.html` を下の完成形にします
+2. `style.css` を下の完成形にします
+3. プレビューでキーボードの Tab と Enter だけで全操作ができるか確認します
 
-  if (path === "/about") {
-    return (
-      <main>
-        <h1>About</h1>
-        <p>このページは about です。</p>
-        <a
-          href="/"
-          onClick={(e) => {
-            e.preventDefault();
-            go("/");
-          }}
-        >
-          Home に戻る
-        </a>
-      </main>
-    );
-  }
+### `index.html` の完成形
 
-  return (
-    <main>
-      <h1>Home</h1>
-      <p>Playwright のサンプル。</p>
-      <a
-        href="/about"
-        onClick={(e) => {
-          e.preventDefault();
-          go("/about");
-        }}
-      >
-        About
-      </a>
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ARIA とキーボード操作</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <h1>ARIA 演習</h1>
 
-      <hr />
+    <section aria-labelledby="toolbar-heading">
+      <h2 id="toolbar-heading">ツールバー</h2>
+      <button aria-label="保存" id="save">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+          <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" />
+          <rect x="5" y="2" width="6" height="4" fill="currentColor" />
+        </svg>
+      </button>
+      <button aria-label="削除" id="delete">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+          <path d="M4 6h8v7H4z M6 3h4v2H6z" fill="currentColor" />
+        </svg>
+      </button>
+    </section>
 
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) setSubmitted(name);
-        }}
-      >
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button type="submit">送信</button>
-      </form>
+    <section aria-labelledby="menu-heading">
+      <h2 id="menu-heading">折りたたみメニュー</h2>
+      <button id="menu-toggle" aria-expanded="false" aria-controls="menu">
+        メニューを開く
+      </button>
+      <ul id="menu" hidden>
+        <li><a href="#">項目 1</a></li>
+        <li><a href="#">項目 2</a></li>
+        <li><a href="#">項目 3</a></li>
+      </ul>
+    </section>
 
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </main>
-  );
+    <section aria-labelledby="status-heading">
+      <h2 id="status-heading">保存の通知</h2>
+      <button id="save-btn">保存する</button>
+      <div id="status" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="dialog-heading">
+      <h2 id="dialog-heading">モーダル</h2>
+      <button id="open-dialog">確認ダイアログを開く</button>
+      <dialog id="confirm-dialog" aria-labelledby="dialog-title">
+        <h3 id="dialog-title">削除の確認</h3>
+        <p>本当に削除してもよろしいですか？</p>
+        <button type="button" id="cancel-btn">キャンセル</button>
+        <button type="button" id="confirm-btn">削除する</button>
+      </dialog>
+    </section>
+
+    <script>
+      // 折りたたみメニュー
+      const toggle = document.getElementById('menu-toggle');
+      const menu = document.getElementById('menu');
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!isOpen));
+        toggle.textContent = isOpen ? 'メニューを開く' : 'メニューを閉じる';
+        if (isOpen) {
+          menu.setAttribute('hidden', '');
+        } else {
+          menu.removeAttribute('hidden');
+        }
+      });
+
+      // ツールバーボタン（デモなのでログだけ）
+      document.getElementById('save').addEventListener('click', () => {
+        console.log('保存ボタンが押されました');
+      });
+      document.getElementById('delete').addEventListener('click', () => {
+        console.log('削除ボタンが押されました');
+      });
+
+      // 動的ステータス通知
+      document.getElementById('save-btn').addEventListener('click', () => {
+        const status = document.getElementById('status');
+        status.textContent = '保存しました (' + new Date().toLocaleTimeString() + ')';
+      });
+
+      // モーダル
+      const dialog = document.getElementById('confirm-dialog');
+      document.getElementById('open-dialog').addEventListener('click', () => {
+        dialog.showModal();
+      });
+      document.getElementById('cancel-btn').addEventListener('click', () => {
+        dialog.close();
+      });
+      document.getElementById('confirm-btn').addEventListener('click', () => {
+        console.log('削除を実行しました');
+        dialog.close();
+      });
+    </script>
+  </body>
+</html>
+```
+
+### `style.css` の完成形
+
+```css
+body {
+  font-family: sans-serif;
+  padding: 16px;
+  color: #1a1a1a;
+  background: #ffffff;
 }
-```
 
-### 手順 2: Playwright をインストール
-
-```bash
-npm install -D @playwright/test
-npx playwright install
-```
-
-### 手順 3: 設定ファイル
-
-`playwright.config.ts`:
-
-```ts
-import { defineConfig } from "@playwright/test";
-
-export default defineConfig({
-  testDir: "./e2e",
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",
-  },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-  },
-});
-```
-
-`package.json` の scripts に追加:
-
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
+section {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
 }
-```
 
-### 手順 4: テストを書く
+h1 {
+  margin-top: 0;
+}
 
-`e2e/sample.spec.ts`:
+button {
+  padding: 8px 16px;
+  margin-right: 8px;
+  background: #1e3a8a;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
 
-```ts
-import { test, expect } from "@playwright/test";
+/* フォーカスリング: キーボード操作時だけ目立たせる */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
 
-test("トップに Home の見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
-});
+/* マウスクリック時は既定のアウトラインを消してもよい（:focus ではなく :focus-visible を使うため、マウス時は自動で出ない） */
 
-test("About リンクで /about に遷移する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
-  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
-});
+ul {
+  margin-top: 8px;
+  padding-left: 20px;
+}
 
-test("フォーム送信で挨拶が表示される", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("お名前").fill("Alice");
-  await page.getByRole("button", { name: "送信" }).click();
-  await expect(page.getByText("こんにちは、Alice さん")).toBeVisible();
-});
-```
+/* モーダル */
+dialog[open] {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 320px;
+}
 
-### 手順 5: 実行
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
 
-UI モードで動きを見ながら:
-
-```bash
-npm run e2e:ui
-```
-
-CI / 自動実行用（ヘッドレス）:
-
-```bash
-npm run e2e
+#status {
+  margin-top: 8px;
+  color: #1e3a8a;
+  font-weight: bold;
+}
 ```
 
 ### 期待出力
 
-UI モードでは画面右側にテスト一覧、中央にブラウザのプレビューが出ます。各テストをクリックすると、各ステップごとの DOM スナップショットが時系列で見られます。
+- アイコンボタン（保存 / 削除の SVG アイコン）が画面に並び、マウスホバーで tooltip 的に `aria-label` が出るブラウザもある
+- Tab キーで「保存」ボタン → 「削除」ボタン → 「メニューを開く」ボタン → （メニュー展開後は）項目リンク → 「保存する」ボタン → 「確認ダイアログを開く」ボタン と順に移動する
+- 「メニューを開く」を Enter で押すと、メニューが展開されボタンのラベルが「メニューを閉じる」に切り替わる
+- 「保存する」を押すと、下の `aria-live` 領域に時刻付きメッセージが追加される
+- 「確認ダイアログを開く」を押すと、モーダルが表示されフォーカスがモーダル内に移動する。Tab はモーダル内だけを巡回する
+- Esc キーでモーダルが閉じ、フォーカスが元のトリガーボタンに戻る
 
-ヘッドレスでは:
+### スクリーンリーダーで確認（任意）
 
-```
-Running 3 tests using 1 worker
+macOS なら **VoiceOver**（`Cmd + F5` で起動）、Windows なら **NVDA**（無料、<https://www.nvaccess.org/>）を使います。それぞれ:
 
-  ok 1 [chromium] › sample.spec.ts:4:1 › トップに Home の見出しが表示される
-  ok 2 [chromium] › sample.spec.ts:9:1 › About リンクで /about に遷移する
-  ok 3 [chromium] › sample.spec.ts:16:1 › フォーム送信で挨拶が表示される
-
-3 passed (3.5s)
-```
+- アイコンボタンが「保存、ボタン」「削除、ボタン」と読み上げられる
+- 折りたたみボタンが「メニューを開く、ボタン、折りたたみ済み」（展開後は「展開済み」）と状態付きで読まれる
+- 「保存する」を押した瞬間、「保存しました（時刻）」と自動で読み上げられる（`aria-live` のおかげ）
+- モーダル内のコンテンツが「削除の確認、ダイアログ」と読み上げられる
 
 ### 変える
 
-- `<button>送信</button>` の `<button>` を `<div onclick="...">` に変えてみる。テストの `getByRole("button", ...)` が要素を見つけられず fail する。a11y 的に正しいタグ選びがテストにも効くと体感
-- `playwright.config.ts` の `webServer.command` を `npm run preview` に変えてみる（本番ビルド済みを配信するモード）。本番ビルドで E2E を回せる
-- 失敗するテストを 1 つ作って、`trace.zip` が生成されることを確認。`npx playwright show-trace trace.zip` で再生
+- `aria-label="保存"` を削除してみる。スクリーンリーダーでは「ボタン」とだけ読まれ、何のボタンか分からなくなる
+- `aria-expanded="false"` を削除してみる。Lighthouse が「Some elements have no accessible name」と警告する
+- `aria-live="polite"` を `aria-live="assertive"` に変えてみる。保存を連打すると、読み上げが即時割り込みで切り替わる
+- `button:focus-visible` のアウトラインを `outline: none` にしてみる（**試したらすぐ戻す**）。キーボード操作でどこにフォーカスがあるか全く見えなくなる恐ろしさを体感できる
 
 ### 自分で書く
 
-- 「フォームを空のまま送信しても挨拶が出ない」テストを足す
-- `page.getByLabel("お名前")` を `page.locator("input")` のような **実装に依存したセレクタ** に変えてみる。動くが、`<input>` が複数あったら壊れる、という弱さを体感
-
-### codegen を試す（任意）
-
-サーバーを `npm run dev` で別ターミナルから起動した状態で:
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、リンクをクリックしたりフォームに入力したりすると、横のパネルにテストコードが自動生成されます。コピペして `e2e/auto.spec.ts` を作ってみると、自分で書いたものとの違いが見られます。
+- 「コピーする」ボタンを追加する。クリックで `navigator.clipboard.writeText('...')` を呼び、`aria-live` 領域に「コピーしました」と出す
+- モーダル内の最初のフォーカス可能要素に **最初から** フォーカスが当たることを確認。`showModal()` が自動でやってくれるので特に追記コードは不要
 
 ## まとめ
 
-- E2E は本物のブラウザでアプリ全体を動かすテスト。**最重要パスだけ** に絞る
-- **Playwright** は 3 ブラウザを 1 API で扱える、自動待機 / トレース / codegen 完備
-- 設定は `playwright.config.ts` の `webServer` で `npm run dev` の自動起動が定番
-- API は Testing Library と似た書き味（`getByRole` / `getByLabel`）
-- アサーションも `expect(...).toBeVisible()` 等が自動リトライ
-- **UI モード** で対話的にデバッグ、**codegen** で操作を録画してテストコード生成
-- 失敗時の **トレース** で CI のエラーをローカル再現
-- MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
-- これで章 7 のテスト 4 連作が完了。次は **Core Web Vitals とパフォーマンス** に進む
+- ARIA の原則の第一は **「HTML で書けるなら ARIA を使わない」**
+- よく使う ARIA 属性: `aria-label` / `aria-labelledby` / `aria-describedby` / `aria-expanded` / `aria-hidden` / `aria-live`
+- `role` 属性は HTML で表現できない複雑ウィジェット（タブ / アコーディオン）で使う
+- キーボードの標準操作（Tab / Enter / Space / Esc / 矢印）はブラウザがやってくれる。自分で実装するのは独自コンポーネントだけ
+- `tabindex` は `0` / `-1` の 2 種類だけを使う。正の数値は使わない
+- フォーカスリングは **`outline: none` で消さない**。`:focus-visible` で目立たせる
+- モーダルは `<dialog>.showModal()` でフォーカストラップを自動入手
+- 別のレッスンで **axe / Lighthouse / スクリーンリーダー** を使った自動チェックを扱う

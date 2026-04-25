@@ -1,198 +1,356 @@
-# lesson31: TypeScript ってなに？
+# lesson31: イベントで画面を動かす
+
+<script setup>
+const demoJs = `
+let count = 0;
+const btn = document.getElementById('btn');
+const label = document.getElementById('label');
+btn.addEventListener('click', () => {
+  count = count + 1;
+  label.textContent = 'カウント: ' + count;
+});
+`
+</script>
 
 ## ゴール
 
-- TypeScript（以下 TS）が何を解決する言語なのか、JavaScript（以下 JS）との違いを自分の言葉で説明できる。
-- プリミティブ型（`string` / `number` / `boolean`）の変数に **型注釈** を付けられる。
-- わざと間違った値を入れて、エディタの赤線と `tsc` の型エラーを自分の目で確認できる。
+- `addEventListener` でボタンのクリックに反応できる
+- `submit` イベントでフォーム送信に反応できる
+- `event.preventDefault()` でブラウザ既定の動作を止められる
+- カウンターアプリを作る
 
 ## 解説
 
-### この章で使う環境
+### イベントとは
 
-この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。<https://stackblitz.com/> のトップページに並ぶテンプレートカードから **TypeScript** と書かれたもの（TS のロゴ）を選んでください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。カードが見当たらないときは検索ボックスに `typescript` と入れるか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開きます。
+ユーザーがボタンを押したり、フォームを送信したり、キーを押したりすると、ブラウザは **イベント** を発生させます。JS でそのイベントを「待ち構えて」処理を登録できます。
 
-テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の3 章 のレッスンでは、この `main.ts` を書き換えていきます。
+### `addEventListener`
 
-### JS だけだと何が困るのか
-
-2 章 までに書いてきた JS では、変数にどんな値でも入れられました。
+「どの要素の」「どのイベントに」「何をする関数を呼ぶか」を指定します。
 
 ```js
-let age = 20;
-age = "二十歳"; // 何の警告もなく通る
+const btn = document.querySelector("#btn");
+
+btn.addEventListener("click", () => {
+  console.log("クリックされた");
+});
 ```
 
-小さなファイルなら困りません。しかし人数やファイルが増え、関数が関数を呼ぶようになると、次のような事故が起き始めます。
+- 第 1 引数: イベント名（`"click"` / `"submit"` / `"input"` など）
+- 第 2 引数: そのイベントが起きたときに呼ばれる関数
 
-- 数値を期待している関数に、うっかり文字列を渡してしまう。
-- オブジェクトのプロパティ名を typo したのに、そのまま `undefined` が流れて画面が壊れる。
-- 自分以外の人が書いた関数に、何を渡せばよいか分からない。
+### `click` イベント
 
-これらは **実行してみるまで分からない** 種類のバグです。しかもブラウザで動かしてはじめて「`undefined is not a function`」のようなメッセージに出会うので、原因の追跡に時間がかかります。
+最もよく使うイベントです。任意の要素に登録できます。
 
-### TS は「書いた瞬間にチェックしてくれる JS」
-
-TypeScript は、JavaScript に **型（かた）** の仕組みを足した言語です。値や変数に「これは文字列」「これは数値」というラベルを付けておくと、コンパイラ（`tsc`）やエディタが、書いた直後に「その操作はラベルに合っていない」と教えてくれます。
-
-- 型のチェックは **実行する前** に行われる。これを **静的型付け** と呼ぶ。
-- 型のチェックを通った TS コードは、最終的に JS に変換（コンパイル）されてブラウザで動く。ブラウザは TS を直接は読めない。
-- 型の情報はコンパイル後の JS には残らない。**実行時の速度は JS と変わらない**。
-
-ざっくり言うと、TS は「書いた直後に typo と型の食い違いを指摘してくれる JS」です。
-
-### 型注釈の書き方
-
-変数を宣言するときに、変数名の後ろに `: 型名` を付けます。これを **型注釈（type annotation）** と呼びます。
-
-```ts
-const userName: string = "Alice";
-const age: number = 20;
-const isAdmin: boolean = false;
+```js
+btn.addEventListener("click", () => {
+  count = count + 1;
+  label.textContent = `カウント: ${count}`;
+});
 ```
 
-- `string`: 文字列（`"hello"`、`` `template` ``、`'single'` すべて含む）
-- `number`: 数値（整数も小数も区別しない）
-- `boolean`: 真偽値（`true` / `false`）
+下のデモはクリックで `count` を増やし、ラベルを書き換える最小の形です。ボタンを押すと数字が増えるのが確認できます。
 
-型注釈は **変数名の直後にコロン**、そのあとに型名、という順番です。JS の代入 (`=`) とは位置が違うので混同しないようにします。
+<LiveDemo
+  height="160px"
+  :html="`
+<button id='btn'>+1</button>
+<span id='label'>カウント: 0</span>
+  `"
+  :css="`
+body { padding: 16px; font-size: 18px; }
+button {
+  padding: 8px 16px;
+  margin-right: 12px;
+  font-size: 1rem;
+  cursor: pointer;
+}
+  `"
+  :js="demoJs"
+/>
 
-### 書かなくても型は付く（型推論）
+### `submit` イベントと `preventDefault`
 
-毎回型を書くのは面倒です。TS は右辺を見て型を自動で決めてくれます。これを **型推論（type inference）** と呼びます。
+`<form>` を送信したときに発生するのが `submit` イベントです。
 
-```ts
-const userName = "Alice"; // userName は string 型と推論される
-const age = 20;        // age は number 型と推論される
+ただし、HTML の `<form>` はデフォルトで「送信するとページがリロード（または別 URL に遷移）する」動きをします。JS で処理したいときはこの既定動作を止める必要があります。
+
+```js
+const form = document.querySelector("#form");
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault(); // ページ遷移を止める
+  console.log("送信されました");
+});
 ```
 
-型推論で十分なときは型注釈を省略するのが普通です。このレッスンでは学習目的であえて型注釈を書き、間違った値を入れたらどうなるかを体験します。
+- イベントハンドラの引数 `event` は「今起きたイベントの情報」
+- `event.preventDefault()` で「ブラウザの既定動作をキャンセル」
 
-### エラーの出方は 2 段階
+この `preventDefault` は、フォームを JS で扱うときのほぼ定番の呪文です。
 
-型が合っていないとき、TS は次の 2 か所でエラーを教えてくれます。
+### ハンドラの 2 つの書き方
 
-1. **エディタ上の赤い波線**: StackBlitz のコード画面で該当箇所に赤線が出る。マウスを乗せるとメッセージが出る。
-2. **`tsc` のコンパイルエラー**: ターミナルで `tsc` を実行する（テンプレートでは通常自動で走る）と、ファイル名・行番号付きでエラーが一覧表示される。
-
-どちらも同じ内容です。エディタの赤線は「書いている最中に教えてくれる」、`tsc` は「保存 / ビルドのタイミングで全ファイルまとめて確認してくれる」くらいの違いです。
-
-典型的なエラーメッセージは例えばこうなります。
-
-```
-Type 'string' is not assignable to type 'number'.
+```js
+btn.addEventListener("click", () => { ... });         // アロー関数
+btn.addEventListener("click", handleClick);           // 関数名を渡す
+function handleClick() { ... }
 ```
 
-「文字列型は数値型には代入できない」という意味です。実際に出してみるのは演習で行います。
+どちらでも動きます。短ければアロー関数、再利用するなら関数名を渡す、が目安です。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
-### 手順 1: テンプレートを開く
+<details>
+<summary>出発点のコード</summary>
 
-1. <https://stackblitz.com/> を開き、トップページのテンプレートカードから **TypeScript**（Vanilla TS、TS ロゴ付き）を選ぶ。見当たらないときは検索ボックスに `typescript` と入力するか、直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開く。
-2. `src/main.ts` を開く。中身はサンプルが入っているので、すべて消す。
-3. プレビュー横のコンソールも見えるようにしておく（DevTools の Console、または StackBlitz 下部のターミナル）。
+**`index.html`**
 
-### 手順 2: 型注釈付きの変数を書く
-
-`src/main.ts` の中身を以下に置き換える。
-
-```ts
-const userName: string = "Alice";
-const age: number = 20;
-const isAdmin: boolean = false;
-
-console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson30</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1 id="title">lesson30</h1>
+    <p id="box">このボックスのクラスが切り替わります</p>
+    <ul id="list">
+      <li>既存の項目 1</li>
+      <li>既存の項目 2</li>
+    </ul>
+  </body>
+</html>
 ```
 
-保存するとプレビューが再読み込みされる。ブラウザの DevTools の Console に次のように出れば成功。
+**`style.css`**
 
-```
-Alice は 20 歳です。管理者: false
-```
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+}
 
-### 手順 3: わざと型を間違えてエラーを見る
+#box {
+  padding: 12px;
+  border: 1px solid #888;
+  border-radius: 6px;
+}
 
-次のコードに書き換える。
+#box.active {
+  background-color: #ffe58f;
+  color: #222;
+  border-color: #d48806;
+}
 
-```ts
-const userName: string = "Alice";
-const age: number = "二十歳"; // わざと文字列を入れる
-const isAdmin: boolean = false;
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
 
-console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
-```
+  #box {
+    border-color: #aaa;
+  }
 
-#### 期待出力
-
-- `"二十歳"` の下に **赤い波線** が引かれる。
-- マウスを乗せると次のようなメッセージが出る。
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-- StackBlitz 下部のターミナル（または Problems タブ）にも同じエラーが出る。
-
-これが **静的型付けが実行前にエラーを教えてくれる** 体験です。2 章 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
-
-### 手順 4: 変えてみる
-
-次の 3 つをそれぞれ試し、どんなメッセージが出るか見比べる。エラーを確認したら元に戻すこと。
-
-1. `const isAdmin: boolean = "yes";`
-2. `const age: number = true;`
-3. `const userName: string = 123;`
-
-期待される代表的なメッセージは次の通り。
-
-```
-Type 'string' is not assignable to type 'boolean'.
-Type 'boolean' is not assignable to type 'number'.
-Type 'number' is not assignable to type 'string'.
+  #box.active {
+    background-color: #5a4600;
+    color: #fff;
+    border-color: #e6a817;
+  }
+}
 ```
 
-型名のところだけ入れ替わっているのが分かる。
+**`script.js`**
 
-### 手順 5: 型推論に任せてみる
+```js
+const title = document.querySelector("#title");
+console.log(title.textContent);
+title.textContent = "DOM を書き換えました";
 
-型注釈を消しても、右辺から型が決まることを確認する。
+const box = document.querySelector("#box");
+box.classList.add("active");
 
-```ts
-const userName = "Alice";
-const age = 20;
-const isAdmin = false;
+const list = document.querySelector("#list");
 
-age = "二十歳"; // ここで赤線が出るはず
+const items = ["りんご", "みかん", "ぶどう"];
+for (const item of items) {
+  const li = document.createElement("li");
+  li.textContent = item;
+  list.appendChild(li);
+}
+
+const newLi = document.createElement("li");
+newLi.textContent = "最後に追加した項目";
+list.appendChild(newLi);
 ```
 
-`age` に型注釈は書いていないが、`20` が入っていたので TS は `number` 型と推論している。そこに文字列を入れようとすると、やはり次のようなメッセージが出る。
+</details>
 
-```
-Type 'string' is not assignable to type 'number'.
+### ゴール
+
+- 「+1」「-1」「リセット」のボタンを持つカウンターアプリを作る
+- フォームの `submit` を捕まえ、入力した値を `preventDefault` で遷移させずに画面に表示する
+
+### 手順
+
+1. 3 ファイルを以下の内容にする
+2. プレビューでボタンとフォームの挙動を確認する
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson31</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson31: カウンター</h1>
+
+    <section>
+      <p id="count-label">カウント: 0</p>
+      <button id="inc">+1</button>
+      <button id="dec">-1</button>
+      <button id="reset">リセット</button>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>フォーム送信</h2>
+      <form id="form">
+        <label for="name-input">名前:</label>
+        <input id="name-input" type="text" />
+        <button type="submit">送信</button>
+      </form>
+      <p id="form-result">（未入力）</p>
+    </section>
+  </body>
+</html>
 ```
 
-（`const` なので「そもそも再代入できない」というエラーも同時に出る場合がある。その場合は `let age = 20;` に変えてから試す。）
+### `style.css`
+
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+  max-width: 480px;
+}
+
+button {
+  margin-right: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+hr {
+  margin: 24px 0;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
+
+  button {
+    background-color: #333;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+
+  input {
+    background-color: #222;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+}
+```
+
+### `script.js`
+
+```js
+// カウンター
+let count = 0;
+const label = document.querySelector("#count-label");
+const incBtn = document.querySelector("#inc");
+const decBtn = document.querySelector("#dec");
+const resetBtn = document.querySelector("#reset");
+
+function render() {
+  label.textContent = `カウント: ${count}`;
+}
+
+incBtn.addEventListener("click", () => {
+  count = count + 1;
+  render();
+});
+
+decBtn.addEventListener("click", () => {
+  count = count - 1;
+  render();
+});
+
+resetBtn.addEventListener("click", () => {
+  count = 0;
+  render();
+});
+
+// フォーム
+const form = document.querySelector("#form");
+const nameInput = document.querySelector("#name-input");
+const result = document.querySelector("#form-result");
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = nameInput.value;
+  result.textContent = `こんにちは、${value} さん`;
+});
+```
+
+### 期待出力
+
+- 「+1」を押すと「カウント: 1」「カウント: 2」... と増える
+- 「-1」を押すと減る
+- 「リセット」を押すと 0 に戻る
+- 名前を入力して「送信」を押すと `（未入力）` が「こんにちは、◯◯ さん」に変わる
+- 送信してもページはリロードされない（URL が変わらない、スクロール位置もそのまま）
+
+### 変える
+
+- `preventDefault` の行を **コメントアウト** すると、送信のたびにページが一瞬リロードされることを確認（URL に `?` が付く）。確認できたら戻す
+- 「+1」ボタンを 3 回押したあと「リセット」を押して 0 に戻ることを確認
+- `incBtn.addEventListener("click", ...)` の `"click"` を `"dblclick"`（ダブルクリック）に変えて、動きの違いを見る
 
 ### 自分で書く
 
-何も見ずに、次の条件を満たすコードを `src/main.ts` に書く。
-
-- `string` 型の変数 `city` に自分が住んでいる都市名を入れる。
-- `number` 型の変数 `population` に適当な人口を入れる。
-- `boolean` 型の変数 `hasSea` に「海に面しているか」を入れる。
-- 3 つをテンプレートリテラルで繋げて `console.log` する。
-
-書き終わったら、わざとどれか 1 つの型注釈と値を食い違わせ、どんなエラーメッセージが出るかを確認してから元に戻す。
+- 「×2」ボタンを追加して、押すとカウントが 2 倍になるようにする
+- フォームに「年齢」入力欄（`<input id="age-input" type="number">`）を追加し、送信時に「◯◯ さん（◯◯ 歳）」の形で表示する
+- カウントが 0 未満になったら `#count-label` に `classList.add("negative")` を付け、CSS で赤色にする（0 以上なら `remove`）
 
 ## まとめ
 
-- TypeScript は JS に型を足した言語で、**実行する前に** 型の食い違いを教えてくれる。
-- 型注釈は `const 変数名: 型名 = 値` の形で書く。プリミティブ型は `string` / `number` / `boolean` の 3 つから。
-- 右辺から型が自動で決まる **型推論** もあるので、実務では型注釈を省略する場面も多い。
-- 型が合わないと、エディタの赤線と `tsc` の両方が `Type 'X' is not assignable to type 'Y'.` のような形で教えてくれる。
-- 別のレッスンで、関数の引数と戻り値に型を付ける。2 章 で書いた関数を TS 化していく。
+- `要素.addEventListener("click", 関数)` でクリックに反応する
+- フォーム送信は `"submit"` イベント、`event.preventDefault()` で既定動作を止める
+- カウンターや入力フォームは、DOM 操作とイベントを組み合わせる定番の練習題
+- **`preventDefault` は5 章 の「Server Actions の最小形」で登場する Server Actions では、React が自動でやってくれるようになる**（コードから消える）

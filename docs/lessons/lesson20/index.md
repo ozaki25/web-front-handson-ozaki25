@@ -1,100 +1,96 @@
-# lesson20: 関数
+# lesson20: 配列を扱う
 
 <script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
 const demoJs = `
-function add(a, b) {
-  return a + b;
+const fruits = ['apple', 'banana'];
+fruits.push('cherry');
+console.log(fruits);
+console.log('length: ' + fruits.length);
+console.log('先頭: ' + fruits[0]);
+for (const f of fruits) {
+  console.log('- ' + f);
 }
-
-console.log('add(1, 2) =', add(1, 2));
-console.log('add(10, 20) =', add(10, 20));
-console.log('add(-5, 5) =', add(-5, 5));
 `
 </script>
 
 ## ゴール
 
-- `function` 宣言で関数を定義できる
-- アロー関数でも関数を定義できる
-- 引数と戻り値（`return`）を使える
+- 配列を作り、中の要素を取り出せる
+- `length` で要素数を確認できる
+- `push` / `pop` で末尾に追加・削除できる
 
 ## 解説
 
-### 関数とは
+### 配列とは
 
-「決まった処理をまとめて名前をつけたもの」が関数です。同じ処理を何度も書く代わりに、関数を 1 つ作っておけば、名前を呼ぶだけで再利用できます。
-
-### `function` 宣言
-
-一番シンプルな書き方です。
+同じ種類のデータを複数まとめたものが配列です。「やることリスト」「買い物リスト」のように「並んでいるもの」に使います。
 
 ```js
-function greet(name) {
-  console.log(`こんにちは、${name} さん`);
-}
-
-greet("Alice");
-greet("Bob");
+const fruits = ["apple", "banana", "cherry"];
 ```
 
-- `function 関数名(引数) { ... }` で定義
-- `関数名(値)` で呼び出す
-- 引数は「関数に渡す値」、関数の中では受け取った名前（`name`）で使う
+- `[` と `]` で囲む
+- 要素と要素はカンマで区切る
+- 中身は文字列でも数値でも何でも入れられる
 
-### `return` で値を返す
+### インデックスで取り出す
 
-関数は「処理をする」だけでなく「結果を返す」こともできます。
+配列の中の要素には、先頭から `0`, `1`, `2`, ... と番号が振られています。これをインデックスと呼びます。
 
 ```js
-function add(a, b) {
-  return a + b;
-}
-
-const result = add(1, 2);
-console.log(result); // 3
+const fruits = ["apple", "banana", "cherry"];
+console.log(fruits[0]); // "apple"
+console.log(fruits[1]); // "banana"
+console.log(fruits[2]); // "cherry"
 ```
 
-- `return 値` で呼び出し元に結果を返す
-- `const result = add(1, 2)` のように、戻り値を変数に受け取れる
+0 から始まる点に注意します。`fruits[1]` は「2 番目」ではなく「インデックス 1 の要素（=先頭から 2 つ目）」です。
 
-`return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
+存在しないインデックスを指定すると `undefined` が返ります。
 
-下のデモで、関数を複数回呼び出すと同じ処理が毎回動き、結果だけが引数に応じて変わるのを確認できます。
+```js
+console.log(fruits[5]); // undefined
+```
+
+### `length` で要素数を知る
+
+```js
+const fruits = ["apple", "banana", "cherry"];
+console.log(fruits.length); // 3
+```
+
+末尾の要素は `fruits[fruits.length - 1]` で取れます（インデックスは 0 始まりなので `-1`）。
+
+### 追加と削除
+
+- `push(値)`: 末尾に追加する
+- `pop()`: 末尾を取り除く（取り除いた値を返す）
+
+```js
+const fruits = ["apple", "banana"];
+fruits.push("cherry");
+console.log(fruits); // ["apple", "banana", "cherry"]
+
+const removed = fruits.pop();
+console.log(removed); // "cherry"
+console.log(fruits);  // ["apple", "banana"]
+```
+
+`const` で宣言した配列に対しても `push` や `pop` は使えます。`const` は「変数に入っている配列そのものを別のものに差し替えない」という約束で、配列の中身の操作はできます。
+
+### デモで確認する
+
+下のデモでは、配列に `push` で要素を足し、`length` とインデックスアクセス、`for...of` でのループ表示を一気に体感できます。
 
 <LiveDemo
-  height="180px"
-  :html="`<p>関数を複数回呼び出します。</p>`"
+  height="260px"
+  :html="`<p>配列の基本操作をまとめて確認するデモ</p>`"
   :css="``"
   :js="demoJs"
 />
-
-### アロー関数
-
-もう 1 つの書き方がアロー関数です。「繰り返し処理」の `forEach` で一度出てきました。
-
-```js
-const add = (a, b) => {
-  return a + b;
-};
-
-console.log(add(1, 2)); // 3
-```
-
-- `(引数) => { ... }` の形
-- 変数に入れて使う（`const 関数名 = (引数) => { ... }`）
-
-波かっこの中で「計算 → 即 return」だけしたいときは、波かっこと `return` を省略できます。
-
-```js
-const add = (a, b) => a + b;
-console.log(add(1, 2)); // 3
-```
-
-本コースでは、まず **両方の書き方を読める** ことを目指します。書き分けは後から慣れで身につきます。
-
-### どちらを使う？
-
-どちらでも動きます。近年のコードはアロー関数が多いですが、`function` 宣言も十分使われます。本コースでは混ぜて使うので、どちらも読めるようにしておきます。
 
 ## 演習
 
@@ -117,7 +113,7 @@ console.log(add(1, 2)); // 3
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson19: 繰り返し処理</h1>
+    <h1>lesson19: 条件で分岐する</h1>
   </body>
 </html>
 ```
@@ -125,38 +121,46 @@ console.log(add(1, 2)); // 3
 **`script.js`**
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+const age = 20;
+const userName = "Alice";
+const isStudent = true;
 
-console.log("--- for...of ---");
-for (const todo of todos) {
-  console.log(todo);
+if (age >= 20) {
+  console.log(`${userName} さんは成人です`);
+} else {
+  console.log(`${userName} さんは未成年です`);
 }
 
-console.log("--- forEach ---");
-todos.forEach((todo) => {
-  console.log(todo);
-});
-
-console.log("--- 合計 ---");
-const numbers = [1, 2, 3, 4, 5];
-let total = 0;
-for (const n of numbers) {
-  total = total + n;
+if (age >= 13 && age <= 19) {
+  console.log("10 代です");
+} else if (age >= 20 && age < 60) {
+  console.log("大人です");
+} else {
+  console.log("それ以外の年代です");
 }
-console.log(total);
+
+if (isStudent && age >= 20) {
+  console.log("成人の学生です");
+}
+
+if (!isStudent) {
+  console.log("学生ではありません");
+} else {
+  console.log("学生です");
+}
 ```
 
 </details>
 
 ### ゴール
 
-- 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く
-- 関数に挨拶文を作ってもらう
+- 「やることリスト」の配列を作り、要素を足したり取り出したりしてコンソールに表示する
 
 ### 手順
 
 1. `index.html` のタイトルを `lesson20` に変える
 2. `script.js` を以下に書き換える
+3. Console を確認する
 
 ### `index.html`
 
@@ -170,7 +174,7 @@ console.log(total);
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson20: 関数</h1>
+    <h1>lesson20: 配列を扱う</h1>
   </body>
 </html>
 ```
@@ -178,61 +182,55 @@ console.log(total);
 ### `script.js`
 
 ```js
-function add(a, b) {
-  return a + b;
-}
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-const addArrow = (a, b) => {
-  return a + b;
-};
+console.log(todos);
+console.log(todos.length);
+console.log(todos[0]);
+console.log(todos[todos.length - 1]);
 
-const addShort = (a, b) => a + b;
+todos.push("部屋を片付ける");
+console.log(todos);
+console.log(todos.length);
 
-console.log(add(1, 2));
-console.log(addArrow(10, 20));
-console.log(addShort(100, 200));
+const last = todos.pop();
+console.log(last);
+console.log(todos);
 
-function greet(name) {
-  return `こんにちは、${name} さん`;
-}
-
-const message = greet("Alice");
-console.log(message);
-console.log(greet("Bob"));
-
-function introduce(name, age) {
-  return `${name}（${age} 歳）です`;
-}
-
-console.log(introduce("Carol", 30));
+console.log(todos[99]);
 ```
 
 ### 期待出力
 
 ```
+["牛乳を買う", "本を読む", "ジョギング"]
 3
-30
-300
-こんにちは、Alice さん
-こんにちは、Bob さん
-Carol（30 歳）です
+牛乳を買う
+ジョギング
+["牛乳を買う", "本を読む", "ジョギング", "部屋を片付ける"]
+4
+部屋を片付ける
+["牛乳を買う", "本を読む", "ジョギング"]
+undefined
 ```
+
+配列の表示形式はブラウザによって少し変わりますが、要素の並びは同じです。
 
 ### 変える
 
-- `add` の中身を `a - b` に変える → Console の 1 行目が `-1` になる
-- `greet` に挨拶の文言 2 種類（朝と夜）を引数で受け取るように変える（`function greet(name, word) { return `${word}、${name} さん`; }`）
-- `introduce` で `return` を書き忘れるとどうなるか確認する（`console.log` で `undefined` が表示される）
+- `todos` の初期値に 5 つ要素を入れる → `length` が `5` になることを確認
+- `todos.push(...)` を 2 回連続で呼んで、末尾に 2 つ追加する
+- `todos.pop()` を 3 回呼んで、3 つ取り除く（配列が空になる）
+- 空の配列 `[]` に `pop` を呼ぶと何が返るか確認する（`undefined`）
 
 ### 自分で書く
 
-- 3 つの数を合計する関数 `sum3(a, b, c)` を書く
-- 1 つの数を受け取って「偶数」または「奇数」を返す関数 `evenOrOdd(n)` を書く（ヒント: `n % 2 === 0` で偶数判定）
-- 名前と点数を受け取り、点数が 60 以上なら「○○ さんは合格」、そうでなければ「○○ さんは不合格」を返す関数 `judge(name, score)` を書く
+- 好きな食べ物 3 つを配列 `foods` に入れて、それぞれをインデックスで取り出して `console.log` する
+- `foods` の末尾に 2 つ追加し、末尾から 1 つ取り除いてから、最終的な `foods` を `console.log` する
 
 ## まとめ
 
-- 関数は「処理に名前をつけて再利用するしくみ」
-- 書き方は 2 種類: `function 関数名(...) { ... }` とアロー関数 `(...) => { ... }`
-- `return` で値を返し、呼び出し元で `const 変数 = 関数(...)` で受け取れる
-- 引数は複数渡せる
+- 配列は `[値1, 値2, ...]` で作る
+- インデックスは 0 から始まる
+- 要素数は `length`、末尾追加は `push`、末尾削除は `pop`
+- 存在しないインデックスを読むと `undefined` が返る

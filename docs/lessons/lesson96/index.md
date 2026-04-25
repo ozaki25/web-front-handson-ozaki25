@@ -1,241 +1,216 @@
-# lesson96: Core Web Vitals の 3 つの指標と Lighthouse
+# lesson96: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
 
 ## ゴール
 
-- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
-- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
-- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
-- 75 パーセンタイル評価の意味を説明できる
-- DevTools の Performance パネルで CWV を計測できる
-- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
+- Chrome DevTools 内蔵の **Lighthouse** で a11y スコアを計測できる
+- **axe DevTools** 拡張で詳細な違反をチェックできる
+- 自動チェックでは拾えない領域（文脈・操作感）を **スクリーンリーダー**（VoiceOver / NVDA）で確認できる
+- CI に **axe-core**（`@axe-core/playwright` など）を組み込む発想を理解する
+- 「自動チェック + 手動チェック + 実ユーザー」の 3 段構えが必要な理由を説明できる
 
 ## 解説
 
-### Core Web Vitals とは
+### チェックの 3 段構え
 
-**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
+a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は 3〜4 割で、残りは **文脈** に依存します。たとえば:
 
-| 指標 | 何を測る | Good | Needs Improvement | Poor |
-|---|---|---|---|---|
-| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
-| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
-| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
+- `alt="画像"` と書いてあっても、画像の本当の内容を表していなければ機械は気づけない
+- ボタンラベルが `aria-label="保存"` でも、「何を保存するのか」が文脈に合ってなければ機械は気づけない
+- キーボードで Tab 順序が「技術的に通る」でも、論理的な順序として使いづらい場合がある
 
-「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
+実務では次の 3 段階でチェックします。
 
-### LCP: 最大コンテンツが見えるまで
+1. **自動**: Lighthouse / axe DevTools → 開発中の基本ラインを自動検知
+2. **手動**: キーボードだけで操作してみる / スクリーンリーダーで読み上げる → 体験として正しいか
+3. **実ユーザー**: 可能ならアクセシビリティ利用者に触ってもらう → リアルなフィードバック
 
-LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
+本レッスンでは 1 と 2 を一通り触ります。
 
-LCP が遅くなる主な原因:
+### 1. Lighthouse: 基本ラインを自動で
 
-1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
-2. **サーバーレスポンスが遅い**（TTFB が長い）
-3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
-4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
+Chrome DevTools 内蔵の **Lighthouse** タブは、その場でページを監査して 4 つのカテゴリ（Performance / Accessibility / Best Practices / SEO）を 0〜100 の点数で返します。
 
-主な対策:
+手順:
 
-- 画像最適化（次の `next/image` 系レッスン参照）
-- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
-- JS のコード分割（次のレッスン参照）
-- 重要な画像 / フォントを `<link rel="preload">` で先読み
+1. Chrome でチェックしたいページを開く
+2. DevTools（`F12`）→ **Lighthouse** タブ
+3. Categories で **Accessibility** だけ選択（他もまとめて出しても良い）
+4. Device は Desktop / Mobile どちらかを選び、**Analyze page load** をクリック
+5. レポートが出る。Accessibility のスコアが 100 / 90 / 80 ... のように点数化される
 
-### INP: 反応の遅さ
+典型的な違反の例:
 
-INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+- Background and foreground colors do not have a sufficient contrast ratio（コントラスト不足）
+- Image elements do not have `[alt]` attributes（alt 欠落）
+- Form elements do not have associated labels（label 欠落）
+- Heading elements are not in a sequentially-descending order（見出し階層の飛び）
+- Buttons do not have an accessible name（アクセシブルネーム欠落）
+- `[aria-*]` attributes do not match their roles（ARIA の誤用）
 
-INP が悪くなる主な原因:
+Lighthouse は **違反ごとに該当の DOM ノード** を示してくれるので、クリックすれば Elements タブにジャンプして直すだけです。
 
-1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
-2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
-3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
+**スコア 100 が目標ですが、それが a11y 完璧の意味ではない** 点に注意してください。Lighthouse が拾うのは機械的な項目だけです。
 
-対策:
+### 2. axe DevTools: より細かく診断
 
-- イベントハンドラ内の処理を軽くする
-- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
-- 重い処理を **Web Worker** に逃がす
-- リスト描画は **仮想スクロール**（`react-window` 等）
-- `requestIdleCallback` で空き時間に処理
+Lighthouse より **詳細な違反情報** が欲しいときは、Chrome 拡張の **axe DevTools**（<https://www.deque.com/axe/devtools/>）を使います。無料版でも十分に使えます。
 
-### CLS: レイアウトのガタつき
+インストール後:
 
-CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
+1. Chrome 拡張からインストール
+2. DevTools に **axe DevTools** タブが追加される
+3. **Scan ALL of my page** を押す
+4. Critical / Serious / Moderate / Minor の優先度別に違反が一覧される
+5. 各違反に「なぜ違反か」「どう直すか」のガイドリンク付き
 
-CLS が悪くなる主な原因:
+Lighthouse との違い:
 
-1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
-2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
-3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
+- axe DevTools は **Deque**（a11y 専門会社）が提供。業界標準の axe-core エンジンを使う
+- 違反の説明が詳しく、**修正方法のコード例** まで載っている
+- Lighthouse は axe-core の一部を内蔵している。つまり **axe DevTools の方が厳しめ**
 
-対策:
+両方回して、Lighthouse で基本を見て、axe で細部を詰めるのが定番です。
 
-- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
-- 動的挿入は **下から** か、placeholder で確保したスペースに収める
-- フォントは `next/font` のようなツールで先読み・サブセット化
-- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
+### 3. キーボード手動チェック
 
-### しきい値は「75 パーセンタイル」で評価する
+ここからは **人間の目と手でしか分からない** 領域です。次を試してください。
 
-Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
+1. マウスから手を離す
+2. Tab キーだけでページを最初から最後まで操作する
+3. 次を確認する:
+   - **フォーカスリングが常に見える** か（どこにフォーカスがあるか分かるか）
+   - **Tab の順序が論理的** か（画面上の自然な流れと一致しているか）
+   - すべての **操作可能な要素** に Tab で到達できるか（マウスでしかクリックできない部分はないか）
+   - **モーダル**が開いたとき、Tab がモーダル内で巡回し、Esc で閉じられるか
+   - **キーボードの罠** がないか（Tab を押してもフォーカスが進まない場所はないか）
 
-評価データは **CrUX（Chrome User Experience Report）** という Google が集めている実ユーザーの匿名データから計算されます。
+「フォーカスが見えない」は最頻発の違反です。CSS で `outline: none` を書いていないか、`:focus-visible` で代替を用意しているか、再確認しましょう。
 
-### Lighthouse vs Real User Monitoring（RUM）
+### 4. スクリーンリーダー手動チェック
 
-CWV を計測する方法は 2 系統あります。
+スクリーンリーダーは **OS 付属（VoiceOver）や無料**（NVDA） が使えます。自分で触ってみると、文章だけでは分からない体験が一気に分かります。
 
-#### Lighthouse（ラボデータ）
+#### macOS: VoiceOver
 
-Chrome DevTools 内蔵の Lighthouse（章 7「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
+- 起動: `Cmd + F5`（または `Touch ID` を 3 回連打）
+- 停止: もう一度 `Cmd + F5`
+- ページ読み上げ: `Ctrl + Option + A`
+- 次の見出しへ移動: `Ctrl + Option + Cmd + H`
+- ランドマーク一覧: `Ctrl + Option + U`（ローター）
 
-- 利点: その場ですぐ計測できる、デプロイ前に確認できる
-- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
+初めての場合、読み上げスピードが速すぎると感じます。システム設定 → アクセシビリティ → VoiceOver で速度を遅くできます。
 
-主に **開発時のデバッグ** に向きます。
+#### Windows: NVDA（無料）
 
-#### RUM（フィールドデータ / 実ユーザー測定）
+- <https://www.nvaccess.org/download/> からダウンロード
+- 起動後、Web ページを開くと自動で読み上げ開始
+- 次の見出しへ: `H`
+- 次のランドマークへ: `D`
+- 読み上げ停止: `Ctrl`
 
-実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
+#### 何を確認するか
 
-- 利点: 本物のユーザー体験を反映
-- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
+- **ページを開いた瞬間に何が読まれるか**（最初の見出しか、関係ないテキストか）
+- ナビゲーションで **「メインコンテンツにスキップ」** できるか（`<main>` ランドマークがあるか）
+- フォームで **ラベルと入力欄が正しく紐付いている** か
+- **アイコンボタンの名前** が読まれるか（`aria-label` 未設定だと「ボタン」としか読まれない）
+- **動的更新**（通知メッセージなど）が `aria-live` で自動通知されるか
 
-代表的なツール:
+「セマンティック HTML とアクセシビリティの基礎」「ARIA 属性とキーボード操作」で作った演習ページで試してみると、これまで配置した属性が効いているのが体感できます。
 
-- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
-- **Google Search Console** — Core Web Vitals レポート
-- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
-- **web-vitals ライブラリ** + 任意の解析サービスへ送信
+### 5. CI に組み込む: `@axe-core/playwright`
 
-Google が SEO で見るのは **RUM データ（CrUX）** です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
-
-### web-vitals ライブラリで RUM を仕込む
-
-自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
-
-```bash
-npm install web-vitals
-```
+手動チェックだけでは、**デグレ**（一度直した違反が再発すること）を防げません。E2E テストで axe を回して CI に組み込むと、PR の段階で自動検知できます。
 
 ```ts
-// src/web-vitals.ts
-import { onLCP, onINP, onCLS } from "web-vitals";
+// e2e/a11y.spec.ts
+import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
-function sendToAnalytics(metric: { name: string; value: number; id: string }) {
-  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
-  console.log(metric);
-  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
-}
-
-onLCP(sendToAnalytics);
-onINP(sendToAnalytics);
-onCLS(sendToAnalytics);
+test("トップページに a11y 違反がない", async ({ page }) => {
+  await page.goto("http://localhost:3000/");
+  const results = await new AxeBuilder({ page }).analyze();
+  expect(results.violations).toEqual([]);
+});
 ```
 
-本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
+「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。
 
-### DevTools の Performance パネルで計測
+> React のユニットテストレベルなら `jest-axe` や `vitest-axe` が使えます。コンポーネント単体の違反チェックに向きます。
 
-Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
+### まとめの「チェックリスト」
 
-1. F12 → **Performance** タブ
-2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
-3. レポートが表示される
-   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
-   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
-   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
+デプロイ前に以下を確認すれば、機械的には OK ラインに届きます（最低限）。
 
-DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
+- [ ] Lighthouse Accessibility スコアが 90 以上
+- [ ] axe DevTools の Critical / Serious が 0
+- [ ] マウスを使わず Tab だけで全機能を操作できる
+- [ ] Tab を押したときに常にフォーカスリングが見える
+- [ ] モーダルが Esc で閉じ、フォーカスが元に戻る
+- [ ] スクリーンリーダーでページを開いた最初の読み上げが自然
 
 ## 演習
 
 ### ゴール
 
-- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
-- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
-- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
+- ローカル or 公開 Web サイト 1 ページに対して Lighthouse を実行する
+- axe DevTools をインストールして違反を眺める
+- キーボードだけで 1 つのサイトを操作する体験をする
+- （任意）スクリーンリーダーを起動してページを読み上げさせる
 
-### 手順 1: Lighthouse で CWV を計測
+### 手順 1: Lighthouse を回す
 
-1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
-2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
-3. レポートを確認:
-   - 全体スコア
-   - **Largest Contentful Paint**（LCP の値）
-   - **Cumulative Layout Shift**（CLS の値）
-   - **Interaction to Next Paint**（条件次第で出る）
+1. Chrome で本コースの教材サイト、または自分が作ったポートフォリオを開きます
+2. DevTools（`F12`）→ **Lighthouse** タブ
+3. Categories で **Accessibility** だけチェックを残し、**Analyze page load** をクリック
+4. スコアが出るまで 10〜30 秒待ちます
+5. スコアと、違反があれば内容をメモします
 
-### 手順 2: PageSpeed Insights で RUM を見る
+### 手順 2: axe DevTools を使う
 
-1. <https://pagespeed.web.dev/> にアクセス
-2. URL を入れて Analyze
-3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
-4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
+1. Chrome Web Store で「axe DevTools」を検索してインストール
+2. DevTools に **axe DevTools** タブが出る
+3. **Scan ALL of my page** をクリック
+4. 結果ペインで違反一覧を眺めます。各違反をクリックすると詳細と該当 DOM が出ます
 
-実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
+### 手順 3: キーボードだけで操作する
 
-### 手順 3: DevTools Performance で観察
+1. マウスをデスクから**物理的に離して** みる（誘惑を断つため）
+2. Tab キーだけで全リンク・全ボタンを順に通過する
+3. 「ここに行きたいが Tab で辿り着けない」ポイントがないか確認
+4. 見つかったら、Tab 順序の修正候補をメモ（原因は `tabindex` 誤設定 / 非インタラクティブな `<div>` をボタン代わりにしている、など）
 
-1. Chrome で対象ページを開く
-2. F12 → **Performance** タブ
-3. 左上の **Record（黒丸）** を押す
-4. ページをリロード（`Ctrl + R`）
-5. ページが落ち着いたら **Stop**
-6. タイムラインで:
-   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
-   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
-   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
+### 手順 4（任意）: スクリーンリーダー
+
+Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストールして起動し、同じページを読ませてみます。
+
+「何が読まれるか」より「何が読まれないか」に注目すると、見えてないラベルやランドマークが炙り出されます。
 
 ### 期待出力
 
-Lighthouse:
-
-- **Performance** スコアが 90 以上なら良好
-- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
-
-PageSpeed Insights:
-
-- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
+- Lighthouse の Accessibility スコアが数字で出る（教材サイトは 90+ のはず）
+- axe DevTools の違反リストが 0 件 or Critical が 0 件
+- Tab だけで迷子にならずに全操作ができる
+- スクリーンリーダー体験で「どう読まれるか」の感覚が掴める
 
 ### 変える
 
-- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
-- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
-- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
+- 自分のポートフォリオやブログ（あれば）で同じ手順を試してみる。違反が出たら、「セマンティック HTML とアクセシビリティの基礎」と「ARIA 属性とキーボード操作」のレッスンに戻って該当 HTML を直す
+- Lighthouse の **Device** を Mobile に切り替えてみる。タップ領域の不足など、モバイル固有の違反が出る場合がある
+- `axe DevTools` の **Intelligent Guided Tests**（有料版機能）の存在を認識しておく。無料版の自動チェックで拾えないものを、人間をガイドしながら問診してくれる
 
-### 自分で書く（任意）
+### 自分で書く
 
-新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
-
-```bash
-npm create vite@latest cwv-sample -- --template vanilla-ts
-cd cwv-sample
-npm install web-vitals
-```
-
-`src/main.ts`:
-
-```ts
-import { onLCP, onINP, onCLS } from "web-vitals";
-
-onLCP(console.log);
-onINP(console.log);
-onCLS(console.log);
-
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
-```
-
-`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
+- `@axe-core/playwright` を使った E2E a11y テストのサンプルを読んで、雰囲気を掴む（実装は「テスト入門」で Playwright を導入するレッスンと合わせて）
+- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン（章 7「ESLint / Prettier / Biome」のレッスンで扱う予定）
 
 ## まとめ
 
-- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS（0.1）**
-- 2024 年 3 月に **FID は INP に置き換わった**
-- 評価は **75 パーセンタイル** + **CrUX（実ユーザーデータ）** で行われる
-- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
-- **PageSpeed Insights** が両方を一覧表示してくれる
-- DevTools の **Performance パネル** で詳細を時系列に見る
-- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託
-- 別のレッスンでは具体的な改善手段（**バンドルサイズ最適化 / コード分割 / 画像最適化**）に進む
+- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは 3〜4 割しかカバーできない
+- **Lighthouse**: Chrome 内蔵。a11y スコアと違反一覧を即出せる
+- **axe DevTools**: Chrome 拡張。より詳細・厳しめ。Deque 提供の業界標準
+- 手動チェック: キーボードだけで操作 / スクリーンリーダーで読ませる
+- **VoiceOver**（macOS）/ **NVDA**（Windows 無料）でスクリーンリーダー体験
+- CI に `@axe-core/playwright` や `jest-axe` / `vitest-axe` を組み込むと、デグレ検知が自動化できる
+- `eslint-plugin-jsx-a11y` も併用すると書く段階で違反を捕まえられる
+- これで a11y の 3 レッスン（セマンティック HTML / ARIA とキーボード / 自動チェック）が完結。次のテーマに進んで、実務の周辺知識を積み上げる

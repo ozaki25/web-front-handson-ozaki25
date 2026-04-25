@@ -1,213 +1,210 @@
-# lesson63: Server Component でデータを取得する
+# lesson63: useEffect の基本
 
 ## ゴール
 
-- `async` な Server Component を書けるようになります。
-- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
-- `loading.tsx` でローディング UI を挟めるようになります。
-- Next.js 16 の Server Component での fetch は **既定でキャッシュしない** ことを知り、キャッシュしたいときの書き方（`"use cache"` ディレクティブ / `fetch` オプション）を見分けられます。
+- `useEffect` が何のためにあるかを説明できる
+- 依存配列 `[]` とそれ以外（`[todos]` など）の違いを書き分けられる
+- `document.title` をマウント時に書き換える最小の例を手を動かして作れる
+
+## このレッスンの範囲（冒頭で明示）
+
+本コースで扱う `useEffect` は、この 2 パターンだけです。
+
+1. マウント時に 1 回だけ実行（依存配列 `[]`）: **このレッスン**
+2. 特定の値が変わるたびに実行（依存配列 `[todos]` など）: **「TODO アプリを React で作る」** で localStorage 保存に使う
+
+**以下は扱いません**（本コースのスコープ外）。必要になった時点でドキュメントを調べてください。
+
+- クリーンアップ関数（`useEffect` の中で return する関数）
+- `addEventListener` / `removeEventListener` のようなイベントリスナの取り付け
+- `setInterval` / `setTimeout` のタイマー管理
 
 ## 解説
 
-### Server Component は `async` にできる
+### 副作用（side effect）とは
 
-4 章 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
+ここまでのレッスンで書いたコンポーネントは、次の形でした。
 
-```tsx
-export default async function Page() {
-  const data = await fetch("https://...").then((r) => r.json());
-  return <div>{data.title}</div>;
-}
-```
+- **入力**: props と state
+- **出力**: JSX（画面）
 
-- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
-- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
+この「入力から JSX を計算する」部分だけなら、コンポーネントは純粋な関数です。関数を呼ぶと JSX が返ってくる、それだけ。
 
-ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（4 章 の「useEffect の基本」末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
+ところが、実用的なアプリでは次のようなこともしたいことがあります。
 
-### `loading.tsx` でローディング UI
+- `document.title` を書き換える
+- ブラウザの localStorage にデータを書き込む
+- サーバーにデータを送る
 
-`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
+これらはコンポーネントの「描画」そのものではなく、**画面を描いた結果として起きてほしい**処理です。こうした処理をまとめて **副作用**（side effect） と呼びます。
 
-```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
+`useEffect` は「描画の後に、副作用を実行する」ためのフックです。
 
-`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
-
-### Next.js 16 のキャッシュは「明示的に opt-in」
-
-Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったため、Next.js 15 以降は **fetch のデフォルトがキャッシュしない** 動作に切り替わっています。毎リクエストで取り直します。
-
-キャッシュしたい場合は明示的に指定します。書き方は 2 系統あります。
-
-#### 従来の方法: `fetch` のオプション
-
-第 2 引数で挙動を切り替える、以前から使える書き方です。
+### 最小形
 
 ```tsx
-// (1) 強くキャッシュ: 一度取ったらずっと使い回す
-await fetch(url, { cache: "force-cache" });
+import { useEffect } from "react";
 
-// (2) 一定時間ごとに再取得: 60 秒間はキャッシュ、60 秒経ったら次のアクセスで新しく取る
-await fetch(url, { next: { revalidate: 60 } });
-
-// (3) タグ単位で無効化: Server Actions から revalidateTag('posts') を呼ぶとこのキャッシュが切れる
-await fetch(url, { next: { tags: ["posts"] } });
+useEffect(() => {
+  document.title = "Hello";
+}, []);
 ```
 
-#### 新しい方法: `"use cache"` ディレクティブ（Cache Components）
+- 第 1 引数: 副作用として実行したい関数
+- 第 2 引数: **依存配列**
 
-Next.js 16 で導入された **Cache Components** のパターンです。コンポーネントや関数の先頭に `"use cache"` と書くと、その結果全体をキャッシュ対象にします。`next.config.ts` で `cacheComponents: true` を有効にしたときに使えます。
+### 依存配列の意味
+
+依存配列は、「中に入っている値のうち 1 つでも前回と違ったら、副作用を再実行する」というルールで効きます。
+
+- **`[]`**（空配列）: どの値も監視しない → **マウント時に 1 回だけ** 実行
+- **`[count]`**: `count` が変わるたびに実行
+- **`[todos]`**: `todos` が変わるたびに実行（別のレッスンで使う）
+- 書かない（第 2 引数を省略）: **毎回の描画後** に実行。原則使わない（無限ループの原因になりやすい）
+
+本コースでは `[]` と `[何かの値]` の 2 通りだけ使います。
+
+### マウント時に 1 回だけ
+
+「マウント」はコンポーネントが **初めて画面に現れた瞬間** を指します。
 
 ```tsx
-// next.config.ts
-const nextConfig = {
-  cacheComponents: true, // Cache Components を有効化
-};
-export default nextConfig;
+useEffect(() => {
+  console.log("mounted");
+}, []);
 ```
 
-```tsx
-// 関数単位: fetch をまとめてキャッシュ
-import { cacheLife, cacheTag } from "next/cache";
+このコードは、コンポーネントが表示されたときに一度だけ `mounted` をログに出します。その後、state が変わって再レンダリングされても、もうこの副作用は走りません。
 
-async function getPosts() {
-  "use cache";
-  cacheLife("hours"); // 1 時間単位でキャッシュ
-  cacheTag("posts");  // 'posts' タグで無効化対象にする
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  return res.json();
-}
+### 何かが変わるたび
+
+```tsx
+useEffect(() => {
+  document.title = `TODO (${todos.length})`;
+}, [todos]);
 ```
 
-```tsx
-// コンポーネント単位: 描画結果ごとキャッシュ
-async function PostList() {
-  "use cache";
-  const posts = await fetch("https://jsonplaceholder.typicode.com/posts").then((r) => r.json());
-  return <ul>{posts.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
-}
-```
+`todos` が変わるたびにタブのタイトルを更新する例です。配列の**中身**が変わっただけでなく、**配列オブジェクト自体**が前回と違う必要があります。「イベントと配列のイミュータブル更新」で学んだ「スプレッドで新しい配列を作る」イミュータブル更新が、このシグナルとして効きます。
 
-- **`"use cache"` を書いた関数 / コンポーネント全体** がキャッシュされる
-- `cacheLife("minutes" | "hours" | "days" | "weeks" | ...)` でキャッシュ寿命を設定
-- `cacheTag("...")` で `revalidateTag` から無効化できるタグを付ける
-- 書く場所はファイル先頭（ファイル全体）/ 関数先頭 / コンポーネント先頭のいずれか
+### コラム: React 19 では `<title>` を JSX に書ける
 
-本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。「キャッシュしたいときに 2 系統の選択肢がある」ことだけ頭に入れておけば十分です。本格的に使うのは実務に入ってからで構いません。
-
-ここで話しているキャッシュは **Server Component のデータ取得** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
-
-## 演習
-
-### 途中から始める場合
-
-このレッスンの記事一覧演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/posts/page.tsx` と `app/posts/loading.tsx` の新規作成が中心です。手順 3 のヘッダーリンク追加は `app/layout.tsx` にナビがあれば足せますが、無ければスキップして構いません）。
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順 1: `/posts` ページを作る
-
-`app/posts/page.tsx` を新規作成します。
+React 19 では、JSX の中に `<title>` / `<meta>` / `<link>` を直接書くと、React が `<head>` に自動で差し込んでくれるようになりました。
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
+function Page() {
   return (
     <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
-          </li>
-        ))}
-      </ul>
+      <title>TODO</title>
+      <h1>...</h1>
     </>
   );
 }
 ```
 
-- `async function` で書いています（Server Component だから許されます）。
-- `fetch` も `response.json()` も `await` が必要です（2 章 で学んだ fetch と同じです）。
-- `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
-- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
+つまり「タイトルを変えたいだけ」なら、`useEffect` で `document.title` を書き換える必要はありません。それでもこのレッスンでは **`useEffect` の素振り** として `document.title` を扱います。「タイトル書き換え」という用途に限れば `<title>` の方が簡単、という事実は頭の片隅に。
 
-### 手順 2: `loading.tsx` を置く
+### コラム: React 19.2 の `useEffectEvent`
 
-`app/posts/loading.tsx` を新規作成します。
+React 19.2 で **`useEffectEvent`** という新しいフックが追加されました。これは「effect の中で使っているが、その値が変わっても effect を再実行したくない」という場面に使います。
 
 ```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
+import { useEffectEvent } from "react";
+
+function Chat({ roomId, theme }) {
+  const onConnected = useEffectEvent(() => {
+    // theme を参照しても、theme が変わっただけでは再接続しない
+    showNotification(theme, "接続しました");
+  });
+
+  useEffect(() => {
+    const connection = connectToRoom(roomId);
+    connection.on("connected", onConnected);
+    return () => connection.disconnect();
+  }, [roomId]); // theme は依存配列に入れなくて良い
 }
 ```
 
-- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
-- ファイル名は `loading.tsx` 固定です。
+依存配列に入れたくないイベントハンドラ的な処理を `useEffectEvent` に切り出すと、**依存配列から除外しても ESLint に怒られません**。本レッスンでは踏み込みませんが、useEffect の複雑な依存配列に悩んだら思い出してください。
 
-### 手順 3: ヘッダーにリンクを追加
+## 演習
 
-`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+
+### ゴール
+
+- 画面の `<h1>` とカウンター UI を作り、マウント時に `document.title` を書き換える
+- カウンターの値が変わるたびに `document.title` を `TODO (N)` のように更新する
+
+### 手順
+
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/App.tsx` を書き換える
+
+### `src/App.tsx`
 
 ```tsx
-<li>
-  <Link href="/posts">Posts</Link>
-</li>
+import { useEffect, useState } from "react";
+import "./App.css";
+
+function App() {
+  const [count, setCount] = useState(0);
+
+  // (1) マウント時に 1 回だけ
+  useEffect(() => {
+    console.log("mounted: 初期タイトルをセット");
+    document.title = "TODO (起動中)";
+  }, []);
+
+  // (2) count が変わるたびに
+  useEffect(() => {
+    document.title = `TODO (${count})`;
+  }, [count]);
+
+  return (
+    <>
+      <h1>useEffect 入門</h1>
+      <p>カウンター: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+      <button onClick={() => setCount(0)}>リセット</button>
+    </>
+  );
+}
+
+export default App;
 ```
 
 ### 期待出力
 
-1. ブラウザで `/posts` を開きます。
-2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
-3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
-4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
+- 画面に `useEffect 入門` という見出しと `カウンター: 0` 、`+1` / `リセット` ボタン
+- **ブラウザのタブのタイトル** が `TODO (0)` になっている（開いた直後は `TODO (起動中)` になることもあるが、すぐ `TODO (0)` に上書きされる）
+- `+1` を押すたびにタブのタイトルが `TODO (1)` → `TODO (2)` → ... に変わる
+- `リセット` を押すとタブのタイトルが `TODO (0)` に戻る
+- ブラウザのコンソールに `mounted: 初期タイトルをセット` が **一度だけ** 出る
 
-### 変えてみる
+### 変える
 
-1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
-2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
-3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
-
-### キャッシュ指定を試す（任意）
-
-`fetch` の第 2 引数に以下を指定して挙動の違いを見てみましょう。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良いです。
-
-```tsx
-const res = await fetch(
-  "https://jsonplaceholder.typicode.com/posts",
-  { next: { revalidate: 60 } },
-);
-```
+- (1) の依存配列 `[]` を消す（依存配列ごと省略する）と、`mounted: 初期タイトルをセット` がクリックのたびに出てしまう（描画のたびに副作用が走る）。確認したら戻す
+- (2) の `[count]` を `[]` に変えると、タブのタイトルが `+1` しても更新されなくなる（マウント時の 1 回だけになる）
+- (1) と (2) を 1 つにまとめてもよい（依存配列は `[count]` で、中で `document.title = TODO (${count})`）
 
 ### 自分で書く
 
-`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
+- `count` の代わりに、「親子コンポーネントの連携」で作った `todos` state を使って、`document.title` を `TODO (${todos.length})` に更新する
+- `<input>` で文字を入れて追加ボタンで増やすと、タブのタイトルの件数が増える、という挙動を作る
+- 「TODO アプリを React で作る」の準備として、ファイルを保存しておくと役立つ
+
+### 末尾予告
+
+- **ブラウザ側で `fetch` を `useEffect` で呼ぶパターン** は、競合状態、ローディング、エラー管理など罠が多いので、本コースでは扱いません。データ取得は5 章（Next.js）の **Server Component** にサーバー側 `fetch` としてまとめます
+- **「TODO アプリを React で作る」** では、`useEffect` を **localStorage への保存** に使います（依存配列に `todos` を渡す形）。2 章 の「TODO アプリを作る」で作った「リロードしても消えない TODO」を、React 版でも取り戻します
 
 ## まとめ
 
-- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
-- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
-- Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ（Cache Components）** を使います。
-- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
-- このあとの「動的ルート」では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。2 章 で学んだ `find` が再登場します。
-
-### コラム: `loading.tsx` の裏で動く Suspense
-
-`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
-
-本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。
+- `useEffect(() => { ... }, deps)` は「描画の後に走る処理」を書く場所
+- 依存配列 `[]` は **マウント時 1 回だけ**
+- 依存配列に値を入れると、その値が変わるたびに再実行
+- 本コースではこの 2 パターンのみ扱う。クリーンアップ関数やイベントリスナ管理は扱わない
+- React 19 では `<title>` を JSX に直接書けるので、実務で「タイトルだけ」なら `useEffect` は不要
+- 次は `useEffect` で localStorage 保存に挑戦

@@ -1,85 +1,130 @@
-# lesson47: useReducer で複雑な state
+# lesson47: 判別共用体（discriminated union）
 
 ## ゴール
 
-- `useReducer` で複数の操作をまとめた state 管理が書ける
-- reducer 関数の形 `(state, action) => newState` を理解する
-- action の型を判別共用体で書ける
-- reducer は純粋関数でなければならないことを理解する
+- オブジェクトのユニオン型に「種類を表す文字列リテラルのプロパティ」を付ける形（**判別共用体**）を書ける。
+- `switch (state.kind)` で各ケースに分岐すると、TS が自動的に型を絞り込んでくれることを体験する。
+- 画面の状態（ローディング / 成功 / エラー）を判別共用体で表現し、1 つの型でまるごと扱えるようになる。
+- この形が4 章 の「useReducer で複雑な state」の `Action` 型で再登場する流れを理解する。
 
 ## 解説
 
-### 最初に: 再接続
+### 判別共用体とは
 
-この `Action` 型は3 章 の「判別共用体」で学んだ **判別共用体** そのものです。`type` プロパティで種類を見分ける形、`switch` での分岐、網羅性チェック、すべてそのまま使います。3 章 の「判別共用体」で書いた `TodoState` の代わりに、今回は「どういう更新をしたいか」を表すオブジェクトを同じ仕組みで表現します。
+「配列・ユニオン・リテラル型・オプショナル」でユニオン型 `A | B` を、「型ガード」で `in` 演算子による絞り込みを学びました。これをさらに読み書きしやすくしたのが **判別共用体**（discriminated union、タグ付きユニオンとも呼ばれます）です。
 
-### なぜ useState だけだと辛くなるか
+ポイントは **全ケースで共通の名前のプロパティ** を持ち、その値は **それぞれ別のリテラル型** にすることです。
 
-「イベントと配列のイミュータブル更新」で作った TODO は、`setTodos` を呼ぶパターンが 3 種類ありました。
-
-```tsx
-// 追加
-setTodos((prev) => [...prev, newTodo]);
-
-// 削除
-setTodos((prev) => prev.filter((t) => t.id !== id));
-
-// 完了切替（今回追加したい）
-setTodos((prev) =>
-  prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-);
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number }
+  | { kind: "rectangle"; width: number; height: number };
 ```
 
-今はまだ読めますが、操作が増えるにつれて「`setTodos` の書き方が画面のあちこちに散る」「同じ処理を別の場所でも書きたくなる」という問題が出てきます。
+- 共通プロパティ `kind` は全ケースで存在する。
+- `kind` の値は `"circle"` / `"square"` / `"rectangle"` とケースごとに違うリテラル。
+- それ以外のプロパティ（`radius`、`side`、`width` / `height`）はケース固有。
 
-`useReducer` は、**state の更新ロジックを 1 箇所に集める** 仕組みです。画面側は「こういう操作をしたい」という **action** を投げるだけになります。
+この「`kind` という共通プロパティの値で種類を見分ける」形を判別共用体と呼びます。共通プロパティの名前は `kind` でも `type` でも `tag` でも構いませんが、本コースでは **`kind`** に統一します（`type` は予約語ではないものの、型注釈の文脈で紛らわしいため）。
 
-### useReducer の形
+### `switch` で自動絞り込み
 
-```tsx
-import { useReducer } from "react";
+判別共用体の最大の嬉しさは、`switch` で **何も書かずに型が絞り込まれる** 点です。
 
-const [state, dispatch] = useReducer(reducer, initialState);
-```
-
-- 第 1 引数: **reducer 関数** `(state, action) => newState`
-- 第 2 引数: **初期 state**
-- 戻り値: `[今の state, dispatch 関数]`
-
-`dispatch(action)` を呼ぶと、React が内部で `reducer(現在の state, action)` を実行し、その戻り値を新しい state として保持します。
-
-### reducer 関数の中身
-
-reducer は「今の state」と「action」を受け取って「次の state」を返すだけの関数です。
-
-```tsx
-function reducer(state: State, action: Action): State {
-  switch (action.type) {
-    case "increment":
-      return { count: state.count + 1 };
-    case "decrement":
-      return { count: state.count - 1 };
-    case "reset":
-      return { count: 0 };
+```ts
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
   }
 }
 ```
 
-ポイントは 3 つです。
+- `case "circle":` のブロックでは `shape` の型が `{ kind: "circle"; radius: number }` に絞られている。`shape.radius` が使える。
+- `case "square":` の中では `shape.side`、`case "rectangle":` の中では `shape.width` / `shape.height` が使える。
+- `in` 演算子も `typeof` もカスタム型ガードも書いていないのに、TS が `kind` の値から自動で絞り込む。
 
-1. **新しいオブジェクト / 配列を返す**（イミュータブル更新、これまでと同じ原則）
-2. **副作用を起こさない**（ログ出力、`localStorage`、`fetch` などは書かない）
-3. **同じ入力には同じ出力**（乱数や `Date.now()` も使わない）
+`switch` の条件に「**判別用プロパティ**」を指定するだけで、各 `case` が局所的な型付けになる。これが判別共用体を使う一番大きな動機です。
 
-これを **純粋関数** と呼びます。reducer は純粋関数でなければなりません。
+### 網羅性チェックとの組み合わせ
 
-### 純粋関数の原則と Strict Mode
+「`unknown` と `never`」で学んだ `never` による網羅性チェックを組み合わせると、ケース追加時に漏れを検出できます。
 
-React の Strict Mode は、開発時に reducer を **意図的に 2 回呼びます**。副作用を書いてしまうと 2 回走って気づけるようにする仕組みです。「reducer 内で `console.log` したら 2 回出た」ときは、Strict Mode が純粋関数違反を検出している合図です。
+```ts
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
+    default: {
+      const _exhaustive: never = shape;
+      return _exhaustive;
+    }
+  }
+}
+```
 
-### action の型は判別共用体で
+`Shape` に新しいケースを足すと、`default` 節の `_exhaustive` に赤線が出て、`area` を直し忘れていることを教えてくれます。
 
-action は「操作の種類」を表すオブジェクトです。`type` というプロパティで種類を見分けます。3 章 の「判別共用体」で学んだ判別共用体が、そのまま action の型になります。
+### 画面の状態を判別共用体で表す
+
+実用面でよく登場するのが **画面の状態** です。データを取ってきて表示する画面は、ざっくり 3 つの状態を取ります。
+
+- まだ読み込み中（ローディング）
+- 成功してデータがある
+- 失敗してエラーメッセージがある
+
+これを判別共用体で 1 つの型にまとめます。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoState =
+  | { kind: "loading" }
+  | { kind: "success"; todos: Todo[] }
+  | { kind: "error"; message: string };
+```
+
+- `"loading"` のときは他に何もいらない。
+- `"success"` のときだけ `todos` がある。
+- `"error"` のときだけ `message` がある。
+
+これを使う関数は、`switch` で自然に分岐できる。
+
+```ts
+function describe(state: TodoState): string {
+  switch (state.kind) {
+    case "loading":
+      return "読み込み中...";
+    case "success":
+      return `${state.todos.length} 件の TODO があります`;
+    case "error":
+      return `エラー: ${state.message}`;
+  }
+}
+```
+
+- `case "loading":` のブロックでは `state` に `todos` も `message` もない。
+- `case "success":` のブロックでは `state.todos` だけある。`state.message` と書くと赤線が出る。
+- `case "error":` のブロックでは `state.message` だけある。
+
+**存在しないプロパティにアクセスしようとすると TS が止めてくれる**。これが判別共用体の安全性です。
+
+### 2 章 の JS との違い（オブジェクトリテラル辞書ではなく型で）
+
+2 章 までは、似たようなことを「オブジェクトリテラル辞書」や「`if` チェーン」で書いていました。判別共用体を使うと、**型定義を見るだけでどんな状態があるかが一目で分かる**、**各状態で使えるプロパティが TS に守られる** という 2 つの利点が一気に手に入ります。
+
+### `kind` 以外の名前を使うとき
+
+既存のライブラリやサンプルでは、共通プロパティ名に `type`（HTTP のアクション種別など）を使っているものをよく見ます。
 
 ```ts
 type Action =
@@ -88,397 +133,206 @@ type Action =
   | { type: "toggle"; id: string };
 ```
 
-`switch (action.type)` で分岐すると、TypeScript は各ブランチで「この action にはどのプロパティがあるか」を正確に絞り込んでくれます。`case "add"` の中では `action.text` が見え、`case "delete"` の中では `action.id` が見える、という形です。
-
-### dispatch を呼ぶ側
-
-画面側（コンポーネントの JSX）からは `dispatch(action)` を呼ぶだけです。
-
-```tsx
-dispatch({ type: "add", text: "牛乳を買う" });
-dispatch({ type: "delete", id: "abc" });
-dispatch({ type: "toggle", id: "abc" });
-```
-
-「追加ロジック」「削除ロジック」は reducer 側に集まっているので、画面側は「何をしたいか」だけを伝えれば済みます。
-
-### useState と useReducer の使い分け
-
-| 状況 | おすすめ |
-| --- | --- |
-| 値が 1 つの単純な state | `useState` |
-| 複数の関連する更新パターン | `useReducer` |
-| 次の state が前の state に強く依存する | `useReducer` |
-
-画面の中で「いくつも `setX` を並べる」のがしんどくなったら `useReducer` の出番です。
+これも立派な判別共用体です。名前の選び方は、**そのデータが自然に呼ばれる語に合わせる** くらいで十分。本コースでは画面の状態には `kind`、Redux 風の動作には `type` を使い分けます（どちらも中身の仕組みは同じ）。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` を新しい形（`done` 付き + `Action` 型）に書き換えて進めます。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-<details>
-<summary>出発点のファイル</summary>
+### 手順 1: `Shape` の判別共用体
 
-**`src/types.ts`**
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-**`src/App.tsx`**
-
-```tsx
-import { useState } from "react";
-import type { Todo } from "./types";
-import "./App.css";
-
-function App() {
-  const [count, setCount] = useState(0);
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "原稿を書く" },
-  ]);
-
-  function handlePlus() {
-    setCount((c) => c + 1);
-  }
-  function handleMinus() {
-    setCount((c) => c - 1);
-  }
-  function handleReset() {
-    setCount(0);
-  }
-
-  function addToEnd() {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: `末尾 ${todos.length + 1}`,
-    };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function addToTop() {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: `先頭 ${todos.length + 1}`,
-    };
-    setTodos((prev) => [newTodo, ...prev]);
-  }
-
-  function removeById(id: string) {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  return (
-    <>
-      <section className="box">
-        <h2>カウンター</h2>
-        <p>現在: {count}</p>
-        <button onClick={handlePlus}>+1</button>
-        <button onClick={handleMinus}>-1</button>
-        <button onClick={handleReset}>リセット</button>
-      </section>
-
-      <section className="box">
-        <h2>TODO</h2>
-        <div className="row">
-          <button onClick={addToEnd}>末尾に追加</button>
-          <button onClick={addToTop}>先頭に追加</button>
-        </div>
-        <ul>
-          {todos.map((todo) => (
-            <li key={todo.id}>
-              {todo.text}
-              <button onClick={() => removeById(todo.id)}>削除</button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </>
-  );
-}
-
-export default App;
-```
-
-本レッスンでは `types.ts` を書き換え、`src/todosReducer.ts` を新規作成し、`App.tsx` を `useReducer` 版に入れ替えて進めます。
-
-</details>
-
-### ゴール
-
-- これまでの TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する
-- 3 種類の action `add` / `delete` / `toggle` を実装する
-- 完了済みの TODO は見た目（取り消し線）で区別する
-
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/types.ts` を作成
-3. `src/todosReducer.ts` を作成
-4. `src/App.tsx` を書き換える
-5. `src/App.css` を書き換える
-
-### `src/types.ts`
+`src/main.ts` の中身を以下に置き換える。
 
 ```ts
-export type Todo = {
-  id: string;
-  text: string;
-  done: boolean;
-};
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number }
+  | { kind: "rectangle"; width: number; height: number };
 
-export type Action =
-  | { type: "add"; text: string }
-  | { type: "delete"; id: string }
-  | { type: "toggle"; id: string };
-```
-
-`Todo` の `done` プロパティで「完了済みかどうか」を表します。`Action` は 3 種類の操作を判別共用体で列挙しています。
-
-### `src/todosReducer.ts`
-
-```ts
-import type { Todo, Action } from "./types";
-
-export function todosReducer(state: Todo[], action: Action): Todo[] {
-  switch (action.type) {
-    case "add": {
-      const newTodo: Todo = {
-        id: crypto.randomUUID(),
-        text: action.text,
-        done: false,
-      };
-      return [...state, newTodo];
-    }
-    case "delete": {
-      return state.filter((todo) => todo.id !== action.id);
-    }
-    case "toggle": {
-      return state.map((todo) =>
-        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
-      );
-    }
-  }
-}
-```
-
-- `case` ごとに新しい配列を返しています（イミュータブル更新）
-- `toggle` は該当 `id` の行だけ新しいオブジェクトで差し替え、それ以外はそのまま
-- ブロック `{ ... }` で囲っているのは、`case` の中で `const` を宣言するためです（変数のスコープを閉じる慣習）
-
-### `src/App.tsx`
-
-```tsx
-import { useReducer, useState } from "react";
-import type { FormEvent } from "react";
-import { todosReducer } from "./todosReducer";
-import type { Todo } from "./types";
-import "./App.css";
-
-function App() {
-  const [todos, dispatch] = useReducer(todosReducer, [] as Todo[]);
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    dispatch({ type: "add", text: trimmed });
-    setText("");
-  }
-
-  return (
-    <>
-      <h1>useReducer 版 TODO</h1>
-
-      <form onSubmit={handleSubmit} className="box">
-        <input
-          value={text}
-          onChange={(e) => setText(e.target.value)}
-          placeholder="やることを入力"
-        />
-        <button type="submit">追加</button>
-      </form>
-
-      <ul className="todo-list">
-        {todos.map((todo) => (
-          <li key={todo.id} className={todo.done ? "done" : ""}>
-            <label>
-              <input
-                type="checkbox"
-                checked={todo.done}
-                onChange={() => dispatch({ type: "toggle", id: todo.id })}
-              />
-              {todo.text}
-            </label>
-            <button
-              type="button"
-              onClick={() => dispatch({ type: "delete", id: todo.id })}
-            >
-              削除
-            </button>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-
-export default App;
-```
-
-- `useReducer(todosReducer, [] as Todo[])` で、初期値は空配列
-- `dispatch({ type: "add", text })` で追加
-- `dispatch({ type: "toggle", id })` でチェックの切替
-- `dispatch({ type: "delete", id })` で削除
-- 画面側には更新ロジックが一切なく、「どういう操作をしたいか」だけを書いています
-
-### `src/App.css`
-
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
-
-.box input {
-  padding: 6px;
-  margin-right: 8px;
-}
-
-.box button {
-  padding: 4px 10px;
-  cursor: pointer;
-}
-
-.todo-list {
-  list-style: none;
-  padding-left: 0;
-  color: #222;
-}
-
-.todo-list li {
-  padding: 4px 0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.todo-list li.done label {
-  text-decoration: line-through;
-  color: #888;
-}
-
-.todo-list li button {
-  margin-left: auto;
-  padding: 2px 8px;
-  cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
-  .todo-list {
-    color: #eee;
-  }
-  .todo-list li.done label {
-    color: #888;
-  }
-}
-```
-
-### 期待出力
-
-- 画面に入力欄と「追加」ボタン、その下に TODO 一覧
-- 入力して「追加」を押すと、一覧末尾に行が追加される（`done: false` の状態）
-- 各行のチェックボックスを押すと取り消し線が付き、もう一度押すと戻る
-- 「削除」ボタンでその行だけが消える
-- 空文字のまま「追加」を押しても何も起きない
-
-### 変える
-
-- `todosReducer` の `case "toggle"` を、意図的に壊してみます。次のように書き換えると、`toggle` を押しても画面が更新されません。
-  ```ts
-  case "toggle": {
-    const todo = state.find((t) => t.id === action.id);
-    if (todo) todo.done = !todo.done; // NG: 元のオブジェクトを書き換えている
-    return state; // 同じ配列参照を返している
-  }
-  ```
-  確認したら元に戻します。reducer も **新しい配列・新しいオブジェクトを返す** 原則は守ります。
-- `case "add"` の中に `console.log("added")` を入れて、Strict Mode が有効なとき（`main.tsx` で `<StrictMode>` に包まれているとき）に 2 回出力されることを確認します。reducer は純粋関数として扱われるため、開発時に 2 回呼ばれても副作用は出ないはず、という検査です。
-
-### 自分で書く
-
-- 「全部完了にする」「全部未完了に戻す」を action として追加します。
-  - `type: "completeAll"` と `type: "uncompleteAll"` を `Action` 型に足す
-  - reducer にそれぞれの `case` を書く（`state.map((t) => ({ ...t, done: true }))` など）
-  - 画面にボタンを 2 つ追加して `dispatch` する
-- 「完了済みだけ一括削除」も追加してみてください（`type: "deleteCompleted"`）。
-
-### 発展: 網羅性チェック（折りたたみ）
-
-::: details never を使った網羅性チェック
-
-3 章 の「unknown と never」で登場した `never` 型を使うと、**action の case を書き忘れたときにコンパイルエラーにできます**。
-
-`todosReducer.ts` の `switch` に `default` を足します。
-
-```ts
-import type { Todo, Action } from "./types";
-
-export function todosReducer(state: Todo[], action: Action): Todo[] {
-  switch (action.type) {
-    case "add": {
-      const newTodo: Todo = {
-        id: crypto.randomUUID(),
-        text: action.text,
-        done: false,
-      };
-      return [...state, newTodo];
-    }
-    case "delete": {
-      return state.filter((todo) => todo.id !== action.id);
-    }
-    case "toggle": {
-      return state.map((todo) =>
-        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
-      );
-    }
+function area(shape: Shape): number {
+  switch (shape.kind) {
+    case "circle":
+      return Math.PI * shape.radius ** 2;
+    case "square":
+      return shape.side ** 2;
+    case "rectangle":
+      return shape.width * shape.height;
     default: {
-      // すべての case を処理していれば、ここに来る action は never 型になる
-      const _exhaustive: never = action;
+      const _exhaustive: never = shape;
       return _exhaustive;
     }
   }
 }
+
+console.log(area({ kind: "circle", radius: 2 }));
+console.log(area({ kind: "square", side: 3 }));
+console.log(area({ kind: "rectangle", width: 4, height: 5 }));
 ```
 
-試しに `Action` 型に新しいケース（例: `{ type: "clear" }`）を足してみてください。`default` の `_exhaustive: never = action` の行で「`action` が `{ type: "clear" }` 型で never に代入できない」というエラーが出ます。これを **網羅性チェック** と呼びます。
+#### 期待出力
 
-action の種類が増えたとき、対応を忘れた場所を TypeScript に教えてもらえるようになります。実務では必ず付けると言ってよい定型です。
+```
+12.566370614359172
+9
+20
+```
 
-:::
+エディタで `case "circle":` の中の `shape` にマウスを乗せると `{ kind: "circle"; radius: number }` と出る。`kind` の値で型が絞られていることが確認できる。
+
+### 手順 2: わざと他ケースのプロパティを触る
+
+`case "circle":` の中で `shape.side` を参照してみる。
+
+```ts
+case "circle":
+  return Math.PI * shape.side ** 2;
+```
+
+期待されるメッセージ:
+
+```
+Property 'side' does not exist on type '{ kind: "circle"; radius: number; }'.
+```
+
+`"circle"` のケースでは `side` は存在しないので、触らせてもらえない。確認できたら `shape.radius` に戻す。
+
+### 手順 3: `TodoState` を書く
+
+「配列・ユニオン・リテラル型・オプショナル」で作った `src/types.ts` の `Todo` をそのまま使う。`src/main.ts` を次の内容に置き換える。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoState =
+  | { kind: "loading" }
+  | { kind: "success"; todos: Todo[] }
+  | { kind: "error"; message: string };
+
+function describe(state: TodoState): string {
+  switch (state.kind) {
+    case "loading":
+      return "読み込み中...";
+    case "success":
+      return `${state.todos.length} 件の TODO があります`;
+    case "error":
+      return `エラー: ${state.message}`;
+    default: {
+      const _exhaustive: never = state;
+      return _exhaustive;
+    }
+  }
+}
+
+const s1: TodoState = { kind: "loading" };
+const s2: TodoState = {
+  kind: "success",
+  todos: [
+    { id: "a1", text: "牛乳を買う", status: "open" },
+    { id: "a2", text: "本を返す", status: "done" },
+  ],
+};
+const s3: TodoState = { kind: "error", message: "ネットワーク切断" };
+
+console.log(describe(s1));
+console.log(describe(s2));
+console.log(describe(s3));
+```
+
+#### 期待出力
+
+```
+読み込み中...
+2 件の TODO があります
+エラー: ネットワーク切断
+```
+
+### 手順 4: ケース追加で網羅性が崩れる様子
+
+`TodoState` に `"empty"` を追加してみる。
+
+```ts
+type TodoState =
+  | { kind: "loading" }
+  | { kind: "success"; todos: Todo[] }
+  | { kind: "error"; message: string }
+  | { kind: "empty" };
+```
+
+`describe` の本体は触らない。すると `default:` の `const _exhaustive: never = state;` に赤線が出る。
+
+期待されるメッセージ:
+
+```
+Type '{ kind: "empty"; }' is not assignable to type 'never'.
+```
+
+「`"empty"` のケースが処理されていない」と TS が教えてくれる。`case "empty":` を足して処理を書くと赤線が消える。
+
+```ts
+case "empty":
+  return "TODO はまだありません";
+```
+
+実行して `describe({ kind: "empty" })` が `TODO はまだありません` を返すことを確認する。
+
+### 手順 5: わざと存在しないプロパティを触る
+
+`case "error":` のブロックで、`state.todos` を触ろうとしてみる。
+
+```ts
+case "error":
+  return `エラー: ${state.message} (${state.todos.length} 件)`;
+```
+
+期待されるメッセージ:
+
+```
+Property 'todos' does not exist on type '{ kind: "error"; message: string; }'.
+```
+
+`"error"` のケースに `todos` は存在しない。判別共用体は **そのケースで本当にあるプロパティだけにアクセスを許可する**。確認できたら `state.todos` の部分は消す。
+
+### 変えてみる
+
+共通プロパティの名前を `kind` から `type` に変えてみる。
+
+```ts
+type TodoState =
+  | { type: "loading" }
+  | { type: "success"; todos: Todo[] }
+  | { type: "error"; message: string };
+```
+
+`switch (state.type)` に変えれば、`kind` のときと完全に同じように動く。呼び出し側のオブジェクトリテラルも `{ type: "loading" }` のように変える。**名前が変わっても挙動は同じ** ことを確認する。
+
+確認できたら `kind` に戻す（本コースでは状態には `kind` を使う）。
+
+### 自分で書く
+
+次の判別共用体と関数を自分で書く。
+
+```ts
+type FetchResult<T> =
+  | { kind: "idle" }
+  | { kind: "loading" }
+  | { kind: "success"; data: T }
+  | { kind: "error"; message: string };
+```
+
+- この `FetchResult` は別のレッスンで学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
+- `function render(r: FetchResult<string>): string` を書き、`"idle"` は `"待機中"`、`"loading"` は `"読み込み中"`、`"success"` は `data` をそのまま、`"error"` は `message` を返すようにする。
+- `default:` で `const _: never = r;` の網羅性チェックを付ける。
+
+書けたら 4 パターンの `FetchResult<string>` を作って呼び出し、期待通りの文字列が返ることを確認する。
 
 ## まとめ
 
-- `useReducer(reducer, initialState)` で state の更新ロジックを 1 箇所にまとめられる
-- reducer は `(state, action) => newState` の形、**純粋関数**（副作用禁止、イミュータブル更新）
-- action は判別共用体で型付け（`type` プロパティで見分ける、3 章 の「判別共用体」の形）
-- 画面からは `dispatch(action)` を呼ぶだけ
-- 複数の関連更新があるとき、`useState` より見通しが良くなる
-- Strict Mode では reducer が 2 回呼ばれる。純粋関数なら結果は同じになる
-- 次は「フォームと制御コンポーネント」のフォームに進み、その後「親子コンポーネントの連携」で親子連携、「Context API」で Context を学ぶ
+- **判別共用体** は「全ケースで共通の名前のプロパティを持ち、値が別々のリテラル」のユニオン型。
+- `switch (x.kind)` で分岐するだけで、各 `case` の中の型が自動で絞り込まれる。
+- 存在しないプロパティを触ろうとすると TS が止めてくれる。
+- `never` による網羅性チェックと組み合わせると、ケース追加時に処理漏れを検出できる。
+- 共通プロパティの名前は `kind` / `type` / `tag` のどれでもよい。本コースでは状態表現に `kind`、動作表現に `type` を使う。
+- **この判別共用体パターンは4 章 の「useReducer で複雑な state」の `Action` 型で再登場します**。`{ type: "add"; text: string } | { type: "delete"; id: string } | { type: "toggle"; id: string }` の形で、ここで学んだ `switch` 分岐と網羅性チェックがそのまま効きます。
+- 別のレッスンで、`FetchResult<T>` のように「型を引数として受け取る」ジェネリクスを学ぶ。判別共用体とジェネリクスを組み合わせると、実用的なデータ構造が一気に書けるようになる。

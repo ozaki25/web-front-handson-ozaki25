@@ -1,300 +1,226 @@
-# lesson48: フォームと制御コンポーネント
+# lesson48: ジェネリクス入門
 
 ## ゴール
 
-- `value` と `onChange` を使って、入力値を state と同期できる（制御コンポーネント）
-- 1 章 の「フォームを作る」の HTML フォーム（`name` 属性で値を集める形）と、React の書き方との違いを説明できる
-- `<form action={fn}>` にも触れ、5 章 の「Server Actions の最小形」で本格的に使うことを予告として受け取る
+- 「どんな型にも使える関数」を書くための仕組みである **ジェネリクス**（型パラメータ `<T>`）を理解する。
+- `first<T>(arr: T[]): T | undefined` を自分で書けて、数値配列でも文字列配列でも `Todo` 配列でも動かせる。
+- 呼び出し側で型パラメータを明示的に書かなくても、**型推論** が働いて正しい型になることを確認できる。
 
 ## 解説
 
-### 1 章 の「フォームを作る」の HTML フォームとの対比
+### 「どんな型でも受け入れる関数」を書きたい
 
-1 章 の「フォームを作る」の自己紹介フォームを思い出してください。次のような形でした。
+配列の先頭の要素を返す関数を書いてみます。数値配列なら次のように書けます。
 
-```html
-<form action="/contact" method="POST">
-  <label for="email">メール</label>
-  <input id="email" name="email" type="email" required />
-  <button type="submit">送信</button>
-</form>
-```
-
-- `name="email"` が「この入力欄はメールです」という目印
-- 送信ボタンを押すと、ブラウザが `name` 属性をキーにして値を集め、`action` に指定された URL に送る
-- 値の持ち主は **ブラウザ**
-
-React の**制御コンポーネント**はこの形と少し違います。
-
-- 値の持ち主は **React の state**
-- `<input>` には「今の state の値」を `value` として渡す
-- 入力するたびに `onChange` で state を更新する
-- `<input>` は常に state と同期している
-
-どちらも「フォームを作る」ことには違いありません。使い分けの現場感としては、HTML ネイティブで十分なら前者、入力値を**その場で JS から使いたい**（リアルタイムプレビュー、バリデーション、条件付き無効化など）なら後者です。React では制御コンポーネントが基本です。
-
-### 制御コンポーネントの最小形
-
-```tsx
-import { useState } from "react";
-
-function NameInput() {
-  const [name, setName] = useState("");
-
-  return (
-    <div>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="名前"
-      />
-      <p>こんにちは、{name} さん</p>
-    </div>
-  );
+```ts
+function firstNumber(arr: number[]): number | undefined {
+  return arr[0];
 }
 ```
 
-- `value={name}` で「いま表示する値」を指定
-- `onChange={(e) => setName(e.target.value)}` で「入力されたら state を更新」
-- これで `<input>` と `name` state がつねに一致する
+- 配列が空なら `arr[0]` は `undefined` なので、戻り値の型は `number | undefined`。
+- 文字列配列でも同じことをしたい場合、`firstString(arr: string[]): string | undefined` をもう 1 つ書く必要がある。
+- `Todo` 配列でも同じことをしたくなったら、さらにもう 1 つ。
 
-ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。つまり、**見た目の真実は state 側にある**。
+明らかに繰り返しです。中身の処理はどれも `return arr[0];` で同じ。違うのは **配列の要素の型と戻り値の型だけ**。
 
-### `e.target.value`
+### ジェネリクス: 型を引数として受け取る
 
-`onChange` が受け取る `e`（イベント）の中に、変化があった要素（`target`）が入っています。`<input>` の value は常に文字列型です。
+関数が **値** を引数で受け取るのと同じように、TS は **型** を引数で受け取れます。これを **ジェネリクス**（総称型）と呼びます。
 
-```tsx
-<input
-  type="number"
-  value={age}
-  onChange={(e) => setAge(Number(e.target.value))}
-/>
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
+}
 ```
 
-数値で扱いたいときは、`Number()` で変換する必要があります。HTML 的には `type="number"` でも、JS から見えるのは文字列です。
+- `<T>`: 関数名の直後に書く **型パラメータ**。`T` は「まだ決まっていない型」の仮の名前。
+- 慣習的に `T`（Type の頭文字）を使う。複数あれば `T, U, V` や `TKey, TValue` のように付ける。
+- 引数 `arr: T[]`: 「`T` の配列」。
+- 戻り値 `T | undefined`: 「`T`、または空配列のときは `undefined`」。
 
-### textarea と select も同じ形
+この関数を呼び出すとき、`T` には **呼び出したときの値の型が自動で入ります**。
 
-HTML では `<textarea>入る文字</textarea>` のように子要素として書いていましたが、React では `<input>` と同じく `value` と `onChange` を使います。
-
-```tsx
-<textarea value={memo} onChange={(e) => setMemo(e.target.value)} />
-<select value={category} onChange={(e) => setCategory(e.target.value)}>
-  <option value="home">家事</option>
-  <option value="work">仕事</option>
-</select>
+```ts
+const n = first([1, 2, 3]);         // T = number、n は number | undefined
+const s = first(["a", "b", "c"]);   // T = string、s は string | undefined
 ```
 
-### `<form>` の送信
+これが **型推論** です。呼び出し側が `<number>` のように書かなくても、渡した値の型から TS が決めてくれます。
 
-送信ボタンを押したときの動作は 2 通り書き方があります。
+### 明示的に書くこともできる
 
-#### (a) `onSubmit` で書く（本コースの4 章 はこれ）
+型推論に任せず、呼び出し側で `<型>` を明示することもできます。
 
-```tsx
-<form
-  onSubmit={(e) => {
-    e.preventDefault();
-    // state をもとに処理する
-  }}
->
-  {/* ... */}
-</form>
+```ts
+const n = first<number>([1, 2, 3]);
 ```
 
-- `e.preventDefault()` で、ブラウザ既定の送信（ページ遷移）を止める
-- その後は自分で `fetch` なり state 更新なりをする
-- 「親子コンポーネントの連携」「TODO アプリを React で作る」で使う形
+普段は型推論に任せるほうが読みやすいですが、推論の結果が期待と違うときや、配列が空で推論のヒントがないときには明示します。
 
-#### (b) `<form action={fn}>`（紹介のみ、5 章 で本格使用）
-
-React 19 では、`<form>` の `action` 属性に **関数** も渡せるようになりました。
-
-```tsx
-<form action={submitTodo}>
-  <input name="text" />
-  <button type="submit">送信</button>
-</form>
+```ts
+const empty = first([]); // T = never と推論されてしまう
+const empty2 = first<number>([]); // T = number と明示
 ```
 
-- `action` が関数なら、React が送信時に `FormData` を渡してその関数を呼ぶ
-- React が**自動で `preventDefault` を呼んでくれる**（書く必要がない）
-- 従来どおり `action="/contact"` のように **URL 文字列** を渡すこともできる（普通の HTML 送信）
+### 型パラメータは「使う側が決める」
 
-本コースでは4 章 の段階では **紹介のみ**です。5 章 の「Server Actions の最小形」の Server Actions でこの形を使うときに「関数を渡すパターン」を詳しく学びます。「4 章 は `onSubmit` 形、5 章 で `action={fn}` 形に乗り換える」という流れを予告として覚えておいてください。
+ジェネリクスは「関数を書く側」ではなく「関数を使う側」が型を決める仕組みです。`first` の実装は `T` が何であるかを知りません。だから `T` の中身（`.toUpperCase()` や `.toFixed()` など）を呼ぶことはできません。
+
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0].toUpperCase(); // エラー
+}
+```
+
+```
+Property 'toUpperCase' does not exist on type 'T'.
+```
+
+「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。この「中身に触らず通すだけの関数」が、ジェネリクスが最も活きる形です。
+
+### `Array.prototype.map` もジェネリクス
+
+実は2 章 で使った `map` / `filter` も TS の世界ではジェネリクス関数です。`map` は「`T[]` を受け取って、`(t: T) => U` の関数で変換して `U[]` を返す」という形で定義されています。ライブラリの内部ではこの形の型定義が大量に書かれていて、私たちは呼び出すだけで恩恵を受けています。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-### ゴール
+### 手順 1: `first` を書く
 
-- 名前とメモの入力欄を作り、入力内容がリアルタイムに下に表示されるプレビュー画面を作る
-- 送信ボタンを押したら（`onSubmit` で）入力内容をまとめて表示する
+`src/main.ts` の中身を以下に置き換える。
 
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` を書き換える
-3. `src/App.css` を書き換える
-
-### `src/App.tsx`
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-import "./App.css";
-
-function App() {
-  const [name, setName] = useState("");
-  const [memo, setMemo] = useState("");
-  const [submitted, setSubmitted] = useState<{ name: string; memo: string } | null>(
-    null
-  );
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitted({ name, memo });
-  }
-
-  return (
-    <>
-      <h1>入力プレビュー</h1>
-
-      <form onSubmit={handleSubmit} className="box">
-        <div className="row">
-          <label htmlFor="name">名前</label>
-          <input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-
-        <div className="row">
-          <label htmlFor="memo">メモ</label>
-          <textarea
-            id="memo"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          />
-        </div>
-
-        <button type="submit">送信</button>
-      </form>
-
-      <section className="box">
-        <h2>リアルタイムプレビュー</h2>
-        <p>名前: {name}</p>
-        <p>メモ: {memo}</p>
-      </section>
-
-      {submitted !== null && (
-        <section className="box">
-          <h2>送信結果</h2>
-          <p>名前: {submitted.name}</p>
-          <p>メモ: {submitted.memo}</p>
-        </section>
-      )}
-    </>
-  );
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
 }
 
-export default App;
+const n = first([1, 2, 3]);
+const s = first(["a", "b", "c"]);
+const empty = first<number>([]);
+
+console.log(n);
+console.log(s);
+console.log(empty);
 ```
 
-### `src/App.css`
+#### 期待出力
 
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
+```
+1
+a
+undefined
+```
+
+- `n` は `1`（数値）。
+- `s` は `"a"`（文字列）。
+- `empty` は `undefined`（空配列なので 0 番目がない）。
+
+エディタで `n` にマウスを乗せると `const n: number | undefined` と表示される。`s` は `const s: string | undefined`。型が正しく推論されていることを確認する。
+
+### 手順 2: `Todo` 配列でも動くことを確認する
+
+`src/main.ts` を次の形に書き換える（`types.ts` は「配列・ユニオン・リテラル型・オプショナル」で作ったものをそのまま使う）。
+
+```ts
+import type { Todo } from "./types";
+
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
 }
 
-.row {
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-}
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
+];
 
-.row label {
-  margin-bottom: 4px;
-  font-weight: bold;
-}
+const topTodo = first(todos);
 
-.row input,
-.row textarea {
-  padding: 6px;
-  border: 1px solid #999;
-  border-radius: 4px;
-}
-
-button {
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
-  .row input,
-  .row textarea {
-    color: #eee;
-    background-color: #2a2a2a;
-    border-color: #666;
-  }
+if (topTodo) {
+  console.log(`先頭の TODO: ${topTodo.text} (status: ${topTodo.status})`);
+} else {
+  console.log("TODO はありません");
 }
 ```
 
-### 期待出力
+#### 期待出力
 
-- 画面に「名前」入力欄と「メモ」テキストエリア、「送信」ボタン
-- 「リアルタイムプレビュー」セクションに、入力内容が**打つたびに**反映される
-- 「送信」を押すと、「送信結果」セクションが現れて、押した時点の入力内容が固定表示される
-- その後もリアルタイムプレビューは入力に追従するが、「送信結果」は次に押すまで変わらない
+```
+先頭の TODO: 牛乳を買う (status: open)
+```
 
-### 変える
+`topTodo` の型は `Todo | undefined` になっている（`if` で絞り込むと、中では `Todo` として `.text` や `.status` にアクセスできる）。
 
-- `onChange` を消して `value={name}` だけ残すと、**入力できなくなる**（読み取り専用扱い）。確認したら戻す
-- `<input>` のラベル `<label htmlFor="name">` の `htmlFor` を `for` に書き換えると、ブラウザのコンソールに警告が出る（JSX では `htmlFor`）
-- `handleSubmit` から `e.preventDefault()` を消すと、送信時にページがリロードされてプレビューが消える。**なぜリロードされるのか** を自分の言葉で説明してみる
+### 手順 3: わざと型を間違えてエラーを見る
+
+`first` の中で `T` の中身を使おうとしてみる。
+
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0].toUpperCase();
+}
+```
+
+期待されるメッセージ:
+
+```
+Property 'toUpperCase' does not exist on type 'T'.
+```
+
+続けて、呼び出し側で配列ではないものを渡してみる。
+
+```ts
+const n = first(123);
+```
+
+期待されるメッセージ:
+
+```
+Argument of type 'number' is not assignable to parameter of type 'unknown[]'.
+```
+
+「配列を渡してくれないと `T[]` にならない」と TS が止めてくれている。確認したら `first([1, 2, 3])` に戻す。
+
+### 変えてみる
+
+配列の最後の要素を返す `last` を書いてみる。
+
+```ts
+function last<T>(arr: T[]): T | undefined {
+  return arr[arr.length - 1];
+}
+
+console.log(last([1, 2, 3]));
+console.log(last(["a", "b", "c"]));
+console.log(last<number>([]));
+```
+
+期待出力:
+
+```
+3
+c
+undefined
+```
 
 ### 自分で書く
 
-- カテゴリ選択用の `<select>` を追加し、`state.category` と同期させる
-- 選択肢: `"家事"` / `"仕事"` / `"趣味"`
-- プレビューと送信結果にカテゴリも表示する
+次の 2 つの関数をジェネリクスで書く。
 
-ヒント:
+1. `second<T>(arr: T[]): T | undefined` — 配列の 2 番目の要素を返す（なければ `undefined`）。
+2. `wrapInArray<T>(value: T): T[]` — 値を 1 つ受け取り、それだけを入れた配列を返す。
 
-```tsx
-const [category, setCategory] = useState("家事");
-// ...
-<select value={category} onChange={(e) => setCategory(e.target.value)}>
-  <option value="家事">家事</option>
-  <option value="仕事">仕事</option>
-  <option value="趣味">趣味</option>
-</select>;
-```
+書けたら、数値・文字列・`Todo` の 3 パターンで呼び出し、期待通りの型が推論されていること（エディタでマウスオーバーして確認）と、期待通りの出力が出ることを確認する。
 
-### 末尾予告
-
-- 4 章 内では `<form onSubmit={(e) => { e.preventDefault(); ... }}>` の形を「親子コンポーネントの連携」「TODO アプリを React で作る」で使い続ける
-- `<form action={fn}>` 形は5 章 の「Server Actions の最小形」の Server Actions で登場する。そこで `preventDefault` が不要になる理由とあわせて扱う
+`wrapInArray` のヒント: `function wrapInArray<T>(value: T): T[] { return [value]; }` で書ける。
 
 ## まとめ
 
-- 制御コンポーネントは `value={state}` + `onChange` の組み合わせ。値の持ち主は state
-- `e.target.value` は常に文字列。数値で扱いたいなら `Number()` で変換
-- `<label>` の `for` は JSX では **`htmlFor`**
-- フォーム送信は当面 `onSubmit` + `e.preventDefault()`。`<form action={fn}>` は5 章 でフル活用
+- ジェネリクスは「関数が型を引数として受け取る仕組み」。`<T>` で仮の型名を宣言する。
+- `first<T>(arr: T[]): T | undefined` のように書くと、数値配列でも文字列配列でも `Todo` 配列でも、**同じ実装** で型安全に動く。
+- 呼び出し側では通常 `<型>` を書かず、型推論に任せる。空配列などで推論のヒントがないときだけ明示する。
+- 実装の中では `T` の中身に触れない（`T` が何かを知らないから）。「中身に触らず通すだけ」の関数がジェネリクスの得意分野。
+- 別のレッスンで、既にある型から新しい型を派生させる **Utility Types**（`Pick` / `Partial`）を学ぶ。`Todo` 型をさらに「一覧用」「下書き用」に派生させる。

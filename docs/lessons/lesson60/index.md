@@ -1,469 +1,317 @@
-# lesson60: 共通レイアウトを作る
+# lesson60: 親子コンポーネントの連携
 
 ## ゴール
 
-- `app/layout.tsx` の役割を理解し、全ページで共通のヘッダー・フッターを持てます。
-- `children` という props を受け取って、中に各ページの中身を差し込む仕組みを把握できます。
-- ルートレイアウトがデフォルトで Server Component であることを確認できます。
+- 親から子へ、子から親へ値を受け渡す関係を整理できる
+- コールバック props を使って、子で起きたイベントを親の state に反映できる
+- 「state を親に持たせる（state lifting）」という考え方を説明できる
 
 ## 解説
 
-### 同じ見た目を毎ページ書くのは大変
+### props は「親 → 子」の一方通行
 
-「ページを増やしてリンクで移動する」で 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
+props はコンポーネント間で値を渡す仕組みですが、**基本は上から下**に流れます。
 
-この「全ページで共通の外側」を 1 箇所に集めるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
+```
+親 (App)  --- todos ---> 子 (TodoList)
+```
 
-### `app/layout.tsx` の最小形
+では、子から親に何かを伝えたいときはどうするか。例えば「子のフォームに文字を入力して追加ボタンを押したら、親が持っている配列に追加したい」場合です。
 
-StackBlitz の Next.js テンプレートには最初から `app/layout.tsx` が用意されています。中身は概ね次の形になっています。
+### コールバック props
+
+答えは「親から子に **関数を渡し**、子はその関数を呼ぶ」です。親が渡した関数を子がコールバックする、という形で、**関数が値として props を流れる**点がポイントです。
+
+```
+親 (App)  --- onAdd (関数) ---> 子 (TodoInput)
+            <-- 関数呼び出し ---
+```
+
+親側:
 
 ```tsx
-export const metadata = {
-  title: "My App",
-};
+function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
   return (
-    <html lang="ja">
-      <body>{children}</body>
-    </html>
+    <>
+      <TodoInput onAdd={handleAdd} />
+      <ul>{/* ... */}</ul>
+    </>
   );
 }
 ```
 
-重要なのは次の点です。
+子側:
 
-- **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
-- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（「ページを増やしてリンクで移動する」で「コピーしない」と言ったのはこのためです）。
-- `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
-- `LayoutProps<"/">` は Next.js 16 が自動生成する **グローバル型** です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` にルート別の型定義が生成されます。第 1 引数の `"/"` はこの `layout.tsx` が覆うルートのパスで、他のルート用レイアウトなら `LayoutProps<"/posts">` のように書きます。
-- `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-### `children` の正体
+type TodoInputProps = {
+  onAdd: (text: string) => void;
+};
 
-`children` はこれまで4 章 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
+function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
 
-レイアウトの場合、Next.js が現在 URL に対応する `page.tsx` を自動で `children` に入れてくれます。学習者が直接 `<RootLayout>` を呼ぶことはありません。
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed); // 親の関数を呼ぶ
+    setText(""); // 入力欄をクリア
+  }
 
-- `/` にアクセス → `app/page.tsx` の JSX が `children` に入る
-- `/about` にアクセス → `app/about/page.tsx` の JSX が `children` に入る
-- `/todos` にアクセス → `app/todos/page.tsx` の JSX が `children` に入る
+  return (
+    <form onSubmit={handleSubmit}>
+      <input value={text} onChange={(e) => setText(e.target.value)} />
+      <button type="submit">追加</button>
+    </form>
+  );
+}
+```
 
-### ルートレイアウトは Server Component
+- 親は `onAdd` という関数を子に渡す
+- 子は入力欄の state（`text`）を自分で持つ
+- 送信時に `onAdd(text)` を呼ぶ → 親が state を更新 → 画面再レンダリング
 
-`app/layout.tsx` の先頭に `"use client"` は付いていないので、これは **Server Component** として動きます。ヘッダーやフッターなど、クリックで動くような仕掛けがなければ Server Component のままで良いです。
+「関数を props として渡す」という発想に慣れるのがこのレッスンのコアです。
 
-今回のようにナビ内の `<Link>` を並べるだけならイベントハンドラを使わないので、`"use client"` は不要です。
+### state lifting（状態の持ち上げ）
 
-### レイアウトは入れ子にできる（予告）
+上の例で、なぜ `todos`（一覧）の state を **親**（App） に置いたのでしょうか。一覧を描画するのは `TodoList` コンポーネントです。一見 `TodoList` に state を置いてもよさそうです。
 
-実は `app/<path>/layout.tsx` を置くと、その配下のページだけに適用される追加のレイアウトが作れます。本コースでは **ルートレイアウト 1 枚** のみ使います（入れ子レイアウトは扱いません）。
+理由: **`todos` は「子の TodoInput」と「子の TodoList」の両方が関わる** からです。TodoInput は追加する側、TodoList は表示する側。2 つが同じ state を共有する必要があります。
+
+兄弟どうしの子コンポーネントは、直接 props で値を送れません。`App → TodoInput → App → TodoList` のように、**共通の親** を経由する必要があります。そのため、共通の親（App）に state を持たせます。
+
+これが「state lifting（共通の親に state を持ち上げる）」です。
+
+```
+        App (todos を持つ)
+       /              \
+  TodoInput        TodoList
+  (追加用)        (表示用)
+```
+
+### props のおさらい
+
+props を関数にすると、慣習的に名前は `onXxx` の形にします（HTML のイベントと同じ感覚）。
+
+| 親が子に渡すもの | 命名例 |
+| --- | --- |
+| 値（state） | `todos`、`user`、`count` |
+| 状態変更を依頼する関数 | `onAdd`、`onDelete`、`onToggle` |
+
+この命名で統一すると、「この props は関数か値か」が読み解きやすくなります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
+このレッスンは独立した TODO 例として完結しています。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。過去のレッスンのファイルは不要で、下の手順に従って `src/types.ts` / `src/TodoInput.tsx` / `src/TodoList.tsx` / `src/App.tsx` を新しく作成していきます。
 
-<details>
-<summary>出発点のファイル</summary>
+### ゴール
 
-**`app/page.tsx`**
+- `TodoInput`（子）と `TodoList`（子）を、`App`（親）が `todos` state を持って束ねる
+- 入力 → 追加ボタンで一覧末尾に追加
+- 各項目の削除ボタンで 1 件削除
 
-```tsx
-import Link from "next/link";
+### 手順
 
-export default function Page() {
-  return (
-    <main>
-      <h1>ようこそ</h1>
-      <nav>
-        <ul>
-          <li>
-            <Link href="/">Home</Link>
-          </li>
-          <li>
-            <Link href="/about">About</Link>
-          </li>
-          <li>
-            <Link href="/todos">Todos</Link>
-          </li>
-        </ul>
-      </nav>
-    </main>
-  );
-}
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/types.ts` を作成
+3. `src/TodoInput.tsx` を作成
+4. `src/TodoList.tsx` を作成
+5. `src/App.tsx` を書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
 ```
 
-**`app/about/page.tsx`**
+### `src/TodoInput.tsx`
 
 ```tsx
-import "./about.css";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-export default function AboutPage() {
-  return (
-    <>
-      <header className="site-header">
-        <h1>私の名前</h1>
-        <nav className="site-nav">
-          <a href="#about">自己紹介</a>
-          <a href="#likes">好きなもの</a>
-          <a href="#contact">問い合わせ</a>
-        </nav>
-      </header>
-
-      <main>
-        <section id="about">
-          <h2>自己紹介</h2>
-          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-        </section>
-
-        <section id="likes">
-          <h2>好きなもの</h2>
-          <div className="cards">
-            <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
-              <h3>コーヒー</h3>
-              <p>朝の 1 杯が欠かせない。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
-              <h3>本</h3>
-              <p>技術書からエッセイまで。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
-              <h3>散歩</h3>
-              <p>行き先を決めずに歩く。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="contact">
-          <h2>問い合わせ</h2>
-          <form>
-            <div>
-              <label htmlFor="name">お名前</label>
-              <input id="name" name="name" type="text" required />
-            </div>
-            <div>
-              <label htmlFor="email">メール</label>
-              <input id="email" name="email" type="email" required />
-            </div>
-            <div>
-              <label htmlFor="message">メッセージ</label>
-              <textarea id="message" name="message" rows={4} required></textarea>
-            </div>
-            <button type="submit">送信</button>
-          </form>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <p>&copy; 私の名前</p>
-      </footer>
-    </>
-  );
-}
-```
-
-**`app/about/about.css`**
-
-```css
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.6;
-  color: #1f2937;
-  background-color: #f9fafb;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb;
-    background-color: #0b1220;
-  }
-}
-
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.site-nav a {
-  color: #f9fafb;
-  margin-right: 16px;
-}
-
-.cards {
-  display: flex;
-  gap: 16px;
-}
-
-.cards .card {
-  flex: 1;
-  background-color: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cards .card {
-    background-color: #111827;
-    border-color: #374151;
-  }
-}
-
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
-}
-
-.site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  text-align: center;
-}
-
-@media (max-width: 600px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .cards {
-    flex-direction: column;
-  }
-}
-```
-
-**`app/todos/page.tsx`**
-
-```tsx
-export default function TodosPage() {
-  return (
-    <main>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </main>
-  );
-}
-```
-
-</details>
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
-
-### 手順 1: ヘッダーとフッターをルートレイアウトに集める
-
-`app/layout.tsx` を以下に書き換えます。
-
-```tsx
-import Link from "next/link";
-import "./globals.css";
-
-export const metadata = {
-  title: "My Next App",
+type TodoInputProps = {
+  onAdd: (text: string) => void;
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed);
+    setText("");
+  }
+
   return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
+    <form onSubmit={handleSubmit} className="todo-input">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
   );
 }
 ```
 
-### 手順 2: 共通 CSS
+### `src/TodoList.tsx`
 
-`app/globals.css` を開き（StackBlitz テンプレートに既にあります）、末尾に以下を追加します。存在しなければ新規作成してください。
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+};
+
+export function TodoList({ todos, onDelete }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p className="empty">まだタスクがありません</p>;
+  }
+
+  return (
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          {todo.text}
+          <button onClick={() => onDelete(todo.id)}>削除</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### `src/App.tsx`
+
+```tsx
+import { useState } from "react";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
+import "./App.css";
+
+function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function handleDelete(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
+
+  return (
+    <>
+      <h1>TODO（親子連携版）</h1>
+      <TodoInput onAdd={handleAdd} />
+      <TodoList todos={todos} onDelete={handleDelete} />
+    </>
+  );
+}
+
+export default App;
+```
+
+### `src/App.css`
 
 ```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
+.todo-input {
+  margin: 12px 0;
 }
 
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
+.todo-input input {
+  padding: 6px;
+  margin-right: 8px;
 }
 
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
+.todo-input button,
+.todo-list button {
+  padding: 4px 10px;
+  cursor: pointer;
 }
 
-/* ダークモード色指定: 白背景前提にすると文字が読めなくなるため必ず上書き */
+.todo-list {
+  list-style: disc;
+  padding-left: 20px;
+  color: #222;
+}
+
+.todo-list li {
+  padding: 4px 0;
+}
+
+.todo-list li button {
+  margin-left: 8px;
+}
+
+.empty {
+  color: #666;
+}
+
 @media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
+  .todo-list {
+    color: #eee;
   }
-  .site-header a {
-    color: #4ea2ff;
+  .empty {
+    color: #aaa;
   }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-}
-```
-
-### 手順 3: 各ページからナビを消す
-
-`app/page.tsx` から `<nav>` のブロックを削除し、ページ固有の中身だけにします。
-
-```tsx
-export default function Page() {
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
-    </>
-  );
-}
-```
-
-`app/about/page.tsx` はこれまでのレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
-
-これまでの `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします（外側の `<main>` / `<>` も不要、layout.tsx の `<main>` に入るため直接 `<section>` から書き始めます）。
-
-```tsx
-import "./about.css";
-
-export default function AboutPage() {
-  return (
-    <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </>
-  );
-}
-```
-
-これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになります。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整えます。
-
-`app/todos/page.tsx` も同様にページ固有の中身だけ残します。
-
-```tsx
-export default function TodosPage() {
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </>
-  );
 }
 ```
 
 ### 期待出力
 
-- どのページにアクセスしても、画面上部に「Home / About / Todos」のナビ、下部に「&copy; 2026 My Next App」のフッターが表示されます。
-- ナビをクリックするとページ本体だけが差し替わります（ヘッダー・フッターは再レンダリングされません）。
-- ブラウザタブのタイトルが「My Next App」になっています（`export const metadata` によります）。
+- 画面上部に入力欄と「追加」ボタン
+- 最初は「まだタスクがありません」と薄い色で表示される
+- 入力して「追加」を押すと一覧に行が増え、各行に「削除」ボタンが付く
+- 「削除」ボタンを押すと、その行だけが消える
+- すべて消すと再び「まだタスクがありません」が現れる
+- 空欄のまま「追加」を押しても、一覧に何も増えない（`trim()` で空文字は弾いている）
 
-### 変えてみる
+### 変える
 
-1. `metadata.title` を自分のアプリ名に変えて、タブ名が変わるのを確認しましょう。
-2. フッターの著作権表示を自分の名前に変えましょう。
-3. 試しに `app/about/layout.tsx` を作って、そこに `<h2>自己紹介セクション</h2>` を入れてみましょう。`/about` の中だけにそのタイトルが追加されることを確認したら、実験が終わったらそのファイルは削除します（本コースではルートレイアウト 1 枚運用）。
+- `TodoList` の中で、一覧の上に「現在 N 件」という `<p>` を追加してみる（ヒント: `<p>現在 {todos.length} 件</p>`）
+- `handleAdd` を `setTodos((prev) => [newTodo, ...prev])` に変えると、新規が **先頭** に入るようになる
+- `TodoInput` 内の `if (trimmed.length === 0) return;` を消すと、空文字で追加されて一覧に空の行ができる。確認したら戻す
 
 ### 自分で書く
 
-`app/layout.tsx` を何も見ずに、`<html>` `<body>` `{children}` の最小構成から書き直してみましょう。ヘッダーとフッターを再度足して、見た目が崩れないことを確認します。
+- `TodoItem` コンポーネントを新たに作り、`<li>{text}<button>削除</button></li>` の部分を切り出す
+- `TodoList` は `TodoItem` を `map` で並べるだけにする
+- `TodoItem` が受け取る props の型:
+  ```ts
+  type TodoItemProps = {
+    todo: Todo;
+    onDelete: (id: string) => void;
+  };
+  ```
+- これは「TODO アプリを React で作る」でそのまま使う形です
 
 ## まとめ
 
-- `app/layout.tsx` は全ページ共通の外側の枠です。`<html>` と `<body>` はここだけに書きます。
-- `children` に現在のページ（`page.tsx`）の中身が自動で差し込まれます。
-- ルートレイアウトは何もしなければ Server Component です。ナビや文字を並べるだけなら `"use client"` は不要です。
-- 共通部分を 1 箇所に集めたので、ページを増やしても繰り返しコードが増えません。
-- このあとの「Server Component と Client Component」で、2 つの違いに踏み込みます。`useState` が必要な部品だけを Client にする使い分けを覚えましょう。
+- props は基本「親 → 子」の一方通行
+- 子から親に伝えたいときは、親が渡した **関数を子が呼ぶ**（コールバック props）
+- 複数の子が関わる state は、**共通の親** に持たせる（state lifting）
+- 関数の props は `onXxx` という命名にするのが慣習

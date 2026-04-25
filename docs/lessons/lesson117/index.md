@@ -3,13 +3,13 @@
 ## ゴール
 
 - 「CI」と「CD」を正しく区別して語れる
-- パイプラインを **段階（lint → test → build → deploy）** に分けて設計できる
+- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
 - GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
 - Lighthouse CI で速度劣化を **PR 単位** で検知できる
 - Vercel の **Preview Deployment** とテストを連携できる
 
 ::: tip 前提
-このレッスンは lesson101「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson101 を参照してください。
+このレッスンは lesson106「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson106 を参照してください。
 :::
 
 ## 解説

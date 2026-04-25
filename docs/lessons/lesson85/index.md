@@ -1,177 +1,212 @@
-# lesson85: DevTools の読み方
+# lesson85: Tailwind CSS の紹介（次のステップ）
 
 ## ゴール
 
-- Chrome DevTools の主要なタブ（Elements / Console / Network / Application / Performance / Sources）がそれぞれ何を見る場所か説明できる
-- ページを開いたときに発生している全リクエストを Network タブで一覧できる
-- Application タブで Cookie / Local Storage / Session Storage を確認できる
-- Performance タブで録画したページロードを眺めて、どの段階が遅いか大まかに判断できる
-- Sources タブで JS のブレークポイントを貼って止められる
+- Tailwind CSS v4 の存在と基本的な使い方を知る
+- 本コースの「素の CSS で書く」方式との違いを説明できる
+- Next.js プロジェクトに Tailwind v4 を導入する手順を観察できる
+- 本コースを終えた後の「次のステップ」として判断できる
 
 ## 解説
 
-### DevTools はブラウザ付属の開発ツール
+### 本コースのスタンス
 
-DevTools はブラウザ本体に組み込まれた、開発者向けの道具箱です。本コースで **最もよく使う 1 つの道具** と言えます。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
+ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
 
-### 開き方
+一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
 
-| 操作 | ショートカット |
-|---|---|
-| DevTools を開く / 閉じる | Windows / Linux: `F12` または `Ctrl+Shift+I` / Mac: `Cmd+Opt+I` |
-| 直接 Elements タブを開く | ページで右クリック → 「検証」 |
-| 直接 Console を開く | Windows / Linux: `Ctrl+Shift+J` / Mac: `Cmd+Opt+J` |
-| デバイスモード（スマホ幅） | `Ctrl+Shift+M` / `Cmd+Shift+M` |
+**本コースの結論**: 「Tailwind は **次のステップ** として学ぶ選択肢」。本コースの自己紹介 / TODO プロジェクトには **持ち込みません**。
 
-### Elements タブ: DOM と CSS を見る・いじる
+### Tailwind CSS とは
 
-「DOM を操作する」で扱った **DOM ツリー** の現在状態が、ここに展開されます。左側のタグをクリックすると、ページ内の対応要素がハイライトされます。右側には、その要素に当たっている **計算済みの CSS** と、どの CSS ファイルの何行目から来たかが表示されます。
+Tailwind は **ユーティリティファースト** の CSS フレームワークです。`margin: 16px` のような個別のスタイルをコード上に書かず、`m-4` のような短いクラス名を HTML に重ねて見た目を作ります。
 
-覚えておきたい操作:
+素の CSS で書いたコード:
 
-- タグをダブルクリックすると中身のテキストを編集できる（プレビュー確認用、保存されない）
-- 右ペインの `Styles` でプロパティのチェックを外すと **その場で無効化** できる（どのスタイルが効いているかの切り分けに便利）
-- `Computed` タブで、実際に当たっている最終値（ブラウザが計算した後のピクセル値など）を確認
-- `Box Model` 図で margin / border / padding / content のサイズを数値で確認
-
-本コースの 1 章（HTML / CSS）の演習中、画面が思った通りに並ばないときは、まずここで **どのスタイルが当たっているか** を目で確認するのが近道です。
-
-### Console タブ: JS を打つ・ログを見る
-
-「デバッグに効く Console API」で扱った `console.log` 系の出力がここに流れ込みます。さらに **その場で JS を打って実行できる** のが Console の強みです。
-
-```js
-// Console に直接打って Enter
-document.title
-> "lesson85: DevTools の読み方"
-
-document.querySelectorAll("a").length
-> 18
+```html
+<div class="card">
+  <h2 class="card-title">タイトル</h2>
+  <p class="card-body">本文</p>
+</div>
 ```
 
-エラーが出たときは Console にスタックトレースが出ます。行番号をクリックすると、該当ファイルが Sources タブで開きます。
+```css
+.card {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+}
+.card-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+.card-body {
+  color: #666;
+}
+```
 
-`console.log` をコードに書き足さなくても、Console に現在のページの値を問い合わせられる、というのは画面を書き換えずに調査できる大きな武器です。
+Tailwind で書くと:
 
-### Network タブ: 通信を見る
+```html
+<div class="p-4 bg-white rounded-lg">
+  <h2 class="text-lg font-bold">タイトル</h2>
+  <p class="text-gray-600">本文</p>
+</div>
+```
 
-「ブラウザと HTTP の基本」で触った、**リクエスト / レスポンスの実物** をここで観察します。
+CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た目を組み立てます。
 
-主な見どころ:
+長所:
 
-- **一覧**: ページを開いたときに発生した全リクエストが時系列に並ぶ
-- **Method / Status / Type / Size / Time**: 各列で「どのメソッドでどのファイルをどう取ったか」がわかる
-- **1 行クリック**: Headers / Payload / Preview / Response / Timing の 5 つのパネルで詳細
-- **Preserve log**: チェックすると、ページ遷移しても過去のログが消えない（リダイレクトの追跡に便利）
-- **Disable cache**: DevTools を開いているあいだ、ブラウザキャッシュを無効化する（キャッシュ確認用。通常はオフにしておく）
-- **Throttling**: 「Slow 3G」などに切り替えて回線が遅い状況を再現できる
+- クラス名の衝突がない（`.card` の名前を考えなくてよい）
+- 小さな変更が HTML 内で完結する
+- VS Code 拡張で補完が強い
 
-Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / `Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
+短所:
 
-### Application タブ: 保存されているデータを見る
+- クラス名が長くなる
+- 「なぜこのプロパティなのか」が CSS の知識無しだと理解しづらい（だから本コースでは素の CSS から学んだ）
 
-ブラウザ側に溜まっている各種ストレージの中身を確認・編集できます。
+### Tailwind v4 の特徴（2025 年 GA）
 
-- **Local Storage / Session Storage**: 「Web Storage」で保存した値が、キーと値のペアで見られる。その場で編集・削除も可能
-- **Cookies**: 現在のドメインに対する Cookie 一覧。`Name` / `Value` / `Domain` / `HttpOnly` / `Secure` / `SameSite` などの属性が一覧できる
-- **IndexedDB**: より大容量のデータベース系 API。本コースでは扱わないが眺めるだけはしておく
-- **Cache Storage**: Service Worker が保存しているキャッシュ
-- **Service Workers**: 登録されている Service Worker（本サイトでも PWA で 1 つ登録されている）
+本レッスンは **Tailwind v4** 準拠で紹介します。v3 から **設定方法が大きく変わった** ため、古い記事のコピペは通用しません。
 
-「Web Storage」と「Cookie と Web セキュリティ」の内容を実地で確認する場所です。
+主な変更点:
 
-### Performance タブ: ページロードと実行を録画する
+- **CSS ファイル 1 行で導入**:
+  ```css
+  @import "tailwindcss";
+  ```
+  v3 の `@tailwind base; @tailwind components; @tailwind utilities;` の 3 行は廃止
+- **`init` コマンド廃止**: v3 の `npx tailwindcss init -p` で `tailwind.config.ts` を生成する手順は不要
+- **PostCSS プラグイン名の変更**: `postcss.config.mjs` に `@tailwindcss/postcss` を指定する
+- **Vite 用プラグイン**: Vite プロジェクトでは `@tailwindcss/vite`（PostCSS 経由ではない）
+- **パフォーマンス大幅改善**: ビルドが高速、開発時のホットリロードも速い
 
-`Record` ボタン（黒丸）を押して一連の操作 → `Stop` を押すと、その間のブラウザの挙動が細かく記録されます。
-
-- **FPS**: 描画フレームレートの推移
-- **Main**: メインスレッドが何をしていたか（JS 実行 / スタイル計算 / レイアウト / 描画）の時間軸
-- **Network**: 各リクエストの発生と完了のタイミング
-- **Frames**: 個々の描画フレームのスクリーンショット
-
-「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
-
-### Sources タブ: JS をデバッガで止める
-
-ソースコードを眺めて、行番号をクリックすると **ブレークポイント** が貼れます。そこに実行が到達すると、その行で JS が一時停止し、変数の値を確認できます。
-
-- **行番号クリック**: 基本のブレークポイント
-- **右クリック → Conditional breakpoint**: 条件式が真のときだけ止まる
-- **`debugger;` 文**: コード側に書いておけば、その行に来たときに止まる
-- **Watch / Scope**: 止まっている時点での変数の値を確認
-
-`console.log` で追うより一段深い調査が必要なときに使います。本コースでは軽く紹介するに留めますが、使えるようになるとバグ探しの速度が何倍にもなります。
-
-### ショートカットで覚えておくと捗るもの
-
-- **`Ctrl+Shift+F` / `Cmd+Opt+F`**: 全ソース横断検索（Sources タブ）。ライブラリ内を含めて grep できる
-- **`Ctrl+P` / `Cmd+P`**: Sources でファイル名クイックオープン
-- **`Ctrl+L` / `Cmd+K`**: Console を全消去
-- **`$0`**: Elements タブで最後に選択した要素を Console から参照
-
-### モバイル / レスポンシブ確認: デバイスモード
-
-`Ctrl+Shift+M` / `Cmd+Shift+M` でツールバー上部にデバイス選択が出ます。`iPhone SE (375×667)` / `Pixel 7` / 任意サイズ（Responsive）で表示を切り替えられます。1 章 の「Flexbox とレスポンシブ」や「CSS Grid」の演習で使ったはずです。
-
-「メディアを確認」（`more options` メニュー内）で `prefers-color-scheme: dark` / `prefers-reduced-motion` などを強制的にオン / オフできます。ダークモード対応の確認に便利です。
+`create-next-app --tailwind` で新規プロジェクトを作ると、デフォルトで Tailwind v4 の設定が入ります。古いチュートリアルを見る前に、まずは `create-next-app` 生成物を観察するのが確実です。
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
+
 ### ゴール
 
-- DevTools を 1 通り触って、本文で説明した各タブの役割を体感する
-- Application タブで本サイトの localStorage を確認する
-- Network タブで 1 リクエストを選び、ヘッダ・ボディ・Timing を読み取れる
-- Performance タブでページロードを録画して眺める
+- `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
+- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
 
 ### 手順
 
-本サイト（この教材）のページを開いた状態で、以下を順に試します。
+1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
+2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
+3. プロジェクト内の以下のファイルを観察する
+   - `app/globals.css`
+   - `postcss.config.mjs`（または `.js`）
+   - `package.json` の `devDependencies`
+4. 任意で、`app/page.tsx` にユーティリティクラスを 1〜2 個書いてみる（`@theme` などカスタマイズは扱わない）
 
-1. **Elements タブ**
-   - F12 で DevTools を開く
-   - 左のツリーで `<body>` を展開し、見出しや段落のタグを辿る
-   - 右ペインの `Styles` で、見出しの `color` のチェックを外して色が消えることを確認（再度チェックで戻る）
-2. **Console タブ**
-   - `document.title` と打って Enter、ページタイトルが返ることを確認
-   - `document.querySelectorAll("h2").length` で、このページの `<h2>` の個数を取得
-3. **Network タブ**
-   - ページをリロード（`F5` / `Cmd+R`）
-   - 一覧のうち **`.js`** の 1 つをクリックし、`Headers` タブで `status: 200` と `content-type: application/javascript` を確認
-   - `Timing` タブで TTFB（Time To First Byte）と Content Download の 2 つの時間を確認
-4. **Application タブ**
-   - 左ペインから `Local Storage` → `https://...`（このサイトの URL）を選択
-   - `lesson-progress` 系のキーがあれば、それは「完了ボタン」を押した進捗データ
-   - 試しに 1 つのキーを選んで **Delete ボタン** で消す → ページをリロード → 該当レッスンの完了マークが消えることを確認
-5. **Performance タブ**
-   - 左上の丸い `Record` ボタンを押す
-   - ページを一度リロード
-   - 5 秒ほど経ったら `Stop`
-   - `Main` 行をドラッグで拡大して、どの時間帯に何が起きていたか（Loading / Scripting / Rendering 等の色分け）を眺める
-6. **Sources タブ**
-   - 左ペインで **Workers** / **Origin** を展開し、自分のサイトの `.js` ファイルを 1 つ開く
-   - 行番号をクリックしてブレークポイントを貼る
-   - ページをリロード → 該当行で停止することを確認（停止したら上部の再生ボタンで続行）
+### `app/globals.css`（観察対象）
 
-### 変える
+Tailwind v4 の導入は、CSS ファイル冒頭に **この 1 行だけ**:
 
-- Network タブで `Disable cache` のチェックを入れて、もう一度リロードする。Size 列に `(memory cache)` や `(disk cache)` と出ていた行が **実サイズ** になることを確認
-- Network タブの Throttling を `Slow 4G` に切り替え、ページをリロード。感覚として遅くなることと、Timing の値が伸びることを確認。元に戻す
-- デバイスモード（`Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE を選び、本サイトのレイアウトがスマホ向けに切り替わることを確認
+```css
+@import "tailwindcss";
+```
 
-### 自分で書く
+v3 の時代は 3 行書いていました:
 
-- 自分でよく開くサイト（SNS / ニュース / ポートフォリオなど）で Network タブを開き、**HTML 1 つ読むのに何個のリクエストが発生しているか** 数える
-- そのうち Status が `304`（キャッシュ使用）になっているリクエストの数もメモしておく（別のレッスンでキャッシュの仕組みを扱う）
+```css
+/* v3（古い、書かない） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+v4 では `@import "tailwindcss";` に統合されています。
+
+### `postcss.config.mjs`（観察対象）
+
+```js
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+export default config;
+```
+
+v3 で必要だった `autoprefixer` は **v4 ではプラグイン内に内蔵** されたため、別途書かなくて済むようになりました。
+
+### `package.json` の `devDependencies`（観察対象）
+
+```json
+{
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
+```
+
+`tailwind.config.ts` は **v4 では原則不要**（デフォルト設定で十分）。カスタマイズしたい場合は CSS 内で `@theme { ... }` を書く方式に変わりました。本レッスンでは `@theme` の深掘りはしません。
+
+### 小さく試す（任意）
+
+生成されたプロジェクトの `app/page.tsx` を次のように書き換えて、Tailwind v4 のデフォルトパレットを試せます。
+
+```tsx
+export default function Page() {
+  return (
+    <main className="p-8 max-w-xl mx-auto">
+      <h1 className="text-3xl font-bold text-slate-800">Tailwind v4 の練習</h1>
+      <p className="mt-4 text-slate-600">
+        素の CSS なしで、クラス名だけで見た目を組み立てている。
+      </p>
+      <button className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+        ボタン
+      </button>
+    </main>
+  );
+}
+```
+
+- `p-8`（padding 2rem）、`max-w-xl`（max-width）、`mx-auto`（水平中央寄せ）
+- `text-3xl`（フォントサイズ）、`font-bold`（太字）
+- `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
+
+1 章 で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが見えると思います。本コースで CSS の仕組みを先に押さえたのが効いてきます。
+
+### 期待出力
+
+- 生成されたプロジェクトで、`@import "tailwindcss";` 1 行で Tailwind が動いていることを確認
+- `app/page.tsx` にユーティリティクラスを書くと、即座にスタイルが適用される
+- `tailwind.config.ts` が無いことを確認（デフォルトで動く）
+
+### 本コースのプロジェクトに入れない理由
+
+本コースの自己紹介 / TODO プロジェクトには **Tailwind を持ち込みません**。理由:
+
+- これまで素の CSS で書いた資産（`.site-header`、`.cards`、`.card` など）が多い
+- Tailwind に置き換えるには全 JSX を書き直す必要がある
+- 「学ぶ手段」として Tailwind を見るだけなら、別プロジェクトで十分
+
+本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
+
+### 変える（任意）
+
+- 生成した Tailwind プロジェクトで `bg-blue-500` を `bg-green-500` / `bg-red-500` に変えて色の組を観察
+- `hover:` や `md:` などのプレフィックス（状態・ブレークポイント）を使ってみる
+
+### 自分で書く（挑戦）
+
+- Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
+- 書き終えたら、1 章 の素の CSS 版（`docs/lessons/lesson11`）と見比べて **同じ見た目をどう表現しているか** 対比する
 
 ## まとめ
 
-- DevTools は開発の生命線。`F12` や右クリック「検証」で常に開ける場所にしておく
-- **Elements**: DOM と CSS を見る・いじる。スタイルのチェック外しで切り分け
-- **Console**: ログ閲覧 + その場で JS 実行
-- **Network**: 通信の全履歴。メソッド / ステータス / Timing / ヘッダ / ボディ
-- **Application**: Web Storage / Cookie / IndexedDB / Service Worker
-- **Performance**: 録画してページロードや JS 実行のボトルネックを可視化
-- **Sources**: JS にブレークポイントを貼ってデバッガで止める
-- デバイスモードで画面幅や prefers-color-scheme を強制切り替え
-- 別のレッスンで、Network タブの `304 Not Modified` の正体、つまり **HTTP キャッシュ** の仕組みを扱う
+- Tailwind は「ユーティリティファースト」の CSS、クラス名だけで見た目を作る
+- v4（2025 GA）は `@import "tailwindcss";` 1 行で導入、`init` コマンドや `tailwind.config.ts` は原則不要
+- `create-next-app --tailwind` でデフォルトで v4 がセットアップされる
+- 本コースの自己紹介 / TODO プロジェクトには持ち込まない（素の CSS 資産を壊さないため）
+- 学ぶ意義を感じたら、本コース完走後に次のステップとして挑戦する

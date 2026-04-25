@@ -1,477 +1,237 @@
-# lesson93: コンポーネントテスト — React Testing Library
+# lesson93: Cookie と Web セキュリティ
 
 ## ゴール
 
-- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
-- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
-- `userEvent` でクリック / 入力をシミュレートできる
-- 状態変化（`useState`）を含むコンポーネントのテストが書ける
-- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
+- Cookie と Web Storage の違いと使い分けを説明できる
+- Cookie の属性（`HttpOnly` / `Secure` / `SameSite` / `Domain` / `Path` / `Expires` / `Max-Age`）の役割を説明できる
+- XSS（Cross-Site Scripting）と CSRF（Cross-Site Request Forgery）の概要と、それぞれに効く防御を挙げられる
+- セッション Cookie を安全に扱うための実務パターン（HttpOnly / Secure / SameSite=Lax）を知る
+- Content-Security-Policy や HTTPS の位置づけを大まかに把握する
 
 ## 解説
 
-### React Testing Library の思想
+### Cookie とは何か（もう一度）
 
-React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
+Cookie は「サーバーがブラウザに値を持たせて、次回以降のリクエストに **自動で付けさせる** 仕組み」です。サーバーからのレスポンスに次のヘッダが付いていると、ブラウザは **`user=alice`** を覚え、同じサイトへの次のリクエストに自動で `Cookie: user=alice` を付けます。
 
-1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
-2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
+```
+# サーバーからのレスポンス
+HTTP/1.1 200 OK
+Set-Cookie: user=alice; Path=/; HttpOnly; Secure; SameSite=Lax
 
-これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
-
-- 内部実装をリファクタしてもテストは壊れない
-- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
-
-### セットアップ
-
-「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
-
-```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
+# 以後、ブラウザが自動で付ける
+GET /profile HTTP/1.1
+Cookie: user=alice
 ```
 
-`vitest.config.ts` を更新:
+この「自動で送る」性質が、認証セッションを維持する用途に向いています。一方で同じ性質が **後述の CSRF 攻撃の温床** にもなります。
 
-```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+### Cookie と Web Storage の使い分け（再掲）
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",  // ブラウザ風 DOM を提供
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-  },
-});
-```
-
-`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
-
-### 最小のコンポーネントテスト
-
-テスト対象:
-
-```tsx
-// src/Greeting.tsx
-type Props = { name: string };
-
-export function Greeting({ name }: Props) {
-  return <h1>こんにちは、{name} さん</h1>;
-}
-```
-
-テスト:
-
-```tsx
-// src/Greeting.test.tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { Greeting } from "./Greeting";
-
-describe("Greeting", () => {
-  it("名前を含む挨拶を表示する", () => {
-    render(<Greeting name="Alice" />);
-    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
-  });
-});
-```
-
-3 つの基本要素:
-
-- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
-- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
-- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
-
-### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
-
-要素を探す関数は **接頭辞** で挙動が変わります。
-
-| 接頭辞 | 見つからない時 | 用途 |
+| 用途 | Cookie | Web Storage |
 |---|---|---|
-| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
-| `queryBy*` | `null` を返す | 「無いはず」を確認する |
-| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
+| ログインセッションの維持 | **最適**（サーバーに自動送信される） | 不向き |
+| ユーザー設定（テーマ / 言語） | 可能だが毎リクエストで送信されるのでムダ | **最適** |
+| 容量 | 4KB 程度（小さい） | 5〜10MB |
+| JS からの読み書き | `document.cookie`（`HttpOnly` ならブラウザで JS からは見えない） | `localStorage.setItem` 等 |
+| 有効期限 | 属性で制御 | localStorage は恒久、session は タブ閉じで消える |
 
-例:
+認証は Cookie、クライアント完結の設定は Web Storage、というのが現代の定番です。
 
-```tsx
-// 「保存」ボタンが必ずある
-const button = screen.getByRole("button", { name: "保存" });
+### Cookie の主要属性
 
-// エラーメッセージは「無いはず」（成功時）
-expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
+`Set-Cookie` に付けられる属性で、Cookie の振る舞いを細かく制御します。どれもセキュリティに直結します。
 
-// fetch が終わった後に現れるユーザー名
-const userName = await screen.findByText("Alice");
+#### `HttpOnly`
+
+**JS から読み書きできない** Cookie にします。`document.cookie` で見ようとしても出てきません。
+
+```
+Set-Cookie: session=abc123; HttpOnly
 ```
 
-### クエリの優先順位
+XSS（後述）でページに悪意ある JS が混入しても、`HttpOnly` 付きのセッション Cookie は盗めません。ログインセッション用の Cookie は **原則 `HttpOnly` を付ける** のが現代の正解です。
 
-Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
+#### `Secure`
 
-| 優先度 | クエリ | 何を見るか |
-|---|---|---|
-| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
-| 2 | `getByLabelText` | フォームの `<label>` テキスト |
-| 3 | `getByPlaceholderText` | input の placeholder |
-| 4 | `getByText` | 表示テキスト |
-| 5 | `getByDisplayValue` | input の現在値 |
-| 6 | `getByAltText` | img の alt |
-| 7 | `getByTitle` | title 属性 |
-| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
+**HTTPS 経由のリクエストにしか送らせない** 属性です。平文 HTTP で運ばれて盗聴される事故を防ぎます。
 
-**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
-
-### `userEvent` でユーザー操作をシミュレート
-
-ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { Counter } from "./Counter";
-
-describe("Counter", () => {
-  it("ボタンを押すと数が増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("複数回押すと累積する", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    const button = screen.getByRole("button", { name: "+1" });
-    await user.click(button);
-    await user.click(button);
-    await user.click(button);
-
-    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
-  });
-});
+```
+Set-Cookie: session=abc123; Secure
 ```
 
-`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
+本番はほぼ HTTPS のみになった現在では、**セッション Cookie には常に `Secure`** を付けます。
 
-### フォーム入力のテスト
+#### `SameSite`
 
-`<input>` への入力は `user.type` でシミュレートします。
+**クロスサイトのリクエストで Cookie を送るか** を制御する属性です。CSRF 攻撃への主要な防御です。
 
-```tsx
-import { useState } from "react";
+| 値 | 動作 |
+|---|---|
+| `Strict` | 他サイトからの遷移では一切送らない（ログインが切れる UX になりがち） |
+| `Lax` | トップレベル GET ナビゲーション（リンククリック等）では送る。フォーム POST や iframe では送らない |
+| `None` | すべて送る。**`Secure` 必須** |
 
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
+現代のブラウザの **デフォルトは `Lax`** です。クロスサイトで明示的に送りたい場合のみ `None; Secure` を付けます。通常のセッション Cookie は `Lax` のままで十分な場合が多いです。
 
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setSubmitted(name);
-      }}
-    >
-      <label htmlFor="name">お名前</label>
-      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
+#### `Domain` / `Path`
+
+どのホスト・どのパスに対して Cookie を送るかの指定です。指定しなければ **発行元のホストとパス以下** になります。
+
+- `Domain=example.com`: サブドメイン（`api.example.com` 等）にも送る
+- `Path=/admin`: `/admin` 以下のパスにだけ送る
+
+広く付けすぎるとセキュリティ事故の原因になるので、**必要最小限** に絞るのが原則です。
+
+#### `Expires` / `Max-Age`
+
+有効期限の指定です。
+
+- `Expires=Wed, 21 Oct 2026 07:28:00 GMT`: 指定日時まで
+- `Max-Age=3600`: 3600 秒後まで（現代では推奨）
+
+どちらも付けなかった Cookie は **セッション Cookie**（ブラウザを閉じると消える）になります。
+
+### 典型的な「ログインセッション Cookie」の形
+
+実務で多く見る典型パターンです。
+
+```
+Set-Cookie: session=abc123xyz; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400
 ```
 
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
+読み解き:
 
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
+- `Path=/`: サイト全体で有効
+- `HttpOnly`: JS から見えない（XSS 対策）
+- `Secure`: HTTPS のみ
+- `SameSite=Lax`: 基本的なクロスサイトリクエストでは送らない（CSRF 対策）
+- `Max-Age=86400`: 24 時間有効
 
-    const input = screen.getByLabelText("お名前");
-    const button = screen.getByRole("button", { name: "送信" });
+この組み合わせを **デフォルトの出発点** と覚えてください。
 
-    await user.type(input, "Alice");
-    await user.click(button);
+### XSS（Cross-Site Scripting）
 
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
+悪意ある JS を **自分のサイトの一部として** 動かされる攻撃です。
 
-  it("入力が空のままだと挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
+代表的な入り口:
 
-    await user.click(screen.getByRole("button", { name: "送信" }));
+1. ユーザー入力をそのまま `innerHTML` で出力（「DOM を操作する」の `innerHTML` 節で扱った）
+2. `<script src="ユーザー入力">` のように属性にも入力が流れ込む
+3. URL のクエリから取った値を HTML にそのまま埋め込む
 
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-});
+成功すると、`document.cookie` / `localStorage` の中身を攻撃者のサーバーに送信されたり、ユーザーになりすまして投稿されたりします。
+
+#### 防御の基本
+
+- **出力をエスケープする**: `textContent` を使う、React / Vue のテンプレートを信じる（彼らが自動でエスケープする）
+- **`innerHTML` には自分で書いた安全な文字列だけ**: ユーザー入力は決して入れない
+- **`HttpOnly` Cookie**: セッション Cookie を JS から見えなくする（攻撃が成功しても Cookie だけは守れる）
+- **Content-Security-Policy（CSP）ヘッダ**: `<script>` の実行元を制限する（後述）
+
+React / Next.js は `{variable}` で値を埋め込む限り、自動的にテキストとして扱ってくれます。生の HTML を埋め込みたいときの `dangerouslySetInnerHTML` が「**危険**」という名前なのは、まさにこの XSS を警告するためです。
+
+### CSRF（Cross-Site Request Forgery）
+
+ログインしているユーザーに **意図しないリクエスト** を送らせる攻撃です。仕組み:
+
+1. 攻撃者が罠サイトを用意する
+2. ログイン中の標的ユーザーに罠サイトを踏ませる
+3. 罠サイトの HTML から `https://bank.example.com/transfer?to=attacker&amount=10000` のような GET や、`<form action="https://bank.example.com/transfer" method="POST">` を自動送信する
+4. ブラウザは `bank.example.com` のセッション Cookie を **自動で付けて** リクエストする
+5. 銀行サーバーから見ると、正規ユーザーの認証済みリクエストに見える
+
+#### 防御
+
+- **`SameSite=Lax` / `Strict`**: クロスサイトの POST で Cookie を送らせない。現代のブラウザのデフォルトが `Lax` なので、大半の単純な CSRF は既にブロック済み
+- **CSRF トークン**: フォーム送信のたびにサーバーから一意のトークンを渡し、リクエスト時に一緒に送らせる。攻撃者の罠サイトはトークンを知らないので送れない
+- **重要操作の再認証**: パスワード変更や送金では、現行セッションでも再度パスワードを入れさせる
+
+現代のフレームワーク（Next.js の Server Actions など）は CSRF トークン処理を内蔵していることが多いため、自分で手書きする機会は減っています。仕組みは知っておく価値があります。
+
+### HTTPS と HSTS
+
+HTTPS は **通信を暗号化** する基本です。HTTPS でない（平文 HTTP）通信は途中経路で改ざん・盗聴される可能性があります。
+
+**HSTS**（HTTP Strict Transport Security） ヘッダを付けると、ブラウザに「今後はこのサイトは必ず HTTPS で来い」と覚えさせられます。初回のみ平文アクセスが発生しうる隙を塞ぎます。
+
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
-`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
+Vercel / Netlify などはデフォルトで HTTPS のみでの配信になっています。本コースの教材サイトもすべて HTTPS です。
 
-### よく使う追加マッチャ（jest-dom）
+### Content-Security-Policy（CSP）
 
-`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
+レスポンスヘッダで **「このページで実行してよい JS の出所」** を制限する仕組みです。XSS の最後の砦として効きます。
 
-```tsx
-expect(element).toBeInTheDocument();        // DOM に存在する
-expect(element).toHaveTextContent("hello"); // テキストを含む
-expect(element).toBeVisible();              // 見える状態
-expect(input).toHaveValue("Alice");         // input の値
-expect(checkbox).toBeChecked();             // チェック済み
-expect(button).toBeDisabled();              // disabled 属性付き
-expect(element).toHaveClass("active");      // CSS クラス付き
-expect(element).toHaveAttribute("href", "/about");
+```
+Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com
 ```
 
-これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
+この例では、`<script>` は自サイトと指定した CDN 以外からは一切読ませない、という宣言です。インラインスクリプトや `eval` も既定では禁止されます。
+
+強力ですが設定を間違えると自分のサイトが動かなくなるので、導入は慎重に（まずは `Content-Security-Policy-Report-Only` で違反だけログに流し、問題がないと確認してから本番適用するのが定番）。
+
+### オリジンと CORS（軽く）
+
+**オリジン** は `スキーム + ホスト + ポート` の 3 つ組で、ブラウザのセキュリティ境界の基本単位です。`https://a.example.com` と `https://b.example.com` は別オリジンです。
+
+ブラウザは既定で **別オリジンへの `fetch` が返すレスポンスを JS から読めなくする** 同一オリジンポリシーを採用しています。別オリジンの API を使いたい場合、サーバー側が `Access-Control-Allow-Origin` 等の CORS ヘッダで明示的に許可する必要があります。
+
+CORS は実務で詰まりやすい分野です。本コースでは深入りせず、「オリジンが違うと fetch 結果が読めないことがある / サーバー側で CORS ヘッダを返してもらう必要がある」という認識だけ押さえてください。
 
 ## 演習
 
 ### ゴール
 
-- React + RTL のセットアップを `vitest.config.ts` に反映する
-- カウンターコンポーネントのテストを書ける
-- 簡単なフォームのテストを書ける
-- `getByRole` / `getByLabelText` を優先して使える
+- 本サイトおよび任意のサイトの Cookie 属性を DevTools Application タブで眺める
+- `HttpOnly` / `Secure` / `SameSite` がどう出ているか確認する
+- XSS / CSRF のイメージを自分の言葉で説明できるようにする
 
-### 途中から始める場合
+### 手順 1: Cookie を観察する
 
-「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
+1. Google や GitHub などログイン済みのサイトを開きます
+2. DevTools → Application タブ → Cookies → そのサイトを選択します
+3. 一覧の `Name` / `Value` / `HttpOnly` / `Secure` / `SameSite` / `Expires` 列を眺めます
+4. セッション系の Cookie には `HttpOnly` と `Secure` がチェックされているはずです
 
-### 手順 1: 依存パッケージをインストール
+### 手順 2: `document.cookie` で JS からの可視性を確認する
 
-```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
+DevTools の Console タブで次を実行します。
+
+```js
+document.cookie
 ```
 
-### 手順 2: 設定ファイルを更新
+出力には **`HttpOnly` が付いていない Cookie だけ** が出ます。セッション系の重要な Cookie が出てこないのは、`HttpOnly` 属性が働いているためです。
 
-`vitest.config.ts`:
+試しに適当なサイト（攻撃を想定したメモ）で、もしセッション Cookie が JS から見えてしまっていた場合は、そのサイトは XSS 耐性が弱い可能性があります。
 
-```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+### 手順 3: 自分の言葉でまとめる
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-  },
-});
-```
+次の質問に、本レッスンを閉じた状態で自分の言葉で答えてみます（目安: それぞれ 2-3 文）。
 
-`vitest.setup.ts` を新規作成:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-### 手順 3: テスト対象のコンポーネントを書く
-
-`src/Counter.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-      <button onClick={() => setCount((c) => c - 1)}>-1</button>
-      <button onClick={() => setCount(0)}>リセット</button>
-    </div>
-  );
-}
-```
-
-`src/NameForm.tsx`:
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (name.trim()) {
-      setSubmitted(name);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="name">お名前</label>
-      <input
-        id="name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
-```
-
-### 手順 4: テストを書く
-
-`src/Counter.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { Counter } from "./Counter";
-
-describe("Counter", () => {
-  it("初期値は 0", () => {
-    render(<Counter />);
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-  });
-
-  it("+1 ボタンで増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("-1 ボタンで減る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "-1" }));
-
-    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
-  });
-
-  it("リセットボタンで 0 に戻る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "リセット" }));
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-  });
-});
-```
-
-`src/NameForm.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.type(screen.getByLabelText("お名前"), "Alice");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
-
-  it("空のまま送信しても挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-
-  it("入力中の値が input に反映される", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    const input = screen.getByLabelText("お名前");
-    await user.type(input, "Bob");
-
-    expect(input).toHaveValue("Bob");
-  });
-});
-```
-
-### 手順 5: 実行
-
-```bash
-npm run test
-```
-
-すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
-
-### 期待出力
-
-```
- PASS  src/Counter.test.tsx (4)
- PASS  src/NameForm.test.tsx (3)
-
- Test Files  2 passed (2)
-      Tests  7 passed (7)
-```
+- Q1: XSS と CSRF のそれぞれが「何を悪用する」攻撃か
+- Q2: 典型的なログインセッション Cookie には、どの属性を付けるか（3 つ挙げよ）
+- Q3: `SameSite=Lax` は CSRF にどう効くか
 
 ### 変える
 
-- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
-- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
-- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
+- Application タブで、適当な非ログインサイトの Cookie を 1 つ選び、右クリック → Delete で削除する。再度アクセスしても閲覧できることを確認
+- ログインしているサイトで、セッション Cookie を削除するとログアウトになる（試すなら復旧手順を確認してから）
 
 ### 自分で書く
 
-- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
-  - 入力欄 + 「追加」ボタン
-  - 追加されたら入力欄が空になる
-  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
-- テストで以下を検証:
-  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
-  - 送信後に input が空になる
-  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
-
-`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
+- 自分がよく使うサイト 3 つの、ログイン後に Application タブの Cookies で確認できる **`HttpOnly` の付き方** を比較する
+- Next.js の Server Actions で POST を送る際、ブラウザ開発者ツールの Network タブから CSRF 関連ヘッダがどう付いているか観察する（将来の発展）
 
 ## まとめ
 
-- React Testing Library は「ユーザーの見え方」をテストする思想
-- `render` / `screen` でコンポーネントを描画して DOM クエリ
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
-- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
-- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
-- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
-- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
-- 別のレッスンでは fetch を含むコンポーネントのテスト（**MSW** で API モック）に進む
+- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値。セッション維持の本命
+- 属性の黄金律: `HttpOnly; Secure; SameSite=Lax`。セッション Cookie はこれを最低ラインに
+- XSS は「サイトに悪意 JS を混入される」攻撃。`textContent` / エスケープ / `HttpOnly` / CSP で防ぐ
+- CSRF は「ログイン中のユーザーに意図しないリクエストを送らせる」攻撃。`SameSite` / CSRF トークンで防ぐ
+- HTTPS + HSTS は前提。平文 HTTP は現代の Web ではほぼ使わない
+- CORS は別オリジン通信の境界の話。深追いは各自必要になったら
+- 6 章 はここで一区切り。次は本コースの到達点を振り返って、各自の次のステップを考える章（あるいは章末のおまけ）につなげる

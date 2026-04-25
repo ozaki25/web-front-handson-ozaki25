@@ -1,341 +1,185 @@
-# lesson83: デバッグに効く Console API
-
-<script setup>
-const demoJs = `
-const users = [
-  { id: 1, name: 'Alice', age: 28, role: 'admin' },
-  { id: 2, name: 'Bob', age: 34, role: 'user' },
-  { id: 3, name: 'Carol', age: 22, role: 'user' },
-];
-
-document.querySelector('#btn-log').addEventListener('click', () => {
-  console.log('log: 普通の出力', users[0]);
-});
-
-document.querySelector('#btn-warn').addEventListener('click', () => {
-  console.warn('warn: 注意喚起。まだ動くが気にしてほしいこと');
-});
-
-document.querySelector('#btn-error').addEventListener('click', () => {
-  console.error('error: 何か壊れた。スタックトレースも一緒に出る');
-});
-
-document.querySelector('#btn-table').addEventListener('click', () => {
-  console.table(users);
-});
-
-document.querySelector('#btn-group').addEventListener('click', () => {
-  console.group('リクエスト処理');
-  console.log('ユーザー認証');
-  console.log('データ取得');
-  console.groupEnd();
-});
-
-document.querySelector('#btn-time').addEventListener('click', () => {
-  console.time('sort');
-  const arr = Array.from({ length: 100000 }, () => Math.random());
-  arr.sort();
-  console.timeEnd('sort');
-});
-
-document.querySelector('#btn-count').addEventListener('click', () => {
-  console.count('ボタン押下回数');
-});
-
-document.querySelector('#btn-assert').addEventListener('click', () => {
-  const total = 100;
-  console.assert(total > 200, 'total が 200 を超えていない', { total });
-});
-`
-</script>
+# lesson83: 環境変数の基本
 
 ## ゴール
 
-- `console.log` 以外の `warn` / `error` で深刻度を出し分けられる
-- `console.table` で配列やオブジェクトを表形式で眺められる
-- `console.group` / `groupEnd` で出力を階層化できる
-- `console.time` / `timeEnd` で処理時間を測れる
-- `console.count` / `assert` で回数や条件付き警告を出せる
-- DevTools の Console タブで、深刻度別のフィルタと検索ができる
+- `.env.local` に環境変数を書いて `process.env` から読める
+- `NEXT_PUBLIC_` プレフィックスの意味を理解する
+- Server Component と Client Component で **読める変数が違う** ことを体感する
+- `.env.local` が `.gitignore` に入っている前提を知る
 
 ## 解説
 
-### `console.log` 以外があることを知る
+### なぜ環境変数か
 
-`console.log` はよく使いますが、Console API にはもっと多くの仲間があります。適切なものを使うと **DevTools が自動的に見た目を区別してくれる**（色付け、スタックトレース、フィルタ）ので、デバッグの効率が段違いに上がります。
+アプリには「環境ごとに変えたい値」があります。
 
-### 深刻度で使い分ける: `log` / `info` / `warn` / `error`
+- ローカル開発では `http://localhost:3000` の API、本番では `https://api.example.com` の API を叩きたい
+- 開発用のテスト API キー、本番用のリリース API キー
+- 機能フラグ（開発では有効、本番では無効）
 
-出力の「重み」を変えるだけの書き分けです。引数の渡し方は `log` と全部同じです。
+これをコード本体に直接書くと、環境を変えるたびにコード修正 → デプロイが必要になり、シークレット（秘密鍵）の場合はリポジトリに漏れる危険もあります。
 
-```js
-console.log("普通のログ");                 // 灰色や黒
-console.info("参考情報");                  // i アイコン（`log` と同等扱いのブラウザも多い）
-console.warn("削除されたプロパティを使っています"); // 黄色、三角アイコン
-console.error("API 呼び出しに失敗しました");  // 赤、スタックトレース付き
+そこで、**環境変数**（Environment Variables）として外に出します。Next.js では `.env.local` というファイルに書く形が標準です。
+
+### `.env.local` の書き方
+
+プロジェクトルート直下に `.env.local` を作り、`KEY=VALUE` の形で書きます。
+
+```
+NEXT_PUBLIC_APP_NAME=My Todo App
+APP_SECRET=super-secret-value
 ```
 
-DevTools の Console タブ上部で **「Errors / Warnings / Info / Verbose」** のチェックを切り替えると、深刻度別に絞り込めます。本番や長時間実行で「エラーだけ見たい」場面でとても役立ちます。
+- 1 行 1 変数、`=` の左右にスペース不要
+- クォートは不要（ただし空白を含むならクォートも可）
+- ファイル末尾に改行を入れておく
 
-### 表形式で眺める: `console.table`
+**`.env.local` は `.gitignore` に入っている** のがデフォルト（`create-next-app` で作ったプロジェクトはこうなっています）。シークレットがリポジトリに入らない仕組みです。
 
-配列やオブジェクトを **表** にしてくれます。ログに `JSON.stringify` を書かずとも、キーごとに列が揃った形で読めるようになります。
+### 読み方は `process.env.XXX`
 
-```js
-const users = [
-  { id: 1, name: "Alice", age: 28 },
-  { id: 2, name: "Bob", age: 34 },
-];
+コード側から読むときは、`process.env` オブジェクトを使います。
 
-console.table(users);
-// id | name  | age
-// ---+-------+----
-//  1 | Alice | 28
-//  2 | Bob   | 34
+```ts
+const name = process.env.NEXT_PUBLIC_APP_NAME; // "My Todo App"
+const secret = process.env.APP_SECRET;          // "super-secret-value"（サーバー側のみ）
 ```
 
-第 2 引数に列名の配列を渡すと、その列だけ表示できます。
+戻り値は常に `string | undefined`（TS の型）。値が無ければ `undefined` です。
 
-```js
-console.table(users, ["name", "age"]);
-```
+### `NEXT_PUBLIC_` プレフィックスの意味
 
-API レスポンスや大量の state を眺めるときの定番です。
+Next.js には重要なルールがあります。
 
-### 出力を階層化する: `console.group` / `console.groupEnd`
+> **`NEXT_PUBLIC_` で始まる変数だけが、Client Component からも読める。**
+> **それ以外の変数は、Server Component・Route Handlers・Server Actions からしか読めない。**
 
-ログを入れ子にしてまとめられます。DevTools 上では折りたためるブロックになります。
+なぜか:
 
-```js
-console.group("リクエスト処理");
-console.log("1. ユーザー認証");
-console.log("2. データ取得");
-console.group("データ変換");
-console.log("2-1. JSON パース");
-console.log("2-2. 整形");
-console.groupEnd();
-console.groupEnd();
-```
+- **サーバー側のみ** = ブラウザに配信される JS に値が入らない。シークレットを隠せる
+- **`NEXT_PUBLIC_` 付き** = ビルド時にクライアント JS に値が埋め込まれる。公開しても構わない値だけ付ける
 
-一気に折りたたんで他のログから隠せるので、フロントエンドの画面更新のような「関連する複数ステップ」の追跡に向きます。最初から折りたたみたい場合は `console.groupCollapsed()` を使います。
+逆に言うと、`NEXT_PUBLIC_` で始まる変数は **ブラウザのソースを開けば全員が見える** ので、シークレットには絶対に付けません。
 
-### 処理時間を測る: `console.time` / `console.timeEnd`
+### 命名の指針
 
-同じラベルで `time` を呼び `timeEnd` を呼ぶと、その間の経過時間を出します。
-
-```js
-console.time("fetch-posts");
-const posts = await fetch("/api/posts").then((r) => r.json());
-console.timeEnd("fetch-posts"); // fetch-posts: 312ms
-```
-
-`console.timeLog("fetch-posts")` で **途中経過** を出すこともできます。長い処理を区切って計測したいときに便利です。
-
-### 回数を数える: `console.count`
-
-同じラベルで呼ぶたびにカウンタが上がります。「ここを何回通ったか」をざっくり知るのに便利です。
-
-```js
-function render() {
-  console.count("render 呼び出し");
-  // ...
-}
-
-render(); // render 呼び出し: 1
-render(); // render 呼び出し: 2
-render(); // render 呼び出し: 3
-```
-
-リセットしたい場合は `console.countReset("render 呼び出し")`。
-
-### 条件付きで警告する: `console.assert`
-
-第 1 引数が **偽のとき** だけ出力する関数です。「ここは常に真のはず」という前提を軽くチェックしたいときに使います。
-
-```js
-const total = 100;
-console.assert(total > 0, "total が 0 以下", { total });
-// total > 0 が真なので何も出ない
-
-console.assert(total > 200, "total が 200 を超えていない", { total });
-// 200 より小さいので Assertion failed の警告が出る
-```
-
-エラーで止めたいわけではない（通してもアプリは壊れない）が、**本来ありえない状態** を検知したい場合の軽いガードに使います。本格的なチェックには `throw new Error(...)` を使ってください。
-
-### スタックトレースを出す: `console.trace`
-
-その行までの呼び出し階層を出します。「どこから呼ばれた？」を追いたいときに。
-
-```js
-function inner() {
-  console.trace("ここを通った");
-}
-
-function middle() {
-  inner();
-}
-
-middle();
-```
-
-### スタイル付き出力: `%c`
-
-第 1 引数の文字列に `%c` を入れ、第 2 引数以降に CSS を渡すと色付きのログになります。ライブラリが Console にロゴを出すのに使っているのを見たことがあるかもしれません。
-
-```js
-console.log("%cデバッグモード", "color: white; background: steelblue; padding: 2px 6px; border-radius: 3px;");
-```
-
-多用するとノイズになるので、「今だけ強調したい」1 行で使うくらいが丁度いいです。
-
-### デモで触ってみる
-
-下のデモで、各ボタンを押すごとに対応する Console API が呼ばれます。DevTools の Console タブを開いた状態でボタンを押してみてください。
-
-<LiveDemo
-  height="220px"
-  :html="`
-<p>DevTools の Console タブを開き、各ボタンを押してください。</p>
-<div>
-  <button id='btn-log' type='button'>log</button>
-  <button id='btn-warn' type='button'>warn</button>
-  <button id='btn-error' type='button'>error</button>
-  <button id='btn-table' type='button'>table</button>
-  <button id='btn-group' type='button'>group</button>
-  <button id='btn-time' type='button'>time / timeEnd</button>
-  <button id='btn-count' type='button'>count</button>
-  <button id='btn-assert' type='button'>assert</button>
-</div>
-  `"
-  :css="`
-button { margin: 4px 6px 4px 0; padding: 6px 12px; }
-  `"
-  :js="demoJs"
-/>
+- 公開しても困らない（URL、アプリ名、GA トラッキング ID など）: `NEXT_PUBLIC_` を付ける
+- 公開すると困る（API キー、DB 接続文字列、JWT の秘密鍵など）: プレフィックスなし
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
-
-<details>
-<summary>出発点のコード</summary>
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson83</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>Console API 体験</h1>
-    <p>DevTools の Console タブを開いてリロードしてください。</p>
-  </body>
-</html>
-```
-
-**`script.js`**
-
-```js
-// 空のまま
-```
-
-</details>
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`.env.local` と `app/env-test/` 配下の 2 ファイルを新規作成するだけです。
 
 ### ゴール
 
-- Console タブに、`log` / `warn` / `error` / `table` / `group` / `time` がすべて出ている
-- 深刻度別フィルタ（Errors / Warnings / Info）でメッセージが絞り込めることを確認する
+- `.env.local` に 2 種類の変数を書く
+- Server Component と Client Component からそれぞれ読み、**プレフィックスなしの変数は Client では `undefined` になる** ことを体感する
+- 本番（Vercel）での設定は「Vercel にデプロイする」でまとめて扱う
 
 ### 手順
 
-1. `script.js` を以下の内容にします。
-2. プレビューの DevTools の Console タブを開き、リロードします。
-3. 出力をフィルタで絞り込みながら眺めます。
+1. 5 章 の既存プロジェクトを開く（どれでも可）
+2. プロジェクトルートに `.env.local` を新規作成
+3. 新しいページ `app/env-test/page.tsx`（Server Component）と `app/env-test/ClientView.tsx`（Client Component）を作る
+4. プレビューで両方を比較
 
-### `script.js` の完成形
+### `.env.local`（プロジェクトルート直下）
 
-```js
-console.log("起動しました");
-console.info("Vite テンプレートで動いています");
+```
+NEXT_PUBLIC_APP_NAME=私の TODO アプリ
+APP_SECRET=super-secret-value
+```
 
-console.group("環境情報");
-console.log("URL:", location.href);
-console.log("言語:", navigator.language);
-console.log("ユーザーエージェント:", navigator.userAgent);
-console.groupEnd();
+`.env.local` を編集した後は **開発サーバーを再起動** する必要があります（StackBlitz なら自動再起動、ローカルなら `Ctrl+C` → `npm run dev`）。
 
-console.warn("この warn は目立ちますが、アプリは動いています");
-console.error("この error は赤く出ます。試しに出しているだけです");
+### `app/env-test/page.tsx`（Server Component）
 
-const users = [
-  { id: 1, name: "Alice", role: "admin" },
-  { id: 2, name: "Bob", role: "user" },
-  { id: 3, name: "Carol", role: "user" },
-];
-console.table(users);
+```tsx
+import { ClientView } from "./ClientView";
 
-console.time("重い処理");
-const arr = [];
-for (let i = 0; i < 100000; i++) {
-  arr.push(Math.random());
+export default function EnvTestPage() {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME;
+  const secret = process.env.APP_SECRET;
+
+  return (
+    <main>
+      <h1>環境変数のテスト</h1>
+
+      <section>
+        <h2>Server Component から読む</h2>
+        <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
+        <p>APP_SECRET = {secret ?? "(undefined)"}</p>
+      </section>
+
+      <ClientView />
+    </main>
+  );
 }
-arr.sort();
-console.timeEnd("重い処理");
+```
 
-function render() {
-  console.count("render 呼び出し");
+### `app/env-test/ClientView.tsx`（Client Component）
+
+```tsx
+"use client";
+
+export function ClientView() {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME;
+  const secret = process.env.APP_SECRET;
+
+  return (
+    <section>
+      <h2>Client Component から読む</h2>
+      <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
+      <p>APP_SECRET = {secret ?? "(undefined)"}</p>
+    </section>
+  );
 }
-render();
-render();
-render();
-
-const total = 100;
-console.assert(total > 200, "total は 200 を超えているはず", { total });
-
-console.log(
-  "%c完了",
-  "color: white; background: steelblue; padding: 2px 8px; border-radius: 3px;",
-);
 ```
 
 ### 期待出力
 
-- Console に `起動しました` から順に表示される
-- `環境情報` のグループが折りたためる状態で出る（左の ▶ で開閉）
-- `warn` は黄色系、`error` は赤系で、アイコンが違う
-- `users` が表形式で出る
-- `重い処理: 〜ms` の経過時間が出る
-- `render 呼び出し` のカウンタが 1 → 2 → 3 と増える
-- `Assertion failed: total は 200 を超えているはず` が警告として出る
-- 最後に `完了` が青背景の塊で出る
+`/env-test` にアクセスすると、次のような表示になります。
+
+- **Server Component から読む**
+  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
+  - `APP_SECRET = super-secret-value`
+- **Client Component から読む**
+  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
+  - `APP_SECRET = (undefined)` ← **ここが重要**
+
+`APP_SECRET` は Client 側では読めません。これが「サーバー専用の変数」と「クライアントに公開される変数」の違いを体感する瞬間です。
+
+### さらに確認: ブラウザのソースを見る
+
+1. `/env-test` を開いた状態で、ブラウザで「ページのソースを表示」
+2. HTML ソース内で `super-secret-value` を検索 → **見つからない**（Client Component のバンドル JS にも含まれない）
+3. `私の TODO アプリ` を検索 → 見つかる（`NEXT_PUBLIC_` なのでクライアントに配信されている）
+
+シークレットが本当に漏れない仕組みになっていることを確認できます。
 
 ### 変える
 
-- Console タブの上部で「Errors」だけチェックし、`error` 以外が消えることを確認
-- `console.table(users)` を `console.table(users, ["name", "role"])` に変えて列を絞る
-- `console.group(...)` を `console.groupCollapsed(...)` に変え、最初から折りたたまれて表示されることを確認
-- `console.time("重い処理")` と `console.timeEnd("重い処理")` のあいだに `console.timeLog("重い処理", "途中経過")` を挟んでみる
+- `APP_SECRET` の名前を `NEXT_PUBLIC_APP_SECRET` に変えると、Client 側でも読めるようになる（が、シークレットを付けるのは NG）
+- 新しい変数 `NEXT_PUBLIC_API_URL=https://jsonplaceholder.typicode.com` を追加し、Client 側で `fetch(process.env.NEXT_PUBLIC_API_URL + "/posts")` して動作確認
 
 ### 自分で書く
 
-- `fetch` で JSONPlaceholder（`https://jsonplaceholder.typicode.com/posts`）から記事一覧を取り、`console.table` で `id` / `title` の 2 列だけ表示する。ヒント: `fetch` は 2 章 の「fetch で API から取得する」で扱った形
-- 「重い処理」を `console.time` で 2 段階（`取得` / `整形`）に分割計測する
+- `NEXT_PUBLIC_GA_ID`（Google Analytics の ID 仮置き、`G-XXXXXX` のような値）を追加し、Server Component のレイアウトに表示する
+- `DB_URL=postgres://user:pass@localhost/mydb` を追加し、Server Component でだけ表示する（Client に漏れないことを確認）
+
+### 本番対比の予告
+
+ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **「Vercel にデプロイする」** でまとめて扱います。
+
+本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
 
 ## まとめ
 
-- `console.log` / `info` / `warn` / `error` で深刻度を分ける（DevTools のフィルタに効く）
-- `console.table` で配列やオブジェクトを表形式に
-- `console.group` / `groupEnd`（`groupCollapsed`）で出力を折りたためる階層に
-- `console.time` / `timeEnd` / `timeLog` で経過時間を測る
-- `console.count` / `countReset` で呼び出し回数を数える
-- `console.assert(条件, メッセージ)` は条件が偽の時だけ出る軽いガード
-- `console.trace` でスタックトレース、`%c` + CSS で装飾
-- 2 章（JavaScript）はここで一区切り。本コースの残りの章（TypeScript / React / Next.js）でも、今回の API は日常的に使います
+- 環境変数は `.env.local` に `KEY=VALUE` で書く
+- `process.env.XXX` で読む。戻り値は `string | undefined`
+- **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
+- シークレットには絶対に `NEXT_PUBLIC_` を付けない
+- `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない
+- 本番（Vercel）での設定は「Vercel にデプロイする」で扱う

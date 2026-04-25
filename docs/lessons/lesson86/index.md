@@ -1,185 +1,368 @@
-# lesson86: HTTP キャッシュ
+# lesson86: Metadata API で SEO を整える
 
 ## ゴール
 
-- ブラウザがリソースをキャッシュしている場所（メモリ / ディスク）を説明できる
-- `Cache-Control` の主要ディレクティブ（`public` / `private` / `max-age` / `no-cache` / `no-store` / `immutable`）の違いを説明できる
-- 強キャッシュ（期限内はサーバーに聞かない）と 弱キャッシュ（サーバーに聞くが中身は省略）の違いを説明できる
-- `ETag` / `Last-Modified` と `304 Not Modified` の関係を説明できる
-- キャッシュ起因で「新しいデプロイが反映されない」古典的なハマりを避ける実務パターンを知る
+- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
+- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
+- `generateMetadata` で動的にタイトルや説明文を組み立てられる
+- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
+- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
 
 ## 解説
 
-### そもそもキャッシュはなぜ要るか
+### 「SEO を整える」とは
 
-ブラウザがリソース（HTML / CSS / JS / 画像）を取りに行くのは、毎回遅くてトラフィックもかかります。一度取ったものを **同じなら再利用する** のがキャッシュです。効き方の強い順に、次の 3 段階があると覚えると整理しやすいです。
+SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
 
-1. **強キャッシュ**: サーバーに問い合わせもしない。ローカルのキャッシュから即配る
-2. **弱キャッシュ**（条件付きリクエスト）: サーバーに「変わってますか？」だけ聞く。変わってなければ `304 Not Modified` が返り、ボディは送られてこない
-3. **キャッシュなし**: 毎回フルで取りに行く
+- `<title>`: ブラウザタブの文字、検索結果の見出し
+- `<meta name="description">`: 検索結果の説明文
+- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
+- `<link rel="icon">`: タブの左に出る favicon
 
-どのモードになるかは、レスポンスヘッダ `Cache-Control` / `ETag` / `Last-Modified` で決まります。
+これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
 
-### `Cache-Control` の主要ディレクティブ
+### Metadata API の 2 系統
 
-サーバーがレスポンスヘッダに **`Cache-Control: ...`** を付けて「このリソースはどう扱っていいか」をブラウザに伝えます。代表的なものを並べます。
+書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
 
-| ディレクティブ | 意味 |
-|---|---|
-| `public` | 誰でも（ブラウザ / 中間キャッシュ / CDN）キャッシュしてよい |
-| `private` | ブラウザ本体だけキャッシュしてよい。CDN には持たせない |
-| `max-age=N` | N 秒間は新鮮。その間はサーバーに聞かない（強キャッシュ） |
-| `s-maxage=N` | 中間キャッシュ（CDN 等）向けの max-age。ブラウザは無視 |
-| `no-cache` | 毎回サーバーに問い合わせ（弱キャッシュは効く）。ボディは返ってこないこともある |
-| `no-store` | 一切キャッシュしない。毎回フルで取り直し |
-| `must-revalidate` | 期限が切れたら **必ず** 再検証（古いキャッシュを出さない） |
-| `immutable` | 期限内は絶対に変わらない。リロードでも再検証しない |
-| `stale-while-revalidate=N` | 期限切れから N 秒はそのまま返して、裏で再検証 |
+1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
+2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
 
-混乱しやすいのは `no-cache` と `no-store` です:
+### 静的 `metadata` export
 
-- **`no-cache`**: キャッシュ **は** する。ただし使う前に毎回サーバーに聞く
-- **`no-store`**: キャッシュ **しない**
+`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
 
-名前と挙動が逆に見えるので、都度仕様を見に行く癖を付けるのが安全です。
+```tsx
+// app/about/page.tsx
+import type { Metadata } from "next";
 
-### 強キャッシュ: `max-age` の世界
+export const metadata: Metadata = {
+  title: "About",
+  description: "このサイトについて",
+};
 
-レスポンスにこういうヘッダが付いていたとします。
-
-```
-Cache-Control: public, max-age=3600
+export default function AboutPage() {
+  return <h1>About</h1>;
+}
 ```
 
-これは「このリソースを **1 時間**（3600 秒）は新鮮とみなす」という意味です。この間はブラウザは **サーバーに一切問い合わせずに** ローカルのキャッシュを使います。
+Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
 
-DevTools の Network タブで見ると、`Size` 列が **`(memory cache)`** や **`(disk cache)`** になり、サーバーに行かなかったことが表示されます。
+### 動的 `generateMetadata`
 
-```
-Size        Status
-(disk cache) 200
-```
+URL から情報を取ってタイトルを作るときに使います。
 
-`max-age` が切れるまでは、コードをいじってデプロイし直しても **古いファイルが配られ続けます**。これがキャッシュ起因の「デプロイしたのに反映されない」問題の典型です。
+```tsx
+// app/posts/[id]/page.tsx
+import type { Metadata } from "next";
 
-### 弱キャッシュ: `304 Not Modified` の世界
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  const post = await res.json();
+  return {
+    title: post.title,
+    description: post.body.slice(0, 120),
+  };
+}
 
-`max-age` が切れた、または `no-cache` が付いているリソースは、ブラウザがサーバーに **「これ、まだ有効？」** と確認しに行きます。この確認のために使うのが `ETag` と `Last-Modified` です。
-
-レスポンスに `ETag` が付いていたら、ブラウザは次回のリクエストに `If-None-Match` ヘッダで同じ値を送ります。
-
-```
-# 初回レスポンス
-HTTP/1.1 200 OK
-Cache-Control: no-cache
-ETag: "abc123"
-Content-Type: image/png
-...（画像ボディ）
-
-# 2 回目のリクエスト
-GET /logo.png HTTP/1.1
-If-None-Match: "abc123"
-
-# サーバーのレスポンス
-HTTP/1.1 304 Not Modified
-（ボディは空）
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  return <h1>記事 ID: {id}</h1>;
+}
 ```
 
-サーバーは「変わってない」と分かれば **ボディを送らずに 304 だけ返す** ので、通信量はほぼゼロになります。ブラウザは手元のキャッシュを使います。
+- `generateMetadata` は非同期関数にできます
+- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
+- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
+- 戻り値は `Metadata` 型のオブジェクト
 
-`Last-Modified` の場合は `If-Modified-Since` ヘッダで日時を送り返します。考え方は同じです。`ETag` のほうが識別が厳密で、現代では主流です。
+`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
 
-### 実務での定番パターン: 「ハッシュ付きファイル名 + immutable」
+### `title.template` でサイト全体を揃える
 
-Web アプリの CSS / JS は「ビルドのたびに中身が変わる可能性があるが、変わったときは URL も変えておく」という運用が主流です。
+記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
 
+```tsx
+// app/layout.tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: {
+    default: "My Next Site",
+    template: "%s | My Next Site",
+  },
+  description: "Next.js App Router の学習用サイト",
+};
 ```
-/assets/main.CEDo5b9P.css
-/assets/main.8c29f6e4.js
+
+- `default`: ページ側でタイトルを書いていないときに使う既定値
+- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
+
+ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
+
+### Open Graph を足す
+
+SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
+
+```tsx
+export const metadata: Metadata = {
+  title: "My Next Site",
+  description: "Next.js App Router の学習用サイト",
+  openGraph: {
+    title: "My Next Site",
+    description: "Next.js App Router の学習用サイト",
+    url: "https://example.com",
+    siteName: "My Next Site",
+    locale: "ja_JP",
+    type: "website",
+  },
+};
 ```
 
-`CEDo5b9P` のようなハッシュ（コード内容から計算した識別子）をファイル名に入れておき、**中身が変われば URL も変わる** ようにします。すると、サーバーは次のヘッダを安全に付けられます。
+最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
 
-```
-Cache-Control: public, max-age=31536000, immutable
-```
+### favicon / apple-touch-icon は **ファイル配置だけで OK**
 
-1 年間（31536000 秒）は絶対に変えないと宣言します。`immutable` は「リロードされても再検証しない」という追加の念押しです。
+Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
 
-中身を更新したければ、ビルド時にハッシュが変わって **別の URL** になるので、HTML から参照される URL もそれに合わせて書き換わります。古いキャッシュは持ち続けてもらってよく、新しい URL は新規リクエストとして取りに行くだけです。
+- `app/favicon.ico` → `<link rel="icon">`
+- `app/icon.png` / `app/icon.svg` → 同上
+- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
 
-一方 **HTML 自体** は `no-cache` または短い `max-age` にしておきます。HTML が古いキャッシュを使うと、新しいハッシュ入りの `<link>` / `<script>` タグに切り替わらないためです。
+`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
 
-### Vercel / VitePress など現代のホスティングは既定が賢い
+### Server Component の前提
 
-Vercel を使うと、静的アセットには自動で `immutable` が付き、HTML には短いキャッシュが付く形になっています。VitePress のビルド出力もハッシュ付きファイル名です。本コースのような教材サイトでは **設定を触らなくてもキャッシュ運用は成立** しています。
-
-とはいえ、仕組みを知らないと「トップだけ更新されて中ページが古い」「CSS だけ反映されない」といった症状に遭遇したときに原因が分からなくなるので、`Cache-Control` の値を読めるようになっておくことは重要です。
-
-### デバッグのコツ
-
-キャッシュまわりの調査では次を覚えておいてください。
-
-- **DevTools の Disable cache**: Network タブを開いているあいだ、キャッシュを無効化できる。開発中はオンにしておくと安心
-- **Hard reload**: `Ctrl+Shift+R` / `Cmd+Shift+R` で強制再読込（キャッシュを無視）
-- **Application → Clear storage**: 特定のサイトのキャッシュ・ストレージを一括削除
-- **Network タブの Size 列**: `(memory cache)` / `(disk cache)` / 実サイズ で、どこから来たか判断
-- **Network タブで行をクリック → Headers**: `Cache-Control` / `ETag` の実際の値を確認
+`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
 
 ## 演習
 
+### 途中から始める場合
+
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
+
+<details>
+<summary>出発点のファイル</summary>
+
+**`app/layout.tsx`**
+
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/about">About</Link>
+          {" | "}
+          <Link href="/posts/1">Post #1</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
+```
+
+**`app/page.tsx`**
+
+```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
+```
+
+**`app/about/page.tsx`**
+
+```tsx
+export default function About() {
+  return <h1>About</h1>;
+}
+```
+
+**`app/posts/[id]/page.tsx`**
+
+```tsx
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  return <h1>記事 ID: {id}</h1>;
+}
+```
+
+</details>
+
 ### ゴール
 
-- 実際のサイトのレスポンスヘッダから `Cache-Control` / `ETag` を読み取る
-- 強キャッシュ・弱キャッシュ・キャッシュなしを切り替えたときの Network タブの見え方の違いを体感する
-- `curl` で条件付きリクエストを自分で送って `304` を取得する
+- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
+- `app/about/page.tsx` に静的 metadata を追加する
+- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
+- ブラウザタブの文字が各ページで変わることを確認する
 
-### 手順 1: DevTools で観察する
+### 手順
 
-1. 本教材サイト（または任意の Web サイト）を開きます
-2. DevTools の Network タブを開き、リロードします
-3. 1 行クリックして `Headers` → `Response Headers` を確認します
-4. `Cache-Control` と `ETag` の値をメモします
-5. もう一度リロードします。同じ行の `Status` が `304` になる（または `Size` が `(disk cache)` になる）ことを確認します
-6. `Disable cache` にチェックを入れてリロードします。全行が `200` に戻り、Size が実サイズになることを確認します
+1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
+2. `app/about/page.tsx` に静的 `metadata` export を追加
+3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
+4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
 
-### 手順 2: `curl` で条件付きリクエストを送る
+### 主要ファイルの完成形
 
-`ETag` の挙動を手で確かめます。ターミナルで次を実行してください。
+**`app/layout.tsx`**
 
-```bash
-# 1 回目: ETag を含むレスポンスヘッダを取る
-curl -I https://jsonplaceholder.typicode.com/posts/1
+```tsx
+import type { Metadata, ReactNode } from "next";
+import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: {
+    default: "My Next Site",
+    template: "%s | My Next Site",
+  },
+  description: "Next.js App Router の学習用サイト",
+  openGraph: {
+    title: "My Next Site",
+    description: "Next.js App Router の学習用サイト",
+    url: "https://example.com",
+    siteName: "My Next Site",
+    locale: "ja_JP",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/about">About</Link>
+          {" | "}
+          <Link href="/posts/1">Post #1</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
 ```
 
-出力の中の `etag: "..."` の値をメモします。次にこの ETag を付けて 2 回目のリクエストを送ります。
+注: `ReactNode` は本来 `react` から import しますが、上の例ではシンプルさのため `next` からの型 import にまとめています。実案件では `import type { ReactNode } from "react";` に分けて書いても構いません。
 
-```bash
-# 2 回目: 先ほどの ETag を If-None-Match で送り返す
-curl -I https://jsonplaceholder.typicode.com/posts/1 \
-  -H 'If-None-Match: "W/\"xxxxxxxxxxxx\""'
+**`app/page.tsx`**
+
+```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
 ```
 
-`-H` で送る値は、1 回目の `etag:` の値をそのまま入れてください（バックスラッシュのエスケープが必要な場合もあります）。成功すると **`HTTP/2 304`** が返り、ボディは送られてきません。
+この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
 
-手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
+**`app/about/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "About",
+  description: "このサイトについて",
+};
+
+export default function About() {
+  return <h1>About</h1>;
+}
+```
+
+**`app/posts/[id]/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const res = await fetch(
+    `https://jsonplaceholder.typicode.com/posts/${id}`,
+    { cache: "force-cache" }
+  );
+  if (!res.ok) {
+    return {
+      title: "記事が見つかりません",
+    };
+  }
+  const post: Post = await res.json();
+  return {
+    title: post.title,
+    description: post.body.slice(0, 120),
+  };
+}
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  const res = await fetch(
+    `https://jsonplaceholder.typicode.com/posts/${id}`,
+    { cache: "force-cache" }
+  );
+  const post: Post = await res.json();
+
+  return (
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
+  );
+}
+```
+
+### 期待出力
+
+ブラウザで次のように動きます。
+
+1. `/` を開く → タブのタイトルが `My Next Site`
+2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
+3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
+4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
 
 ### 変える
 
-- DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
-- `Hard reload`（`Ctrl+Shift+R` / `Cmd+Shift+R`）を試す。`Disable cache` と同様だが、開発者ツールが閉じていてもキャッシュを無視できる
-- Network タブで `Throttling` を `Slow 4G` に。キャッシュから取っているときはほぼ無影響だが、キャッシュを無効にして比較すると体感差が大きい
+- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
+- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
+- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
 
 ### 自分で書く
 
-- 「`no-cache` と `no-store` の違いを 2 行で説明する」文章を書いてみる（本文を隠した状態で挑戦）
-- `Cache-Control: public, max-age=31536000, immutable` が付いたリソースをリロードしたとき、Network タブでどう見えるか予想し、実際に本サイトの `/assets/*.css` などで確認する
+- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
+- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
+- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
 
 ## まとめ
 
-- キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
-- `Cache-Control` でモードを指定。`max-age` / `no-cache` / `no-store` / `immutable` が主役
-- `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
-- 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
-- DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く
-- 別のレッスンで、複数のリクエストを同時に投げる時に効いてくる **同時接続数と HTTP/2 / HTTP/3** の話に進む
+- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
+- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
+- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
+- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
+- `metadata` / `generateMetadata` は Server Component 側でだけ書く
+- 別のレッスンで、ページの待ち時間をより良く見せる **Loading UI と Streaming** を扱う

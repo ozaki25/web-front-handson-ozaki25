@@ -93,7 +93,7 @@ Sentry.captureMessage("ユーザーが何度もログインに失敗");
 
 ### React の Error Boundary と統合
 
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson78 と相性 ◎）。
+Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson68 と相性 ◎）。
 
 ```tsx
 import * as Sentry from "@sentry/react";
@@ -420,7 +420,7 @@ npm run dev
 - React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
 - **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
 - `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
-- `release` / `environment` で **退行（regression）** を可視化
+- `release` / `environment` で **退行**（regression） を可視化
 - **Breadcrumbs** と **Session Replay** で再現が容易になる
 - 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
 - 別のレッスンでは **Vercel Analytics と GA4** に進み、ユーザー行動とパフォーマンスの計測へ

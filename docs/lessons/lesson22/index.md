@@ -1,113 +1,100 @@
-# lesson22: オブジェクト
+# lesson22: 関数
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-const user = { name: 'Alice', age: 20, isStudent: true };
-console.log('name(ドット): ' + user.name);
-console.log('age(ブラケット): ' + user['age']);
-user.age = 21;
-console.log('書き換え後の age: ' + user.age);
-for (const key of Object.keys(user)) {
-  console.log(key + ' = ' + user[key]);
+function add(a, b) {
+  return a + b;
 }
+
+console.log('add(1, 2) =', add(1, 2));
+console.log('add(10, 20) =', add(10, 20));
+console.log('add(-5, 5) =', add(-5, 5));
 `
 </script>
 
 ## ゴール
 
-- `{ key: value }` の形でオブジェクトを作れる
-- ドット記法でプロパティを読み書きできる
-- プロパティを追加・更新できる
+- `function` 宣言で関数を定義できる
+- アロー関数でも関数を定義できる
+- 引数と戻り値（`return`）を使える
 
 ## 解説
 
-### オブジェクトとは
+### 関数とは
 
-「名前付きの値」をいくつかまとめたものがオブジェクトです。配列が「並んだリスト」なら、オブジェクトは「ラベル付きの箱の集まり」です。
+「決まった処理をまとめて名前をつけたもの」が関数です。同じ処理を何度も書く代わりに、関数を 1 つ作っておけば、名前を呼ぶだけで再利用できます。
 
-```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
-};
-```
+### `function` 宣言
 
-- `{` と `}` で囲む
-- 中は `キー: 値` のペアをカンマで区切る
-- キーのことをプロパティ名と呼ぶ
-
-キーは文字列（クオートは省略できる）、値は何でも入れられます（文字列・数値・真偽値・別のオブジェクト・配列など）。
-
-### ドット記法で読み書き
-
-プロパティを読むときも書くときも、ドット（`.`）を使います。
+一番シンプルな書き方です。
 
 ```js
-const user = {
-  name: "Alice",
-  age: 20,
-};
-
-console.log(user.name); // "Alice"
-console.log(user.age);  // 20
-
-user.age = 21;          // 書き換え
-console.log(user.age);  // 21
-
-user.city = "Tokyo";    // 新しいプロパティを追加
-console.log(user.city); // "Tokyo"
-```
-
-存在しないプロパティを読むと `undefined` が返ります。
-
-```js
-console.log(user.email); // undefined
-```
-
-`const` で宣言したオブジェクトでも、プロパティの追加や書き換えはできます（配列と同じ）。
-
-### 配列の中にオブジェクトを並べる
-
-実際のデータでよくある形です。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-console.log(users[0].name);      // "Alice"
-console.log(users[1].age);       // 25
-console.log(users.length);       // 3
-```
-
-`for...of` と組み合わせると、全員の情報を順に処理できます。
-
-```js
-for (const user of users) {
-  console.log(`${user.name} は ${user.age} 歳`);
+function greet(name) {
+  console.log(`こんにちは、${name} さん`);
 }
+
+greet("Alice");
+greet("Bob");
 ```
 
-この「配列にオブジェクトを並べる」形は、TODO アプリやユーザー一覧など、後のレッスンで頻繁に使います。
+- `function 関数名(引数) { ... }` で定義
+- `関数名(値)` で呼び出す
+- 引数は「関数に渡す値」、関数の中では受け取った名前（`name`）で使う
 
-### デモで確認する
+### `return` で値を返す
 
-下のデモでは、オブジェクトをドット記法・ブラケット記法でアクセスし、値の書き換えとプロパティ一覧表示を体感できます。
+関数は「処理をする」だけでなく「結果を返す」こともできます。
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+const result = add(1, 2);
+console.log(result); // 3
+```
+
+- `return 値` で呼び出し元に結果を返す
+- `const result = add(1, 2)` のように、戻り値を変数に受け取れる
+
+`return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
+
+下のデモで、関数を複数回呼び出すと同じ処理が毎回動き、結果だけが引数に応じて変わるのを確認できます。
 
 <LiveDemo
-  height="260px"
-  :html="`<p>オブジェクトの読み書きをまとめて確認するデモ</p>`"
+  height="180px"
+  :html="`<p>関数を複数回呼び出します。</p>`"
   :css="``"
   :js="demoJs"
 />
 
-`Object.keys(obj)` はオブジェクトのキー名を配列で返すメソッドです。ブラケット記法 `obj[key]` と組み合わせると、全プロパティを順に処理できます。
+### アロー関数
+
+もう 1 つの書き方がアロー関数です。「繰り返し処理」の `forEach` で一度出てきました。
+
+```js
+const add = (a, b) => {
+  return a + b;
+};
+
+console.log(add(1, 2)); // 3
+```
+
+- `(引数) => { ... }` の形
+- 変数に入れて使う（`const 関数名 = (引数) => { ... }`）
+
+波かっこの中で「計算 → 即 return」だけしたいときは、波かっこと `return` を省略できます。
+
+```js
+const add = (a, b) => a + b;
+console.log(add(1, 2)); // 3
+```
+
+本コースでは、まず **両方の書き方を読める** ことを目指します。書き分けは後から慣れで身につきます。
+
+### どちらを使う？
+
+どちらでも動きます。近年のコードはアロー関数が多いですが、`function` 宣言も十分使われます。本コースでは混ぜて使うので、どちらも読めるようにしておきます。
 
 ## 演習
 
@@ -130,7 +117,7 @@ for (const user of users) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson21: スコープとクロージャ</h1>
+    <h1>lesson21: 繰り返し処理</h1>
   </body>
 </html>
 ```
@@ -138,49 +125,33 @@ for (const user of users) {
 **`script.js`**
 
 ```js
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+
+console.log("--- for...of ---");
+for (const todo of todos) {
+  console.log(todo);
 }
 
-const counterA = makeCounter();
-const counterB = makeCounter();
+console.log("--- forEach ---");
+todos.forEach((todo) => {
+  console.log(todo);
+});
 
-console.log(counterA());
-console.log(counterA());
-console.log(counterB());
-console.log(counterA());
-console.log(counterB());
-
-function makeFilter(status) {
-  return function (todo) {
-    return todo.status === status;
-  };
+console.log("--- 合計 ---");
+const numbers = [1, 2, 3, 4, 5];
+let total = 0;
+for (const n of numbers) {
+  total = total + n;
 }
-
-const todos = [
-  { text: "牛乳を買う", status: "done" },
-  { text: "本を読む",   status: "todo" },
-  { text: "掃除する",   status: "done" },
-  { text: "ゴミを出す", status: "todo" },
-];
-
-const isDone = makeFilter("done");
-const isTodo = makeFilter("todo");
-
-console.log(todos.filter(isDone));
-console.log(todos.filter(isTodo));
+console.log(total);
 ```
 
 </details>
 
 ### ゴール
 
-- `user` オブジェクトを作り、ドット記法で名前と年齢を読み書きする
-- 配列に複数のユーザーを並べて、`for...of` で全員分表示する
+- 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く
+- 関数に挨拶文を作ってもらう
 
 ### 手順
 
@@ -199,7 +170,7 @@ console.log(todos.filter(isTodo));
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson22: オブジェクト</h1>
+    <h1>lesson22: 関数</h1>
   </body>
 </html>
 ```
@@ -207,67 +178,61 @@ console.log(todos.filter(isTodo));
 ### `script.js`
 
 ```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
+function add(a, b) {
+  return a + b;
+}
+
+const addArrow = (a, b) => {
+  return a + b;
 };
 
-console.log(user);
-console.log(user.name);
-console.log(user.age);
+const addShort = (a, b) => a + b;
 
-user.age = 21;
-console.log(user.age);
+console.log(add(1, 2));
+console.log(addArrow(10, 20));
+console.log(addShort(100, 200));
 
-user.city = "Tokyo";
-console.log(user.city);
-console.log(user);
-
-console.log(user.email);
-
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-for (const u of users) {
-  console.log(`${u.name} は ${u.age} 歳`);
+function greet(name) {
+  return `こんにちは、${name} さん`;
 }
+
+const message = greet("Alice");
+console.log(message);
+console.log(greet("Bob"));
+
+function introduce(name, age) {
+  return `${name}（${age} 歳）です`;
+}
+
+console.log(introduce("Carol", 30));
 ```
 
 ### 期待出力
 
 ```
-{name: "Alice", age: 20, isStudent: true}
-Alice
-20
-21
-Tokyo
-{name: "Alice", age: 21, isStudent: true, city: "Tokyo"}
-undefined
-Alice は 20 歳
-Bob は 25 歳
-Carol は 30 歳
+3
+30
+300
+こんにちは、Alice さん
+こんにちは、Bob さん
+Carol（30 歳）です
 ```
-
-オブジェクト全体を `console.log` したときの表示形式はブラウザで少し異なります。
 
 ### 変える
 
-- `user` に `hobby: "読書"` というプロパティを追加で持たせて `console.log(user.hobby)` を試す
-- `user.isStudent = false;` で値を書き換えて Console に出してみる
-- `users` に 4 人目 `{ name: "Dave", age: 40 }` を `push` で追加し、もう一度 `for...of` で全員出す
+- `add` の中身を `a - b` に変える → Console の 1 行目が `-1` になる
+- `greet` に挨拶の文言 2 種類（朝と夜）を引数で受け取るように変える（`function greet(name, word) { return `${word}、${name} さん`; }`）
+- `introduce` で `return` を書き忘れるとどうなるか確認する（`console.log` で `undefined` が表示される）
 
 ### 自分で書く
 
-- `book` オブジェクト（`title` / `author` / `year`）を作り、3 つのプロパティをテンプレートリテラルで 1 行にまとめて表示する
-- 本を 3 冊入れた `books` 配列を作り、`for...of` で「『タイトル』（著者, 年）」の形で全件出す
+- 3 つの数を合計する関数 `sum3(a, b, c)` を書く
+- 1 つの数を受け取って「偶数」または「奇数」を返す関数 `evenOrOdd(n)` を書く（ヒント: `n % 2 === 0` で偶数判定）
+- 名前と点数を受け取り、点数が 60 以上なら「○○ さんは合格」、そうでなければ「○○ さんは不合格」を返す関数 `judge(name, score)` を書く
 
 ## まとめ
 
-- オブジェクトは `{ key: value, ... }` で作る
-- 読み書きはドット記法（`user.name`）
-- 存在しないプロパティを読むと `undefined`
-- 配列にオブジェクトを並べる形は実務でもよく使う
+- 関数は「処理に名前をつけて再利用するしくみ」
+- 書き方は 2 種類: `function 関数名(...) { ... }` とアロー関数 `(...) => { ... }`
+- `return` で値を返し、呼び出し元で `const 変数 = 関数(...)` で受け取れる
+- 引数は複数渡せる

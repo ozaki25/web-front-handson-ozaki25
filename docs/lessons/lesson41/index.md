@@ -1,194 +1,284 @@
-# lesson41: React ってなに？
+# lesson41: 関数の型
 
 ## ゴール
 
-- React が何を解決する道具なのかを、自分の言葉で説明できる
-- Vite / npm / `package.json` / `npm run dev` の役割をざっくり理解する
-- StackBlitz の React + Vite（TypeScript）テンプレートから、自分の文字を画面に出せる
+- 関数の **引数** と **戻り値** に型を付けられる。
+- 戻り値を返さない関数の型 `void` を理解し、使い分けられる。
+- 「関数そのものの型」（関数型）を書き、変数に代入できる。
 
 ## 解説
 
-### ここまでの立ち位置
+### 2 章 の関数を TS 化する
 
-2 章 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。2 章 の仕上げの「TODO アプリを作る」では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
+2 章 の「関数」では、数値を合計する関数を書きました。
 
-そこまでできるのなら、React はなぜ必要なのでしょうか。
-
-### React が解決すること
-
-素の JS で画面を書き換えるコードを思い出してください。例えば「TODO を 1 件追加する」ためには、次のような手順が必要でした。
-
-1. 新しい `<li>` 要素を `document.createElement` で作る
-2. その中に文字を入れる
-3. 削除ボタンを作って `<li>` の中にくっつける
-4. `<ul>` に `appendChild` で追加する
-
-「画面をこう変えたい」という気持ちから遠い、**手順の羅列**になりがちです。項目数が増えたり、削除・並び替え・ハイライトなど状態の種類が増えると、どの DOM をどう更新するかを一つずつ書かないといけません。バグも混入しやすいです。
-
-React の発想はこうです。
-
-> **画面（UI）を「今の状態」から計算される結果として書く**
-
-コードの書き方は「今、TODO 配列がこうなっているなら、画面はこういう形です」と宣言するだけ。追加・削除で配列が変わると、React が「前の画面」と「新しい画面」を比べて、**変わった箇所だけ** DOM に反映してくれます。
-
-### 「仮想 DOM」という言葉は使わない
-
-古い記事では「仮想 DOM」という言葉で説明されていることがあります。本コースでは次のような現代的な表現を使います。
-
-- React は UI を「JS のツリー」として保持している
-- 状態が変わるたびに、新しいツリーを作って前のツリーと比較する
-- 差があった部分だけ、本物の DOM に反映する
-
-要は「全部書き換えるのではなく、変化した差分だけ反映する」仕組みだと覚えておけば十分です。
-
-### コンポーネントという単位
-
-React では、画面を**コンポーネント**という部品に分けて組み立てます。コンポーネントは「JSX を返す関数」です。
-
-```tsx
-function Hello() {
-  return <h1>Hello, React</h1>;
+```js
+function add(a, b) {
+  return a + b;
 }
 ```
 
-この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。JSX の詳しい書き方は別のレッスンで扱います。
+この関数は `add(1, 2)` なら `3` を返しますが、`add("1", "2")` と呼ぶと `"12"` を返します（文字列結合になる）。引数に何を渡してよいかは、呼ぶ側の「気持ち」だけが頼りです。
 
-### Vite / npm / `package.json` の最低限
+TS では、引数と戻り値に型を付けてこの「気持ち」を明文化できます。
 
-素の JS なら `<script defer src="./script.js">` と書けば動きました。React + TypeScript では、TS を JS に変換したり、開発中に保存するとブラウザを自動更新したりする仕組みが必要です。その仕組みをまとめて提供してくれるのが **Vite（ヴィート）** です。
+### 引数と戻り値の型注釈
 
-Vite は次の 2 つを担います。
+関数宣言で、各引数の名前のあとに `: 型名`、引数リストの閉じ括弧の後ろに `: 戻り値の型` を書きます。
 
-- **開発サーバー**: ファイルを保存するたびに画面を自動更新（`npm run dev`）
-- **ビルド**: 本番公開用に最適化したファイルを出力（`npm run build`）
-
-そして Vite 本体や React 本体などの「外部ライブラリ」をダウンロード・管理する道具が **npm（Node Package Manager）** です。npm は `package.json` というファイルを見て、「このプロジェクトはどのライブラリを使っていて、どのコマンドで起動するか」を判断します。
-
-`package.json` の `scripts` セクションだけ見れば、とりあえず十分です。例えば次のような形です。
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  }
+```ts
+function add(a: number, b: number): number {
+  return a + b;
 }
 ```
 
-`npm run dev` と打つと、npm は `scripts.dev` に書かれているコマンド（ここでは `vite`）を実行します。Vite が開発サーバーを立ち上げて、ブラウザで表示できる状態になります。
+- `a: number` / `b: number`: 引数はどちらも数値。
+- `: number`: 戻り値は数値。
+- 体の中で `return` する値がこの型と合っていないとエラーになる。
 
-### StackBlitz なら自動で走る
+アロー関数でも同じ場所に書きます。
 
-StackBlitz の React + Vite テンプレートを開くと、次のことが自動で起きます。
-
-1. `npm install`（`package.json` に書かれたライブラリをダウンロード）
-2. `npm run dev`（Vite 開発サーバーを起動）
-3. プレビューエリアに画面が表示される
-
-本コースでは `npm install` や `npm run dev` を **知っておく程度** でよく、コマンドを手で打つことはほとんどありません。それでも「StackBlitz の裏では Vite が動いている」「設定は `package.json` に書かれている」ことだけ頭に入れておくと、後で応用が利きます。
-
-### `App.tsx` の位置
-
-Vite の React + TS テンプレートでは、画面の入口となるファイルが 2 つあります。
-
-- `src/main.tsx`: React を起動する（ここは基本触らない）
-- `src/App.tsx`: 画面の中身を書く（本コースではここを中心に触る）
-
-`main.tsx` の中で `<App />` をブラウザに流し込んでいます。イメージとしてはこうです。
-
-```tsx
-// src/main.tsx（テンプレートに最初から入っている）
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+```ts
+const add = (a: number, b: number): number => {
+  return a + b;
+};
 ```
 
-`StrictMode` は「開発中に問題を見つけやすくするラッパー」です。今は気にしなくてよいです。
+### 戻り値の型は推論に任せてもよい
 
-本コースで意識的に編集するのは、基本的に `src/App.tsx` です。
+戻り値の型は、`return` している値から TS が自動で決めてくれます（型推論）。普段は省略することが多いです。
+
+```ts
+function add(a: number, b: number) {
+  return a + b; // 戻り値は number と推論される
+}
+```
+
+このレッスンでは学習目的で、あえて戻り値の型も書きます。関数がどんな型を返すのかを **意図として** 書き残すと、実装が意図とずれたときに TS が止めてくれるからです。
+
+### 戻り値がない関数は `void`
+
+`console.log` のように、何かを実行するだけで **値を返さない** 関数があります。この「値を返さない」を表す型が `void` です。
+
+```ts
+function greet(name: string): void {
+  console.log(`Hello, ${name}`);
+}
+
+greet("Alice"); // 呼び出すだけ。戻り値は使わない
+```
+
+- `void` 型の関数を `return` 付きで書くと、`return;`（値なし）か、そもそも `return` を書かないかのどちらか。
+- `void` と書いた関数の戻り値を使おうとすると、TS は警告する。
+
+### 関数そのものの型（関数型）
+
+「この変数には、数値 2 つを受け取って数値を返す関数が入る」と書きたい場面があります。関数の型は次のように書きます。
+
+```ts
+const add: (a: number, b: number) => number = (a, b) => a + b;
+```
+
+左辺の `: (a: number, b: number) => number` が **関数型** です。
+
+- `(a: number, b: number)`: 引数の型。名前は何でもよいが、書く必要がある。
+- `=>`: この矢印は「関数の型を表す矢印」。アロー関数の `=>` と見た目は同じだが、文法上の位置が違う。
+- `number`: 戻り値の型。
+
+左辺で型を決めてしまっているので、右辺のアロー関数では引数の型注釈を省略できます（型推論が働く）。
+
+関数を **引数として受け取る関数** でも同じ書き方が使えます。
+
+```ts
+function twice(fn: (n: number) => number, value: number): number {
+  return fn(fn(value));
+}
+
+twice((n) => n + 1, 10); // 12
+```
+
+関数型を使うと「関数を受け渡すときの契約」を型で書けるようになります。2 章 の「配列の変換」の `map` / `filter` に渡す関数も、実は TS のライブラリ側で関数型が定義されています。
+
+### 引数の数が合わないのもエラー
+
+TS は「宣言した数と違う数の引数で呼び出す」こともエラーにします。
+
+```ts
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+add(1);       // エラー: 引数が足りない
+add(1, 2, 3); // エラー: 引数が多い
+```
+
+典型的なメッセージはこうなります。
+
+```
+Expected 2 arguments, but got 1.
+Expected 2 arguments, but got 3.
+```
+
+省略できる引数を作る方法は「配列・ユニオン・リテラル型・オプショナル」でオプショナルプロパティと合わせて扱います。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-### ゴール
+### 手順 1: `add` を TS 化する
 
-- StackBlitz の React + Vite（TS）テンプレートから新しいプロジェクトを起動する
-- `src/App.tsx` を編集して「Hello, React」とあなたの名前を画面に表示する
-- `package.json` を開いて `scripts.dev` の値を確認する
+`src/main.ts` の中身を以下に置き換える。
 
-### 手順
-
-1. ブラウザで [https://stackblitz.com/](https://stackblitz.com/) を開く
-2. トップ画面の「Start a new project」セクションから、**Vite のロゴ付きで「react-ts」（あるいは「React + Vite + TS」「React TypeScript Vite」などと表記）** のテンプレートを選ぶ
-   - 旧 Create React App（CRA）ベースの「React」テンプレートも並んでいることがあるが、本コースでは **必ず「Vite」側** を選ぶ
-   - 「Vanilla TypeScript」「Next.js」は今回は選ばない
-3. 直接次の URL を開いても同じテンプレートが立ち上がる → [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts)
-4. 左のファイルツリーから `src/App.tsx` を開く
-5. 中身を下記の内容に書き換える
-6. 右のプレビューで確認する
-
-### `src/App.tsx`
-
-```tsx
-function App() {
-  const userName = "Alice";
-  return (
-    <div>
-      <h1>Hello, React</h1>
-      <p>こんにちは、{userName} さん</p>
-    </div>
-  );
+```ts
+function add(a: number, b: number): number {
+  return a + b;
 }
 
-export default App;
+console.log(add(1, 2));
+console.log(add(10, 20));
 ```
 
-`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です（詳しくは別のレッスン）。
+#### 期待出力
 
-### 期待出力
-
-プレビューに次の 2 行が表示されます。
+Console に次のように出る。
 
 ```
-Hello, React
-こんにちは、Alice さん
+3
+30
 ```
 
-見出しの `Hello, React` が `<h1>` の大きな文字、`こんにちは、Alice さん` が `<p>` の通常の大きさで並びます。
+### 手順 2: わざと間違えてエラーを見る
 
-### 変える
+次のように呼び出しを変えて、それぞれのエラーを確認する。確認したら元に戻すこと。
 
-- `const userName = "Alice";` の `"Alice"` をあなたの名前に書き換えて保存する。保存するとプレビューが自動で更新されることを確認する
-- `<h1>Hello, React</h1>` を `<h1>Hello, 世界</h1>` に変えて保存。これも即反映されるはず
+```ts
+console.log(add("1", "2"));
+```
+
+期待されるメッセージ:
+
+```
+Argument of type 'string' is not assignable to parameter of type 'number'.
+```
+
+```ts
+console.log(add(1));
+```
+
+期待されるメッセージ:
+
+```
+Expected 2 arguments, but got 1.
+```
+
+```ts
+function add(a: number, b: number): number {
+  return `${a}${b}`; // 文字列を返してしまう
+}
+```
+
+期待されるメッセージ:
+
+```
+Type 'string' is not assignable to type 'number'.
+```
+
+最後のパターンは「戻り値の型注釈が、実装のミスを捕まえてくれる」例です。
+
+### 手順 3: `void` 型の関数
+
+次のコードを追記して動かす。
+
+```ts
+function greet(name: string): void {
+  console.log(`Hello, ${name}`);
+}
+
+greet("Alice");
+greet("Bob");
+```
+
+#### 期待出力
+
+```
+Hello, Alice
+Hello, Bob
+```
+
+次に、戻り値を使おうとしてみる。
+
+```ts
+const result = greet("Alice");
+console.log(result.toUpperCase());
+```
+
+`result` は `void` 型なので、`.toUpperCase()` を呼ぶと次のようなメッセージが出る。
+
+```
+Property 'toUpperCase' does not exist on type 'void'.
+```
+
+「`void` 型に `toUpperCase` というプロパティは存在しない」という意味。`void` は「値が無いことを表す型」なので、そもそも値として使ってはいけない、と TS が教えてくれている。
+
+### 手順 4: 関数型を書いてみる
+
+次のコードを書く。
+
+```ts
+const multiply: (a: number, b: number) => number = (a, b) => a * b;
+
+function twice(fn: (n: number) => number, value: number): number {
+  return fn(fn(value));
+}
+
+console.log(multiply(3, 4));
+console.log(twice((n) => n + 1, 10));
+console.log(twice((n) => n * 2, 5));
+```
+
+#### 期待出力
+
+```
+12
+12
+20
+```
+
+- `multiply(3, 4)` は `12`。
+- `twice((n) => n + 1, 10)` は「10 に 1 を足す」を 2 回で `12`。
+- `twice((n) => n * 2, 5)` は「5 を 2 倍」を 2 回で `20`。
+
+### 変えてみる
+
+`twice` に、数値ではなく文字列を返す関数を渡してみる。
+
+```ts
+twice((n) => `number: ${n}`, 10);
+```
+
+期待されるメッセージ:
+
+```
+Type 'string' is not assignable to type 'number'.
+```
+
+`twice` の引数 `fn` は `(n: number) => number` 型なので、文字列を返す関数は渡せない、と教えてくれる。
 
 ### 自分で書く
 
-- 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
-- 変数の型は今は書かなくてよい（3 章 でやった型注釈は、次の lesson で必要に応じて使う）
+次の条件を満たす関数を何も見ずに書く。
 
-### `package.json` を覗く小タスク
+1. `subtract(a: number, b: number): number` — 引き算して返す関数。
+2. `printUser(name: string, age: number): void` — `"Alice (20)"` のように Console に出すだけの関数。
+3. 関数型 `(s: string) => string` を持つ変数 `shout` に、「文字列を受け取って大文字にして `!` を足して返す関数」を代入する。
 
-1. 左のファイルツリーから `package.json` を開く
-2. `"scripts"` の中を見つける
-3. `"dev": "vite"` のような行があることを確認する
-
-StackBlitz が自動で走らせているのは、この `vite` コマンドです。手元で同じことをやるなら、ターミナルで `npm install` → `npm run dev` と打つ流れになります。
+書けたら、それぞれを 1 回ずつ呼び出して期待通りに動くことを確認する。
 
 ## まとめ
 
-- React は「画面を今の状態から計算する」発想の道具。差分だけを DOM に反映する
-- 画面は**コンポーネント**（JSX を返す関数）の組み合わせで作る
-- Vite は開発サーバーとビルドを担当し、`npm run dev` で起動する
-- `package.json` の `scripts` セクションに、起動やビルドのコマンドがまとまっている
-- StackBlitz を使う限り、`npm install` も `npm run dev` も自動で走る。コマンドは知っておく程度で OK
-- 編集するのは基本的に `src/App.tsx`
+- 関数の引数と戻り値に型を付けると、呼び出し側と実装の両方のミスを TS が事前に止めてくれる。
+- 値を返さない関数は `void` を戻り値の型として使う。`void` の戻り値は値として使えない。
+- 関数そのものの型は `(引数名: 型) => 戻り値の型` で書ける。関数を受け渡すときの「契約」になる。
+- 別のレッスンで、複数のプロパティをまとめた **オブジェクト型** と、型に名前を付ける `type` エイリアスを学ぶ。2 章 の TODO の 1 件を表す `Todo` 型を作っていく。

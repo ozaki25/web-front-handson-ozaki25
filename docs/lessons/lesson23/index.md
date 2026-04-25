@@ -1,132 +1,197 @@
-# lesson23: 分割代入とスプレッド
+# lesson23: スコープとクロージャ
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-const user = { name: 'Alice', age: 20 };
-const { name, age } = user;
-console.log('取り出し: ' + name + ', ' + age);
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
 
-const colors = ['red', 'green', 'blue'];
-const [first, ...rest] = colors;
-console.log('first: ' + first);
-console.log('rest: ' + JSON.stringify(rest));
+const counterA = makeCounter();
+const counterB = makeCounter();
 
-const updated = { ...user, age: 21 };
-console.log('updated: ' + JSON.stringify(updated));
-console.log('元の user: ' + JSON.stringify(user));
-
-const merged = [...colors, 'yellow'];
-console.log('merged: ' + JSON.stringify(merged));
+console.log('A:', counterA()); // 1
+console.log('A:', counterA()); // 2
+console.log('B:', counterB()); // 1
+console.log('A:', counterA()); // 3
+console.log('B:', counterB()); // 2
 `
 </script>
 
 ## ゴール
 
-- オブジェクトや配列から値を分割代入で取り出せる
-- スプレッド構文でオブジェクトや配列をコピー・結合できる
-- 2 つの書き方を「取り出す」vs「まとめる・広げる」で使い分けられる
+- `let` / `const` のブロックスコープと関数スコープを区別できる
+- 「関数の中で作った変数」は外から触れないことを理解する
+- クロージャ（関数が「作られた場所の変数」を覚えているしくみ）を体感する
+- `makeCounter()` のように、関数を呼ぶたびに独立した状態を持たせられる
 
 ## 解説
 
-### 最初に注意
+### スコープとは
 
-分割代入とスプレッドは **見た目が似ていて混同しやすい** 機能です。先に目的の違いを押さえます。
+**変数が有効な範囲** のことを **スコープ** と呼びます。変数は「どこで宣言したか」によって、見える範囲が決まります。
 
-| 構文 | どこに書く | 目的 | イメージ |
-| --- | --- | --- | --- |
-| 分割代入 | 代入の **左辺** | 値を **取り出す** | 箱の中身を取り出す |
-| スプレッド `...` | 代入の **右辺**（配列・オブジェクトの中） | 値を **まとめる・広げる** | 中身を並べ直す |
+スコープを知らないと、「なぜこの変数が `undefined` なのか」「なぜ外から触れないのか」がわからず、デバッグで迷子になりやすくなります。
 
-この表を意識していれば、コードを読むときに迷いにくくなります。
+### ブロックスコープ（`let` / `const`）
 
-### オブジェクトの分割代入
-
-オブジェクトから特定のプロパティを取り出して、同じ名前の変数に入れます。
+`{` と `}` で囲まれた部分を **ブロック** と呼びます。`let` と `const` で宣言した変数は、そのブロックの中でしか使えません。
 
 ```js
-const user = { name: "Alice", age: 20 };
+if (true) {
+  const message = "こんにちは";
+  console.log(message); // "こんにちは"
+}
 
-const { name, age } = user;
-console.log(name); // "Alice"
-console.log(age);  // 20
+console.log(message); // ReferenceError: message is not defined
 ```
 
-`const { name } = user;` のように、欲しいものだけ取り出すこともできます。従来の書き方は `const name = user.name;` で、分割代入はそれを一度に書くための構文です。
-
-### 配列の分割代入
-
-配列の場合は `[` `]` を使います。位置（インデックス）で取り出します。
+- ブロックの中で宣言した変数は、ブロックの外からは見えない
+- `for` ループの `{` と `}` も同じ
 
 ```js
-const colors = ["red", "green", "blue"];
+for (let i = 0; i < 3; i++) {
+  console.log(i); // 0, 1, 2
+}
 
-const [first, second] = colors;
-console.log(first);  // "red"
-console.log(second); // "green"
+console.log(i); // ReferenceError: i is not defined
 ```
 
-### オブジェクトのスプレッド
+ループが終わった後、`i` はもう存在しません。
 
-既存のオブジェクトの中身を「展開」して、新しいオブジェクトを作るときに使います。
+### 関数スコープ
+
+関数の中で宣言した変数も、関数の外からは見えません。
 
 ```js
-const user = { name: "Alice", age: 20 };
+function greet() {
+  const message = "こんにちは";
+  console.log(message);
+}
 
-const copy = { ...user };
-console.log(copy); // { name: "Alice", age: 20 }
-
-const updated = { ...user, age: 21 };
-console.log(updated); // { name: "Alice", age: 21 }
-console.log(user);    // { name: "Alice", age: 20 } （元のオブジェクトは変わらない）
+greet(); // "こんにちは"
+console.log(message); // ReferenceError: message is not defined
 ```
 
-- `{ ...user }` で元の中身を展開してコピー
-- 後ろに `age: 21` を書くと、同じキーは上書きされる
-- 元のオブジェクトは変わらない（これを「イミュータブルな更新」と呼ぶ。4 章 で再登場）
+関数の中は「独立した部屋」と思ってください。中で作った変数は、その部屋を出たら使えません。
 
-### 配列のスプレッド
+### レキシカルスコープ（書かれた場所で決まる）
 
-配列も同じように展開できます。
+JavaScript のスコープは **「書かれた場所」** で決まります。呼び出された場所ではありません。これを **レキシカルスコープ** と呼びます。
 
 ```js
-const a = [1, 2];
-const b = [3, 4];
+const name = "外側";
 
-const merged = [...a, ...b];
-console.log(merged); // [1, 2, 3, 4]
+function outer() {
+  const name = "内側";
+  inner();
+}
 
-const appended = [...a, 100];
-console.log(appended); // [1, 2, 100]
+function inner() {
+  console.log(name); // "外側"
+}
+
+outer();
 ```
 
-### 分割代入とスプレッドの対比表
+`inner` は `outer` から呼ばれていますが、**`inner` が書かれた場所** から見える `name` は外側の `"外側"` です。そのため `"外側"` が出力されます。
 
-もう一度整理します。
+### クロージャ
 
-| やりたいこと | 書き方 | 例 |
-| --- | --- | --- |
-| オブジェクトから値を取り出す | `const { key } = obj` | `const { name } = user` |
-| 配列から値を取り出す | `const [a, b] = arr` | `const [first, second] = colors` |
-| オブジェクトをコピー / 一部だけ変える | `{ ...obj, key: newValue }` | `{ ...user, age: 21 }` |
-| 配列をコピー / 結合 / 末尾追加 | `[...arr, newValue]` | `[...todos, "新しい"]` |
+関数は、自分の外側のスコープにある変数を **覚えています**。関数を「外に持ち出しても」その変数を使い続けられます。このしくみを **クロージャ** と呼びます。
 
-「左辺に書く `{ }` / `[ ]`」は取り出す。「右辺の中に書く `...`」はまとめる・広げる。この対比で覚えます。
+```js
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
 
-### デモで確認する
+const counter = makeCounter();
+console.log(counter()); // 1
+console.log(counter()); // 2
+console.log(counter()); // 3
+```
 
-下のデモでは、オブジェクトと配列の分割代入、レスト構文、スプレッドによるコピー・マージを一通り実行します。元の値が変わらないこともあわせて確認できます。
+`makeCounter` を呼ぶと、中に作られた `count` と、それを使う関数（戻り値）が一緒に「閉じ込められて」返ってきます。外から `count` に直接触ることはできませんが、返ってきた関数を呼ぶたびに `count` が 1 増えます。
+
+#### 独立したカウンタが複数作れる
+
+`makeCounter()` を 2 回呼ぶと、それぞれが **別の `count`** を持ちます。
+
+```js
+const counterA = makeCounter();
+const counterB = makeCounter();
+
+console.log(counterA()); // 1
+console.log(counterA()); // 2
+console.log(counterB()); // 1 （counterA とは独立）
+console.log(counterA()); // 3
+console.log(counterB()); // 2
+```
+
+`counterA` と `counterB` は、それぞれ自分専用の `count` を抱えています。これが「関数が状態を閉じ込める」しくみです。
+
+下のデモで、独立したカウンタ 2 つがそれぞれ別の `count` を持っている様子を体感できます。`counterA` を 3 回呼んでも `counterB` は影響を受けません。
 
 <LiveDemo
-  height="300px"
-  :html="`<p>分割代入とスプレッドをまとめて確認するデモ</p>`"
+  height="220px"
+  :html="`<p>独立した 2 つのカウンタを動かします。</p>`"
   :css="``"
   :js="demoJs"
 />
 
-`...rest` のように左辺で使うと「残り全部をまとめる」レスト構文になります。右辺で使うスプレッドと見た目は同じですが、役割は「取り出し」側である点に注意します。
+#### 関数を作って返す（`makeFilter`）
+
+同じパターンで、**設定を覚えた関数** を作ることもできます。「配列の変換」の `filter` と組み合わせる例を見てみます。
+
+```js
+function makeFilter(status) {
+  return function (todo) {
+    return todo.status === status;
+  };
+}
+
+const isDone = makeFilter("done");
+const isTodo = makeFilter("todo");
+
+const todos = [
+  { text: "牛乳を買う", status: "done" },
+  { text: "本を読む",   status: "todo" },
+  { text: "掃除する",   status: "done" },
+];
+
+console.log(todos.filter(isDone));
+// [{ text: "牛乳を買う", status: "done" }, { text: "掃除する", status: "done" }]
+
+console.log(todos.filter(isTodo));
+// [{ text: "本を読む", status: "todo" }]
+```
+
+`makeFilter("done")` で返ってきた関数は、**`status` が `"done"` だったこと** を覚えています。この関数を `filter` に渡すと、`status === "done"` の要素だけが残ります。
+
+「呼び出し時の引数を覚えた新しい関数を作る」のは、クロージャのとても実用的な使い方です。
+
+### `var` との違い（軽く対比のみ）
+
+古いコードでは `var` を見かけます。`var` はブロックスコープではなく **関数スコープ** で、宣言前に使ってもエラーにならず `undefined` になる（**巻き上げ**）という挙動があります。
+
+```js
+console.log(a); // undefined （エラーにならない）
+var a = 1;
+
+if (true) {
+  var b = 2;
+}
+console.log(b); // 2 （ブロックの外でも見える）
+```
+
+本コースでは `let` / `const` だけを使います。`var` は「そういう古い書き方がある」とだけ覚えておけば十分です。
 
 ## 演習
 
@@ -149,7 +214,7 @@ console.log(appended); // [1, 2, 100]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson22: オブジェクト</h1>
+    <h1>lesson22: 関数</h1>
   </body>
 </html>
 ```
@@ -157,42 +222,41 @@ console.log(appended); // [1, 2, 100]
 **`script.js`**
 
 ```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
+function add(a, b) {
+  return a + b;
+}
+
+const addArrow = (a, b) => {
+  return a + b;
 };
 
-console.log(user);
-console.log(user.name);
-console.log(user.age);
+const addShort = (a, b) => a + b;
 
-user.age = 21;
-console.log(user.age);
+console.log(add(1, 2));
+console.log(addArrow(10, 20));
+console.log(addShort(100, 200));
 
-user.city = "Tokyo";
-console.log(user.city);
-console.log(user);
-
-console.log(user.email);
-
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-for (const u of users) {
-  console.log(`${u.name} は ${u.age} 歳`);
+function greet(name) {
+  return `こんにちは、${name} さん`;
 }
+
+const message = greet("Alice");
+console.log(message);
+console.log(greet("Bob"));
+
+function introduce(name, age) {
+  return `${name}（${age} 歳）です`;
+}
+
+console.log(introduce("Carol", 30));
 ```
 
 </details>
 
 ### ゴール
 
-- （A）`user` オブジェクトから `name` と `age` を分割代入で取り出して表示する
-- （B）分割代入で取り出した値と、既存オブジェクトをスプレッドでマージして新しいオブジェクトを作る
+- `makeCounter()` で独立したカウンタ `counterA` / `counterB` を作る
+- `makeFilter(status)` で「状態ごとのフィルタ関数」を作り、`filter` に渡す
 
 ### 手順
 
@@ -211,7 +275,7 @@ for (const u of users) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson23: 分割代入とスプレッド</h1>
+    <h1>lesson23: スコープとクロージャ</h1>
   </body>
 </html>
 ```
@@ -219,69 +283,77 @@ for (const u of users) {
 ### `script.js`
 
 ```js
-// 演習 A: 分割代入
-const user = { name: "Alice", age: 20, city: "Tokyo" };
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
 
-const { name, age } = user;
-console.log(name);
-console.log(age);
+const counterA = makeCounter();
+const counterB = makeCounter();
 
-const colors = ["red", "green", "blue"];
-const [first, second] = colors;
-console.log(first);
-console.log(second);
+console.log(counterA()); // 1
+console.log(counterA()); // 2
+console.log(counterB()); // 1
+console.log(counterA()); // 3
+console.log(counterB()); // 2
 
-// 演習 B: スプレッド
-const copy = { ...user };
-console.log(copy);
+function makeFilter(status) {
+  return function (todo) {
+    return todo.status === status;
+  };
+}
 
-const updated = { ...user, age: 21 };
-console.log(updated);
-console.log(user);
+const todos = [
+  { text: "牛乳を買う", status: "done" },
+  { text: "本を読む",   status: "todo" },
+  { text: "掃除する",   status: "done" },
+  { text: "ゴミを出す", status: "todo" },
+];
 
-const a = [1, 2];
-const b = [3, 4];
-const merged = [...a, ...b];
-console.log(merged);
+const isDone = makeFilter("done");
+const isTodo = makeFilter("todo");
 
-const todos = ["牛乳を買う", "本を読む"];
-const added = [...todos, "ジョギング"];
-console.log(added);
-console.log(todos);
+console.log(todos.filter(isDone));
+console.log(todos.filter(isTodo));
 ```
 
 ### 期待出力
 
 ```
-Alice
-20
-red
-green
-{name: "Alice", age: 20, city: "Tokyo"}
-{name: "Alice", age: 21, city: "Tokyo"}
-{name: "Alice", age: 20, city: "Tokyo"}
-[1, 2, 3, 4]
-["牛乳を買う", "本を読む", "ジョギング"]
-["牛乳を買う", "本を読む"]
+1
+2
+1
+3
+2
+[{text: "牛乳を買う", status: "done"}, {text: "掃除する", status: "done"}]
+[{text: "本を読む", status: "todo"}, {text: "ゴミを出す", status: "todo"}]
 ```
 
-スプレッドで作った `updated` や `added` は新しいオブジェクト / 配列で、元の `user` や `todos` は変わらないことを確認します。
+- `counterA` と `counterB` の出力が独立している（`counterB` を呼んでも `counterA` の値には影響しない）
+- `isDone` / `isTodo` を `filter` に渡すと、それぞれの状態の TODO だけが抽出される
 
 ### 変える
 
-- 分割代入で `const { name, city } = user;` に変え、`city` の値を取り出す
-- `const [, second, third] = colors;` で先頭を飛ばして 2 番目と 3 番目を取り出す（カンマで位置をずらす）
-- `const updated2 = { ...user, name: "Bob" };` で名前を上書きした新オブジェクトを作る
-- `const added2 = ["先頭", ...todos];` で先頭に追加してみる
+- `makeCounter` の `count = 0` を `count = 10` に変える → `counterA()` の初回が `11` から始まる
+- `makeCounter` の中の `count = count + 1` を `count = count + 2` にする → 2 ずつ増える
+- `makeFilter("todo")` を `makeFilter("done")` に書き換えて、結果が変わることを確認する
 
 ### 自分で書く
 
-- `book = { title: "JS入門", author: "山田", year: 2024 }` を作り、分割代入で `title` と `author` を取り出して「『○○』（○○）」の形で表示
-- 上記 `book` からスプレッドを使って `year` だけ `2025` に変えた新しいオブジェクトを作り、両方とも Console に出して、元は変わらないことを確認
+- `makeAdder(n)` を作る。`makeAdder(5)` を呼ぶと「引数に 5 を足す関数」が返ってくる。`add5(10)` が `15` を返せば OK（ヒント: 戻り値の関数の中で外側の `n` を使う）
+- `makeGreeter(word)` を作る。`makeGreeter("こんにちは")` を呼ぶと「`(name) => `${word}、${name} さん`` のような関数」が返ってくる。`greetJa("Alice")` で `"こんにちは、Alice さん"` が返れば OK
+- `makeCounter` を改造して、呼ぶと `{ increment, reset, value }` の 3 つの関数を持つオブジェクトを返すようにする（余力があれば）
 
 ## まとめ
 
-- 分割代入は左辺で書く「取り出し」の構文
-- スプレッドは右辺で書く「まとめる・広げる」の構文
-- 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本
-- **この分割代入の書き方は「コンポーネントと props」で `function Greeting({ name }: Props)` のように React の props として再登場する**
+- 変数には **スコープ**（有効な範囲）がある
+- `let` / `const` は **ブロックスコープ**、関数の中の変数は **関数スコープ**
+- JavaScript は **レキシカルスコープ**: 変数の見える範囲は「書かれた場所」で決まる
+- **クロージャ** は「関数が自分の外側の変数を覚えているしくみ」
+- `makeCounter()` のように、関数を呼ぶたびに **独立した状態** を閉じ込めた関数を返せる
+- `makeFilter(status)` のように、**引数を覚えた関数** を作って他のメソッドに渡せる
+- 本コースでは `let` / `const` だけを使う。`var` の古い挙動は覚えなくてよい
+- **ここで体感した「関数が状態を閉じ込める」しくみは、4 章 の「カスタムフック」で再登場します**。`useTodos()` のような関数が内部の state を閉じ込めて、呼び出し側に必要な操作だけを返す、という形で、`makeCounter` / `makeFilter` と同じ発想を React の文脈で使います

@@ -1,157 +1,298 @@
-# lesson87: 同時接続数と HTTP/2 / HTTP/3
+# lesson87: Loading UI と Streaming
 
 ## ゴール
 
-- ブラウザが **同じドメインに対して同時に張れる接続数** に上限があることを知る
-- HTTP/1.1 の問題（Head-of-Line ブロッキング / 接続数制限）を 1 行で説明できる
-- HTTP/2 の多重化（1 接続で複数リクエスト）で何が変わったか説明できる
-- HTTP/3 の QUIC で何がさらに変わったか（UDP ベース / パケロス耐性）を大まかに説明できる
-- 昔の定番テク「画像を 1 枚にまとめる（CSS スプライト）」が HTTP/2 時代には不要になった理由を説明できる
+- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
+- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
+- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
+- React 19.2 + Next.js 16 の Server Component でどう動くかを、1 つの演習を通して体感する
 
 ## 解説
 
-### HTTP/1.1 の時代の制約
+### `loading.tsx` の役割
 
-HTTP/1.1 では、ブラウザはサーバーとの間に **TCP 接続を張って、リクエストとレスポンスを 1 往復しては次** という使い方をしていました。素直な仕組みですが、2 つの厄介な問題がありました。
-
-#### 同じドメインへの接続数の上限
-
-1 つの TCP 接続で一度に 1 つのリクエスト・レスポンスしか扱えないため、複数ファイルを取るには複数接続を張る必要があります。でも、ブラウザは **同じドメインに対して同時に張れる接続数を 6 本程度** に制限していました（Chrome / Firefox / Safari いずれも 6 が目安）。
-
-つまり、1 つのページで 100 個の画像を読もうとすると、最初の 6 個だけが並行で走り、残り 94 個は **前のどれかが終わるのを待ち続ける** という状況になります。
-
-#### Head-of-Line ブロッキング
-
-TCP 接続はリクエストを **順番に** 処理します。仮に先頭のリクエストがサーバーでちょっと遅かった場合、同じ接続の後続のリクエストも **全部待たされる** 形になります。これを Head-of-Line（先頭行）ブロッキングと呼びます。
-
-#### 当時の定番「対策テク」
-
-HTTP/1.1 時代、これらの制約を回避するために以下のようなテクニックが常識でした。
-
-- **CSS スプライト**: 多数の小さなアイコン画像を 1 枚の大きな画像にまとめ、CSS の `background-position` で 1 枚から必要な部分だけ切り出して使う。リクエスト数を減らす
-- **画像のドメイン分散**: `img1.example.com` / `img2.example.com` のようにサブドメインを分けて、接続数制限を回避（各ドメインにつき 6 本なので、2 ドメインで 12 本張れる）
-- **JS / CSS の結合**（バンドル）: 複数ファイルを 1 つに連結
-- **インライン化**: 小さな画像を Data URL で HTML / CSS に埋め込み
-
-これらは **現代（HTTP/2 以降）では逆に遅くなることが多い** 最適化です。なぜそうなったかを次から見ていきます。
-
-### HTTP/2 の登場と「多重化」
-
-HTTP/2（2015 年標準化）の最大の変更点は **多重化（multiplexing）** です。1 本の TCP 接続の上で、**複数のリクエスト・レスポンスを同時並行** に流せるようになりました。
+Server Component でデータ取得を行うと、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
 
 ```
-HTTP/1.1: [req1]→[res1]→[req2]→[res2]→[req3]→[res3]  （順に 1 つずつ）
-
-HTTP/2:   [req1, req2, req3]─→1 本の接続の中で並行に処理→[res1, res2, res3]
+app/
+└── posts/
+    ├── page.tsx       ← データ取得込みのページ
+    └── loading.tsx    ← 取得中に表示される
 ```
 
-この仕組みで、HTTP/1.1 の「同じドメインへの接続数制限」は **実質無くなりました**。6 本の制限は「TCP 接続の数」の話なので、1 本の TCP 接続で何十ものリクエストを並行できる HTTP/2 では気にしなくてよくなります。
+- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
+- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
 
-さらに次の改善も入っています。
+これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
 
-- **ヘッダ圧縮**（HPACK）: 繰り返される `User-Agent` などを圧縮
-- **サーバープッシュ**: サーバーから先回りでリソースを送る（結局ほとんど使われなかったため、現在は事実上廃止）
-- **バイナリプロトコル**: テキストではなくバイナリフレームで効率化
+### ルート単位のローディングだけだと粗い
 
-HTTP/2 は HTTPS 上で動くのが標準で、Vercel や Netlify などの主要なホスティングは **デフォルトで HTTP/2** を使っています。本コースの教材サイトも HTTP/2 で配信されています（DevTools Network タブの Protocol 列で確認できます）。
+`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
 
-### HTTP/2 でも残った問題: TCP レベルの Head-of-Line
+例: 記事ページに
 
-HTTP/2 はアプリケーション層（HTTP）の多重化は解決しましたが、下の **TCP 層で 1 つのパケットが失われると、そのあとの全パケットが待たされる** という Head-of-Line ブロッキングは残っていました。
+- 記事本文（速い、キャッシュ済み）
+- 関連記事（遅い、外部 API から取得）
 
-普通の有線 LAN ではほぼ問題になりませんが、**モバイル通信で電波が悪いとき** に影響が出ます。この問題を解決するのが次の HTTP/3 です。
+があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
 
-### HTTP/3 の登場: QUIC（UDP ベース）
+### 部分的 Streaming: `<Suspense>` で囲む
 
-HTTP/3（2022 年標準化）は **TCP ではなく UDP 上** で動きます。その上に **QUIC** という新しい多重化プロトコルを載せる形です。
+遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
 
-QUIC の特徴:
+```tsx
+// app/posts/[id]/page.tsx
+import { Suspense } from "react";
+import RelatedPosts from "./RelatedPosts";
 
-- **パケットロスに強い**: 1 ストリームで損失があっても、他のストリームは独立して進む（TCP レベルの Head-of-Line ブロッキング解消）
-- **接続確立が速い**: TLS ハンドシェイクと一緒に行うことで往復を減らせる
-- **接続の移動が可能**: Wi-Fi からモバイル回線に切り替わっても、接続 ID で継続できる
+export default async function PostPage() {
+  return (
+    <>
+      <h1>記事本文（すぐ出る）</h1>
+      <p>...本文...</p>
 
-モバイルファーストや、電波状況が安定しない環境ではっきり速さに差が出ます。Cloudflare / Vercel など現代の CDN は HTTP/3 にも対応しており、対応ブラウザからは自動で HTTP/3 で配信されます。
+      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
+        <RelatedPosts />
+      </Suspense>
+    </>
+  );
+}
+```
 
-### 「HTTP/2 時代には 1 枚画像にまとめなくていい」の意味
+- `<h1>` と `<p>` は先にブラウザに届く
+- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
+- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
 
-CSS スプライト（多数アイコンを 1 枚にまとめる）は、HTTP/1.1 では次のようなメリットがありました。
+これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
 
-- リクエスト数が減る（接続数制限の回避）
-- TCP ハンドシェイクのオーバーヘッドが減る
+### `loading.tsx` と `<Suspense>` の棲み分け
 
-しかし HTTP/2 では:
+ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
 
-- **1 接続で並行にいくつでも取れる** ので、10 個のアイコンを別々に取っても接続数コストはほぼゼロ
-- スプライト画像は **一括更新の負担が大きい**（1 個のアイコン差し替えで 1 枚全部再ダウンロード）
-- **キャッシュ効率が悪い**（差分更新できない）
-- 解像度別やダークモード別の切り出しが面倒
+- **`loading.tsx`**（ルート単位）: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
+- **`<Suspense>`**（コンポーネント単位）: ページの中で遅い領域だけを個別に待たせる
 
-このため HTTP/2 時代には **個別のアイコンファイルをそのまま置いておく** ほうが、キャッシュ効率も開発しやすさも勝ります。バンドルも同じで、「全部 1 つに結合」より「ページ単位でコード分割」のほうがキャッシュが効く場面が多くなりました。
+両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
 
-### じゃあバンドルは不要？（実務の現在地）
+### `error.tsx` との関係
 
-「HTTP/2 でリクエスト数のコストが激減したのだから、バンドル自体不要では？」と思うかもしれません。実際は以下のバランスで運用されています。
+「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
 
-- **たくさんの小さなファイル**: リクエスト 1 本あたりのヘッダ / 認証 / TLS のオーバーヘッドはゼロにはならない。あまりに細切れだと逆に遅い
-- **大きすぎる単一バンドル**: 1 つ直すだけで全部キャッシュ破棄される。分割しないと差分更新が効かない
+| 何が起きた？ | 担当ファイル |
+|---|---|
+| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
+| 取得に失敗・例外が飛んだ | `error.tsx` |
 
-現代のフレームワーク（Vite / webpack / Next.js / Remix）は **適切な粒度でコードを分割** しつつ、**チャンクには安定したハッシュ名** を付けてキャッシュさせる、という中間解を採用しています。Vite の `dist/assets/` の中身を見ると、機能や経路ごとに分かれた `.js` / `.css` が並んでいるのがわかります。
+両方置いておくのが実用的な構成です。
 
-### 確認してみよう
+```
+app/
+└── posts/
+    ├── page.tsx
+    ├── loading.tsx
+    └── error.tsx
+```
 
-今見ているページの通信がどのプロトコルで流れているかは、DevTools Network タブの **`Protocol`** 列で確認できます（列が出ていなければヘッダを右クリックして `Protocol` を表示）。
+### スケルトン UI を返すコツ
 
-- `h3` = HTTP/3
-- `h2` = HTTP/2
-- `http/1.1` = HTTP/1.1
+`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
 
-現代のホスティングは `h2` または `h3` になっているはずです。
+- 見出しの位置にグレーのバー
+- 本文の位置に複数の細いバー
+- 画像の位置に正方形のプレースホルダ
+
+これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
+
+### 実行順のイメージ
+
+`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+
+1. ブラウザが `/posts/1` にアクセス
+2. Server が `page.tsx` を評価し始める
+3. `<h1>` と `<p>` の部分は即座に生成される
+4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
+5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
+6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
+7. ブラウザが追加分を受け取り、`fallback` を置き換える
+
+「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
 
 ## 演習
 
+### 途中から始める場合
+
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
+
+<details>
+<summary>出発点のファイル</summary>
+
+**`app/layout.tsx`**
+
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/streaming">Streaming</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
+```
+
+**`app/page.tsx`**
+
+```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
+```
+
+</details>
+
 ### ゴール
 
-- 本教材サイトと、昔ながらの構成のサイトとで **Protocol 列** を見比べる
-- 1 つのドメインに対する Connection 数と、実際に走っているリクエスト数の関係を眺める
-- HTTP/1.1 で同時接続数がボトルネックになる様子を Throttling とシミュレーションで体感する（任意）
+- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
+- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
+- fetch が終わると fallback が実データに置き換わる
 
-### 手順 1: プロトコルを見る
+### 手順
 
-1. 本教材サイトを開き、DevTools の Network タブでリロードします
-2. 列ヘッダを右クリック → `Protocol` を有効にします
-3. 全リクエストの `Protocol` 列を眺めます。`h2` または `h3` になっているはずです
+1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
+2. `app/streaming/loading.tsx` を置く
+3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
+4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
+5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
 
-### 手順 2: 同じドメインへの同時リクエスト数を眺める
+### 主要ファイルの完成形
 
-1. Network タブで `Domain` 列を有効にします（右クリック → Domain）
-2. 全行を Domain でソートします
-3. 同じドメインに対して **10 本以上のリクエストが同時に完了している** ことが見て取れます。HTTP/2 の多重化の恩恵です
+**`app/streaming/page.tsx`**
 
-### 手順 3: Throttling で遅くしてみる（任意）
+```tsx
+import { Suspense } from "react";
+import RelatedPosts from "./RelatedPosts";
+import { PostsSkeleton } from "./skeleton";
 
-1. Network タブの Throttling を `Slow 4G` に切り替え
-2. リロード
-3. Timing タブで `Initial connection` の時間が伸びることを確認
-4. 元に戻す（`No throttling`）
+export default function StreamingPage() {
+  return (
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <h1>Streaming デモ</h1>
+      <p>
+        このテキストと見出しは <strong>すぐに</strong> 表示されます。
+        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
+      </p>
 
-HTTP/2 の多重化自体は、回線が遅くても 1 接続で済む利点がしっかり残ります。HTTP/1.1 のように 6 本の接続それぞれで TLS ハンドシェイクをやり直す必要がないぶん、モバイル環境ほど差が出やすい領域です。
+      <h2>関連記事</h2>
+      <Suspense fallback={<PostsSkeleton />}>
+        <RelatedPosts />
+      </Suspense>
+
+      <p>フッター（これも先に出ます）</p>
+    </div>
+  );
+}
+```
+
+**`app/streaming/RelatedPosts.tsx`**
+
+```tsx
+type Post = {
+  id: number;
+  title: string;
+};
+
+export default async function RelatedPosts() {
+  // わざと 2 秒待つ
+  await new Promise((r) => setTimeout(r, 2000));
+
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts?_limit=3",
+    { cache: "no-store" }
+  );
+  const posts: Post[] = await res.json();
+
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+**`app/streaming/skeleton.tsx`**
+
+```tsx
+export function PostsSkeleton() {
+  return (
+    <ul style={{ listStyle: "none", padding: 0 }}>
+      {[0, 1, 2].map((i) => (
+        <li
+          key={i}
+          style={{
+            height: 16,
+            margin: "8px 0",
+            background: "#e5e5e5",
+            borderRadius: 4,
+          }}
+        />
+      ))}
+    </ul>
+  );
+}
+```
+
+**`app/streaming/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return (
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
+    </div>
+  );
+}
+```
+
+### 期待出力
+
+1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
+2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
+3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
+4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
+
+DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
 
 ### 変える
 
-- 別のサイト（昔ながらの構成のブログや CMS）を開いて、`Protocol` 列を見比べる。`http/1.1` のサイトは減ってきているが、まだ見かける
-- 本教材サイトの `/assets/*.css` / `/assets/*.js` のファイル名を見比べる。**ハッシュが付いている**（例: `theme.CGtCztgT.js`）ことを確認。HTTP/2 + immutable キャッシュを前提にした現代的な命名
+- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
+- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
+- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
 
 ### 自分で書く
 
-- 「HTTP/1.1 時代に CSS スプライトが流行り、HTTP/2 時代に不要になった理由」を自分の言葉で 3-4 文でまとめる
-- `@vite-pwa/vitepress` が生成する `sw.js` を DevTools の Network タブで探す。プロトコルとキャッシュ制御ヘッダをメモする（この内容は「Cookie と Web セキュリティ」の後に置く予定の Service Worker 関連の補足に繋がります）
+- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
+- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
+- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
 
 ## まとめ
 
-- HTTP/1.1 は「1 接続 = 1 リクエスト順次処理」で、同じドメインへの同時接続は 6 本程度の制限
-- CSS スプライト / ドメイン分散 / バンドル結合などの「リクエストを減らす」テクは、この制限が背景
-- HTTP/2 は 1 接続で複数リクエストを並行する多重化を導入。ドメイン分散やスプライトは意味を失った
-- HTTP/3 は UDP + QUIC で、パケットロスや回線切替に強く、モバイル環境で有利
-- 実務では「小さすぎず大きすぎない」粒度でコード分割し、ハッシュ付きファイル名でキャッシュさせるのが現代の定番
-- 別のレッスンで、Cookie と Web セキュリティ（HttpOnly / Secure / SameSite / CSRF / XSS）を扱う
+- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
+- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
+- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
+- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
+- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
+- これでコースのコア内容は揃いました。あとはサイトを仕上げて Vercel にデプロイすれば、他の人に見せられるアプリになります

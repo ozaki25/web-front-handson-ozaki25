@@ -1,237 +1,461 @@
-# lesson88: Cookie と Web セキュリティ
+# lesson88: Vercel にデプロイする
 
 ## ゴール
 
-- Cookie と Web Storage の違いと使い分けを説明できる
-- Cookie の属性（`HttpOnly` / `Secure` / `SameSite` / `Domain` / `Path` / `Expires` / `Max-Age`）の役割を説明できる
-- XSS（Cross-Site Scripting）と CSRF（Cross-Site Request Forgery）の概要と、それぞれに効く防御を挙げられる
-- セッション Cookie を安全に扱うための実務パターン（HttpOnly / Secure / SameSite=Lax）を知る
-- Content-Security-Policy や HTTPS の位置づけを大まかに把握する
+- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できます。
+- そのリポジトリを Vercel に接続して、数十秒でデプロイできます。
+- 発行された `https://<project>.vercel.app` の URL をブラウザで開き、動作確認できます。
+- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえます。
 
 ## 解説
 
-### Cookie とは何か（もう一度）
+### 今までは「自分のブラウザでしか見えない」状態
 
-Cookie は「サーバーがブラウザに値を持たせて、次回以降のリクエストに **自動で付けさせる** 仕組み」です。サーバーからのレスポンスに次のヘッダが付いていると、ブラウザは **`user=alice`** を覚え、同じサイトへの次のリクエストに自動で `Cookie: user=alice` を付けます。
+StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
 
-```
-# サーバーからのレスポンス
-HTTP/1.1 200 OK
-Set-Cookie: user=alice; Path=/; HttpOnly; Secure; SameSite=Lax
+Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
 
-# 以後、ブラウザが自動で付ける
-GET /profile HTTP/1.1
-Cookie: user=alice
-```
+### 3 ステップの全体像
 
-この「自動で送る」性質が、認証セッションを維持する用途に向いています。一方で同じ性質が **後述の CSRF 攻撃の温床** にもなります。
+以下の 3 つのサービスを繋ぎます。
 
-### Cookie と Web Storage の使い分け（再掲）
+1. **StackBlitz**: コードを書いている場所です。
+2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
+3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
 
-| 用途 | Cookie | Web Storage |
-|---|---|---|
-| ログインセッションの維持 | **最適**（サーバーに自動送信される） | 不向き |
-| ユーザー設定（テーマ / 言語） | 可能だが毎リクエストで送信されるのでムダ | **最適** |
-| 容量 | 4KB 程度（小さい） | 5〜10MB |
-| JS からの読み書き | `document.cookie`（`HttpOnly` ならブラウザで JS からは見えない） | `localStorage.setItem` 等 |
-| 有効期限 | 属性で制御 | localStorage は恒久、session は タブ閉じで消える |
-
-認証は Cookie、クライアント完結の設定は Web Storage、というのが現代の定番です。
-
-### Cookie の主要属性
-
-`Set-Cookie` に付けられる属性で、Cookie の振る舞いを細かく制御します。どれもセキュリティに直結します。
-
-#### `HttpOnly`
-
-**JS から読み書きできない** Cookie にします。`document.cookie` で見ようとしても出てきません。
+流れはこうです。
 
 ```
-Set-Cookie: session=abc123; HttpOnly
+StackBlitz → GitHub → Vercel → https://<project>.vercel.app
 ```
 
-XSS（後述）でページに悪意ある JS が混入しても、`HttpOnly` 付きのセッション Cookie は盗めません。ログインセッション用の Cookie は **原則 `HttpOnly` を付ける** のが現代の正解です。
+一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
 
-#### `Secure`
+### アカウントが 2 つ必要
 
-**HTTPS 経由のリクエストにしか送らせない** 属性です。平文 HTTP で運ばれて盗聴される事故を防ぎます。
-
-```
-Set-Cookie: session=abc123; Secure
-```
-
-本番はほぼ HTTPS のみになった現在では、**セッション Cookie には常に `Secure`** を付けます。
-
-#### `SameSite`
-
-**クロスサイトのリクエストで Cookie を送るか** を制御する属性です。CSRF 攻撃への主要な防御です。
-
-| 値 | 動作 |
-|---|---|
-| `Strict` | 他サイトからの遷移では一切送らない（ログインが切れる UX になりがち） |
-| `Lax` | トップレベル GET ナビゲーション（リンククリック等）では送る。フォーム POST や iframe では送らない |
-| `None` | すべて送る。**`Secure` 必須** |
-
-現代のブラウザの **デフォルトは `Lax`** です。クロスサイトで明示的に送りたい場合のみ `None; Secure` を付けます。通常のセッション Cookie は `Lax` のままで十分な場合が多いです。
-
-#### `Domain` / `Path`
-
-どのホスト・どのパスに対して Cookie を送るかの指定です。指定しなければ **発行元のホストとパス以下** になります。
-
-- `Domain=example.com`: サブドメイン（`api.example.com` 等）にも送る
-- `Path=/admin`: `/admin` 以下のパスにだけ送る
-
-広く付けすぎるとセキュリティ事故の原因になるので、**必要最小限** に絞るのが原則です。
-
-#### `Expires` / `Max-Age`
-
-有効期限の指定です。
-
-- `Expires=Wed, 21 Oct 2026 07:28:00 GMT`: 指定日時まで
-- `Max-Age=3600`: 3600 秒後まで（現代では推奨）
-
-どちらも付けなかった Cookie は **セッション Cookie**（ブラウザを閉じると消える）になります。
-
-### 典型的な「ログインセッション Cookie」の形
-
-実務で多く見る典型パターンです。
-
-```
-Set-Cookie: session=abc123xyz; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400
-```
-
-読み解き:
-
-- `Path=/`: サイト全体で有効
-- `HttpOnly`: JS から見えない（XSS 対策）
-- `Secure`: HTTPS のみ
-- `SameSite=Lax`: 基本的なクロスサイトリクエストでは送らない（CSRF 対策）
-- `Max-Age=86400`: 24 時間有効
-
-この組み合わせを **デフォルトの出発点** と覚えてください。
-
-### XSS（Cross-Site Scripting）
-
-悪意ある JS を **自分のサイトの一部として** 動かされる攻撃です。
-
-代表的な入り口:
-
-1. ユーザー入力をそのまま `innerHTML` で出力（「DOM を操作する」の `innerHTML` 節で扱った）
-2. `<script src="ユーザー入力">` のように属性にも入力が流れ込む
-3. URL のクエリから取った値を HTML にそのまま埋め込む
-
-成功すると、`document.cookie` / `localStorage` の中身を攻撃者のサーバーに送信されたり、ユーザーになりすまして投稿されたりします。
-
-#### 防御の基本
-
-- **出力をエスケープする**: `textContent` を使う、React / Vue のテンプレートを信じる（彼らが自動でエスケープする）
-- **`innerHTML` には自分で書いた安全な文字列だけ**: ユーザー入力は決して入れない
-- **`HttpOnly` Cookie**: セッション Cookie を JS から見えなくする（攻撃が成功しても Cookie だけは守れる）
-- **Content-Security-Policy（CSP）ヘッダ**: `<script>` の実行元を制限する（後述）
-
-React / Next.js は `{variable}` で値を埋め込む限り、自動的にテキストとして扱ってくれます。生の HTML を埋め込みたいときの `dangerouslySetInnerHTML` が「**危険**」という名前なのは、まさにこの XSS を警告するためです。
-
-### CSRF（Cross-Site Request Forgery）
-
-ログインしているユーザーに **意図しないリクエスト** を送らせる攻撃です。仕組み:
-
-1. 攻撃者が罠サイトを用意する
-2. ログイン中の標的ユーザーに罠サイトを踏ませる
-3. 罠サイトの HTML から `https://bank.example.com/transfer?to=attacker&amount=10000` のような GET や、`<form action="https://bank.example.com/transfer" method="POST">` を自動送信する
-4. ブラウザは `bank.example.com` のセッション Cookie を **自動で付けて** リクエストする
-5. 銀行サーバーから見ると、正規ユーザーの認証済みリクエストに見える
-
-#### 防御
-
-- **`SameSite=Lax` / `Strict`**: クロスサイトの POST で Cookie を送らせない。現代のブラウザのデフォルトが `Lax` なので、大半の単純な CSRF は既にブロック済み
-- **CSRF トークン**: フォーム送信のたびにサーバーから一意のトークンを渡し、リクエスト時に一緒に送らせる。攻撃者の罠サイトはトークンを知らないので送れない
-- **重要操作の再認証**: パスワード変更や送金では、現行セッションでも再度パスワードを入れさせる
-
-現代のフレームワーク（Next.js の Server Actions など）は CSRF トークン処理を内蔵していることが多いため、自分で手書きする機会は減っています。仕組みは知っておく価値があります。
-
-### HTTPS と HSTS
-
-HTTPS は **通信を暗号化** する基本です。HTTPS でない（平文 HTTP）通信は途中経路で改ざん・盗聴される可能性があります。
-
-**HSTS（HTTP Strict Transport Security）** ヘッダを付けると、ブラウザに「今後はこのサイトは必ず HTTPS で来い」と覚えさせられます。初回のみ平文アクセスが発生しうる隙を塞ぎます。
-
-```
-Strict-Transport-Security: max-age=31536000; includeSubDomains
-```
-
-Vercel / Netlify などはデフォルトで HTTPS のみでの配信になっています。本コースの教材サイトもすべて HTTPS です。
-
-### Content-Security-Policy（CSP）
-
-レスポンスヘッダで **「このページで実行してよい JS の出所」** を制限する仕組みです。XSS の最後の砦として効きます。
-
-```
-Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com
-```
-
-この例では、`<script>` は自サイトと指定した CDN 以外からは一切読ませない、という宣言です。インラインスクリプトや `eval` も既定では禁止されます。
-
-強力ですが設定を間違えると自分のサイトが動かなくなるので、導入は慎重に（まずは `Content-Security-Policy-Report-Only` で違反だけログに流し、問題がないと確認してから本番適用するのが定番）。
-
-### オリジンと CORS（軽く）
-
-**オリジン** は `スキーム + ホスト + ポート` の 3 つ組で、ブラウザのセキュリティ境界の基本単位です。`https://a.example.com` と `https://b.example.com` は別オリジンです。
-
-ブラウザは既定で **別オリジンへの `fetch` が返すレスポンスを JS から読めなくする** 同一オリジンポリシーを採用しています。別オリジンの API を使いたい場合、サーバー側が `Access-Control-Allow-Origin` 等の CORS ヘッダで明示的に許可する必要があります。
-
-CORS は実務で詰まりやすい分野です。本コースでは深入りせず、「オリジンが違うと fetch 結果が読めないことがある / サーバー側で CORS ヘッダを返してもらう必要がある」という認識だけ押さえてください。
+- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
+- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
 
 ## 演習
 
-### ゴール
+### 途中から始める場合
 
-- 本サイトおよび任意のサイトの Cookie 属性を DevTools Application タブで眺める
-- `HttpOnly` / `Secure` / `SameSite` がどう出ているか確認する
-- XSS / CSRF のイメージを自分の言葉で説明できるようにする
+「小さなアプリを仕上げる」で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために「小さなアプリを仕上げる」の完成品を推奨します）。
 
-### 手順 1: Cookie を観察する
+<details>
+<summary>出発点のファイル</summary>
 
-1. Google や GitHub などログイン済みのサイトを開きます
-2. DevTools → Application タブ → Cookies → そのサイトを選択します
-3. 一覧の `Name` / `Value` / `HttpOnly` / `Secure` / `SameSite` / `Expires` 列を眺めます
-4. セッション系の Cookie には `HttpOnly` と `Secure` がチェックされているはずです
+**`app/layout.tsx`**
 
-### 手順 2: `document.cookie` で JS からの可視性を確認する
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+import "./globals.css";
 
-DevTools の Console タブで次を実行します。
+export const metadata = {
+  title: {
+    default: "TODO アプリ",
+    template: "%s | TODO アプリ",
+  },
+  description: "Next.js App Router の学習用 TODO アプリ",
+};
 
-```js
-document.cookie
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 TODO アプリ</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
 ```
 
-出力には **`HttpOnly` が付いていない Cookie だけ** が出ます。セッション系の重要な Cookie が出てこないのは、`HttpOnly` 属性が働いているためです。
+**`app/page.tsx`**
 
-試しに適当なサイト（攻撃を想定したメモ）で、もしセッション Cookie が JS から見えてしまっていた場合は、そのサイトは XSS 耐性が弱い可能性があります。
+```tsx
+export default function Page() {
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <p>このアプリについてはヘッダーのリンクから。</p>
+    </>
+  );
+}
+```
 
-### 手順 3: 自分の言葉でまとめる
+**`app/types.ts`**
 
-次の質問に、本レッスンを閉じた状態で自分の言葉で答えてみます（目安: それぞれ 2-3 文）。
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
 
-- Q1: XSS と CSRF のそれぞれが「何を悪用する」攻撃か
-- Q2: 典型的なログインセッション Cookie には、どの属性を付けるか（3 つ挙げよ）
-- Q3: `SameSite=Lax` は CSRF にどう効くか
+**`app/actions.ts`**
 
-### 変える
+```ts
+"use server";
 
-- Application タブで、適当な非ログインサイトの Cookie を 1 つ選び、右クリック → Delete で削除する。再度アクセスしても閲覧できることを確認
-- ログインしているサイトで、セッション Cookie を削除するとログアウトになる（試すなら復旧手順を確認してから）
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function getTodo(id: string): Promise<Todo | undefined> {
+  return todos.find((t) => t.id === id);
+}
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+
+export async function deleteTodo(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const index = todos.findIndex((t) => t.id === id);
+  if (index >= 0) {
+    todos.splice(index, 1);
+  }
+  revalidatePath("/todos");
+}
+```
+
+**`app/todos/TodoForm.tsx`**
+
+```tsx
+"use client";
+
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { addTodo, type AddTodoState } from "../actions";
+
+const initialState: AddTodoState = {};
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
+
+export function TodoForm() {
+  const [state, formAction, isPending] = useActionState(addTodo, initialState);
+
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.error && <p className="error">{state.error}</p>}
+      {isPending && <p>通信中...</p>}
+    </form>
+  );
+}
+```
+
+**`app/todos/page.tsx`**
+
+```tsx
+import { listTodos, deleteTodo } from "../actions";
+import { TodoForm } from "./TodoForm";
+import Link from "next/link";
+
+export default async function TodosPage({
+  searchParams,
+}: PageProps<"/todos">) {
+  const { highlight } = await searchParams;
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li
+            key={todo.id}
+            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
+          >
+            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
+            <form action={deleteTodo} style={{ display: "inline" }}>
+              <input type="hidden" name="id" value={todo.id} />
+              <button type="submit">削除</button>
+            </form>
+          </li>
+        ))}
+      </ul>
+      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
+    </>
+  );
+}
+```
+
+**`app/todos/[id]/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { getTodo } from "../../actions";
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/todos/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const todo = await getTodo(id);
+  return {
+    title: todo ? `Todo: ${todo.text}` : "Todo not found",
+  };
+}
+
+export default async function TodoDetailPage({
+  params,
+}: PageProps<"/todos/[id]">) {
+  const { id } = await params;
+  const todo = await getTodo(id);
+
+  if (!todo) {
+    notFound();
+  }
+
+  return (
+    <>
+      <h1>Todo 詳細</h1>
+      <p>ID: {todo.id}</p>
+      <p>内容: {todo.text}</p>
+      <p>
+        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
+      </p>
+      <p>
+        <Link href="/todos">一覧に戻る</Link>
+      </p>
+    </>
+  );
+}
+```
+
+**`app/todos/[id]/not-found.tsx`**
+
+```tsx
+import Link from "next/link";
+
+export default function TodoNotFound() {
+  return (
+    <>
+      <h1>Todo が見つからない</h1>
+      <p>指定された ID の Todo は存在しない（または削除された）。</p>
+      <Link href="/todos">一覧に戻る</Link>
+    </>
+  );
+}
+```
+
+**`app/globals.css`**（共通 CSS + `.error` + `.todo-list` / `.todo-item--highlight`）
+
+```css
+.site-header ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding: 1rem;
+  background: #f5f5f5;
+}
+
+.site-header a {
+  text-decoration: none;
+  color: #0070f3;
+}
+
+.site-footer {
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  color: #555;
+}
+
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+.todo-list {
+  list-style: none;
+  padding: 0;
+}
+
+.todo-item {
+  padding: 0.5rem;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.todo-item--highlight {
+  background: #fff3a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-header ul {
+    background: #1f1f1f;
+  }
+  .site-header a {
+    color: #4ea2ff;
+  }
+  .site-footer {
+    border-top-color: #333;
+    color: #bbb;
+  }
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
+  }
+  .todo-item {
+    border-bottom-color: #333;
+  }
+  .todo-item--highlight {
+    background: #665c1e;
+    color: #fff;
+  }
+}
+```
+
+</details>
+
+なお、Vercel デプロイの手順自体（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。出発点の全量を貼らずに、素の hello-world テンプレートのまま手順 1〜5 を通して URL 発行まで体験するのも有効です。
+
+### 前回のプロジェクトを開く
+
+「小さなアプリを仕上げる」で仕上げた StackBlitz の Next.js プロジェクトを開きましょう。
+
+### 手順 1: GitHub アカウントを用意
+
+1. <https://github.com/> にアクセスします。
+2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
+
+### 手順 2: StackBlitz から GitHub に保存
+
+1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
+2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
+3. 保存先のリポジトリ名を指定します。例: `my-next-todo`。
+4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
+5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-todo` が出ているはずです。
+
+> うまく行かないとき: StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもある。本コース想定は前者。
+
+### 手順 3: Vercel アカウントを作る
+
+1. <https://vercel.com/> にアクセスします。
+2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
+3. 必要なら Vercel にメール認証を済ませましょう。
+
+### 手順 4: Vercel で新しいプロジェクトを作る
+
+1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
+2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-todo` を **「Import」** します。
+   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-todo` のみ選択）。
+3. 設定画面が出ます。
+   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
+   - **Root Directory**: デフォルトのままにします。
+   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
+   - **Environment Variables**: 本コースでは使いません。空で OK です。
+4. 画面下の **「Deploy」** をクリックします。
+5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
+
+### 手順 5: 公開 URL を確認
+
+1. Vercel の「Dashboard」→ プロジェクト名（`my-next-todo`）をクリックします。
+2. 画面上部に **`https://my-next-todo-xxxx.vercel.app`** のような URL が出ています。
+3. クリックして開きます。
+
+### 期待出力
+
+- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ TODO アプリが表示されます。
+- 「TODO 一覧」で追加・削除・詳細遷移が動きます。
+- `/about` にアクセスすると自己紹介ページが出ます。
+- ナビの `<Link>` でページ遷移ができます。
+- URL を別のブラウザや友人に送っても、同じアプリが見えます。
+
+### 更新を反映する
+
+GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
+
+1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
+2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
+3. 数十秒待ちます。
+4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
+5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
+
+### よくある躓き
+
+- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
+- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
+- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
+- TODO を追加してもリロードすると消える → 次項の通り、サーバーレス環境ではインメモリ配列が保持されません。
+
+### 注意: 本番ではデータが保持されない
+
+本コースでは `app/actions.ts` の `const todos: Todo[] = []` という **メモリ上の配列** でデータを持っていました。
+
+- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
+- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。結果として、追加した直後は見えてもしばらく経つと消えて見える、といった動きになります。
+
+本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。本コースでは扱いませんが、次のステップとして「`actions.ts` の配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
 
 ### 自分で書く
 
-- 自分がよく使うサイト 3 つの、ログイン後に Application タブの Cookies で確認できる **`HttpOnly` の付き方** を比較する
-- Next.js の Server Actions で POST を送る際、ブラウザ開発者ツールの Network タブから CSRF 関連ヘッダがどう付いているか観察する（将来の発展）
+1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。例: 「自己紹介 + TODO メモの練習アプリ」。
+2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
+3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
 
 ## まとめ
 
-- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値。セッション維持の本命
-- 属性の黄金律: `HttpOnly; Secure; SameSite=Lax`。セッション Cookie はこれを最低ラインに
-- XSS は「サイトに悪意 JS を混入される」攻撃。`textContent` / エスケープ / `HttpOnly` / CSP で防ぐ
-- CSRF は「ログイン中のユーザーに意図しないリクエストを送らせる」攻撃。`SameSite` / CSRF トークンで防ぐ
-- HTTPS + HSTS は前提。平文 HTTP は現代の Web ではほぼ使わない
-- CORS は別オリジン通信の境界の話。深追いは各自必要になったら
-- 6 章 はここで一区切り。次は本コースの到達点を振り返って、各自の次のステップを考える章（あるいは章末のおまけ）につなげる
+- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できます。
+- 初回の接続だけ手数がかかりますが、以後は Git に push すれば自動デプロイです。
+- 本コースの擬似永続化（インメモリ配列）は Vercel では保持されません。本番の永続化には DB が必要です（本コースでは扱いません）。
+- ここでコースは終わりです。Next.js（App Router）で「フォーム + データ表示 + ルーティング」の小さなアプリを自分で作り、公開するところまで辿り着きました。
+- 次に進みたい学習者へのおすすめ:
+  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
+  - 認証（NextAuth、Clerk など）を足して「自分の TODO」を作る
+  - スタイリングを Tailwind CSS や CSS Modules に寄せる
+  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る

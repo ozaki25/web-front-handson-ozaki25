@@ -1,96 +1,84 @@
-# lesson18: 配列を扱う
+# lesson18: 値の種類
 
 <script setup>
 // LiveDemo の :js に渡す JS コード。
 // 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
 // script setup の変数経由で渡している。
 const demoJs = `
-const fruits = ['apple', 'banana'];
-fruits.push('cherry');
-console.log(fruits);
-console.log('length: ' + fruits.length);
-console.log('先頭: ' + fruits[0]);
-for (const f of fruits) {
-  console.log('- ' + f);
-}
+console.log(typeof 'Alice');
+console.log(typeof 42);
+console.log(typeof true);
+console.log(typeof null);
+console.log(typeof undefined);
+console.log(typeof { name: 'Alice' });
 `
 </script>
 
 ## ゴール
 
-- 配列を作り、中の要素を取り出せる
-- `length` で要素数を確認できる
-- `push` / `pop` で末尾に追加・削除できる
+- 文字列・数値・真偽値・`null` / `undefined` を区別できる
+- テンプレートリテラルで文字列の中に変数を埋め込める
 
 ## 解説
 
-### 配列とは
+### 値には「種類」がある
 
-同じ種類のデータを複数まとめたものが配列です。「やることリスト」「買い物リスト」のように「並んでいるもの」に使います。
+JS では、変数に入れる値にいくつかの種類があります。今回は 5 種類を覚えます。
 
-```js
-const fruits = ["apple", "banana", "cherry"];
-```
+| 種類 | 例 | 説明 |
+| --- | --- | --- |
+| 文字列 | `"Alice"` / `'hello'` | テキスト。ダブルクオート / シングルクオートで囲む |
+| 数値 | `42` / `3.14` | 整数と小数の両方。クオートを付けない |
+| 真偽値 | `true` / `false` | 「はい / いいえ」の 2 値。条件分岐で使う |
+| `null` | `null` | 「意図的に空」 |
+| `undefined` | `undefined` | 「まだ値がない」 |
 
-- `[` と `]` で囲む
-- 要素と要素はカンマで区切る
-- 中身は文字列でも数値でも何でも入れられる
+`null` と `undefined` はどちらも「空」を表しますが、ニュアンスが違います。
 
-### インデックスで取り出す
+- `null`: プログラマが「ここは空にしておくぞ」と明示的に入れるもの
+- `undefined`: 変数を宣言しただけで値を入れていないときに、自動で付く初期状態
 
-配列の中の要素には、先頭から `0`, `1`, `2`, ... と番号が振られています。これをインデックスと呼びます。
+当面は「どちらも空を表す」くらいの理解で十分です。使い分けは徐々に身につきます。
 
-```js
-const fruits = ["apple", "banana", "cherry"];
-console.log(fruits[0]); // "apple"
-console.log(fruits[1]); // "banana"
-console.log(fruits[2]); // "cherry"
-```
-
-0 から始まる点に注意します。`fruits[1]` は「2 番目」ではなく「インデックス 1 の要素（=先頭から 2 つ目）」です。
-
-存在しないインデックスを指定すると `undefined` が返ります。
+### 数値と文字列は混ぜない
 
 ```js
-console.log(fruits[5]); // undefined
+const a = 1 + 2;       // 3 （数値の足し算）
+const b = "1" + "2";   // "12" （文字列の連結）
+const c = 1 + "2";     // "12" （文字列側に寄せられる）
 ```
 
-### `length` で要素数を知る
+`+` は数値なら足し算、文字列なら連結になります。片方が文字列だと全体が文字列になる、という挙動だけ頭の片隅に置いておきます。
+
+### テンプレートリテラル
+
+文字列の中に変数を埋め込みたいとき、バッククオート（`` ` ``）で囲む書き方が便利です。これをテンプレートリテラルと呼びます。
 
 ```js
-const fruits = ["apple", "banana", "cherry"];
-console.log(fruits.length); // 3
+const userName = "Alice";
+const age = 20;
+
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
 ```
 
-末尾の要素は `fruits[fruits.length - 1]` で取れます（インデックスは 0 始まりなので `-1`）。
+- バッククオートで囲む
+- `${ ... }` の中に変数や式を書く
 
-### 追加と削除
-
-- `push(値)`: 末尾に追加する
-- `pop()`: 末尾を取り除く（取り除いた値を返す）
-
-```js
-const fruits = ["apple", "banana"];
-fruits.push("cherry");
-console.log(fruits); // ["apple", "banana", "cherry"]
-
-const removed = fruits.pop();
-console.log(removed); // "cherry"
-console.log(fruits);  // ["apple", "banana"]
-```
-
-`const` で宣言した配列に対しても `push` や `pop` は使えます。`const` は「変数に入っている配列そのものを別のものに差し替えない」という約束で、配列の中身の操作はできます。
+シングルクオート / ダブルクオートで囲んだ文字列では `${ ... }` は使えません。埋め込みたいときは必ずバッククオートを使います。
 
 ### デモで確認する
 
-下のデモでは、配列に `push` で要素を足し、`length` とインデックスアクセス、`for...of` でのループ表示を一気に体感できます。
+下のデモでは、`typeof` 演算子を使って 6 種類の値の型を順に表示します。Console タブを見ると、それぞれがどの型として扱われるかが分かります。
 
 <LiveDemo
-  height="260px"
-  :html="`<p>配列の基本操作をまとめて確認するデモ</p>`"
+  height="220px"
+  :html="`<p>各値の型を typeof で確認するデモ</p>`"
   :css="``"
   :js="demoJs"
 />
+
+`null` が `'object'` と表示されるのは JavaScript の歴史的な仕様です。当面は「そういうものだ」と覚えておけば大丈夫です。
 
 ## 演習
 
@@ -113,7 +101,8 @@ console.log(fruits);  // ["apple", "banana"]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson17: 条件で分岐する</h1>
+    <h1>lesson17: 最初の JavaScript</h1>
+    <p>DevTools の Console を開いてください。</p>
   </body>
 </html>
 ```
@@ -121,46 +110,28 @@ console.log(fruits);  // ["apple", "banana"]
 **`script.js`**
 
 ```js
-const age = 20;
 const userName = "Alice";
-const isStudent = true;
+let count = 0;
 
-if (age >= 20) {
-  console.log(`${userName} さんは成人です`);
-} else {
-  console.log(`${userName} さんは未成年です`);
-}
+console.log("Hello, JavaScript");
+console.log(userName);
+console.log(count);
 
-if (age >= 13 && age <= 19) {
-  console.log("10 代です");
-} else if (age >= 20 && age < 60) {
-  console.log("大人です");
-} else {
-  console.log("それ以外の年代です");
-}
-
-if (isStudent && age >= 20) {
-  console.log("成人の学生です");
-}
-
-if (!isStudent) {
-  console.log("学生ではありません");
-} else {
-  console.log("学生です");
-}
+count = count + 1;
+console.log(count);
 ```
 
 </details>
 
 ### ゴール
 
-- 「やることリスト」の配列を作り、要素を足したり取り出したりしてコンソールに表示する
+- 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson18` に変える
-2. `script.js` を以下に書き換える
-3. Console を確認する
+1. これまでの `index.html` をそのまま使う（タイトルだけ `lesson18` に変える）
+2. `script.js` を以下の内容に書き換える
+3. プレビューの Console を開く
 
 ### `index.html`
 
@@ -174,7 +145,7 @@ if (!isStudent) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: 配列を扱う</h1>
+    <h1>lesson18: 値の種類</h1>
   </body>
 </html>
 ```
@@ -182,55 +153,51 @@ if (!isStudent) {
 ### `script.js`
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+const userName = "Alice";
+const age = 20;
+const isStudent = true;
+const nickname = null;
+let score;
 
-console.log(todos);
-console.log(todos.length);
-console.log(todos[0]);
-console.log(todos[todos.length - 1]);
+console.log(userName);
+console.log(age);
+console.log(isStudent);
+console.log(nickname);
+console.log(score);
 
-todos.push("部屋を片付ける");
-console.log(todos);
-console.log(todos.length);
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
 
-const last = todos.pop();
-console.log(last);
-console.log(todos);
-
-console.log(todos[99]);
+const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
+console.log(summary);
 ```
 
 ### 期待出力
 
 ```
-["牛乳を買う", "本を読む", "ジョギング"]
-3
-牛乳を買う
-ジョギング
-["牛乳を買う", "本を読む", "ジョギング", "部屋を片付ける"]
-4
-部屋を片付ける
-["牛乳を買う", "本を読む", "ジョギング"]
+Alice
+20
+true
+null
 undefined
+あなたは Alice さんで、20 歳です
+名前: Alice / 学生: true / 点数: undefined
 ```
 
-配列の表示形式はブラウザによって少し変わりますが、要素の並びは同じです。
+`score` は `let score;` と宣言しただけで値を入れていないので、自動で `undefined` になります。テンプレートリテラルの中に入れると `undefined` という文字列として表示されます。
 
 ### 変える
 
-- `todos` の初期値に 5 つ要素を入れる → `length` が `5` になることを確認
-- `todos.push(...)` を 2 回連続で呼んで、末尾に 2 つ追加する
-- `todos.pop()` を 3 回呼んで、3 つ取り除く（配列が空になる）
-- 空の配列 `[]` に `pop` を呼ぶと何が返るか確認する（`undefined`）
+- `age` を `20` から `"20"`（文字列）に変えて、`age + 1` の結果を `console.log` してみる → `201` になる（文字列連結）
+- `isStudent` を `false` に変えて Console を確認
+- `nickname` を `"あり"` に変えて `summary` の出力に含まれる挙動を確認
 
 ### 自分で書く
 
-- 好きな食べ物 3 つを配列 `foods` に入れて、それぞれをインデックスで取り出して `console.log` する
-- `foods` の末尾に 2 つ追加し、末尾から 1 つ取り除いてから、最終的な `foods` を `console.log` する
+- 自分の情報（名前・好きな数字・趣味）を 3 つの変数に入れ、「私は ○○ です。好きな数字は ○○ で、趣味は ○○ です。」という 1 行の文をテンプレートリテラルで作って表示する
 
 ## まとめ
 
-- 配列は `[値1, 値2, ...]` で作る
-- インデックスは 0 から始まる
-- 要素数は `length`、末尾追加は `push`、末尾削除は `pop`
-- 存在しないインデックスを読むと `undefined` が返る
+- 値には文字列 / 数値 / 真偽値 / `null` / `undefined` の 5 種類（当面はこれで十分）
+- 文字列の中に変数を埋め込むときはバッククオート + `${ ... }`
+- クオートの種類（`` ` `` と `"` と `'`）を取り違えると `${ ... }` が文字通りに出てしまうので注意

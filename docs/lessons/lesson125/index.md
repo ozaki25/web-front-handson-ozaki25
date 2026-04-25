@@ -108,7 +108,7 @@ query {
 ポイント:
 
 - **`name` と `posts.title` だけ** 要求 → サーバーはそれだけ返す（**Over fetch を防げる**）
-- **複数リソース（user + posts）** を 1 リクエストで取れる（**N+1 を防げる**）
+- **複数リソース**（user + posts） を 1 リクエストで取れる（**N+1 を防げる**）
 
 #### ミューテーション
 
@@ -298,9 +298,9 @@ const { data } = trpc.hello.useQuery({ name: "world" });
 Next.js の App Router では **Server Component が直接 DB を叩ける**（`async function` の中で `prisma.user.findFirst({...})`）ようになりました。これは **「Web フロントが API を呼ぶ」発想を崩します**。
 
 - 初期表示は **Server Component が直接 DB / 外部 API**
-- 動的なクライアント操作は **Server Actions** または **API（tRPC / GraphQL / REST）**
+- 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
 
-「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代。Server Actions / Server Components は lesson62 / 63 / 68 や後続のレッスンで詳しく扱います。
+「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代。Server Actions / Server Components は lesson73 / 63 / 68 や後続のレッスンで詳しく扱います。
 
 ### よくある質問
 

@@ -1,477 +1,350 @@
-# lesson61: Route Groups で整理する
+# lesson61: Context API で多層バケツリレー回避
 
 ## ゴール
 
-- `(group)/` という括弧付きディレクトリ名の意味を理解し、URL を変えずにファイル側だけを意味のある単位で整理できます。
-- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されることを確認できます。
-- 「公開側」と「アプリ側」で共通レイアウトを分けたい、という典型的な使いどころを体験できます。
+- 多段階の props リレー（prop drilling）を Context で置き換えられる
+- `createContext` / `Provider` / `useContext` の 3 点セットの形を覚える
+- Context の型を付けられる
+- Context を使うべきでない場面を理解する
 
 ## 解説
 
-### 前回までに作ったもの
+### バケツリレー問題
 
-「共通レイアウトを作る」で、全ページ共通のヘッダー・フッターを `app/layout.tsx` にまとめました。`/`、`/about`、`/todos` のどのページにアクセスしても、上にナビ・下にフッターが出る状態です。
-
-一方で、今後アプリが大きくなると次のような悩みが出ます。
-
-- `/about` は公開ページなのでサイドバーは不要
-- `/todos` はアプリ内ページなので、左にサイドメニューがあると便利
-
-「ページの種類ごとに追加レイアウトを変えたい」のに、URL 体系は `/`、`/about`、`/todos` のままにしたい。このとき役立つのが **Route Groups** です。
-
-### `(group)/` の意味
-
-App Router では、ディレクトリ名を `( )` で囲むと **URL には登場しない** 仕組みがあります。これが Route Groups です。
+「親子コンポーネントの連携」で学んだように、props は「親 → 子」の一方通行でした。これが深い階層になると、**途中のコンポーネントが使わない値を、ただ下に渡すためだけに受け取る** 状況が生まれます。
 
 ```
-app/
-├── (public)/
-│   ├── page.tsx          → /
-│   └── about/
-│       └── page.tsx      → /about
-└── (app)/
-    ├── layout.tsx        → (app) 配下だけに適用
-    └── todos/
-        └── page.tsx      → /todos
+App (theme を持つ)
+ └─ Layout (theme を受け取って Header に渡すだけ)
+     └─ Header (theme を受け取って Nav に渡すだけ)
+         └─ Nav (theme を受け取って ThemeToggle に渡すだけ)
+             └─ ThemeToggle (ここで初めて theme を使う)
 ```
 
-- `(public)` というディレクトリ名は URL には出ません。`app/(public)/page.tsx` の URL は `/` です。
-- 同じく `(app)` も URL には出ません。`app/(app)/todos/page.tsx` の URL は `/todos` です。
-- 結果として、**URL は `/`、`/about`、`/todos` のまま変わりません**。ファイルの置き場所だけが整理されます。
+`Layout` / `Header` / `Nav` は `theme` を **自分では使わない** のに、props として受け取って子に渡しています。バケツをリレーするように値を運ぶだけの中間層が増え、型定義も面倒になります。これを **prop drilling**（バケツリレー問題）と呼びます。
 
-### グループ内の `layout.tsx`
+### Context の考え方
 
-Route Groups の嬉しさは、グループ直下に `layout.tsx` を置けることです。この `layout.tsx` は、**そのグループ配下のページだけ** に適用されます。
+Context は、「ある範囲のコンポーネントツリー全体から参照できる共有値」を作る仕組みです。途中のコンポーネントは関与せず、値を使いたいコンポーネントが **直接** Context から取り出せます。
 
-- `app/(app)/layout.tsx` を置くと、`/todos` には適用されるが、`/` や `/about` には適用されない
-- 逆に `app/(public)/layout.tsx` を置くと、`/` と `/about` には適用されるが、`/todos` には適用されない
-- `app/layout.tsx`（ルートレイアウト）は引き続き全ページに適用される
-
-つまり、レイアウトの構造は「ルートレイアウト → グループレイアウト → page」のように入れ子になります。
-
-```mermaid
-graph TD
-  classDef root fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
-  classDef group fill:#1b4965,stroke:#62b6cb,color:#ffffff;
-  classDef page fill:#3a2d5c,stroke:#c4a6ff,color:#ffffff;
-
-  Root["app/layout.tsx (全ページ共通)"]:::root
-  Public["(public) は layout.tsx なし"]:::group
-  App["app/(app)/layout.tsx (サイドバー)"]:::group
-  Home["/ page.tsx"]:::page
-  About["/about page.tsx"]:::page
-  Todos["/todos page.tsx"]:::page
-
-  Root --> Public
-  Root --> App
-  Public --> Home
-  Public --> About
-  App --> Todos
+```
+App
+ └─ ThemeProvider (value={theme})   ← ここに値を提供
+     └─ Layout
+         └─ Header
+             └─ Nav
+                 └─ ThemeToggle ← useContext(ThemeContext) で直接読む
 ```
 
-図の色はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965` / `#3a2d5c`、文字 `#ffffff`）を指定しています。
+中間層はノータッチで、`ThemeToggle` だけが Context を読みます。
 
-### 並列・インターセプトは扱わない
+### 3 点セット
 
-App Router には `@slot/page.tsx`（並列ルート）や `(.)path`（インターセプトルート）といったさらに発展的な機能もありますが、本コースでは **Route Groups まで** にとどめます。
+Context は次の 3 つをセットで使います。
+
+1. `createContext<型>(初期値)` で Context を作る
+2. `<Context.Provider value={値}>` で配下に値を提供する
+3. 使いたい側で `useContext(Context)` で値を取り出す
+
+```tsx
+import { createContext, useContext, useState } from "react";
+
+// (1) 作る
+type Theme = "light" | "dark";
+const ThemeContext = createContext<Theme>("light");
+
+// (2) 提供する
+function App() {
+  const [theme, setTheme] = useState<Theme>("light");
+  return (
+    <ThemeContext.Provider value={theme}>
+      <Child />
+    </ThemeContext.Provider>
+  );
+}
+
+// (3) 読む
+function Child() {
+  const theme = useContext(ThemeContext);
+  return <p>現在のテーマ: {theme}</p>;
+}
+```
+
+### Context の型と初期値
+
+`createContext<型>(初期値)` の初期値は、**Provider で包まれていないときに使われる値** です。「包み忘れたらこれを使う」という保険です。
+
+今回のテーマ切替では、値だけでなく「切り替える関数」も一緒に配りたいので、オブジェクトで型を作ります。
+
+```ts
+type Theme = "light" | "dark";
+
+type ThemeContextValue = {
+  theme: Theme;
+  toggleTheme: () => void;
+};
+```
+
+### Context を使うべきでないケース
+
+Context は便利ですが、何でも入れていい仕組みではありません。
+
+| 場面 | 向く / 向かない |
+| --- | --- |
+| テーマ、ログインユーザー情報、言語設定 | 向く（変化が少なく、広く参照される） |
+| フォーム入力のリアルタイム値 | 向かない（頻繁に変わる） |
+| 大規模な state 全体 | 向かない（外部ストア管理の領域） |
+
+**頻繁に変わる値** を Context に入れると、Provider 配下のすべての `useContext` 利用コンポーネントが再レンダリングされます。小さなアプリなら気になりませんが、大きくなると性能上の負荷になります。
+
+そうした用途（TODO アプリ全体の状態管理など）では Zustand / Redux など専用のライブラリが使われますが、**本コースでは扱いません**。今回は「テーマ切替」という変化の少ない題材に絞ります。
+
+### TODO の Context 化は扱わない
+
+「カスタムフック」で `useTodos` カスタムフックを作り、「TODO アプリを React で作る」の発展枠で「`useTodos` を Context でアプリ全体に提供する」パターンに触れます。本レッスンでは **テーマ切替のみ** を扱い、TODO の Context 化には踏み込みません。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
 
-<details>
-<summary>出発点のファイル</summary>
+### ゴール
 
-**`app/layout.tsx`**
+- アプリ全体でテーマ（`"light" | "dark"`）を Context で共有する
+- 深い階層の `ThemeToggle` から、props を経由せずにテーマを切り替える
+- 中間層のコンポーネント（`Layout` / `Header` / `Nav`）が props を受け取らないことを確認する
+
+### 手順
+
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/ThemeContext.tsx` を作成
+3. `src/Layout.tsx` / `src/Header.tsx` / `src/Nav.tsx` / `src/ThemeToggle.tsx` を作成
+4. `src/App.tsx` を書き換える
+5. `src/App.css` を書き換える
+
+### `src/ThemeContext.tsx`
 
 ```tsx
-import Link from "next/link";
-import "./globals.css";
+import { createContext, useContext, useState } from "react";
+import type { ReactNode } from "react";
 
-export const metadata = {
-  title: "My Next App",
+export type Theme = "light" | "dark";
+
+type ThemeContextValue = {
+  theme: Theme;
+  toggleTheme: () => void;
 };
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
-  );
-}
-```
+const ThemeContext = createContext<ThemeContextValue | null>(null);
 
-**`app/page.tsx`**
+type ThemeProviderProps = {
+  children: ReactNode;
+};
 
-```tsx
-export default function Page() {
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
-    </>
-  );
-}
-```
+export function ThemeProvider({ children }: ThemeProviderProps) {
+  const [theme, setTheme] = useState<Theme>("light");
 
-**`app/about/page.tsx`**
-
-```tsx
-import "./about.css";
-
-export default function AboutPage() {
-  return (
-    <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.jp/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </>
-  );
-}
-```
-
-**`app/about/about.css`**（「ページを増やしてリンクで移動する」と同じ。`.cards` / `.card` のスタイル中心に必要なものを貼ってください）
-
-**`app/todos/page.tsx`**
-
-```tsx
-export default function TodosPage() {
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </>
-  );
-}
-```
-
-**`app/globals.css`**
-
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
-
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
-
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
-
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
+  function toggleTheme() {
+    setTheme((prev) => (prev === "light" ? "dark" : "light"));
   }
-  .site-header a {
-    color: #4ea2ff;
+
+  return (
+    <ThemeContext.Provider value={{ theme, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+export function useTheme() {
+  const ctx = useContext(ThemeContext);
+  if (ctx === null) {
+    throw new Error("useTheme は ThemeProvider の中で使ってください");
   }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
+  return ctx;
 }
 ```
 
-</details>
+- Context の初期値を `null` にしておき、`useTheme` で「`null` ならエラー」をチェックしています。これで「Provider で包み忘れた」ときに、はっきりエラーメッセージが出ます
+- Provider はよく使う形なので、`ThemeProvider` という関数コンポーネントとしてラップしています
+- `useTheme` という **カスタムフック** にしておくと、使う側が `useContext(ThemeContext)` と書かずに済みます（カスタムフックは「カスタムフック」で深掘りします）
 
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
-
-### 現状の確認
-
-現在のファイル構成は次のようになっているはずです。
-
-```
-app/
-├── layout.tsx       ← 全ページ共通のヘッダー・フッター
-├── page.tsx         → /
-├── about/
-│   ├── page.tsx     → /about
-│   └── about.css
-└── todos/
-    └── page.tsx     → /todos
-```
-
-この構成を、次の形に変えます。
-
-```
-app/
-├── layout.tsx
-├── (public)/
-│   ├── page.tsx
-│   └── about/
-│       ├── page.tsx
-│       └── about.css
-└── (app)/
-    ├── layout.tsx   ← 新規。サイドバーを置く
-    └── todos/
-        └── page.tsx
-```
-
-### 手順 1: `(public)` グループを作る
-
-StackBlitz のファイルツリーで、`app/` の直下に新しいフォルダを作ります。名前は `(public)` です（括弧も含めてそのまま入力します）。
-
-作れたら、次のファイル・フォルダを `(public)/` の中に **移動** します。
-
-- `app/page.tsx` → `app/(public)/page.tsx`
-- `app/about/` フォルダごと → `app/(public)/about/`
-
-移動は StackBlitz の UI 上でドラッグするか、右クリックメニューの「Move」で行います。
-
-### 手順 2: `(app)` グループを作る
-
-同じ要領で、`app/` 直下に `(app)` というフォルダを新規作成します。
-
-- `app/todos/` フォルダごと → `app/(app)/todos/`
-
-これで `(public)` と `(app)` の 2 つのグループに分かれました。
-
-### 手順 3: 動作確認（`layout.tsx` 追加前）
-
-この時点で、ブラウザから `/`、`/about`、`/todos` の 3 つの URL を確認しましょう。
-
-- URL は **変わりません**（Route Groups なので `( )` は URL に出ません）
-- 見た目も **変わりません**（`app/layout.tsx` のヘッダー・フッターは全ページに適用されたままです）
-
-「ファイルを動かしても URL が壊れない」ことが Route Groups の第一印象です。
-
-### 手順 4: `(app)/layout.tsx` を作る
-
-`app/(app)/layout.tsx` を新規作成します。ここに「アプリ用のサイドバー」を置きます。
+### `src/ThemeToggle.tsx`
 
 ```tsx
-import Link from "next/link";
+import { useTheme } from "./ThemeContext";
 
-export default function AppLayout({ children }: LayoutProps<"/todos">) {
+export function ThemeToggle() {
+  const { theme, toggleTheme } = useTheme();
+
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <h2>アプリメニュー</h2>
-        <nav>
-          <ul>
-            <li>
-              <Link href="/todos">TODO 一覧</Link>
-            </li>
-            <li>
-              <Link href="/">ホームに戻る</Link>
-            </li>
-          </ul>
-        </nav>
-      </aside>
-      <section className="app-main">{children}</section>
+    <button type="button" onClick={toggleTheme} className="theme-toggle">
+      現在: {theme} (クリックで切替)
+    </button>
+  );
+}
+```
+
+深い階層のコンポーネントが、props を **一切受け取らず** に Context からテーマを読み出して切り替えています。
+
+### `src/Nav.tsx`
+
+```tsx
+import { ThemeToggle } from "./ThemeToggle";
+
+export function Nav() {
+  return (
+    <nav className="nav">
+      <span>メニュー</span>
+      <ThemeToggle />
+    </nav>
+  );
+}
+```
+
+`Nav` はテーマのことを知りません。`ThemeToggle` を置くだけです。
+
+### `src/Header.tsx`
+
+```tsx
+import { Nav } from "./Nav";
+
+export function Header() {
+  return (
+    <header className="header">
+      <h1>Context API のデモ</h1>
+      <Nav />
+    </header>
+  );
+}
+```
+
+### `src/Layout.tsx`
+
+```tsx
+import type { ReactNode } from "react";
+import { Header } from "./Header";
+import { useTheme } from "./ThemeContext";
+
+type LayoutProps = {
+  children: ReactNode;
+};
+
+export function Layout({ children }: LayoutProps) {
+  const { theme } = useTheme();
+
+  return (
+    <div className={`layout ${theme}`}>
+      <Header />
+      <main className="main">{children}</main>
     </div>
   );
 }
 ```
 
-ポイント:
+`Layout` は `theme` の値を **見た目を変えるために** 読みますが、props としては受け取っていません。Context から直接取り出しています。
 
-- このファイルは `(app)` グループ配下の `layout.tsx` なので、`/todos` にだけ適用されます。`/` や `/about` には影響しません。
-- `children` には `(app)` 配下の各 `page.tsx` が差し込まれます（今回は `/todos` だけ）。
-- `"use client"` は不要です。`<Link>` を並べるだけで、クリックで動く JS は書いていません（Server Component のままで OK）。
+### `src/App.tsx`
 
-### 手順 5: サイドバーの CSS
+```tsx
+import { ThemeProvider } from "./ThemeContext";
+import { Layout } from "./Layout";
+import "./App.css";
 
-`app/globals.css` の末尾に次を追加します。
+function App() {
+  return (
+    <ThemeProvider>
+      <Layout>
+        <p>このページは Context からテーマを受け取って見た目を変えます。</p>
+        <p>右上のボタンで light / dark を切り替えてみてください。</p>
+      </Layout>
+    </ThemeProvider>
+  );
+}
+
+export default App;
+```
+
+`App` は `<ThemeProvider>` で全体を包むだけです。`theme` を各コンポーネントに props として渡していません。
+
+### `src/App.css`
 
 ```css
-.app-shell {
+.layout {
+  min-height: 100vh;
+  transition: background-color 200ms, color 200ms;
+}
+
+.layout.light {
+  background-color: #fff;
+  color: #222;
+}
+
+.layout.dark {
+  background-color: #202020;
+  color: #eee;
+}
+
+.header {
+  padding: 12px 16px;
+  border-bottom: 1px solid currentColor;
   display: flex;
-  gap: 1rem;
-  align-items: flex-start;
+  align-items: center;
+  justify-content: space-between;
 }
 
-.app-sidebar {
-  flex: 0 0 200px;
-  padding: 1rem;
-  background: #f5f5f5;
-  border-right: 1px solid #ddd;
+.header h1 {
+  font-size: 1.2rem;
+  margin: 0;
 }
 
-.app-sidebar h2 {
-  margin-top: 0;
-  font-size: 1rem;
-}
-
-.app-sidebar ul {
-  list-style: none;
-  padding: 0;
+.nav {
   display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
+  align-items: center;
+  gap: 12px;
 }
 
-.app-sidebar a {
-  color: #0070f3;
-  text-decoration: none;
+.main {
+  padding: 16px;
 }
 
-.app-main {
-  flex: 1;
-}
-
-/* ダークモード配慮 */
-@media (prefers-color-scheme: dark) {
-  .app-sidebar {
-    background: #1f1f1f;
-    border-right-color: #333;
-    color: #e5e7eb;
-  }
-  .app-sidebar a {
-    color: #4ea2ff;
-  }
-}
-
-/* 画面が狭いときは縦積み */
-@media (max-width: 640px) {
-  .app-shell {
-    flex-direction: column;
-  }
-  .app-sidebar {
-    flex: 0 0 auto;
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #ddd;
-  }
+.theme-toggle {
+  padding: 6px 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  border: 1px solid currentColor;
+  background-color: transparent;
+  color: inherit;
 }
 ```
+
+背景色と文字色を `.light` / `.dark` クラスで切り替えています。クラス名は `Layout` が `theme` を見て付けています。
 
 ### 期待出力
 
-ブラウザで `/about` と `/todos` を開き比べます。
+- 画面右上に「現在: light (クリックで切替)」ボタンが表示される
+- 画面全体が白背景・黒文字（light テーマ）で表示される
+- ボタンを押すと「現在: dark (クリックで切替)」に変わり、画面全体が黒背景・白文字に切り替わる
+- もう一度押すと light に戻る
+- `Nav` / `Header` コンポーネントは props を 1 つも受け取っていないのにテーマ切替が動く
 
-**`/about`（サイドバーなし）:**
+### 変える
 
-```
-+-----------------------------------------+
-| Home | About | Todos   ← ルートレイアウト |
-+-----------------------------------------+
-|                                         |
-| 自己紹介                                |
-| ...                                     |
-|                                         |
-+-----------------------------------------+
-| © 2026 My Next App                      |
-+-----------------------------------------+
-```
-
-**`/todos`（サイドバーあり）:**
-
-```
-+-----------------------------------------+
-| Home | About | Todos   ← ルートレイアウト |
-+-----------------------------------------+
-| アプリメニュー |                        |
-| - TODO 一覧   |  TODO 一覧              |
-| - ホームに戻る|  (ページ固有の内容)     |
-|               |                         |
-+-----------------------------------------+
-| © 2026 My Next App                      |
-+-----------------------------------------+
-```
-
-確認したいポイント:
-
-- **URL は `/`、`/about`、`/todos` のまま変わらない**（`(public)` や `(app)` はどちらも URL に出ない）
-- **`/about` にはサイドバーが出ない**（`(app)/layout.tsx` の適用範囲外）
-- **`/todos` にはサイドバーが出る**（`(app)/layout.tsx` の適用範囲内）
-- ルートレイアウト（ヘッダー・フッター）は 3 ページすべてに出る
-
-この「同じ URL 体系のまま、一部のページだけに追加レイアウトを付けられる」のが Route Groups の狙いです。
-
-### 変えてみる
-
-1. `(app)/layout.tsx` のサイドバーに「新規作成」のリンク（仮に `/todos/new`）を足してみましょう（リンク先のページはまだ作らなくて構いません）。
-2. `(public)/layout.tsx` を新規作成して、`/` と `/about` にだけ「Welcome!」と書かれた小さなバナーを上に出してみましょう。`/todos` には出ないことを確認します。
-3. 手順の途中で、`(app)` を誤って `app/app/` のような括弧なしのディレクトリに作ったら URL がどうなるか試してみましょう（`/app/todos` のように URL に反映されてしまうはずです）。確認したら元に戻します。
+- `App.tsx` で `<ThemeProvider>` の行を削除してみます。`useTheme` の中で `throw new Error(...)` が発動し、画面がエラー表示になります。「Provider を必ず外側に置く」必要性を体感する演習です。確認したら元に戻します。
+- `ThemeContext.tsx` の `createContext<ThemeContextValue | null>(null)` を `createContext<ThemeContextValue>({ theme: "light", toggleTheme: () => {} })` のように「ダミーのデフォルト値」に変えることもできます。こうすると Provider 無しでもエラーは出ませんが、「包み忘れ」に気づけなくなる欠点があります。本コースでは `null` + チェック方式を推奨します。
+- `ThemeToggle` を `Header` の直下に移動しても、変わらず動くことを確認します。Context は **ツリーのどこに置いても** Provider の配下なら届きます。
 
 ### 自分で書く
 
-何も見ずに、次の構造を組めるか挑戦しましょう。
-
-- `(marketing)` グループの中に `/pricing` ページを作り、`(marketing)/layout.tsx` で「製品ページ共通の帯」を上に出す
-- `/pricing` ではその帯が出るが、`/about` では出ないことを確認する
-
-必要なファイルは `app/(marketing)/layout.tsx` と `app/(marketing)/pricing/page.tsx` の 2 つだけです。
+- `useTheme` の戻り値に `isDark: boolean` を追加してみてください（`theme === "dark"` で計算する）。`ThemeToggle` の文言を `isDark ? "Dark" : "Light"` のように切り替えると、より実用的な見た目になります（本コース本体は絵文字なしで統一しています。お好みで差し替えてください）。
+- 別の Context として `LangContext`（`"ja" | "en"` を持つ）を追加し、`Header` の見出しを言語で切り替える演習もおすすめです。Context を **複数使う** 形に慣れます。
 
 ## まとめ
 
-- ディレクトリ名を `( )` で囲むと URL に出ない「グループ」になります。URL 体系を変えずにファイル配置だけを整理できます。
-- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されます。
-- 典型的な使いどころは「公開ページ / アプリ側ページ」のような大きな 2 分割です。
-- 本コースで扱うのはここまで。並列ルート（`@slot`）やインターセプトルート（`(.)path`）は本コースでは扱いません。
-- 別のレッスンで Server Component と Client Component の境界に踏み込みます（すでに済みの場合は「Server Component でデータを取得する」以降に進んでください）。
+- Context は「ツリーの途中を通さずに値を共有する」仕組み
+- `createContext` / `<Provider value>` / `useContext` の 3 点セットで使う
+- 初期値を `null` にして、カスタムフックでチェックすると Provider 包み忘れに気づきやすい
+- テーマ、ログインユーザー、言語設定のように **変化が少なく広く参照される値** に向く
+- 頻繁に変わる値や大規模 state には不向き。外部ライブラリ（Zustand / Redux 等）の領域だが本コースでは扱わない
+- TODO を Context 化する応用は「TODO アプリを React で作る」の発展枠で扱う
+- 別のレッスンで `useRef` で DOM を直接触る方法を学ぶ

@@ -57,7 +57,7 @@ Vite の開発サーバーが速い秘密は「**バンドルしないで配る*
 
 #### Vite の流れ
 
-1. ブラウザの **ESM（`import` / `export`）** をそのまま使う
+1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
 2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
 3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
 
@@ -105,7 +105,7 @@ React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plug
 - **ベンダー**（`node_modules`）を別チャンクに
 - **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
 
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson97 のバンドルサイズ最適化と繋がる話）。
+を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson102 のバンドルサイズ最適化と繋がる話）。
 
 ```ts
 // クリック時に初めて読み込む
@@ -175,7 +175,7 @@ export default defineConfig({
 - `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
 - `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
 - `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（lesson92）
+- `vitest`: テストランナー（lesson97）
 
 Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
 

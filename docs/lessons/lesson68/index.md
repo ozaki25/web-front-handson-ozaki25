@@ -1,276 +1,315 @@
-# lesson68: Server Actions の最小形
+# lesson68: Error Boundary と Suspense
 
 ## ゴール
 
-- `<form action={fn}>` に **関数** を渡してサーバー側で処理できることを理解します。
-- `"use server"` の配置ルール（ファイル先頭 or 関数先頭、async 必須、Client 内には書けない）を覚えます。
-- `FormData.get("...")` で送信値を取り出し、サーバー側の配列に追加できます。
-- `revalidatePath` の仕組みを図で把握し、送信後に一覧が自動更新される流れを追えます。
+- コンポーネントツリーの中で起きた例外が、親の境界で受け止められる仕組みを説明できる
+- `ErrorBoundary` をクラスコンポーネントで最小実装できる（React 19 でも現状クラスが必要）
+- `<Suspense fallback={...}>` の役割を説明でき、最小の使い方を書ける
+- `<ErrorBoundary>` と `<Suspense>` を組み合わせるパターンを書ける
+- 次章の Next.js の `error.tsx` / `loading.tsx` がこれを Route レベルで統合したものだと理解する
 
 ## 解説
 
-### `preventDefault` が要らなくなる
+### なぜ必要か: 1 箇所のエラーで全画面真っ白
 
-2 章 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（4 章）でも `onSubmit` の中で同じことをしていました。
+React は、レンダリング中にどこかで例外が飛ぶと **そのコンポーネントのツリー全体をアンマウント** します。本来関係ないヘッダーやフッターまで消えて、画面が真っ白になってしまいます。
 
-React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React が送信イベントを **自動で止めて** その関数を呼んでくれます。結果として、以下の対比になります。
+たとえば「記事一覧」「記事本文」「関連記事」の 3 つを並べていて、本文取得に失敗しただけで全部消える、という状況は避けたいわけです。
 
-| 書き方 | 送信のデフォルトを止める |
-|---|---|
-| 2 章 の素の JS | `event.preventDefault()` を手書き |
-| 4 章 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
-| **本レッスンの `<form action={fn}>`** | **React が自動で止める** |
+ここで登場するのが **ErrorBoundary**。境界より内側で起きた例外を受け止めて、フォールバック UI（エラー表示）に差し替えます。境界の外側は無事なままです。
 
-`preventDefault` という呼び出しが消えることに注目しておきましょう。
+### `ErrorBoundary` は現状クラスコンポーネントが必要
 
-### Server Actions とは
+React 19 でも、ErrorBoundary を **自分で書く** ときはクラスコンポーネントを使います。関数コンポーネントの fook だけでは用意できません。
 
-`<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
+ただし日常的にクラスを書く必要はなく、「この 1 ファイルだけクラスで書いて、以後は `<ErrorBoundary>` として JSX で使う」という運用でほぼ間に合います。
 
-- クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
-- 戻り値はありません（あっても無視されます。戻り値を使いたいときは別のレッスンの `useActionState`）。
-- 関数は **必ず `async`** です。
+最小の実装は次のとおりです。
 
-### `"use server"` の配置ルール
+```tsx
+import { Component, type ReactNode } from "react";
 
-Server Action であることを示すには、次のどちらかの場所に `"use server"` と書きます。
+type Props = {
+  fallback: ReactNode;
+  children: ReactNode;
+};
 
-1. **ファイル先頭に書く**: そのファイル内で `export` されている **async 関数すべて** が Server Action になります。最もよく使う形です。
-   ```ts
-   // app/actions.ts
-   "use server";
+type State = {
+  hasError: boolean;
+};
 
-   export async function addTodo(formData: FormData) {
-     // サーバー側で動く
-   }
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false };
 
-   export async function deleteTodo(id: string) {
-     // これも Server Action
-   }
-   ```
+  static getDerivedStateFromError(_error: Error): State {
+    // レンダリング中に例外が飛んだら、この戻り値で state を差し替える
+    return { hasError: true };
+  }
 
-2. **関数の先頭行に書く**: その関数だけが Server Action になります。Server Component の中にインラインで定義する場合に使います。
-   ```tsx
-   export default async function Page() {
-     async function addTodo(formData: FormData) {
-       "use server";
-       // この関数だけ Server Action
-     }
-     return <form action={addTodo}>...</form>;
-   }
-   ```
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // ログ送信など副作用を行いたい場合に使う
+    console.log("ErrorBoundary がキャッチ:", error.message, info);
+  }
 
-ルール:
-
-- **必ず async 関数** です。同期関数に `"use server"` は書けません。
-- **Client Component の中（`"use client"` のファイル内）には書けません**。Client から使いたいときは、別ファイルで `"use server"` を書いて `import` します。
-- `"use server"` を書いたファイルからの **`export` は async 関数だけ** にするのが安全です。値（普通の `const`）や非 async 関数を `export` するとビルド時に警告やエラーが出ることがあります。
-- 例外として **型の `export type`** は問題ありません（TypeScript の型情報はビルド後の JS には残らないためです）。
-
-本コースでは **(1) のファイル先頭パターン** を使います（分離が分かりやすいためです）。
-
-### データの保存先（本コースでの割り切り）
-
-本コースではデータベースは使いません。代わりに、`app/actions.ts` のモジュールトップレベルに **ただの配列** を置いて、擬似的な永続化とします。
-
-**開発時（dev）の注意**: StackBlitz や `next dev` では、`app/actions.ts` を編集するたびにモジュールが再評価され、`const todos: Todo[] = []` が初期化し直されて中身が消えます。動作確認のコツは「**追加したら actions.ts を編集しない**」です。本物の永続化が必要な場合は DB を使うのが正攻法です。
-
-```ts
-// app/actions.ts
-"use server";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
 ```
 
-- サーバーのプロセスが生きている間は `todos` が残ります（同じプロセス内の呼び出しは同じ配列を共有します）。
-- **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（「Vercel にデプロイする」末尾でも再度注意を書きます）。
+- **`getDerivedStateFromError`**: 例外を受け取って、エラー状態に切り替えるための **純粋な** メソッドです。ここで state を `{ hasError: true }` に差し替えます。
+- **`componentDidCatch`**: 副作用（ロギング / 通報）を走らせる場所です。ログ送信が要らなければ省略できます。
+- `fallback` と `children` は props で受け取る、シンプルなコンテナです。
 
-### `revalidatePath` の仕組み
+### 使い方
 
-Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッシュされます。Server Action が配列を変更しても、そのままではキャッシュされた古い画面が残ります。
+守りたい範囲を囲むだけです。
 
-`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** されます。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画されます。
-
-```mermaid
-sequenceDiagram
-  participant Browser as ブラウザ
-  participant Page as /todos page.tsx (Server)
-  participant Action as addTodo (Server Action)
-  participant Store as todos 配列
-
-  Browser->>Page: アクセス
-  Page->>Store: 配列を読む
-  Store-->>Page: [] (空)
-  Page-->>Browser: 空の一覧
-
-  Browser->>Action: <form action> で送信
-  Action->>Store: push(new)
-  Action->>Page: revalidatePath('/todos')
-  Note right of Page: キャッシュ無効化
-  Action-->>Browser: 完了
-  Browser->>Page: 再レンダリング(自動)
-  Page->>Store: 配列を読む
-  Store-->>Page: [new]
-  Page-->>Browser: 更新された一覧
+```tsx
+<ErrorBoundary fallback={<p>関連記事の読み込みに失敗しました</p>}>
+  <RelatedPosts />
+</ErrorBoundary>
 ```
+
+`<RelatedPosts />` でどれだけ例外が飛んでも、境界の外にあるヘッダー / ナビ / 他セクションは生きたままです。
+
+### 拾える例外と拾えない例外
+
+ErrorBoundary が捕まえるのは「**レンダリング中** の例外」です。次は拾えません。
+
+- イベントハンドラの中で投げた例外（`onClick={() => { throw ... }}`）
+- 非同期処理（`setTimeout` / `Promise` の `.then` の中）
+- サーバーサイドで起きる例外（Next.js の Server Component は別の仕組みで拾う）
+
+イベントハンドラの例外は、普通の `try` / `catch`（「try / catch でエラー処理」）か、state を使って自分でフォールバックを出すのが基本です。
+
+### `<Suspense>`: ローディングの境界
+
+`<Suspense>` はエラーの兄弟です。**非同期なデータ / コンポーネントを待つ間、フォールバック UI を見せる** 仕組みです。
+
+```tsx
+<Suspense fallback={<p>読み込み中...</p>}>
+  <SlowComponent />
+</Suspense>
+```
+
+- 中のコンポーネントが読み込み待ち状態（Promise を投げている / lazy ロードの途中）になると、`fallback` が代わりに表示される
+- 待ちが終わると中身に切り替わる
+- `<Suspense>` は React 本体の機能で、ライブラリ（Next.js / Remix / lazy など）と組み合わせて使う
+
+日常的には、後に学ぶ Next.js の App Router で Server Component と組み合わせて使うのが主戦場です（「Loading UI と Streaming」で扱います）。
+
+### 組み合わせパターン
+
+エラーとローディングは同時に起こりえます。両方を囲むのが基本形です。
+
+```tsx
+<ErrorBoundary fallback={<p>読み込みに失敗しました</p>}>
+  <Suspense fallback={<p>読み込み中...</p>}>
+    <RemoteContent />
+  </Suspense>
+</ErrorBoundary>
+```
+
+- **外側** が ErrorBoundary、**内側** が Suspense の順が定番です
+- 途中で Promise が投げられれば Suspense が受け取り、途中で例外が投げられれば ErrorBoundary が受け取ります
+
+### 次章への布石
+
+次章の Next.js App Router では、**ルートごと** にこの 2 つを書けるようになっています。
+
+- `app/posts/[id]/error.tsx` → そのルート配下の ErrorBoundary
+- `app/posts/[id]/loading.tsx` → そのルート配下の Suspense
+
+ファイルを置くだけで境界が自動で入るので、毎回コンポーネントを囲む必要がなくなります。今回学ぶ「境界で区切って、フォールバックに差し替える」発想は、Next.js でそのまま生きます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
+「TODO アプリを React で作る」で作ったプロジェクトを使い回しても構いませんし、新しいプロジェクトで始めても構いません。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは **新規の小さな演習** として分離して進めるのが楽です。
 
 <details>
-<summary>出発点のファイル（TODO の最小出発点）</summary>
+<summary>出発点のファイル</summary>
 
-**`app/todos/page.tsx`**（空でもよい。本文の手順 3 で全量置き換えます）
+**`src/main.tsx`**
 
 ```tsx
-export default function TodosPage() {
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+```
+
+**`src/App.tsx`**
+
+```tsx
+export default function App() {
   return (
-    <>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </>
+    <div>
+      <h1>lesson68</h1>
+    </div>
   );
 }
 ```
-
-`app/types.ts` と `app/actions.ts` は、本文の手順 1・手順 2 で新規作成するので事前準備は不要です。
 
 </details>
 
-### 前回のプロジェクトを開く
+### ゴール
 
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
+- わざと例外を投げる子コンポーネント `Bomb` を `ErrorBoundary` で囲み、画面全体が死なずにフォールバックに切り替わる
+- `Suspense` で `lazy` 読み込みのコンポーネントを囲み、ロード中のフォールバックを確認する
+- 「爆発するボタンを押す前」は通常表示、「押した後」は ErrorBoundary のフォールバックが出ることを確認する
 
-### 手順 1: `Todo` 型を用意
+### 手順
 
-3 章 で決めた `Todo` 型を、Next.js プロジェクトでも再利用します。`app/types.ts` を作ります。
+1. `src/ErrorBoundary.tsx` を新規作成して、クラスコンポーネントの ErrorBoundary を用意する
+2. `src/Bomb.tsx` を新規作成する。props で `shouldExplode` を受け取り、`true` のときは `throw new Error(...)` する
+3. `src/LazyGreeting.tsx` を作り、`App.tsx` から `lazy(() => import("./LazyGreeting"))` で読み込む
+4. `App.tsx` に 2 つのセクションを並べる。それぞれ境界で囲む
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
+### 主要ファイルの完成形
 
-### 手順 2: `app/actions.ts` を作る
-
-先頭に `"use server"` を書きます。モジュールトップレベルに配列とアクションを書きます。
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-// 戻り値の型（3 章 「判別共用体」そのもの）
-export type AddTodoResult = { ok: true } | { ok: false; error: string };
-
-export async function addTodo(formData: FormData): Promise<AddTodoResult> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { ok: false, error: "空のままでは追加できません" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return { ok: true };
-}
-```
-
-ポイント:
-
-- `"use server"` はファイルの **1 行目** に書きます。
-- `const todos: Todo[] = []` が「永続化の代わり」です。サーバーが生きている間だけ保持されます。
-- `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
-- `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
-- `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
-- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体（discriminated union）** そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は別のレッスンで `useActionState` と結合するとき効きます。
-
-### 手順 3: `/todos` を本物のページにする
-
-`app/todos/page.tsx` を書き換えます。
+**`src/ErrorBoundary.tsx`**
 
 ```tsx
-import { addTodo, listTodos } from "../actions";
+import { Component, type ReactNode, type ErrorInfo } from "react";
 
-export default async function TodosPage() {
-  const todos = await listTodos();
+type Props = {
+  fallback: ReactNode;
+  children: ReactNode;
+};
+
+type State = {
+  hasError: boolean;
+};
+
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false };
+
+  static getDerivedStateFromError(_error: Error): State {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.log("ErrorBoundary がキャッチ:", error.message);
+    console.log("発生場所:", info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
+}
+```
+
+**`src/Bomb.tsx`**
+
+```tsx
+type Props = {
+  shouldExplode: boolean;
+};
+
+export function Bomb({ shouldExplode }: Props) {
+  if (shouldExplode) {
+    throw new Error("Bomb が爆発しました");
+  }
+  return <p>Bomb はまだ安全です</p>;
+}
+```
+
+**`src/LazyGreeting.tsx`**
+
+```tsx
+export default function LazyGreeting() {
+  return <p>こんにちは！（遅れて読み込まれたコンポーネント）</p>;
+}
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { lazy, Suspense, useState } from "react";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { Bomb } from "./Bomb";
+
+const LazyGreeting = lazy(() => import("./LazyGreeting"));
+
+export default function App() {
+  const [exploded, setExploded] = useState(false);
 
   return (
-    <>
-      <h1>TODO 一覧</h1>
-      <form action={addTodo}>
-        <input type="text" name="text" placeholder="やることを入力" />
-        <button type="submit">追加</button>
-      </form>
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
+    <div style={{ fontFamily: "system-ui", padding: 16 }}>
+      <h1>lesson68: ErrorBoundary と Suspense</h1>
+
+      <section>
+        <h2>1. ErrorBoundary</h2>
+        <button onClick={() => setExploded(true)}>爆発させる</button>
+        <ErrorBoundary
+          fallback={
+            <div style={{ color: "red" }}>
+              ここだけエラーになりました（他のセクションは生きています）
+            </div>
+          }
+        >
+          <Bomb shouldExplode={exploded} />
+        </ErrorBoundary>
+      </section>
+
+      <section>
+        <h2>2. Suspense</h2>
+        <Suspense fallback={<p>読み込み中...</p>}>
+          <LazyGreeting />
+        </Suspense>
+      </section>
+
+      <section>
+        <h2>3. 組み合わせ</h2>
+        <ErrorBoundary fallback={<p>組み合わせでも守られています</p>}>
+          <Suspense fallback={<p>読み込み中 (組み合わせ)...</p>}>
+            <LazyGreeting />
+          </Suspense>
+        </ErrorBoundary>
+      </section>
+    </div>
   );
 }
 ```
 
-ポイント:
-
-- このファイルは Server Component です（`"use client"` を書きません）。
-- `<form action={addTodo}>` に関数を直接渡しています。
-- `event.preventDefault()` も `onSubmit` も書いていません。React が自動で止めます。
-- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（1 章 で学んだ `name` 属性がここで効いています）。
-
 ### 期待出力
 
-1. `/todos` を開くと、入力欄・追加ボタン・空の `<ul>` が見えます。
-2. 「買い物」と入力して「追加」を押す → `<ul>` に「買い物」が 1 件追加されます。
-3. 「課題」を入力して追加 → 2 件目として「課題」が追加されます。
-4. ブラウザの DevTools → Network タブを見ると、送信時に POST が飛び、200 で返ってきています。
-5. **リロードしても消えません**（サーバープロセスが生きているためです）。ただし StackBlitz を開き直したり、プロジェクトを再起動すると配列がリセットされ、すべて消えます。
+1. 最初の画面には 3 つのセクションが並び、Suspense セクションは一瞬「読み込み中...」が見えた後、グリーティングに置き換わる
+2. 「爆発させる」ボタンを押す → 1 番目のセクションだけ赤字のフォールバックに切り替わる。ページ全体は生きたまま、ヘッダー（`h1`）も他のセクションも残っている
+3. Console に `ErrorBoundary がキャッチ: Bomb が爆発しました` のログが出る
+4. **StrictMode の開発ビルドでは、キャッチされた後もブラウザ Console に赤字のエラーが表示されます**。これは開発時の二重警告で、本番ビルドでは出ません（ErrorBoundary のキャッチ自体は機能しています）。気にせず進めて大丈夫です。
 
-### 変えてみる
+### 変える
 
-1. `addTodo` の中で `console.log("addTodo", text)` を追加しましょう。StackBlitz のターミナル側にログが出ることを確認します（Server Actions はサーバーで動く証拠です）。
-2. `revalidatePath("/todos")` をコメントアウトして、追加ボタンを押すとどうなるか試しましょう。一覧が更新されなくなります（手動で再読み込みすると更新されます）。確認したら戻します。
-3. `<input>` の `placeholder` を自分の好きなテキストに変えましょう。
-
-### スコープ外
-
-- 送信中のボタン無効化、空入力エラー表示は 別のレッスン で追加します。本レッスンでは最小形に集中します。
-- `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
+- `fallback` の中身を絵文字なしの自由な HTML に差し替えて、見た目を変える（例: `<div><h3>読み込みエラー</h3><p>あとで試してください</p></div>`）
+- `Bomb` を 2 つ並べ、それぞれ別の ErrorBoundary で囲む → 片方だけ爆発させたときに、もう片方は生きたままになる
+- ErrorBoundary の外側に `Bomb` を置くと画面全体が落ちることを確認する（確認後、内側に戻す）
 
 ### 自分で書く
 
-`/memo` という別ページを作り、`addMemo`（サーバー側に `const memos: string[] = []` を持つ）で「メモを追加して下に並べる」だけの最小アプリを作ってみましょう。`types.ts` や `actions.ts` は新しく別ファイルで作っても、既存の `actions.ts` に追記しても構いません。
+- ErrorBoundary に **「再試行」ボタン** を付ける。`state` に `hasError` を持っているので、押したら `setState({ hasError: false })` 相当の処理でリセットできる（クラスの `this.setState({ hasError: false })` を使う）
+- `LazyGreeting` の読み込みをわざと遅らせる。トップに `await new Promise(r => setTimeout(r, 2000))` 相当の処理を入れるダミーを作り、Suspense のフォールバックが長く見えることを確認する
+- 複数の ErrorBoundary を入れ子にする。内側でキャッチしたエラーは外側に届かないことを確認する
 
 ## まとめ
 
-- `<form action={fn}>` に関数を渡すと、React が自動で送信を止めて `fn` を呼びます。`preventDefault` は要りません。
-- Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
-- データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
-- `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
-- 別のレッスンで、送信中の状態表示とエラー表示を `useActionState` / `useFormStatus` で追加します。`addTodo` のシグネチャもそこで少し変えます。
-
-### コラム: `revalidateTag`
-
-`revalidatePath` はパス単位で無効化します。もっと細かく、「`fetch` にタグを付けておき、その **タグ** だけ無効化する」方法もあります。
-
-```ts
-// 読み込み側: タグを付ける
-await fetch(url, { next: { tags: ["todos"] } });
-
-// Server Action 側: タグで無効化
-import { revalidateTag } from "next/cache";
-revalidateTag("todos");
-```
-
-複数ページで同じデータを使っているときに便利です。本コースでは扱いませんが、実務では頻出です。
+- ErrorBoundary は「レンダリング中の例外」を境界で受け止め、画面全体の崩壊を防ぐ
+- React 19 でも、ErrorBoundary を書くにはクラスコンポーネントが必要。ただし 1 回書いたら以降は JSX で使うだけ
+- `getDerivedStateFromError` で state を切り替え、`componentDidCatch` でログを残す
+- `<Suspense fallback={...}>` は非同期な待ちの間にフォールバック UI を出す
+- 外側に ErrorBoundary、内側に Suspense、が定番の組み合わせ
+- 次章の Next.js では、この 2 つが `error.tsx` / `loading.tsx` としてルート単位で使えるようになる

@@ -1,326 +1,477 @@
-# lesson98: 画像とフォントの最適化
+# lesson98: コンポーネントテスト — React Testing Library
 
 ## ゴール
 
-- 画像が **LCP の最重要要因** であることを理解する
-- 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
-- `next/image` がやってくれる自動最適化の中身を説明できる
-- フォントが **CLS** と LCP にどう効くかを理解する
-- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
-- Self-hosted フォントと Google Fonts の使い分けを知る
+- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
+- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
+- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
+- `userEvent` でクリック / 入力をシミュレートできる
+- 状態変化（`useState`）を含むコンポーネントのテストが書ける
+- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
 
 ## 解説
 
-### 画像が LCP の最重要要因
+### React Testing Library の思想
 
-ほとんどのページで **LCP（最大コンテンツ）はヒーロー画像** が選ばれます。だから「LCP を改善する」は事実上「画像を最適化する」とほぼ同義です。
+React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
 
-### 画像最適化 5 つの技
+1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
+2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
 
-#### 1. フォーマット: WebP / AVIF を使う
+これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
 
-JPEG / PNG はもう古い選択肢です。現代は:
+- 内部実装をリファクタしてもテストは壊れない
+- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
 
-- **WebP**: ブラウザ対応率 95% 超。JPEG より 25-35% 軽い
-- **AVIF**: 比較的新しい。WebP よりさらに 30% 軽い。ブラウザ対応率は約 95%
+### セットアップ
 
-両者は **可逆 / 非可逆** 両方サポート。古いブラウザ用に JPEG をフォールバックで残すのが定番です。
+「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
 
-#### 2. サイズ: 表示サイズに合わせる
-
-3000×2000 の写真を `<img width="300" height="200">` で表示すると、**3000×2000 のファイルがそのまま転送** されます。これが LCP を遅らせる最大の原因です。
-
-対策:
-
-- **複数解像度** を用意して `srcset` で適切な一枚を選ばせる
-- ビルド時に **自動リサイズ** するツール（`next/image`、`vite-plugin-image-optimizer` 等）を使う
-
-```html
-<img
-  src="/photo-400.jpg"
-  srcset="/photo-400.jpg 400w, /photo-800.jpg 800w, /photo-1200.jpg 1200w"
-  sizes="(max-width: 600px) 100vw, 800px"
-  alt="..."
-/>
+```bash
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
 ```
 
-`sizes` は CSS のメディアクエリと同じ書き方で「表示サイズの目安」を伝えます。ブラウザがそれを見て `srcset` から最適な 1 枚を選びます。
+`vitest.config.ts` を更新:
 
-#### 3. 遅延読み込み: `loading="lazy"`
+```ts
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-画面外の画像は **読み込みを遅らせて** 後から取りに行きます。
-
-```html
-<!-- ページ最初に見える画像（first view）: eager -->
-<img src="/hero.jpg" loading="eager" fetchpriority="high" alt="..." />
-
-<!-- 画面外の画像: lazy -->
-<img src="/below-fold.jpg" loading="lazy" alt="..." />
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",  // ブラウザ風 DOM を提供
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
+  },
+});
 ```
 
-- **`loading="lazy"`**: ブラウザがスクロール位置に応じて読み込み開始
-- **`loading="eager"`**: 即時読み込み（既定）
-- **`fetchpriority="high"`**: ヒーロー画像で優先度を上げる（LCP の最強の武器）
+`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
 
-`loading="lazy"` を **first view の画像に付けてはいけません**（LCP が悪化）。ページの最重要画像には `fetchpriority="high"` を付けるのが 2026 年の定番です。
-
-#### 4. プレースホルダ: ぼかし画像の先出し
-
-LQIP（Low Quality Image Placeholder）と呼ばれる手法です。本物が読み込まれるまで、極小サイズのぼかし画像を表示しておきます。
-
-```html
-<!-- placeholder-blur と 本物の差し替え -->
-<img
-  src="/placeholder-blur.jpg"  /* 数 KB の小さい画像 */
-  data-src="/full.jpg"          /* 本物 */
-  ...
-/>
+```ts
+import "@testing-library/jest-dom/vitest";
 ```
 
-`next/image` の `placeholder="blur"` がこれを自動でやってくれます。
+これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
 
-#### 5. `<picture>` でフォーマットを分岐
+### 最小のコンポーネントテスト
 
-WebP / AVIF をサポートしていないブラウザに JPEG をフォールバックで返すには `<picture>` を使います。
+テスト対象:
 
-```html
-<picture>
-  <source srcset="/photo.avif" type="image/avif" />
-  <source srcset="/photo.webp" type="image/webp" />
-  <img src="/photo.jpg" alt="..." width="800" height="600" />
-</picture>
-```
+```tsx
+// src/Greeting.tsx
+type Props = { name: string };
 
-ブラウザは上から順に対応形式を探し、最初に対応している `<source>` を使います。すべて非対応なら最後の `<img>` を使います。
-
-### `next/image` は全部やってくれる
-
-5 章 で扱った `<Image>` コンポーネントは、上記 5 つの最適化を **設定なしで** 全部やります。
-
-- フォーマット自動変換（WebP / AVIF）
-- 表示サイズに応じた `srcset` 生成
-- `loading="lazy"`（first view を除く自動判定は手動が確実）
-- `placeholder="blur"` でぼかし
-- `<picture>` 相当のフォールバック
-
-Next.js 以外の環境では同等の自動化は手作業が必要なので、Next.js が選ばれる理由の 1 つになっています。
-
-### フォントが CLS と LCP に効く
-
-フォントの読み込み挙動が悪いと:
-
-- **CLS 悪化**: フォントが切り替わった瞬間にテキスト幅が変わってレイアウトがズレる
-- **LCP 悪化**: テキストが LCP 要素なら、フォント読み込み完了まで描画されない
-
-主な現象:
-
-- **FOIT**（Flash of Invisible Text）: フォント読み込み中、テキストが **見えない**
-- **FOUT**（Flash of Unstyled Text）: フォント読み込み中、フォールバックフォントで一瞬表示 → 切り替わり
-
-### `font-display: swap`
-
-CSS の `@font-face` で `font-display: swap` を指定すると、**FOUT** モードになります。フォールバックフォントで先に表示し、本物のフォントが届いたら差し替えます。
-
-```css
-@font-face {
-  font-family: "MyFont";
-  src: url("/fonts/myfont.woff2") format("woff2");
-  font-display: swap;
+export function Greeting({ name }: Props) {
+  return <h1>こんにちは、{name} さん</h1>;
 }
 ```
 
-`swap` は LCP に有利（テキストが先に表示される）ですが、CLS は出やすくなります。トレードオフです。`optional` を選ぶと「100ms 以内に読み込めなければ諦める」という慎重派の挙動になります。
-
-### `<link rel="preload">` で先読み
-
-クリティカルなフォント（first view で使う）は **`<link rel="preload">`** でブラウザに「優先して読んでね」と伝えます。
-
-```html
-<link
-  rel="preload"
-  href="/fonts/myfont.woff2"
-  as="font"
-  type="font/woff2"
-  crossorigin
-/>
-```
-
-これで HTML パース中に並行して読み込みが始まり、CSS で `@font-face` が見つかった時にはほぼ準備完了の状態になります。LCP / CLS 双方に効きます。
-
-### `next/font` は全部やってくれる
-
-Next.js では `next/font` が自動で:
-
-- フォントをビルド時にダウンロード（self-host 化、Google Fonts への外部リクエスト削減）
-- サブセット化（必要な文字だけ抽出）
-- preload リンクを HTML に自動挿入
-- `font-display: swap` を既定にする
-- フォールバックフォントの幅メトリクスを近づけて CLS を抑制
+テスト:
 
 ```tsx
-import { Inter } from "next/font/google";
+// src/Greeting.test.tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Greeting } from "./Greeting";
 
-const inter = Inter({ subsets: ["latin"], display: "swap" });
+describe("Greeting", () => {
+  it("名前を含む挨拶を表示する", () => {
+    render(<Greeting name="Alice" />);
+    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
+  });
+});
+```
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+3 つの基本要素:
+
+- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
+- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
+- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
+
+### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
+
+要素を探す関数は **接頭辞** で挙動が変わります。
+
+| 接頭辞 | 見つからない時 | 用途 |
+|---|---|---|
+| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
+| `queryBy*` | `null` を返す | 「無いはず」を確認する |
+| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
+
+例:
+
+```tsx
+// 「保存」ボタンが必ずある
+const button = screen.getByRole("button", { name: "保存" });
+
+// エラーメッセージは「無いはず」（成功時）
+expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
+
+// fetch が終わった後に現れるユーザー名
+const userName = await screen.findByText("Alice");
+```
+
+### クエリの優先順位
+
+Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
+
+| 優先度 | クエリ | 何を見るか |
+|---|---|---|
+| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
+| 2 | `getByLabelText` | フォームの `<label>` テキスト |
+| 3 | `getByPlaceholderText` | input の placeholder |
+| 4 | `getByText` | 表示テキスト |
+| 5 | `getByDisplayValue` | input の現在値 |
+| 6 | `getByAltText` | img の alt |
+| 7 | `getByTitle` | title 属性 |
+| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
+
+**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
+
+### `userEvent` でユーザー操作をシミュレート
+
+ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { Counter } from "./Counter";
+
+describe("Counter", () => {
+  it("ボタンを押すと数が増える", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+
+    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
+  });
+
+  it("複数回押すと累積する", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    const button = screen.getByRole("button", { name: "+1" });
+    await user.click(button);
+    await user.click(button);
+    await user.click(button);
+
+    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
+  });
+});
+```
+
+`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
+
+### フォーム入力のテスト
+
+`<input>` への入力は `user.type` でシミュレートします。
+
+```tsx
+import { useState } from "react";
+
+export function NameForm() {
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSubmitted(name);
+      }}
+    >
+      <label htmlFor="name">お名前</label>
+      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+      <button type="submit">送信</button>
+      {submitted && <p>こんにちは、{submitted} さん</p>}
+    </form>
   );
 }
 ```
 
-`next/font/google` は Google Fonts を自動 self-host 化、`next/font/local` は手元の `.woff2` をビルドに組み込みます。
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { NameForm } from "./NameForm";
 
-### Self-host vs Google Fonts CDN
+describe("NameForm", () => {
+  it("名前を入力して送信すると挨拶が出る", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
 
-| 方式 | 利点 | 欠点 |
-|---|---|---|
-| Google Fonts CDN（`<link href="fonts.googleapis.com">`） | セットアップ簡単 | 外部ドメインへの追加 DNS / 接続 / プライバシー懸念 |
-| Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
-| `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
+    const input = screen.getByLabelText("お名前");
+    const button = screen.getByRole("button", { name: "送信" });
 
-2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
+    await user.type(input, "Alice");
+    await user.click(button);
 
-### サブセット化
+    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+  });
 
-日本語フォント（`Noto Sans JP` 等）はファイルが MB 単位で巨大です。**実際に使う文字だけを抽出した「サブセット」** を配信しないと一気に LCP / CLS が悪化します。
+  it("入力が空のままだと挨拶は出ない", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
 
-- ラテン文字だけのページなら `subsets: ["latin"]` で 30KB 程度
-- 日本語ページは `Noto Sans JP` の **第一水準漢字 + 平仮名 + 片仮名 + 数字 + 記号** に絞ったサブセットを用意（数百 KB 程度）
+    await user.click(screen.getByRole("button", { name: "送信" }));
 
-ビルド時にサブセット化するツール（`subset-font` パッケージ等）や、`next/font/google` の `subsets` 指定で自動化できます。
+    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
+  });
+});
+```
+
+`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
+
+### よく使う追加マッチャ（jest-dom）
+
+`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
+
+```tsx
+expect(element).toBeInTheDocument();        // DOM に存在する
+expect(element).toHaveTextContent("hello"); // テキストを含む
+expect(element).toBeVisible();              // 見える状態
+expect(input).toHaveValue("Alice");         // input の値
+expect(checkbox).toBeChecked();             // チェック済み
+expect(button).toBeDisabled();              // disabled 属性付き
+expect(element).toHaveClass("active");      // CSS クラス付き
+expect(element).toHaveAttribute("href", "/about");
+```
+
+これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
 
 ## 演習
 
 ### ゴール
 
-- 既存の Next.js プロジェクト（または新規）に `<Image>` を入れる前後で Lighthouse の LCP を比較する
-- `next/font/google` で Google Fonts を self-host 化する
-- DevTools Network タブで画像 / フォントの読み込み順序を観察する
+- React + RTL のセットアップを `vitest.config.ts` に反映する
+- カウンターコンポーネントのテストを書ける
+- 簡単なフォームのテストを書ける
+- `getByRole` / `getByLabelText` を優先して使える
 
-### 手順 1: 画像最適化の前後比較（Next.js）
+### 途中から始める場合
 
-1. 5 章 で作った Next.js プロジェクト or 新規 `create-next-app` で:
+「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
 
-   ```bash
-   npx create-next-app@latest perf-image --typescript --tailwind=false --app
-   cd perf-image
-   ```
+### 手順 1: 依存パッケージをインストール
 
-2. `app/page.tsx` に大きな画像を **素の `<img>` で** 配置（最初は最適化なし）:
+```bash
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
+```
 
-   ```tsx
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <img
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           style={{ width: 600, height: 400 }}
-         />
-       </main>
-     );
-   }
-   ```
+### 手順 2: 設定ファイルを更新
 
-3. `npm run build && npm run start` でビルド済みを起動し、Lighthouse を Mobile で計測。LCP / 全体スコアをメモ
+`vitest.config.ts`:
 
-4. `<img>` を `<Image>` に置き換え:
+```ts
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-   ```tsx
-   import Image from "next/image";
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
+  },
+});
+```
 
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <Image
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           width={600}
-           height={400}
-           priority
-         />
-       </main>
-     );
-   }
-   ```
+`vitest.setup.ts` を新規作成:
 
-   `next.config.ts` に `picsum.photos` を許可:
+```ts
+import "@testing-library/jest-dom/vitest";
+```
 
-   ```ts
-   const nextConfig = {
-     images: {
-       remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
-     },
-   };
-   export default nextConfig;
-   ```
+### 手順 3: テスト対象のコンポーネントを書く
 
-5. もう一度ビルド + Lighthouse。LCP が大幅に改善するはず（数秒 → 1 秒以下）
-
-### 手順 2: `next/font` でフォント
-
-`app/layout.tsx`:
+`src/Counter.tsx`:
 
 ```tsx
-import { Inter } from "next/font/google";
+import { useState } from "react";
 
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-});
+export function Counter() {
+  const [count, setCount] = useState(0);
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+      <button onClick={() => setCount((c) => c - 1)}>-1</button>
+      <button onClick={() => setCount(0)}>リセット</button>
+    </div>
   );
 }
 ```
 
-ビルドして Network タブで:
+`src/NameForm.tsx`:
 
-- 自分のドメイン（`localhost:3000`）から `.woff2` が配信される
-- `fonts.googleapis.com` への外部リクエストが消える
-- HTML の `<head>` に `<link rel="preload" as="font">` が自動挿入されている
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-### 手順 3: 画像のフォーマット確認
+export function NameForm() {
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
 
-Network タブの **Type** 列で:
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (name.trim()) {
+      setSubmitted(name);
+    }
+  }
 
-- `<img>` 直書き: `jpeg` / `png`
-- `<Image>`: `webp` / `avif`（ブラウザ対応に応じて）
+  return (
+    <form onSubmit={handleSubmit}>
+      <label htmlFor="name">お名前</label>
+      <input
+        id="name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <button type="submit">送信</button>
+      {submitted && <p>こんにちは、{submitted} さん</p>}
+    </form>
+  );
+}
+```
 
-「Response Headers」の `content-type` も確認できます。
+### 手順 4: テストを書く
+
+`src/Counter.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { Counter } from "./Counter";
+
+describe("Counter", () => {
+  it("初期値は 0", () => {
+    render(<Counter />);
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+  });
+
+  it("+1 ボタンで増える", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+
+    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
+  });
+
+  it("-1 ボタンで減る", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "-1" }));
+
+    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
+  });
+
+  it("リセットボタンで 0 に戻る", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+    await user.click(screen.getByRole("button", { name: "+1" }));
+    await user.click(screen.getByRole("button", { name: "リセット" }));
+
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+  });
+});
+```
+
+`src/NameForm.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { NameForm } from "./NameForm";
+
+describe("NameForm", () => {
+  it("名前を入力して送信すると挨拶が出る", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.type(screen.getByLabelText("お名前"), "Alice");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+  });
+
+  it("空のまま送信しても挨拶は出ない", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
+  });
+
+  it("入力中の値が input に反映される", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    const input = screen.getByLabelText("お名前");
+    await user.type(input, "Bob");
+
+    expect(input).toHaveValue("Bob");
+  });
+});
+```
+
+### 手順 5: 実行
+
+```bash
+npm run test
+```
+
+すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
 
 ### 期待出力
 
-- 同じ画像でもファイルサイズが半分以下に縮む
-- LCP の数値が劇的に改善
-- フォントの FOIT / FOUT がほぼ気にならないレベル
+```
+ PASS  src/Counter.test.tsx (4)
+ PASS  src/NameForm.test.tsx (3)
+
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
+```
 
 ### 変える
 
-- `<Image priority>` を外してみる。LCP がやや悪化する（`priority` は first view の画像に必須）
-- `next/font/google` の `display: "swap"` を `display: "block"` に変えると、FOIT になることを確認
-- `<Image>` の `placeholder="blur"` を試す（ローカル画像を使う場合のみ）。読み込み中にぼかしが見える
+- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
+- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
+- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
 
 ### 自分で書く
 
-- 普段使う画像を `<picture>` でラップして、AVIF / WebP / JPEG のフォールバック構造を手書きで作る
-- `<link rel="preload">` を `<head>` に追加して、特定の画像 / フォントを先読みさせる
+- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
+  - 入力欄 + 「追加」ボタン
+  - 追加されたら入力欄が空になる
+  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
+- テストで以下を検証:
+  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
+  - 送信後に input が空になる
+  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
+
+`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
 
 ## まとめ
 
-- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
-- 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
-- **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
-- フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
-- **`font-display: swap`** + **`<link rel="preload">`** が基本
-- **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化
-- これで章 7 の Core Web Vitals 3 連作が完了。次は **Git と GitHub ワークフロー** に進む
+- React Testing Library は「ユーザーの見え方」をテストする思想
+- `render` / `screen` でコンポーネントを描画して DOM クエリ
+- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
+- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
+- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
+- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
+- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
+- 別のレッスンでは fetch を含むコンポーネントのテスト（**MSW** で API モック）に進む

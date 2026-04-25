@@ -1,200 +1,599 @@
-# lesson84: ブラウザと HTTP の基本
+# lesson84: 小さなアプリを仕上げる（統合）
 
 ## ゴール
 
-- Web ページが表示されるまでにブラウザとサーバーのあいだで何が起きているか、おおまかに説明できる
-- HTTP のリクエスト / レスポンスがそれぞれ「何行か文字列が連なったもの」であることを理解する
-- HTTP メソッド（GET / POST / PUT / DELETE など）の違いを 1 行で言える
-- ステータスコードの番台（2xx / 3xx / 4xx / 5xx）を使い分けの文脈で説明できる
-- 主要なリクエスト / レスポンスヘッダの役割を数個挙げられる
+- ここまでの知識を統合して「投稿できる TODO アプリ」を完成させます。
+- `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
+- `export const metadata` でサイト共通タイトル、`generateMetadata` で詳細ページの動的タイトルを設定できます。
+- `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
 
 ## 解説
 
-### ブラウザがページを表示するまでの流れ
+### 今まで作ってきたものを並べる
 
-アドレスバーに `https://example.com/` と入れて Enter を押したとき、ざっくり次の流れで動いています。
+2 章 で素の JS で作った TODO、4 章 の「TODO アプリを React で作る」で React + localStorage に移植した TODO、そして「Server Actions の最小形」「送信状態とエラー表示」で Server Actions 化した TODO。
 
-1. DNS でホスト名（`example.com`）を IP アドレスに解決する
-2. その IP アドレスの **サーバーに TCP 接続 + TLS（https なら）** を張る
-3. `GET / HTTP/1.1` 的な **リクエスト** を送る
-4. サーバーから **レスポンス**（HTML 文字列）が返る
-5. HTML を読みながら、中に書かれている `<link>` / `<script>` / `<img>` の URL を **追加でリクエスト** する（CSS / JS / 画像）
-6. それらをすべて受け取って、ブラウザが DOM・CSSOM・レイアウト計算 → 画面に描画
+ここまでで以下が揃っています:
 
-本レッスンでは、このうち **3-5 の「HTTP 通信の中身」** を見ていきます。「DOM を操作する」で扱った DOM は 6 の段階（ブラウザの内部表現）の話でした。
+- `app/layout.tsx`（「共通レイアウトを作る」）: ナビとフッターを含む共通レイアウト
+- `app/page.tsx`（「Next.js ってなに？」で作った形）: トップページ
+- `app/about/page.tsx`（「ページを増やしてリンクで移動する」）: 1 章 の自己紹介ページを移植
+- `app/posts/page.tsx` / `app/posts/[id]/page.tsx`（「Server Component でデータを取得する」「動的ルート」）: 練習用の記事一覧
+- `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（「Server Actions の最小形」「送信状態とエラー表示」）: 追加フォーム付き一覧
+- `app/actions.ts`（「Server Actions の最小形」「送信状態とエラー表示」）: Server Actions
 
-### HTTP は「文字列のやり取り」
+このレッスンで足すものは次のとおりです:
 
-HTTP は意外と素朴なプロトコルで、**人間が読める文字列** を TCP の上で送り合っているだけです。
+1. TODO の **詳細ページ** `/todos/[id]`
+2. 一覧からの削除ボタン
+3. ルートレイアウトの `metadata`（サイト共通）
+4. 詳細ページの `generateMetadata`（動的タイトル）
+5. `/todos?highlight=<id>` のハイライト表示（`searchParams` の初登場）
 
-例えばクライアント（ブラウザ）がサーバーに送るリクエストは、次のような形をしています。
+### `export const metadata`（静的）
 
-```
-GET /articles/42 HTTP/1.1
-Host: example.com
-User-Agent: Mozilla/5.0 (...)
-Accept: text/html
-Accept-Language: ja,en
-Cookie: session=abc123
+ルートレイアウトや静的なページでは、`metadata` という名前の定数を `export` するとタイトル等が設定できます。
 
-```
-
-1 行目: **リクエストライン**。`HTTP メソッド パス HTTP バージョン` の 3 つ。2 行目以降: **ヘッダ**。キー: 値。空行が 1 つ入ったあと、必要ならリクエストボディが続きます（GET では普通は付けません）。
-
-それに対してサーバーからのレスポンスは次のような形です。
-
-```
-HTTP/1.1 200 OK
-Content-Type: text/html; charset=utf-8
-Content-Length: 1234
-Cache-Control: public, max-age=3600
-Set-Cookie: session=abc123; HttpOnly
-
-<!doctype html>
-<html>
-...
-</html>
+```tsx
+// app/layout.tsx
+export const metadata = {
+  title: "TODO アプリ",
+  description: "Next.js App Router の学習用アプリ",
+};
 ```
 
-1 行目: **ステータスライン**。`HTTP バージョン ステータスコード 理由フレーズ`。2 行目以降: **ヘッダ**。空行の後に **ボディ**（HTML / JSON / 画像バイナリなど）。
+`title` `description` 以外にも OG 画像などを指定できますが、本コースでは 2 つに留めます。
 
-この 2 つのかたまりがブラウザとサーバーのあいだを **1 往復する** のが HTTP 通信の基本単位です。HTTPS の場合も、TLS で暗号化されるだけで中身の形は同じです。
+### `generateMetadata`（動的）
 
-### HTTP メソッドの 4 つ
+URL ごとにタイトルを変えたいときは、静的な定数では足りません。その場合は **`generateMetadata` 関数** を `export` します。
 
-大きく 4 つ覚えておけば、ほぼ現代のアプリは読めます。
+```tsx
+import type { Metadata } from "next";
 
-| メソッド | 用途 | 冪等性 | ボディ |
-|---|---|---|---|
-| **`GET`** | 取得 | あり（何回呼んでも同じ） | 基本なし |
-| **`POST`** | 作成・任意の操作 | なし | あり |
-| **`PUT`** | 全体置換 | あり | あり |
-| **`DELETE`** | 削除 | あり | 基本なし |
+export async function generateMetadata({
+  params,
+}: PageProps<"/todos/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  return { title: `Todo #${id}` };
+}
+```
 
-他にも `PATCH`（部分更新）/ `HEAD`（ヘッダだけ取得）/ `OPTIONS`（CORS の事前問い合わせ）がありますが、まずは上の 4 つです。
+- 関数名は `generateMetadata` 固定です。
+- 引数の型は Next.js 16 のグローバル型 `PageProps<"/todos/[id]">` で受けます（`import` 不要）。`params` は Promise なので `await` します。
+- 戻り値は `export const metadata` と同じ形のオブジェクトです。型は `Metadata` です（`next` から `import type`）。
+- 戻り値を `Promise<Metadata>` と明示すると、誤字やプロパティ名の間違いを TS が拾ってくれます。
 
-**冪等性（idempotent）** とは「同じリクエストを何回送っても結果が同じ」という性質です。ネットワーク不良で再送されても安全な `GET` / `PUT` / `DELETE` と、再送で二重登録になる恐れがある `POST` は別物として扱われます。
+### `searchParams` も Promise
 
-### ステータスコードの 4 つの番台
+クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams` です。Next.js 15 以降は `params` と同様に **Promise** になっています。
 
-先頭 1 桁でグループを表します。
+```tsx
+export default async function TodosPage({
+  searchParams,
+}: PageProps<"/todos">) {
+  const { highlight } = await searchParams;
+  // highlight は string | undefined
+}
+```
 
-| 番台 | 意味 | 代表例 |
-|---|---|---|
-| **2xx 成功** | リクエストは正常に処理された | `200 OK` / `201 Created` / `204 No Content` |
-| **3xx リダイレクト / キャッシュ** | 別の URL へ / ブラウザのキャッシュを使って | `301 Moved Permanently` / `302 Found` / `304 Not Modified` |
-| **4xx クライアントエラー** | 送り方が悪い | `400 Bad Request` / `401 Unauthorized` / `403 Forbidden` / `404 Not Found` |
-| **5xx サーバーエラー** | サーバー側の問題 | `500 Internal Server Error` / `502 Bad Gateway` / `503 Service Unavailable` |
-
-細かい違いの覚え方:
-
-- `401` は「認証が要る / 認証情報が間違っている」
-- `403` は「認証は通ったが権限がない」
-- `404` は「リソースがない」
-- `500` は「サーバー側が想定外で落ちた」
-- `502` / `503` は「サーバーの手前（ロードバランサ / リバースプロキシ）で問題」
-
-### 主要なヘッダ
-
-全部は覚えなくて良いですが、以下は DevTools の Network タブでも頻出します。
-
-**リクエストヘッダ（クライアント → サーバー）:**
-
-| ヘッダ | 意味 |
-|---|---|
-| `Host` | どのホストに向けたリクエストか |
-| `User-Agent` | ブラウザの種類・バージョン |
-| `Accept` | 受け取れる Content-Type |
-| `Accept-Language` | 希望言語（`ja,en` など） |
-| `Authorization` | 認証情報（`Bearer xxxx` など） |
-| `Cookie` | サーバーから受け取った Cookie |
-| `Referer` | どのページから来たか（綴り間違い通りに定義されている） |
-
-**レスポンスヘッダ（サーバー → クライアント）:**
-
-| ヘッダ | 意味 |
-|---|---|
-| `Content-Type` | ボディの種類（`text/html` / `application/json` 等） |
-| `Content-Length` | ボディのバイト数 |
-| `Cache-Control` | キャッシュ制御（次の「HTTP キャッシュ」で詳解） |
-| `ETag` | リソースのバージョン識別子（キャッシュ用） |
-| `Location` | リダイレクト先（3xx と一緒に使う） |
-| `Set-Cookie` | Cookie を発行 |
-
-### DevTools の Network タブで見る
-
-ここまでの話は、ブラウザの DevTools を使うと **実際にやり取りされているリクエスト / レスポンスの生の姿** として観察できます。
-
-Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページをリロード → 一覧から 1 行クリックすると、Headers / Payload / Preview / Response / Timing の各パネルで詳細が見られます。
-
-この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。別のレッスンで DevTools の各タブを詳しく扱うので、本レッスンの演習は DevTools の入り口までで十分です。
+- `PageProps<"/todos">` のグローバル型が `searchParams` を `Promise<{ [key: string]: string | string[] | undefined }>` として推論します。`?highlight=abc` のようなクエリを取り出すときは `await searchParams` してから `highlight` を読みます。
+- `?highlight=abc&foo=bar` のように複数指定されていれば、それぞれのキーが文字列として届きます。
+- 同じキーが複数個（`?foo=1&foo=2`）あると配列になりますが、本レッスンでは扱いません。
 
 ## 演習
 
-### ゴール
+### 途中から始める場合
 
-- 任意のページを開いて DevTools の Network タブで通信を観察する
-- 1 つのリクエスト / レスポンスを選び、ヘッダ・ステータス・メソッドを読み取れる
-- `curl` でも同じ内容が取れることを手元で確認する（任意）
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは5 章 の総まとめなので、「共通レイアウトを作る」の共通レイアウト・「Server Actions の最小形」の Server Actions・「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
 
-### 手順
+<details>
+<summary>出発点のファイル</summary>
 
-1. 手元のブラウザで `https://jsonplaceholder.typicode.com/posts/1` を開きます（ブラウザが JSON をそのまま表示します）
-2. DevTools（F12）→ Network タブを開いた状態で、ページをリロードします
-3. 一番上に `posts/1` のような行が出ます。これをクリックします
-4. 右側に開くパネルで以下を確認します。
+**`app/layout.tsx`**
 
-### 観察するポイント
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+import "./globals.css";
 
-**Headers タブ:**
+export const metadata = {
+  title: "My Next App",
+};
 
-- General: Request URL / Request Method（`GET`）/ Status Code（`200 OK`）
-- Response Headers: `content-type: application/json; charset=utf-8` / `cache-control: ...`
-- Request Headers: `Host` / `User-Agent` / `Accept` / `Accept-Language`
-
-**Response タブ（または Preview タブ）:**
-
-- レスポンスボディの JSON（`{ "userId": 1, "id": 1, "title": "...", ... }`）
-
-**Timing タブ:**
-
-- DNS Lookup / Initial connection / TLS / Waiting (TTFB) / Content Download の各段階にかかった時間
-
-### 任意課題: `curl` で同じことを体験する
-
-ターミナルから `curl` を叩くと、ブラウザ抜きで同じ通信を確認できます。
-
-```bash
-curl -i https://jsonplaceholder.typicode.com/posts/1
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
 ```
 
-`-i` オプションでレスポンスヘッダも表示します。出力の先頭に `HTTP/2 200` のようなステータスライン、空行の後に JSON ボディが続くのが見えます。
+**`app/page.tsx`**
 
-送信側を見たいときは `-v`（詳細）を使います。
-
-```bash
-curl -v https://jsonplaceholder.typicode.com/posts/1
+```tsx
+export default function Page() {
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <p>このアプリについてはヘッダーのリンクから。</p>
+    </>
+  );
+}
 ```
 
-`>` で始まる行がリクエスト、`<` で始まる行がレスポンスです。最初の `> GET /posts/1 HTTP/2` と `> host: jsonplaceholder.typicode.com` を見比べると、本文で説明したリクエストの形と一致していることが分かります。
+**`app/about/page.tsx`**（「ページを増やしてリンクで移動する」で作った自己紹介ページ。省略可）
 
-### 変える
+**`app/types.ts`**
 
-- URL を `https://jsonplaceholder.typicode.com/does-not-exist` に変えて、ブラウザのアドレスバーで開く。Network タブで Status Code が **`404`** になっていることを確認
-- `https://httpstat.us/500` を開く。Status Code が **`500`** になる（HTTP のテスト用サービス。明示的に各ステータスを返す）
-- `https://httpstat.us/301` を開く。リダイレクト先があって、ブラウザが自動で追従する様子を Network タブで確認
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
 
-### 自分で書く
+**`app/actions.ts`**
 
-- DevTools の Network タブで、最近よく見るサイト（自分のポートフォリオ・ブログ等）を開き、**1 つの HTML ページを開くときにいくつのリクエストが発生しているか** を数えてみる
-- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンスで、別のレッスンで仕組みを扱う
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+```
+
+**`app/todos/TodoForm.tsx`**
+
+```tsx
+"use client";
+
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { addTodo, type AddTodoState } from "../actions";
+
+const initialState: AddTodoState = {};
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
+
+export function TodoForm() {
+  const [state, formAction, isPending] = useActionState(addTodo, initialState);
+
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.error && <p className="error">{state.error}</p>}
+      {isPending && <p>通信中...</p>}
+    </form>
+  );
+}
+```
+
+**`app/todos/page.tsx`**
+
+```tsx
+import { listTodos } from "../actions";
+import { TodoForm } from "./TodoForm";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+**`app/globals.css`**（「共通レイアウトを作る」と「送信状態とエラー表示」で書いた共通 CSS + `.error` スタイル）
+
+```css
+.site-header ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding: 1rem;
+  background: #f5f5f5;
+}
+
+.site-header a {
+  text-decoration: none;
+  color: #0070f3;
+}
+
+.site-footer {
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  color: #555;
+}
+
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-header ul {
+    background: #1f1f1f;
+  }
+  .site-header a {
+    color: #4ea2ff;
+  }
+  .site-footer {
+    border-top-color: #333;
+    color: #bbb;
+  }
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
+  }
+}
+```
+
+</details>
+
+### 前回のプロジェクトを開く
+
+「送信状態とエラー表示」で作ったプロジェクトを開き直しましょう。
+
+### 手順 1: 削除アクションを追加する
+
+`app/actions.ts` に `deleteTodo` を追加します。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function getTodo(id: string): Promise<Todo | undefined> {
+  return todos.find((t) => t.id === id);
+}
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+
+export async function deleteTodo(formData: FormData) {
+  const id = String(formData.get("id") ?? "");
+  const index = todos.findIndex((t) => t.id === id);
+  if (index >= 0) {
+    todos.splice(index, 1);
+  }
+  revalidatePath("/todos");
+}
+```
+
+- `getTodo(id)` は詳細ページで使います。
+- `deleteTodo` は `FormData` から `id` を取り出し、`splice` で削除します。同じく Server Action です。
+- 削除用フォームは `useActionState` を使わない（戻り値不要）ので `(formData) => void` のシンプルな形です。
+
+### 手順 2: 一覧ページで削除ボタンを出す + ハイライト対応
+
+`app/todos/page.tsx` を書き換えます。`searchParams` を受け取って、ハイライトする行に `className` を付けます。
+
+```tsx
+import { listTodos, deleteTodo } from "../actions";
+import { TodoForm } from "./TodoForm";
+import Link from "next/link";
+
+export default async function TodosPage({
+  searchParams,
+}: PageProps<"/todos">) {
+  const { highlight } = await searchParams;
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li
+            key={todo.id}
+            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
+          >
+            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
+            <form action={deleteTodo} style={{ display: "inline" }}>
+              <input type="hidden" name="id" value={todo.id} />
+              <button type="submit">削除</button>
+            </form>
+          </li>
+        ))}
+      </ul>
+      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
+    </>
+  );
+}
+```
+
+ポイント:
+
+- `PageProps<"/todos">` のグローバル型が `searchParams` を Promise として推論するので、`await searchParams` で `highlight` を取り出します。
+- `todo.id === highlight` のときだけ `todo-item--highlight` クラスを足します。
+- 削除ボタンは `<form action={deleteTodo}>` の中に `<input type="hidden" name="id" value={todo.id} />` を仕込みます。ボタンを押すと `deleteTodo(formData)` が呼ばれます。
+- 詳細ページへのリンクも `<Link href={`/todos/${todo.id}`}>` で追加します。
+
+### 手順 3: CSS でハイライト
+
+`app/globals.css` に以下を追加します。
+
+```css
+.todo-list {
+  list-style: none;
+  padding: 0;
+}
+
+.todo-item {
+  padding: 0.5rem;
+  border-bottom: 1px solid #ddd;
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.todo-item--highlight {
+  background: #fff3a3;
+}
+
+@media (prefers-color-scheme: dark) {
+  .todo-item {
+    border-bottom-color: #333;
+  }
+  .todo-item--highlight {
+    background: #665c1e;
+    color: #fff;
+  }
+}
+```
+
+- 黄色背景 `#fff3a3` がハイライトです（ダーク時は濃い黄土色 `#665c1e` + 白文字で視認性を確保します）。
+
+### 手順 4: 詳細ページ `/todos/[id]` を作る
+
+`app/todos/[id]/page.tsx` を新規作成します。
+
+```tsx
+import type { Metadata } from "next";
+import { notFound } from "next/navigation";
+import Link from "next/link";
+import { getTodo } from "../../actions";
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/todos/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const todo = await getTodo(id);
+  return {
+    title: todo ? `Todo: ${todo.text}` : "Todo not found",
+  };
+}
+
+export default async function TodoDetailPage({
+  params,
+}: PageProps<"/todos/[id]">) {
+  const { id } = await params;
+  const todo = await getTodo(id);
+
+  if (!todo) {
+    notFound();
+  }
+
+  return (
+    <>
+      <h1>Todo 詳細</h1>
+      <p>ID: {todo.id}</p>
+      <p>内容: {todo.text}</p>
+      <p>
+        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
+      </p>
+      <p>
+        <Link href="/todos">一覧に戻る</Link>
+      </p>
+    </>
+  );
+}
+```
+
+ポイント:
+
+- `generateMetadata` で動的タイトルを返します。`await params` と `getTodo(id)` を呼びます。
+- 見つからないときは `notFound()` を呼びます（「エラーと見つからないページ」と同じです）。
+- `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
+
+### 手順 5: 詳細ページの `not-found.tsx`
+
+`app/todos/[id]/not-found.tsx`:
+
+```tsx
+import Link from "next/link";
+
+export default function TodoNotFound() {
+  return (
+    <>
+      <h1>Todo が見つからない</h1>
+      <p>指定された ID の Todo は存在しない（または削除された）。</p>
+      <Link href="/todos">一覧に戻る</Link>
+    </>
+  );
+}
+```
+
+### 手順 6: ルートレイアウトの `metadata`
+
+`app/layout.tsx` の `metadata` を書き換えます。
+
+```tsx
+export const metadata = {
+  title: {
+    default: "TODO アプリ",
+    template: "%s | TODO アプリ",
+  },
+  description: "Next.js App Router の学習用 TODO アプリ",
+};
+```
+
+- `title.default`: 子ページで `title` を設定しない場合のデフォルトです。
+- `title.template`: 子ページが自分のタイトルを持つ場合、`%s` の部分に埋め込みます。例えば詳細ページの `generateMetadata` が `{ title: "Todo: 買い物" }` を返すと、実際のタブには **「Todo: 買い物 | TODO アプリ」** と表示されます。
+
+### 期待出力
+
+1. `/todos` を開く → TODO 一覧が表示されます。0 件なら「まだ 1 件もない」のメッセージが出ます。
+2. 「買い物」「課題」「運動」を順に追加 → 3 件の一覧が出ます。各項目は詳細リンクと削除ボタン付きです。
+3. タブのタイトル: 「TODO アプリ」です。
+4. 「買い物」をクリック → `/todos/<id>` に遷移します。タブのタイトルが「Todo: 買い物 | TODO アプリ」に変わります。
+5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になります。
+6. 一覧で「削除」ボタンを押す → その 1 件が消えます。タブのタイトルは「TODO アプリ」のままです。
+7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。タブのタイトルは「Todo not found | TODO アプリ」です。
+8. `/about` は1 章 の自己紹介ページです。タブのタイトルは「TODO アプリ」です（ルートの `default` が適用されます）。
+9. ナビから 3 ページを行き来できます。
+
+### 動作確認チェックリスト
+
+- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（「送信状態とエラー表示」の成果）
+- [ ] 送信中はボタンが disabled になる（「送信状態とエラー表示」の成果）
+- [ ] 追加 → 一覧が自動で更新される（`revalidatePath` の成果）
+- [ ] 削除 → 該当 1 件だけが消える
+- [ ] `/todos?highlight=<id>` でその行だけ黄色背景
+- [ ] `/todos/<id>` の詳細ページのタブタイトルが動的に変わる
+- [ ] `/todos/not-a-real-id` で `not-found.tsx` が出る
+- [ ] `/about` が1 章 の自己紹介と同じ見た目で出る
+
+### 変えてみる
+
+1. `<input type="hidden" name="id">` の値を書き換えて送信してみましょう（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認します。
+2. `generateMetadata` で `description` も返してみましょう: `return { title: ..., description: `ID ${id} の TODO` };`
+3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習です。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲みます。
+
+### 自分で書く（応用）
+
+TODO に「完了」のフラグを追加する演習です。
+
+- `types.ts` の `Todo` 型に `done: boolean` を追加します。
+- `actions.ts` に `toggleDone(formData: FormData)` を追加し、`id` を受け取って該当 Todo の `done` を反転させます。
+- 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出します。
+- 完了済みの項目はテキストに `text-decoration: line-through` を当てます（CSS に `.todo-item--done` を追加）。
+
+実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターンです。「Server Actions の最小形」「送信状態とエラー表示」でやったことの応用です。
 
 ## まとめ
 
-- HTTP はリクエスト / レスポンスという文字列の塊を 1 往復やり取りする素朴なプロトコル
-- リクエストは「メソッド + パス + ヘッダ + ボディ（任意）」の形
-- レスポンスは「ステータス + ヘッダ + ボディ」の形
-- メソッドは `GET` / `POST` / `PUT` / `DELETE` を基本に、冪等性を意識して使う
-- ステータスコードは 2xx / 3xx / 4xx / 5xx で大分類。細かい違い（401 vs 403 など）は都度覚える
-- ヘッダには `Host` / `User-Agent` / `Accept` / `Content-Type` / `Cache-Control` / `Set-Cookie` などがあり、DevTools の Network タブで実物を観察できる
-- 別のレッスンで、その **DevTools の各タブ** を読み方から押さえる
+- `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
+- `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できます。`template` を使うと子ページのタイトルを共通で包めます。
+- `PageProps<"/todos">` で URL クエリ（`searchParams`）を受け取り、`await` してから条件付きスタイルに反映できます。
+- 2 章 の TODO（素の JS）→ 4 章 の「TODO アプリを React で作る」（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
+- 「Vercel にデプロイする」では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。
+
+### 補足: レイアウトのおさらい
+
+このレッスンまでの `app/` 以下は、おおよそ次の形になっているはずです。
+
+```
+app/
+├── layout.tsx                # 共通レイアウト (Server)
+├── page.tsx                  # トップ (Server)
+├── globals.css
+├── actions.ts                # Server Actions
+├── types.ts                  # Todo 型
+├── components/               # 共通部品
+│   ├── Counter.tsx           # 「Server Component と Client Component」で作った Client コンポーネント
+│   ├── ClientBox.tsx
+│   └── ServerInfo.tsx
+├── about/
+│   ├── page.tsx              # 自己紹介 (Server)
+│   └── about.css
+├── todos/
+│   ├── page.tsx              # TODO 一覧 (Server)
+│   ├── TodoForm.tsx          # 追加フォーム (Client)
+│   └── [id]/
+│       ├── page.tsx          # TODO 詳細 (Server)
+│       └── not-found.tsx
+└── posts/                    # 記事一覧ページの練習用
+    ├── page.tsx
+    ├── loading.tsx
+    └── [id]/
+        ├── page.tsx
+        ├── error.tsx
+        └── not-found.tsx
+```
+
+不要になった練習用ページは消しても、残しても構いません。残すと Vercel 公開後も色々見られて面白いです。

@@ -1,176 +1,203 @@
-# lesson54: `useMemo` で計算のメモ化
+# lesson54: 配列を描画する
 
 ## ゴール
 
-- `useMemo` で重い計算の結果をメモ化できる
-- 依存配列 `[deps]` の意味を理解する
-- 「まず普通に書き、計測してから最適化する」という原則を持つ
-- `useCallback` / `React.memo` / React Compiler との関係を俯瞰できる
+- 配列を `.map` で JSX の配列に変換し、`<ul>` の中に並べられる
+- `key` prop に何を渡すべきかを説明できる
+- 素の JS での描画（2 章 の「繰り返し処理」「TODO アプリを作る」）との違いが書き出せる
 
 ## 解説
 
-### 再レンダリングのたびに走る計算
+### 2 章 の「繰り返し処理」の `for...of` / 「TODO アプリを作る」の DOM 追加との対比
 
-React は state や props が変わるたびにコンポーネント関数を再実行します。関数の中で書いた計算も、**毎回やり直し** です。
+2 章 で、TODO アプリの一覧を描画したときは次のように書きました。
 
-```tsx
-function TodoList({ todos }: { todos: Todo[] }) {
-  const [keyword, setKeyword] = useState("");
-
-  // 毎回のレンダリングでフィルタリングが走る
-  const filtered = todos.filter((t) => t.text.includes(keyword));
-
-  return (
-    <>
-      <input value={keyword} onChange={(e) => setKeyword(e.target.value)} />
-      <ul>
-        {filtered.map((t) => (
-          <li key={t.id}>{t.text}</li>
-        ))}
-      </ul>
-    </>
-  );
+```js
+// 素の JS での描画イメージ（2 章 の「繰り返し処理」+「TODO アプリを作る」）
+const ul = document.querySelector("#list");
+for (const todo of todos) {
+  const li = document.createElement("li");
+  li.textContent = todo.text;
+  ul.appendChild(li);
 }
 ```
 
-`todos` が 100 件くらいならこのまま書いても全く問題ありません。ただ、1 万件以上の配列で毎回フィルタするような場面では、再計算をスキップしたくなります。
+「1 件ずつ DOM を作って `appendChild`」。数が増えても手順は同じです。
 
-そのための仕組みが **`useMemo`** です。
-
-### `useMemo` の形
+React では、**配列を JSX の配列に変換するだけ**です。`return` に書いた JSX を見て、React が前回のツリーとの差分を計算し、必要な DOM だけを更新してくれます。
 
 ```tsx
-import { useMemo } from "react";
-
-const filtered = useMemo(() => {
-  return todos.filter((t) => t.text.includes(keyword));
-}, [todos, keyword]);
+<ul>
+  {todos.map((todo) => (
+    <li key={todo.id}>{todo.text}</li>
+  ))}
+</ul>
 ```
 
-- 第 1 引数: 値を返す関数
-- 第 2 引数: **依存配列**。この中の値が前回と同じなら、関数を呼び直さず前回の結果を使い回す
-- 戻り値: 第 1 引数の関数の戻り値
+`for` ループで `appendChild` を呼ぶ必要はありません。配列（`todos`）から配列（JSX の `<li>` の並び）への**変換**だけを書きます。
 
-「`todos` か `keyword` が変わったときだけ再計算する」という書き方になります。
+### `map` は2 章 の「配列の変換」の続き
 
-### 依存配列を忘れるとどうなるか
+2 章 の「配列の変換」で `map` / `filter` を学びました。`map` は配列の各要素を別の値に変換して、新しい配列を返すメソッドです。
 
-依存配列を `[]`（空配列）にすると、初回レンダリングの結果がずっと使い回されます。`keyword` を変えても `filtered` が更新されないバグになります。
+```ts
+const numbers = [1, 2, 3];
+const doubled = numbers.map((n) => n * 2); // [2, 4, 6]
+```
+
+React の配列描画は、この `map` で **JSX の要素に変換する** ことに他なりません。
 
 ```tsx
-// NG: keyword が変わっても filtered が更新されない
-const filtered = useMemo(() => {
-  return todos.filter((t) => t.text.includes(keyword));
-}, []);
+const items = ["りんご", "みかん", "ぶどう"];
+const listItems = items.map((item) => <li>{item}</li>);
+// listItems は [<li>りんご</li>, <li>みかん</li>, <li>ぶどう</li>]
+
+<ul>{listItems}</ul>;
 ```
 
-依存配列は **関数の中で参照している「外の値」すべて** を入れるのが原則です。忘れると静かなバグになります。
-
-### まず普通に書く、計測してから最適化
-
-`useMemo` は便利そうに見えますが、**乱用すると逆にコードが読みにくくなり、メモ化自体のコスト（依存配列のチェック、前回値の保持）で遅くなる** こともあります。
-
-原則:
-
-1. まず **`useMemo` なし** で書く
-2. 「画面がカクつく」「数千〜数万件の配列を扱う」など、**実際に遅いと感じたときだけ** `useMemo` を検討する
-3. React DevTools Profiler（「React DevTools」）で **本当に速くなったか計測** してから採用する
-
-「念のため」で書いた `useMemo` は、ほとんどの場合で邪魔になります。
-
-### コラム（折りたたみ）: `useCallback` と `React.memo`
-
-`useMemo` は **値** のメモ化ですが、関連する仕組みがもう 2 つあります。
-
-:::details useCallback / React.memo / React Compiler
-
-**`useCallback`**: 関数のメモ化。毎回のレンダリングで新しく作られる関数の参照を安定させます。
+実際は変数に入れずに、JSX の中で直接書きます。
 
 ```tsx
-const handleDelete = useCallback(
-  (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  },
-  [], // 依存なし、常に同じ関数参照を返す
-);
+<ul>
+  {items.map((item) => (
+    <li>{item}</li>
+  ))}
+</ul>
 ```
 
-**`React.memo`**: コンポーネントのメモ化。props が変わらなければ再レンダリングをスキップします。
+### `key` prop は「誰がどれか」を React に伝える
+
+上のコードを実際に書くと、ブラウザのコンソールに**警告**が出ます。
+
+```
+Warning: Each child in a list should have a unique "key" prop.
+```
+
+「リストの各要素に `key` prop を付けてね」という警告です。
+
+React は状態が変わるたびに、前回のツリーと新しいツリーを比べて差分を反映します。このとき、配列で並んでいる要素のうち「どれが前回と同じ要素なのか」を判断する材料が必要です。その材料が `key` です。
 
 ```tsx
-import { memo } from "react";
-
-export const TodoItem = memo(function TodoItem({ todo, onDelete }: Props) {
-  return <li>{todo.text}</li>;
-});
+<ul>
+  {todos.map((todo) => (
+    <li key={todo.id}>{todo.text}</li>
+  ))}
+</ul>
 ```
 
-`React.memo` で包んだ子コンポーネントに `useCallback` で関数 props を渡すと、親の再レンダリングで子がスキップされるようになります。
+- `key` には **配列内でユニークな値** を渡す
+- TODO のように `id` を持つデータなら、`id` をそのまま使う
+- 「配列のインデックス（`map((todo, i) => ...)` の `i`）を渡す」のは**避ける**。並び替えや途中削除で挙動が怪しくなるため
 
-**React Compiler** は React チームが進めている自動最適化ツールで、Next.js 16 で **stable** として採用されました（experimental フラグが不要に）。Compiler が有効な環境では、**`useMemo` / `useCallback` / `React.memo` の手動メモ化は原則不要** になる方向です。
+`key` は props 扱いですが、コンポーネント側で受け取れる値ではなく、**React 内部だけが使う特別な prop** です。
 
-本コースのスタンスは明確です。
+### 空の配列でも動く
 
-- **今**: 手動メモ化（`useMemo`）の意味を押さえる
-- **将来**: Compiler が成熟したら自動で済むようになる。その時は道具の使い方が変わる
-- **読者がやるべきこと**: 手動メモ化を押さえたうえで、「Compiler がある」ことを知識として頭の端に置くだけでよい
+`todos` が空配列 `[]` の場合、`map` の結果も空配列になるので、`<ul>` の中身は空になります。エラーにはなりません。
 
-:::
+「0 件のとき専用のメッセージを出したい」場合は、条件表示と組み合わせます（「条件で出し分ける」で扱います）。
+
+### 要素の中で `{式}` は 1 つだけ書けばよい
+
+JSX の中の `{ ... }` には、式を 1 つだけ書きます。`for` 文や `if` 文は書けません。配列の `map` の戻り値はれっきとした「式」（値を返す）なので、そのまま書けます。
+
+```tsx
+{
+  /* OK: map は式 */
+  todos.map((t) => <li key={t.id}>{t.text}</li>);
+}
+{
+  /* NG: for 文は式ではない */
+  for (const t of todos) {
+    /* ... */
+  }
+}
+```
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+
+<details>
+<summary>出発点のファイル</summary>
+
+**`src/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+本レッスンの演習でこのファイルを `import type { Todo } from "./types"` の形で利用します。
+
+</details>
 
 ### ゴール
 
-- 大きな配列の合計を `useMemo` でメモ化する
-- 別の state を変えても、依存配列にその値が入っていなければ再計算されないことを確認する
+- ハードコードした `todos` 配列を `<ul>` で描画する
+- `Todo` 型を3 章 の `types.ts` から `import type` して再利用する
+- 各 `<li>` に `key={todo.id}` を付ける
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートを開く
-2. `src/App.tsx` を以下に書き換える
-3. プレビューを確認する
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/types.ts` を作成（3 章 の「オブジェクトの型と type エイリアス」「配列・ユニオン・リテラル型・オプショナル」で作ったものを持ってくる想定）
+3. `src/TodoList.tsx` を作成
+4. `src/App.tsx` を書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+3 章 で `status` や `memo` を足した版を書いた場合はそちらを使っても OK です。このレッスンは `id` と `text` しか使いません。
+
+### `src/TodoList.tsx`
+
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+};
+
+export function TodoList({ todos }: TodoListProps) {
+  return (
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>{todo.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
 
 ### `src/App.tsx`
 
 ```tsx
-import { useMemo, useState } from "react";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
 import "./App.css";
 
-const BIG_NUMBERS = Array.from({ length: 10000 }, (_, i) => i + 1);
+const sampleTodos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "原稿を書く" },
+  { id: "a3", text: "散歩する" },
+];
 
 function App() {
-  const [multiplier, setMultiplier] = useState(1);
-  const [color, setColor] = useState<"red" | "blue">("blue");
-
-  // 重い計算（ここでは 1 万件の合計）
-  const total = useMemo(() => {
-    console.log("computing total...");
-    return BIG_NUMBERS.reduce((a, b) => a + b, 0) * multiplier;
-  }, [multiplier]);
-
   return (
     <>
-      <h1>useMemo のデモ</h1>
-
-      <section className="box">
-        <h2>合計</h2>
-        <p style={{ color }}>total = {total.toLocaleString()}</p>
-        <button onClick={() => setMultiplier((m) => m + 1)}>
-          multiplier +1（合計が再計算される）
-        </button>
-      </section>
-
-      <section className="box">
-        <h2>無関係な state</h2>
-        <p>現在の色: {color}</p>
-        <button onClick={() => setColor((c) => (c === "blue" ? "red" : "blue"))}>
-          色を切り替え（合計は再計算されないはず）
-        </button>
-      </section>
+      <h1>今日のタスク</h1>
+      <TodoList todos={sampleTodos} />
     </>
   );
 }
@@ -181,57 +208,51 @@ export default App;
 ### `src/App.css`
 
 ```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
+.todo-list {
+  list-style: disc;
+  padding-left: 20px;
   color: #222;
-  background-color: #fff;
 }
 
-.box button {
-  padding: 6px 10px;
-  cursor: pointer;
+.todo-list li {
+  padding: 4px 0;
 }
 
 @media (prefers-color-scheme: dark) {
-  .box {
+  .todo-list {
     color: #eee;
-    background-color: #202020;
-    border-color: #555;
   }
 }
 ```
 
 ### 期待出力
 
-- 画面に「合計」と「無関係な state」の 2 つのボックス
-- 初回に Console に `computing total...` が 1 回出る
-- 「multiplier +1」ボタンを押すたびに Console に `computing total...` が出る（依存配列に `multiplier` が入っているため）
-- 「色を切り替え」ボタンを何度押しても Console には `computing total...` が **出ない**（依存配列に `color` は入っていないため）
+画面に次のような表示が出ます。
 
-これが `useMemo` の効果です。`color` の変更では再レンダリングは起きますが、`total` の計算はスキップされます。
+```
+今日のタスク
+  ・ 牛乳を買う
+  ・ 原稿を書く
+  ・ 散歩する
+```
+
+ブラウザのコンソールに `key` に関する警告が **出ない** ことも確認してください。
 
 ### 変える
 
-- 依存配列を `[]` に変える → `multiplier` を増やしても `total` が更新されなくなる（バグ）。確認したら戻す
-- `useMemo` を外して `const total = ... * multiplier` に戻す → 色を切り替えるだけでも `computing total...` が出るようになる。1 万件程度なら体感差はほぼないが、再計算が走っていることは Console から確認できる
+- `sampleTodos` に要素を 2, 3 件追加して、画面が 1 行ずつ増えることを確認
+- `<li key={todo.id}>` の `key={todo.id}` を削除して、コンソールに警告が出ることを確認（確認できたら戻す）
+- `sampleTodos` を空配列 `[]` にすると `<ul>` が空になる。エラーにはならないことを確認
 
 ### 自分で書く
 
-- 「偶数だけを取り出す」処理を `useMemo` で書く
-- ヒント: `const evens = useMemo(() => BIG_NUMBERS.filter((n) => n % 2 === 0), []);`
-- `BIG_NUMBERS` は固定なので依存配列は `[]` で OK
-
-### 「React DevTools」への前振り
-
-「本当にスキップされているか」を React DevTools Profiler で計測する方法は、「React DevTools」で扱います。
+- `src/TodoList.tsx` を少しだけ変えて、リストの頭に `<p>合計 N 件</p>` を表示する
+- ヒント: `<ul>` の外側を `<div>` やフラグメントで包み、`<p>合計 {todos.length} 件</p>` を足す
+- 期待出力: 「今日のタスク」の下に「合計 3 件」と出て、その下にリスト
 
 ## まとめ
 
-- `useMemo(() => 計算, [deps])` で重い計算をメモ化できる
-- 依存配列の値が変わらなければ、前回の結果を使い回す
-- 依存配列を忘れると静かなバグの原因になる
-- まず普通に書き、本当に遅いときだけ `useMemo` を検討する
-- `useCallback` / `React.memo` / React Compiler は発展的な話題として頭の端に置く
+- 配列の描画は `配列.map((item) => <JSX />)` でおこなう
+- 各要素に **ユニークな `key`** を付ける（インデックスは避ける）
+- `for` / `appendChild` を書く素の JS と違い、React は「前のツリーとの差分」を自分で計算して DOM を更新する
+- 型（`Todo`）は3 章 の `types.ts` から `import type` で再利用できる

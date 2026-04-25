@@ -1,446 +1,342 @@
-# lesson106: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）
+# lesson106: GitHub Actions で CI
 
 ## ゴール
 
-- `:has()` / `:is()` / `:where()` を使い分けられる
-- `@layer` でカスケードの優先度を意図的に管理できる
-- `@scope` でコンポーネント単位のスコープを書ける
-- `@container`（Container Queries）で「親の幅に応じた」レイアウトを書ける
-- View Transitions API で状態の切り替えを滑らかにアニメートできる
-- 「JS でやっていたこと」が CSS だけでできる範囲が広がっていることを体感する
+- CI / CD の意味と価値を説明できる
+- GitHub Actions のワークフロー YAML の基本構造を読める
+- push / pull_request トリガーで Lint / Test / Build を自動実行できる
+- 失敗時の通知・ステータスバッジ・キャッシュの基本を知る
+- ブランチ保護ルールに **CI 必須** を組み合わせる
+- Vercel / Netlify の Preview Deployment が裏でやっていることを理解する
 
 ## 解説
 
-ここまで章 1 で扱ってきた CSS は **2010 年代に固まった基本** が中心でした。一方、2022〜2025 年にかけて CSS は急速に進化しています。`:has()` の登場で「親セレクタが書ける」、`@container` で「メディアクエリの限界」が解消され、`@layer` で「優先度の暴走」を防げるようになりました。
+### CI / CD とは
 
-「いま新しい CSS を書くなら最初から使ってよいもの」だけを集めたのがこのレッスンです。
+- **CI**（Continuous Integration、継続的インテグレーション）: コードをリポジトリに統合する **そのたびに** 自動でビルド / テスト / Lint を回す仕組み
+- **CD**（Continuous Delivery / Deployment、継続的デリバリー / デプロイ）: 統合に成功したら自動でステージング / 本番にデプロイする仕組み
 
-### :has() — 親セレクタ
+CI が崩れたまま開発を続けると、**「どの変更で壊れたか分からない」** 状態になります。1 つの PR ごとに「壊れていない」を保証することで、main は常に動く状態を保てます。
 
-長年「CSS には親セレクタがない」と言われてきました。子の状態を見て親を装飾するには JavaScript を使うしかなかった。それが `:has()` で書けるようになりました。
+### GitHub Actions とは
 
-#### 例 1: 画像を含む段落だけ余白を広げる
+GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料で月 2,000 分**（執筆時点）使えます。
 
-```css
-p:has(img) {
-  margin-block: 2rem;
-}
+主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
+
+### 最小のワークフロー
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:run
 ```
 
-#### 例 2: フォーカス中の入力を持つフォームに枠を出す
+このファイルを **commit + push** すると、GitHub Actions タブに最初の実行が現れ、自動で:
 
-```css
-form:has(input:focus) {
-  outline: 2px solid #2563eb;
-}
+1. Ubuntu の仮想マシンを起動
+2. リポジトリを `checkout`
+3. Node.js 22 をセットアップ（npm キャッシュも有効化）
+4. `npm ci` で依存パッケージをインストール
+5. `npm run test:run` でテストを実行
+
+### 構造を読む
+
+- **`name`**: ワークフローの表示名
+- **`on`**: トリガー条件
+  - `push.branches`: 指定ブランチへの push で実行
+  - `pull_request.branches`: 指定ブランチを **マージ先** にする PR で実行
+  - `schedule`: cron 式で定期実行
+  - `workflow_dispatch`: 手動実行
+- **`jobs`**: 並列実行できる仕事の単位
+- **`runs-on`**: 実行環境（`ubuntu-latest` / `macos-latest` / `windows-latest`）
+- **`steps`**: 順番に実行する処理
+  - `uses: actions/...@v4`: 既製のアクションを使う
+  - `run: ...`: シェルコマンドを実行
+
+### Lint / テスト / ビルドを並列で
+
+実用的には次のような構成です。
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run test:run
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
 ```
 
-#### 例 3: チェック済みの input を持つ label を強調
+3 つの job が **並列で実行** されます。1 つでも fail すると全体が fail として扱われ、PR ページに赤い X が出ます。
 
-```css
-label:has(input:checked) {
-  background: #dbeafe;
-  font-weight: bold;
-}
+### キャッシュで速くする
+
+`actions/setup-node@v4` の `cache: npm` を指定するだけで、`~/.npm` の中身がキャッシュされます。2 回目以降の `npm ci` が秒速で終わります。
+
+`pnpm` / `yarn` の場合も同様にキャッシュキーを指定できます。
+
+### マトリクスで複数バージョンをテスト
+
+```yaml
+test:
+  runs-on: ubuntu-latest
+  strategy:
+    matrix:
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }}, cache: npm }
+    - run: npm ci
+    - run: npm run test:run
 ```
 
-<LiveDemo
-  height="220px"
-  :html="`
-<form>
-  <label><input type='checkbox'> 利用規約に同意する</label>
-  <label><input type='checkbox'> ニュースレターを受け取る</label>
-  <input type='text' placeholder='フォーカスしてみて'>
-</form>
-  `"
-  :css="`
-form { display: grid; gap: 12px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-form:has(input:focus) { outline: 2px solid #2563eb; outline-offset: 2px; }
-label { padding: 8px; border-radius: 4px; }
-label:has(input:checked) { background: #dbeafe; font-weight: bold; }
-input[type=text] { padding: 8px; }
-  `"
-  :js="``"
-/>
+これで Node 20 と 22 の両方で同じテストが走ります。複数 OS（`os: [ubuntu, macos, windows]`）も同様。
 
-これまで JS で「checkbox の change を listen → 親 label にクラス付与」と書いていたコードが、**CSS 1 行** に置き換わります。
+### 環境変数とシークレット
 
-`:has()` は **2023 年末に全主要ブラウザで対応**し、2026 年の現在は安心して使えます。
+機密情報（API キー / Vercel トークン等）はリポジトリ設定の **Settings → Secrets and variables → Actions → New repository secret** に登録します。ワークフローからは:
 
-### :is() / :where() — セレクタの共通化
-
-複数のセレクタに同じスタイルを当てたい時、これまで `,` で並べて書いていました。
-
-```css
-h1 a, h2 a, h3 a {
-  color: #2563eb;
-}
+```yaml
+- run: deploy --token $VERCEL_TOKEN
+  env:
+    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 ```
 
-`:is()` でまとめられます。
+YAML やコードに **直接書くと公開されてしまう** ので絶対に避けます。
 
-```css
-:is(h1, h2, h3) a {
-  color: #2563eb;
-}
+### ステータスバッジ
+
+`README.md` の冒頭に CI バッジを貼ると、ブランチが「動く状態か」が一目で分かります。
+
+```md
+[![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
 ```
 
-`:where()` は **書き方が同じで詳細度だけ 0** になる版です。リセット CSS など「他の指定に絶対勝たないでほしい」場面で使います。
+緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
 
-```css
-:where(button, input, select) {
-  all: unset;
-}
-/* 詳細度 0 なので、後から書くどんなスタイルにも負ける */
+### ブランチ保護と CI 必須
+
+「GitHub の PR とコードレビュー」で設定したブランチ保護に **「Require status checks to pass before merging」** を追加し、`lint` / `test` / `build` の各 job を必須に指定します。
+
+これで:
+
+- CI が通っていない PR は **マージ ボタンが押せない**
+- 「テスト書いてあるけど動かしたら fail してた」が起きなくなる
+- 安心して main を信じられる
+
+### Vercel / Netlify との関係
+
+Vercel / Netlify の **Preview Deployment** は、内部で GitHub Actions と似た仕組みを動かしています。PR を作るたびに **そのブランチの内容で本物のサイトを一時デプロイ** してくれて、URL が PR にコメントされます。
+
+CI（GitHub Actions）と Preview Deployment は **役割が違う** ので両方使うのが普通です:
+
+- **CI**（Actions）: テストや Lint で「壊れてないか」を機械的に検証
+- **Preview Deployment**: 「本物の動作を人間がブラウザで確認」する場所
+
+本コースの教材サイトでも、PR を作ると Vercel が自動でプレビュー URL を作ってくれています。
+
+### Lighthouse CI で a11y / パフォーマンスを CI に
+
+「アクセシビリティの自動チェック」と「Core Web Vitals」で扱った **Lighthouse** を CI に組み込めます。
+
+```yaml
+- name: Lighthouse CI
+  uses: treosh/lighthouse-ci-action@v12
+  with:
+    urls: |
+      https://your-preview-url.vercel.app/
+    uploadArtifacts: true
+    temporaryPublicStorage: true
 ```
 
-詳細度の暴走を意図的に避けられるのがポイントです。
+PR ごとに自動で Lighthouse が走り、スコアが下がったら警告できます。
 
-### @layer — カスケードを意図的に積む
+### 通知
 
-CSS の優先度（カスケード）は「詳細度」「宣言順」「`!important`」で決まりますが、規模が大きくなると **どのスタイルが勝つか読めなくなる** 問題が起きます。
+CI 失敗時に Slack / Discord / Email に通知する Action も豊富です。
 
-`@layer` は「優先度の階層」を **明示的に** 書く仕組みです。
+- `slackapi/slack-github-action`
+- `act10ns/slack`
+- 失敗時のみ通知する条件: `if: failure()`
 
-```css
-@layer reset, base, components, utilities;
-
-@layer reset {
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-}
-
-@layer base {
-  body { font-family: sans-serif; line-height: 1.6; }
-}
-
-@layer components {
-  .button {
-    background: #2563eb;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-  }
-}
-
-@layer utilities {
-  .mt-4 { margin-top: 1rem; }
-}
+```yaml
+- name: Slack 通知
+  if: failure()
+  uses: slackapi/slack-github-action@v2
+  with:
+    payload: '{"text": "CI failed!"}'
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
-ルール:
+### よく使う公式アクション
 
-- **宣言順が優先度**。後ろの layer が勝つ
-- layer 内の詳細度は **layer 間の優先度に勝てない**
-- 「layer なし」の宣言は **すべての layer より強い**
+| アクション | 用途 |
+|---|---|
+| `actions/checkout@v4` | リポジトリを checkout |
+| `actions/setup-node@v4` | Node.js セットアップ |
+| `actions/cache@v4` | 任意のディレクトリをキャッシュ |
+| `actions/upload-artifact@v4` | テスト結果やビルド成果物を保存 |
+| `actions/download-artifact@v4` | 保存した成果物を取り出す |
+| `pnpm/action-setup` | pnpm セットアップ（Node とは別途） |
 
-これで「なぜか utilities が効かない」事故が消えます。Tailwind CSS v4 もこの `@layer` を全面採用しています。
-
-### @scope — コンポーネント単位のスコープ
-
-「このカードの中の `a` だけスタイルを当てたい」を、深いネストや BEM クラス名なしで書けます。
-
-```html
-<article class="card">
-  <h2>タイトル</h2>
-  <a href="#">続きを読む</a>
-</article>
-
-<a href="#">外側のリンク</a>
-```
-
-```css
-@scope (.card) {
-  a {
-    color: #dc2626;
-    text-decoration: none;
-  }
-}
-```
-
-`.card` 内の `a` だけ赤くなり、外側の `a` には影響しません。
-
-範囲を **下限指定** で「ここから先は適用外」にもできます。
-
-```css
-@scope (.card) to (.card-actions) {
-  /* .card の中だが .card-actions より上の階層だけが対象 */
-}
-```
-
-`@scope` は 2024 年以降に Chrome / Safari / Firefox（160）で対応が進みました。CSS Modules や CSS-in-JS なしで「スコープ付き CSS」が書けます。
-
-### @container — Container Queries
-
-これまでのメディアクエリは **画面幅** にしか反応できませんでした。
-
-```css
-@media (min-width: 768px) {
-  /* 画面幅 768px 以上 */
-}
-```
-
-これだと「サイドバーに置いた時の Card」と「メインに置いた時の Card」を **同じ画面幅で違うレイアウト** にすることが難しい。`@container` は「**親要素の幅** で分岐できる」仕組みです。
-
-```css
-.card-list {
-  container-type: inline-size;
-}
-
-.card {
-  display: block;
-}
-
-@container (min-width: 600px) {
-  .card {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 16px;
-  }
-}
-```
-
-`.card-list` が 600px 以上の場所に置かれた時だけ、子の `.card` が横並びになります。**画面幅は無関係**。
-
-これで「**コンポーネントが置かれた場所** に応じて見た目が変わる」、真にレスポンシブな部品が書けます。
-
-### View Transitions API — 滑らかな遷移
-
-「state 変化や画面遷移をフェード / スライドで自然に」を **CSS のみ + JS 数行** で実現できます。
-
-#### 同一ページ内で（`document.startViewTransition`）
-
-```js
-const box = document.getElementById("box");
-const button = document.getElementById("toggle");
-
-button.addEventListener("click", () => {
-  // 対応していないブラウザは普通に変更だけする
-  if (!document.startViewTransition) {
-    box.classList.toggle("big");
-    return;
-  }
-  document.startViewTransition(() => {
-    box.classList.toggle("big");
-  });
-});
-```
-
-`startViewTransition` のコールバック内で DOM を変えると、変更前後の **スナップショットを自動で撮ってクロスフェード** してくれます。
-
-<LiveDemo
-  height="320px"
-  :html="`
-<button id='toggle'>切り替え</button>
-<div id='box'></div>
-  `"
-  :css="`
-button { padding: 8px 16px; margin-bottom: 16px; }
-#box { width: 100px; height: 100px; background: #2563eb; border-radius: 8px; }
-#box.big { width: 280px; height: 200px; background: #dc2626; }
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.5s; }
-  `"
-  :js="`
-const box = document.getElementById('box');
-const button = document.getElementById('toggle');
-button.addEventListener('click', () => {
-  if (!document.startViewTransition) {
-    box.classList.toggle('big');
-    return;
-  }
-  document.startViewTransition(() => {
-    box.classList.toggle('big');
-  });
-});
-  `"
-/>
-
-#### ページ間（cross-document, MPA）
-
-2024〜2025 年に対応が進み、**異なるページ間** でも View Transition が使えるようになりました。
-
-```css
-@view-transition {
-  navigation: auto;
-}
-```
-
-これを CSS に書くと、同一オリジン内のページ遷移が **自動でフェード** します。さらに「両ページに共通する要素」に名前を付けると、ページをまたいで **同じ要素が動く** 演出ができます。
-
-```css
-.hero-image {
-  view-transition-name: hero-image;
-}
-```
-
-ページ A の `.hero-image` から ページ B の `.hero-image` へ、自然にモーフィングします。Next.js の App Router でも `next/link` の遷移に乗ります。
-
-#### Safari / Firefox の状況
-
-- 同一ページ内: Chrome / Safari / Firefox で対応
-- ページ間: Chrome 系で先行。Safari は段階的、Firefox は対応中（2026 年現在）
-
-未対応ブラウザでは **遷移なしで普通に動く** だけなので、Progressive Enhancement として安心して書けます。
-
-### おまけ: 知っておくと得する 2026 のモダン CSS
-
-- **`@starting-style`**: 要素が表示される瞬間のスタイル。`display: none` から表示への transition が書ける
-- **Anchor Positioning**（`anchor()`）: ある要素を **別の要素** に紐付けて配置。tooltip / popover が JS なしで書ける
-- **`color-mix()`**: `color-mix(in oklch, blue 70%, white)` のような色合成
-- **CSS Nesting**: Sass のように `&` で入れ子。2024 年に全ブラウザ対応
-
-これらも現場で増えていく機能です。
+`actions/checkout` のバージョンは年に数回更新されます。最新版は <https://github.com/marketplace?type=actions> で確認できます。
 
 ## 演習
 
 ### ゴール
 
-- `:has()` / `@container` / View Transitions API を **同じページに同居** させて動作を確認する
+- 「GitHub の PR とコードレビュー」で作ったリポジトリに `.github/workflows/ci.yml` を追加する
+- PR を作って CI が走るのを確認する
+- ブランチ保護に CI 必須を追加する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: テストスクリプトを用意
+
+リポジトリにテストが何もない場合、最小のものを足します。`package.json` の `scripts` に:
+
+```json
+{
+  "scripts": {
+    "test:run": "echo 'テスト実行（プレースホルダ）'",
+    "lint": "echo 'Lint 実行（プレースホルダ）'",
+    "build": "echo 'Build 実行（プレースホルダ）'"
+  }
+}
+```
+
+実プロジェクトでは Vitest / ESLint / Vite / Next.js のビルドコマンドを書きます。
+
+### 手順 2: ワークフローを書く
+
+`.github/workflows/ci.yml`（プロジェクトルートから見たパス）:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build
+```
+
+### 手順 3: ブランチで commit + push
 
 ```bash
-npm create vite@latest css-modern -- --template vanilla-ts
-cd css-modern
-npm install
+git switch -c chore/ci
+mkdir -p .github/workflows
+# 上記 ci.yml を保存
+git add .github package.json
+git commit -m "chore: GitHub Actions で CI を追加"
+git push -u origin chore/ci
 ```
 
-### 手順 2: index.html
+### 手順 4: PR を作って CI を観察
 
-`index.html` を以下に置き換えます。
+GitHub のリポジトリ → PR を作成。
 
-```html
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Modern CSS Demo</title>
-    <link rel="stylesheet" href="/src/style.css" />
-  </head>
-  <body>
-    <main>
-      <h1>モダン CSS のショーケース</h1>
+PR ページに **「Some checks haven't completed yet」** が出て、しばらくすると **「All checks have passed」** に変わるはずです（プレースホルダなので即終わる）。**Details** リンクから個別の job ログを見られます。
 
-      <section class="container">
-        <div class="card-list">
-          <article class="card"><h2>カード A</h2><p>説明文 A</p></article>
-          <article class="card"><h2>カード B</h2><p>説明文 B</p></article>
-        </div>
-      </section>
+PR 内で右側の **Checks** タブを開くと、各 step ごとの所要時間とログが時系列で見られます。
 
-      <section>
-        <button id="toggle">切り替え</button>
-        <div id="box"></div>
-      </section>
+### 手順 5: ブランチ保護に CI 必須を追加
 
-      <section>
-        <form>
-          <label><input type="checkbox" /> 同意する</label>
-          <input type="text" placeholder="フォーカスしてみる" />
-        </form>
-      </section>
-    </main>
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-```
+リポジトリの **Settings → Branches → main → Edit rule**:
 
-### 手順 3: src/style.css
+- **Require status checks to pass before merging** にチェック
+- 検索ボックスに `ci` と入力 → 表示されたチェックを **必須** に登録
+- 保存
 
-```css
-@layer reset, base, components;
-
-@layer reset {
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-}
-
-@layer base {
-  body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
-  main { display: grid; gap: 32px; max-width: 800px; }
-  section { padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-}
-
-@layer components {
-  /* Container Queries */
-  .card-list {
-    container-type: inline-size;
-    display: grid;
-    gap: 16px;
-  }
-  .card { padding: 16px; background: #f3f4f6; border-radius: 8px; }
-  @container (min-width: 600px) {
-    .card-list { grid-template-columns: 1fr 1fr; }
-  }
-
-  /* :has() */
-  form:has(input:focus) { outline: 2px solid #2563eb; outline-offset: 2px; }
-  label:has(input:checked) { background: #dbeafe; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
-  form { display: grid; gap: 12px; }
-
-  /* View Transitions */
-  #box { width: 100px; height: 100px; background: #2563eb; border-radius: 8px; margin-top: 12px; }
-  #box.big { width: 100%; height: 200px; background: #dc2626; }
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0.5s;
-  }
-}
-```
-
-### 手順 4: src/main.ts
-
-```ts
-const box = document.getElementById("box")!;
-const toggle = document.getElementById("toggle")!;
-
-toggle.addEventListener("click", () => {
-  if (!document.startViewTransition) {
-    box.classList.toggle("big");
-    return;
-  }
-  document.startViewTransition(() => {
-    box.classList.toggle("big");
-  });
-});
-```
-
-### 手順 5: 起動して確認
-
-```bash
-npm run dev
-```
-
-ブラウザで開いて以下を確認します。
-
-1. **`:has()`**: form 内の `input` をフォーカスすると form 全体に枠が出る。checkbox を ON にすると label の背景が変わる
-2. **`@container`**: ブラウザの `<section>` の幅を狭めるとカードが縦並びに、広げると横並びになる（**画面幅ではなく親要素の幅** で動くことを確認）
-3. **View Transitions**: 「切り替え」を押すと box の大きさと色がフェードしながら変化する
+これ以降、CI が成功していない PR はマージできなくなります。試しに `ci.yml` をわざと壊して push してみると、CI が fail して PR がマージできない状態になります（確認したら戻す）。
 
 ### 期待出力
 
-- フォームの input にフォーカスすると **青い枠** が出る
-- checkbox ON で label の背景が **薄い青** になる
-- ブラウザの幅を狭めるとカードが **縦並び**、広げると **2 列**
-- 「切り替え」ボタンで box が **フェードしながら** 拡大 / 縮小
+- PR ページに緑のチェック「All checks have passed」が出る
+- Actions タブにワークフロー実行履歴が並ぶ
+- ブランチ保護でマージボタンが無効化される（CI 失敗時）
 
 ### 変える
 
-- `@container (min-width: 600px)` を `(min-width: 400px)` に変えて分岐点を確認
-- `card-list` の `container-type` を消すと `@container` が効かなくなることを確認
-- `::view-transition-old/new` の `animation-duration` を `1.5s` にすると遷移がゆっくりになる
-- `@layer components` を `@layer reset` の前に動かすと優先度が変わる（`reset` が勝って `card` の余白が消える）
+- ジョブを 3 つに分割（lint / test / build）して並列実行に変える。CI 全体の時間が短くなる
+- `runs-on` を `windows-latest` に変えて Windows でも動くか確認（Vite / Next なら通常 OK）
+- `if: github.event_name == 'pull_request'` を追加して、特定の job を PR 時だけ実行
+- `actions/cache@v4` で `~/.cache/Cypress` などをキャッシュして E2E を速くする
 
 ### 自分で書く
 
-- `:has(input[type="email"]:invalid)` で「メール形式が不正な input を含む form」に赤枠を出す
-- 2 ページ作って `@view-transition { navigation: auto; }` を CSS に追加し、ページ間遷移にフェードがかかることを確認
-- `view-transition-name: hero;` を付けた要素を 2 ページに置き、ページをまたいだ要素が **モーフィング** することを確認（Chrome 系推奨）
+- README に CI バッジを貼る
+- Vercel デプロイのプレビュー URL を Lighthouse CI で計測するワークフローを足す（`treosh/lighthouse-ci-action@v12`）
+- Slack 通知を `if: failure()` で組み込む
 
 ## まとめ
 
-- `:has()` で **親セレクタ** が書ける。子の状態に応じた装飾を CSS だけで実現できる
-- `:is()` でセレクタを共通化、`:where()` は詳細度 0 で「弱い指定」を作る
-- `@layer` で **カスケードを意図的に積む**。Tailwind CSS v4 も採用
-- `@scope` で **コンポーネント単位のスコープ**。BEM や CSS Modules がなくても局所化できる
-- `@container` は **親要素の幅** で分岐。コンポーネント単位のレスポンシブが書ける
-- View Transitions API は `startViewTransition()` 1 つで状態遷移を滑らかにし、`@view-transition` でページ間にも拡張できる
-- 章 1「HTML / CSS」はここで一段落。**章 2「JavaScript」** へ進んでブラウザを動的に動かす方法に入る
+- **CI** は push / PR のたびに自動でビルド / テスト / Lint を回す仕組み
+- GitHub Actions は **`.github/workflows/*.yml`** に書くだけで動く
+- 構造: `on`（トリガー）→ `jobs`（並列の仕事）→ `steps`（順次のコマンド / アクション）
+- `actions/checkout` + `actions/setup-node` が定番の出発点。`cache: npm` で 2 回目以降が爆速
+- マトリクスで複数 OS / 複数 Node バージョンを並列テストできる
+- シークレットは **Settings → Secrets** に登録し、ワークフロー内で `secrets.NAME` を参照（具体的な記法は本文の YAML 例を参照）
+- ブランチ保護で **CI 必須** に設定すると安全
+- Vercel / Netlify の Preview Deployment は CI とは別の役割（実機確認）
+- Lighthouse CI / Slack 通知 / Artifact 保存などの拡張が豊富
+- これで章 7 の Git / GitHub 3 連作が完了。次は **フォーム深掘り**（React Hook Form + Zod） に進む

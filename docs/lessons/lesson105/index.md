@@ -1,414 +1,330 @@
-# lesson105: ESLint / Prettier / Biome
+# lesson105: GitHub の PR とコードレビュー
 
 ## ゴール
 
-- Lint と Format が **役割の異なる別物** であることを理解する
-- ESLint の flat config（`eslint.config.js`）の最小形を読める
-- Prettier との連携で衝突しない設定を書ける
-- Biome がこの 2 役を **1 ツール** で 35x 速く処理することを理解する
-- 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
-- VS Code の保存時 autofix で「書きながら直る」体験を得る
+- GitHub と Git の関係を区別して説明できる
+- リモートリポジトリを作成し、ローカル → GitHub に push できる
+- ブランチで作業 → Pull Request（PR）作成 → レビュー → マージの流れを理解する
+- 良いコミットメッセージと PR タイトルの書き方を知る
+- マージ戦略（merge / squash / rebase）の違いを 1 行で言える
+- ブランチ保護ルールの目的を説明できる
+- セルフホストではなく GitHub を選ぶ理由を 1 つ挙げられる
 
 ## 解説
 
-### Lint と Format は別物
+### Git と GitHub は別物
 
-混同しがちですが、役割が違います。
+混同されがちですが:
 
-| ツール | 守備範囲 |
-|---|---|
-| **Lint**（ESLint） | コードの **品質** チェック。バグの種 / アンチパターン / a11y 違反 / 未使用変数を検知 |
-| **Format**（Prettier） | コードの **見た目** を整える。インデント / クォート / 改行位置 |
+- **Git**: バージョン管理ツール（`git` コマンド本体）
+- **GitHub**: Git リポジトリをホスティングする SaaS。PR / Issue / Actions / Projects 等の協業機能付き
 
-ESLint は「未使用変数があるよ」「`any` 型は避けて」と教える。Prettier は「シングルクォートに統一して、80 文字で改行して」と整える。両方やると初めて綺麗で安全なコードベースになります。
+似たサービスに **GitLab** / **Bitbucket** / **Codeberg** などがありますが、2026 年時点でデファクトは GitHub です。本コースも GitHub を前提にします。
 
-歴史的には ESLint だけで両方やる時代もありましたが、**役割を分ける** のが現代の合意。最近はさらに **Biome** という「両方を 1 ツールでやる」次世代の選択肢が出てきました。
+### リモートリポジトリを作る
 
-### ESLint の flat config
+#### 1. GitHub で空の repo を作成
 
-ESLint v9（2024 年リリース）から **flat config** が既定になり、古い `.eslintrc` 形式は非推奨です。設定ファイルは **`eslint.config.js`**（ESM）になります。
+1. <https://github.com/new> にアクセス
+2. **Repository name** を入力（例: `my-todo-app`）
+3. **Public / Private** を選択
+4. **Initialize this repository** のチェックは **すべて外す**（後でローカルから push するため）
+5. **Create repository**
 
-#### 最小構成（TypeScript + React）
+#### 2. ローカルから push
 
-```bash
-npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks
-```
-
-`eslint.config.js`:
-
-```js
-import js from "@eslint/js";
-import tseslint from "typescript-eslint";
-import reactHooks from "eslint-plugin-react-hooks";
-
-export default [
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    files: ["**/*.{ts,tsx}"],
-    plugins: {
-      "react-hooks": reactHooks,
-    },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-    },
-  },
-  {
-    ignores: ["dist/", "node_modules/"],
-  },
-];
-```
-
-`package.json`:
-
-```json
-{
-  "scripts": {
-    "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
-  }
-}
-```
-
-`npm run lint` で全ファイルをチェック、`npm run lint:fix` で自動修正できる範囲は直してくれます。
-
-#### よく使うプラグイン
-
-- `typescript-eslint`: TypeScript の型情報を使った高度なチェック
-- `eslint-plugin-react`: React のお作法
-- `eslint-plugin-react-hooks`: フック規則の検証
-- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（章 7「アクセシビリティ」と相性◎）
-- `eslint-plugin-import`: import の順序とパス解決
-
-### Prettier の最小設定
+GitHub の repo 作成後の画面に表示される手順をそのまま実行:
 
 ```bash
-npm install -D prettier
+git remote add origin https://github.com/your-name/my-todo-app.git
+git branch -M main
+git push -u origin main
 ```
 
-`.prettierrc`（プロジェクトルート）:
+これでローカルのコミットが GitHub に上がります。`-u`（upstream）はそのブランチの追跡先を記録するので、次回からは `git push` だけで OK。
 
-```json
-{
-  "semi": true,
-  "singleQuote": false,
-  "trailingComma": "es5",
-  "printWidth": 80,
-  "tabWidth": 2
-}
-```
+### Pull Request（PR）の流れ
 
-`package.json`:
+PR は「**このブランチの変更を main に取り込みたい**、レビューしてください」という依頼書です。現代の開発フローでは **直接 main に push する代わりに** PR を経由するのが基本です。
 
-```json
-{
-  "scripts": {
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
-  }
-}
-```
-
-`.prettierignore` に除外を書きます:
+#### 典型的なフロー
 
 ```
-dist/
-node_modules/
-*.min.js
+1. ローカルでブランチ作成: git switch -c feature/add-login
+2. 変更してコミット (1 件 or 複数件)
+3. ブランチを GitHub に push: git push -u origin feature/add-login
+4. GitHub で PR を作成（main ← feature/add-login）
+5. レビュアーがコードをチェック、コメント、修正依頼
+6. 必要に応じて修正コミットを追加 push（PR は自動更新）
+7. レビュー承認（Approve）
+8. main にマージ
+9. ブランチを削除（GitHub の UI からワンクリック）
 ```
 
-### ESLint と Prettier の衝突を避ける
+#### PR の作り方
 
-ESLint にも整形系のルール（インデント / セミコロン）が組み込まれていますが、これが Prettier と衝突します。**`eslint-config-prettier`** を使ってこれらのルールを無効化します。
+`git push` 後に GitHub のリポジトリページを開くと、**「Compare & pull request」** ボタンが出ます。または:
+
+- リポジトリの **Pull requests** タブ → **New pull request**
+- ベースブランチ（マージ先）= `main`、比較ブランチ（変更元）= `feature/add-login`
+- タイトルと説明を書く → **Create pull request**
+
+### 良いコミットメッセージ・PR タイトル
+
+#### コミットメッセージ
+
+**Why**（なぜ）を中心に書きます。**What**（何）はコードを見れば分かるので最小限で。
+
+NG:
+
+```
+修正
+変更
+fix
+```
+
+OK:
+
+```
+Login ボタンの色をブランドカラーに統一
+useEffect のクリーンアップ漏れで起きていたメモリリークを修正
+ヘッダーのレスポンシブ対応（600px 以下で縦並び）
+```
+
+書式は **1 行目 50 文字以内** + **空行** + 詳細。最近は **Conventional Commits**（`feat:` / `fix:` / `docs:` などの prefix）も人気です。
+
+```
+feat(auth): magic link ログインを追加
+
+メール経由のワンタイム URL でログインできるようにする。
+パスワード認証は次のリリースで非推奨化する予定。
+```
+
+#### PR タイトル
+
+PR タイトルもコミットメッセージと同じ書き方が良いです。マージ後のコミット履歴に残るので、後から検索できる文言を選びます。
+
+PR 説明（本文）は **「何を変えたか」「なぜ」「どうテストしたか」** の 3 つを書くのが定番。テンプレート（`.github/pull_request_template.md`）を用意するチームも多いです。
+
+### コードレビュー
+
+#### レビュアーの観点
+
+- **動くか**: ローカルで動かして確認できれば理想
+- **読めるか**: 半年後の自分が読んで意味が通るか
+- **テストがあるか**: 重要なロジックに自動テストが付いているか
+- **影響範囲**: 既存機能を壊していないか
+- **セキュリティ**: 入力値検証 / シークレット漏洩 / XSS / SQL インジェクション
+- **パフォーマンス**: 明らかに遅くなる書き方をしていないか
+
+#### コメントの書き方
+
+GitHub の **Files changed** タブで、行ごとに `+` ボタンを押すとインラインコメントが書けます。
+
+良いコメント:
+
+```
+suggestion: ここは Array.from よりも展開構文の方が読みやすそうです
+question: なぜ条件を反転させているか教えてもらえますか？
+nit: 命名は `users` より `userList` の方がチームの規約に合いそうです
+blocking: ここで input をエスケープしないと XSS の余地があります
+```
+
+`suggestion` / `question` / `nit`（nitpick = 些細な指摘）/ `blocking`（マージブロッカー）のような **接頭辞** を使うと、レビュアーの意図が明確で議論が早くなります。
+
+GitHub の **Suggested change** 機能を使うと、コードを直接書き換える提案も送れます。レビュイーは 1 クリックで取り込めます。
+
+### マージ戦略の 3 種類
+
+PR の **Merge** ボタンには 3 つのオプションがあります（リポジトリ設定で許可されているものだけ表示）。
+
+#### 1. Merge commit（既定）
+
+```
+*   Merge pull request #42 from feature/login
+|\
+| * a (feature/login)
+| * b
+|/
+* c (main)
+```
+
+ブランチの履歴が残り、マージ用の追加コミット（`Merge pull request ...`）が作られます。
+
+- 利点: 履歴が完全に残る、PR と main の関係が分かりやすい
+- 欠点: 履歴グラフが複雑になりやすい
+
+#### 2. Squash and merge
+
+```
+* squashed (main) ← feature/login の全 commit を 1 つに圧縮
+* c (main)
+```
+
+PR の全コミットを **1 つに圧縮** して main に合流。
+
+- 利点: main の履歴が線形 + クリーン、1 PR = 1 commit でリバートしやすい
+- 欠点: PR 内の細かい履歴が失われる
+
+最近のチームでは **Squash が既定** になることが多いです。本コースの教材サイトもこの方針です。
+
+#### 3. Rebase and merge
+
+PR のコミットを **そのまま順番に** main の上に積む。マージコミットなし。
+
+- 利点: 完全に線形な履歴
+- 欠点: PR 中のコミットが個別に main に並ぶので、ノイズが多い場合は読みづらい
+
+### ブランチ保護ルール
+
+GitHub の **Settings → Branches → Branch protection rules** で main ブランチに守りを入れます。
+
+典型的な設定:
+
+- **Require a pull request before merging**: main への直接 push を禁止
+- **Require approvals: 1 人以上**: 最低 1 人の Approve を必須化
+- **Require status checks to pass**: CI（Lint / Test / Build）が通らないとマージできない
+- **Require branches to be up to date**: main の最新を取り込んでから merge
+- **Require linear history**: Squash / Rebase 限定にする
+- **Restrict pushes that create matching branches**: 特定ブランチ名の作成を制限
+
+これでチームの誰かがうっかり main に push しても、ブロックしてくれます。
+
+### Issue / Discussions / Projects
+
+GitHub には PR 以外にも協業ツールがあります。
+
+- **Issues**: バグ報告 / 機能要望 / TODO の管理
+- **Discussions**: Q&A / アイデア共有（Issue より柔らかい場）
+- **Projects**: カンバン / ロードマップで Issue / PR を整理
+- **Milestones**: リリース単位で Issue / PR をまとめる
+
+本コースでも、機能追加要望や軽微な修正は Issue → PR の流れで管理しています（過去の issue 番号が commit メッセージに付いているのを見たことがあるかもしれません）。
+
+### `gh` CLI
+
+GitHub の操作をコマンドラインからやる公式ツールです。
 
 ```bash
-npm install -D eslint-config-prettier
+# インストール（macOS）
+brew install gh
+
+# ログイン（1 回だけ）
+gh auth login
+
+# PR を作成
+gh pr create --title "feat: login を追加" --body "..."
+
+# PR 一覧
+gh pr list
+
+# PR をマージ
+gh pr merge --squash
 ```
 
-`eslint.config.js` の最後に追加:
-
-```js
-import prettierConfig from "eslint-config-prettier";
-
-export default [
-  // ...上記の設定
-  prettierConfig,  // 最後に置いて整形系のルールを上書きで OFF
-];
-```
-
-これで「ESLint は品質、Prettier は見た目」の役割分担が綺麗に成立します。
-
-### VS Code の保存時 autofix
-
-`.vscode/settings.json`（プロジェクトの設定）:
-
-```json
-{
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
-  }
-}
-```
-
-これでファイル保存時に:
-
-1. ESLint の自動修正可能な違反が直る
-2. Prettier がコードを整形する
-
-の 2 段階が走ります。「書きながら綺麗になる」体験になり、PR レビューで「インデントが…」と指摘するムダが消えます。
-
-VS Code の拡張は `dbaeumer.vscode-eslint` と `esbenp.prettier-vscode` を入れます。
-
-### Biome: 1 ツールで両方
-
-**Biome** は Rust 製の Lint + Format ツールです。
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
-```
-
-これだけで `biome.json` が生成され、すぐ使えます。
-
-`package.json`:
-
-```json
-{
-  "scripts": {
-    "check": "biome check .",
-    "check:fix": "biome check --write ."
-  }
-}
-```
-
-#### Biome の魅力
-
-- **設定ファイルが 1 つだけ**（`biome.json`）
-- **ESLint + Prettier より 35x 速い**（10000 ファイル: ESLint 45.2s vs Biome 0.8s）
-- **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
-- **Lint と Format の衝突がない**（同じツール内なので）
-- **VS Code 拡張**（`biomejs.biome`）も公式
-
-#### Biome の限界
-
-- TypeScript の **型情報を使う高度なルール**（`no-floating-promises` 等）は ESLint だけが提供
-- 既存 ESLint プラグイン（`jsx-a11y` 等）は使えない
-- カスタムルールが書きづらい
-
-### 2026 年の選び方
-
-#### 新規プロジェクト（greenfield）
-
-**Biome 単独** が最有力候補です。設定が少なく速いので、立ち上げの摩擦が圧倒的に小さい。
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
-```
-
-#### 既存プロジェクト（ESLint + Prettier がある）
-
-**ハイブリッド構成** が現実解:
-
-- **Biome**: フォーマット + 基本 Lint（高速）
-- **ESLint**: 型情報を要する高度なルール + 既存プラグイン
-
-または、コストをかけて Biome に完全移行（手動マイグレーションツールあり）。
-
-#### Lighthouse / a11y 検査も Lint で
-
-ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、章 7「アクセシビリティ」と組み合わせると効果的です。
-
-```js
-// eslint.config.js
-import jsxA11y from "eslint-plugin-jsx-a11y";
-
-export default [
-  // ...
-  jsxA11y.configs.recommended,
-];
-```
-
-これで `<img>` の alt 欠落 / `<button>` の `tabindex="-1"` などが Lint で警告されます。
-
-### Husky + lint-staged で commit 時に自動チェック
-
-「commit する時に Lint / Format を自動実行」して、CI で fail する前に直す仕組みです。
-
-```bash
-npm install -D husky lint-staged
-npx husky init
-```
-
-`.husky/pre-commit`:
-
-```sh
-npx lint-staged
-```
-
-`package.json`:
-
-```json
-{
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx}": ["biome check --write"]
-  }
-}
-```
-
-`git commit` のたびに、ステージングされたファイルだけが対象に Lint + Format されます。**全プロジェクトを毎回チェックしないので速い** のが lint-staged の利点。
+ブラウザを開かずに操作できるので、慣れると圧倒的に速いです。
 
 ## 演習
 
 ### ゴール
 
-- Vite + React + TS プロジェクトに **Biome** を導入する
-- VS Code で保存時に自動整形 / 自動修正が走るようにする
-- わざとエラーを入れて、Biome が検知することを確認する
+- ローカルの Git リポジトリを GitHub に push する
+- ブランチで作業 → PR 作成 → 自分でセルフレビュー → マージする
+- ブランチ保護ルールを 1 つ設定する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: GitHub アカウント準備
 
-```bash
-npm create vite@latest lint-sample -- --template react-ts
-cd lint-sample
-npm install
-```
+GitHub アカウントを持っていない場合は <https://github.com/> で作成。SSH キーや Personal Access Token も設定しておきます（公式ガイド: <https://docs.github.com/ja/authentication>）。
 
-### 手順 2: Biome を導入
+### 手順 2: 「Git の基本操作」で作ったリポジトリを push
 
 ```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+cd git-practice    # 「Git の基本操作」で作ったディレクトリ
 ```
 
-`biome.json` が生成されます。中身は最小設定:
+GitHub で空 repo（例: `git-practice`）を作成後:
 
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "files": {
-    "ignoreUnknown": false,
-    "ignore": ["node_modules", "dist"]
-  },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "tab"
-  },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true
-    }
-  }
-}
+```bash
+git remote add origin https://github.com/your-name/git-practice.git
+git branch -M main
+git push -u origin main
 ```
 
-`indentStyle` を `space` に変えたい場合は `"indentStyle": "space", "indentWidth": 2` に。
+### 手順 3: ブランチで変更 → PR
 
-### 手順 3: package.json scripts
-
-```json
-{
-  "scripts": {
-    "check": "biome check .",
-    "check:fix": "biome check --write ."
-  }
-}
+```bash
+git switch -c feature/colors
+echo "色を変える予定" >> README.md
+git add README.md
+git commit -m "docs: 色変更の予定をメモに追加"
+git push -u origin feature/colors
 ```
 
-### 手順 4: VS Code 設定
+GitHub のリポジトリページに **「Compare & pull request」** ボタンが出るのでクリック → タイトルと説明を書いて **Create pull request**。
 
-`.vscode/settings.json`:
+### 手順 4: セルフレビュー
 
-```json
-{
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "biomejs.biome",
-  "editor.codeActionsOnSave": {
-    "quickfix.biome": "explicit",
-    "source.organizeImports.biome": "explicit"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  },
-  "[typescriptreact]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  }
-}
+自分で PR の **Files changed** タブを開き、変更を眺めます。気になった行に `+` ボタンでコメントを 1 つ書いてみる（例: `nit: 「予定」より「TODO」の方が一般的かも`）。
+
+### 手順 5: マージ
+
+PR ページ下部の **Merge pull request** → **Squash and merge** を試します。マージ後、`feature/colors` ブランチを削除（**Delete branch** ボタン）。
+
+ローカルでも:
+
+```bash
+git switch main
+git pull origin main
+git branch -d feature/colors    # ローカルブランチも削除
 ```
 
-VS Code の拡張ストアで `biomejs.biome` をインストールします。
+### 手順 6: ブランチ保護を 1 つ設定
 
-### 手順 5: 動作確認
+リポジトリの **Settings** → **Branches** → **Add rule** で:
 
-`src/App.tsx` に、わざと整形が崩れたコードを書きます:
+- **Branch name pattern**: `main`
+- **Require a pull request before merging** にチェック
+- 保存
 
-```tsx
-import {useState}from "react"
-
-export default function App(){
-const[count,setCount]=useState(0)
-const unused = "使ってない";
-return <div><h1>Count: {count}</h1><button onClick={()=>setCount(c=>c+1)}>+1</button></div>
-}
-```
-
-ファイルを保存すると:
-
-- インデントが揃う
-- 改行が入る
-- 引用符が統一される
-- `unused` 変数が「使われていない」と警告される
-
-ターミナルで `npm run check` を実行すると、すべての違反が一覧されます。`npm run check:fix` で自動修正できる範囲は直されます。
+これで、これ以降 `main` に直接 push できなくなります。試しに `git push origin main` を直接やろうとすると拒否されます（ブランチ保護を一時解除するか、PR 経由で取り込む必要がある）。
 
 ### 期待出力
 
-```
-Checked 5 files in 200ms. No fixes applied.
-Found 1 warning.
-```
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [count, setCount] = useState(0);
-  const unused = "使ってない";  // 警告: unused
-  return (
-    <div>
-      <h1>Count: {count}</h1>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-    </div>
-  );
-}
-```
+- GitHub にローカルの履歴がそのまま反映される
+- PR 画面で行単位の差分とコメントが表示される
+- Squash でマージすると、main の履歴が線形になる（PR の複数 commit が 1 つに圧縮）
+- main への直接 push が「Branch protection rules: protected branch」のエラーで拒否される
 
 ### 変える
 
-- `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
-- `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
-- `linter.rules.style.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
+- マージ戦略を **Merge commit** に変えてみる（リポジトリ設定で許可）。グラフが分岐 + 合流の形になる
+- PR をマージせず **Close** してみる（後から消したい時の操作）
+- Issues タブで Issue を作り、コミットメッセージに `Closes #1` と書いて push してみる。マージ時に Issue が自動で閉じる
 
-### 自分で書く（任意）
+### 自分で書く
 
-- 既存の Vite テンプレートに **ESLint + Prettier** を入れて、Biome 構成と比較する
-  - 必要なパッケージ数の違い
-  - 設定ファイルの数の違い
-  - `npm run lint` の所要時間
-- Husky + lint-staged を入れて commit 時に自動 Lint / Format される構成を作る
+- リポジトリに `.github/pull_request_template.md` を追加し、PR の説明テンプレートを作る:
+
+  ```md
+  ## 概要
+
+  ## 変更内容
+  -
+  -
+
+  ## テスト
+  - [ ] ローカルで動作確認
+  - [ ] 単体テスト追加 / 更新
+  ```
+
+- `gh` CLI をインストールして、`gh pr create` でブラウザを開かずに PR を作る
 
 ## まとめ
 
-- **Lint** はコード品質、**Format** はコード整形。役割が違う
-- **ESLint v9** は flat config が既定。`.eslintrc` は非推奨
-- ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
-- VS Code の保存時 autofix で「書きながら綺麗になる」体験
-- **Biome** は Lint + Format を 1 ツール、Rust 製、35x 速い、設定 1 ファイル
-- **新規プロジェクトは Biome 単独** が 2026 年の有力解
-- 既存 ESLint 資産を活かすなら **Biome（基本）+ ESLint（型情報を要するルール）** のハイブリッド
-- `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
-- Husky + lint-staged で commit 時の自動 Lint / Format
-- 別のレッスンでは **モダン CSS** に進む
+- **Git は道具、GitHub はホスティングサービス**
+- 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
+- コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
+- マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
+- ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
+- `gh` CLI でコマンドラインからほぼ全操作が可能
+- 別のレッスンでは **GitHub Actions で CI** を組み込み、PR の段階で Lint / テスト / ビルドを自動実行する

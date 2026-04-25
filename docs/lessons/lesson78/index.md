@@ -1,315 +1,300 @@
-# lesson78: Error Boundary と Suspense
+# lesson78: エラーと見つからないページ
 
 ## ゴール
 
-- コンポーネントツリーの中で起きた例外が、親の境界で受け止められる仕組みを説明できる
-- `ErrorBoundary` をクラスコンポーネントで最小実装できる（React 19 でも現状クラスが必要）
-- `<Suspense fallback={...}>` の役割を説明でき、最小の使い方を書ける
-- `<ErrorBoundary>` と `<Suspense>` を組み合わせるパターンを書ける
-- 次章の Next.js の `error.tsx` / `loading.tsx` がこれを Route レベルで統合したものだと理解する
+- レンダリング中に発生した例外を `error.tsx` で捕まえて、壊れた画面の代わりにエラー画面を出せます。
+- `notFound()` を呼んで `not-found.tsx` を表示できます。
+- `error.tsx` が担当する範囲と、Server Actions のフォームエラー（「送信状態とエラー表示」）の担当範囲が **別物** であることを理解しています。
 
 ## 解説
 
-### なぜ必要か: 1 箇所のエラーで全画面真っ白
+### ページの事故を 2 種類に分ける
 
-React は、レンダリング中にどこかで例外が飛ぶと **そのコンポーネントのツリー全体をアンマウント** します。本来関係ないヘッダーやフッターまで消えて、画面が真っ白になってしまいます。
+Web アプリで出会う「いつもの画面が出ない」状況は、Next.js では次の 2 つに分けて扱います。
 
-たとえば「記事一覧」「記事本文」「関連記事」の 3 つを並べていて、本文取得に失敗しただけで全部消える、という状況は避けたいわけです。
+1. **存在しない URL / データ**: 記事 ID が存在しない、ユーザーが削除済みなど。→ `not-found.tsx`
+2. **実行中の例外**: fetch が失敗、`throw new Error(...)` が飛んだ、など。→ `error.tsx`
 
-ここで登場するのが **ErrorBoundary**。境界より内側で起きた例外を受け止めて、フォールバック UI（エラー表示）に差し替えます。境界の外側は無事なままです。
+この 2 つをそれぞれ専用のファイルで受け止めます。
 
-### `ErrorBoundary` は現状クラスコンポーネントが必要
+### `not-found.tsx` と `notFound()`
 
-React 19 でも、ErrorBoundary を **自分で書く** ときはクラスコンポーネントを使います。関数コンポーネントの fook だけでは用意できません。
+該当データが見つからないときは、**`next/navigation`** から `notFound()` 関数を呼び出します。すると同じディレクトリ（またはその上位ディレクトリ）の `not-found.tsx` が表示されます。
 
-ただし日常的にクラスを書く必要はなく、「この 1 ファイルだけクラスで書いて、以後は `<ErrorBoundary>` として JSX で使う」という運用でほぼ間に合います。
-
-最小の実装は次のとおりです。
+```
+app/
+└── posts/
+    └── [id]/
+        ├── page.tsx
+        └── not-found.tsx
+```
 
 ```tsx
-import { Component, type ReactNode } from "react";
+// app/posts/[id]/page.tsx
+import { notFound } from "next/navigation";
 
-type Props = {
-  fallback: ReactNode;
-  children: ReactNode;
-};
-
-type State = {
-  hasError: boolean;
-};
-
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(_error: Error): State {
-    // レンダリング中に例外が飛んだら、この戻り値で state を差し替える
-    return { hasError: true };
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  // ...探す
+  const post = posts.find((p) => String(p.id) === id);
+  if (!post) {
+    notFound(); // ここで実行は止まり、not-found.tsx に切り替わる
   }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // ログ送信など副作用を行いたい場合に使う
-    console.log("ErrorBoundary がキャッチ:", error.message, info);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
+  return <div>{post.title}</div>;
 }
 ```
 
-- **`getDerivedStateFromError`**: 例外を受け取って、エラー状態に切り替えるための **純粋な** メソッドです。ここで state を `{ hasError: true }` に差し替えます。
-- **`componentDidCatch`**: 副作用（ロギング / 通報）を走らせる場所です。ログ送信が要らなければ省略できます。
-- `fallback` と `children` は props で受け取る、シンプルなコンテナです。
+- `notFound()` は呼ぶだけで良いです。`return` は書きません（書いても問題はありませんが、`notFound()` が例外を投げる仕組みで実行を止めるため、それ以降は走りません）。
+- `not-found.tsx` はそのディレクトリに置きます。上位のディレクトリに置いておけば、配下のページ全部で共通利用できます。
 
-### 使い方
+### `error.tsx`
 
-守りたい範囲を囲むだけです。
+レンダリング中に `throw` された例外を捕まえるのが `error.tsx` です。**Client Component として書く必要があります**（`"use client"` が必要です）。エラーの情報とリトライ関数を props で受け取ります。
 
-```tsx
-<ErrorBoundary fallback={<p>関連記事の読み込みに失敗しました</p>}>
-  <RelatedPosts />
-</ErrorBoundary>
+```
+app/
+└── posts/
+    └── [id]/
+        ├── page.tsx
+        └── error.tsx
 ```
 
-`<RelatedPosts />` でどれだけ例外が飛んでも、境界の外にあるヘッダー / ナビ / 他セクションは生きたままです。
-
-### 拾える例外と拾えない例外
-
-ErrorBoundary が捕まえるのは「**レンダリング中** の例外」です。次は拾えません。
-
-- イベントハンドラの中で投げた例外（`onClick={() => { throw ... }}`）
-- 非同期処理（`setTimeout` / `Promise` の `.then` の中）
-- サーバーサイドで起きる例外（Next.js の Server Component は別の仕組みで拾う）
-
-イベントハンドラの例外は、普通の `try` / `catch`（「try / catch でエラー処理」）か、state を使って自分でフォールバックを出すのが基本です。
-
-### `<Suspense>`: ローディングの境界
-
-`<Suspense>` はエラーの兄弟です。**非同期なデータ / コンポーネントを待つ間、フォールバック UI を見せる** 仕組みです。
-
 ```tsx
-<Suspense fallback={<p>読み込み中...</p>}>
-  <SlowComponent />
-</Suspense>
+"use client";
+
+type Props = {
+  error: Error & { digest?: string };
+  reset: () => void;
+};
+
+export default function Error({ error, reset }: Props) {
+  return (
+    <div>
+      <h1>問題が発生した</h1>
+      <p>{error.message}</p>
+      <button onClick={reset}>もう一度試す</button>
+    </div>
+  );
+}
 ```
 
-- 中のコンポーネントが読み込み待ち状態（Promise を投げている / lazy ロードの途中）になると、`fallback` が代わりに表示される
-- 待ちが終わると中身に切り替わる
-- `<Suspense>` は React 本体の機能で、ライブラリ（Next.js / Remix / lazy など）と組み合わせて使う
+- 1 行目に `"use client"` を書きます。
+- `error` は `Error` オブジェクトです。本番ビルドでは `message` は潰されます（情報漏れ防止）。開発中は読めます。
+- `reset()` を呼ぶとページを再レンダリングしようとします。
 
-日常的には、後に学ぶ Next.js の App Router で Server Component と組み合わせて使うのが主戦場です（「Loading UI と Streaming」で扱います）。
+### `error.tsx` の範囲は「レンダリング中」
 
-### 組み合わせパターン
+ここが混同しやすいポイントです。**`error.tsx` はレンダリング中の例外だけを拾います**。
 
-エラーとローディングは同時に起こりえます。両方を囲むのが基本形です。
+- Server Component の中で `throw` / `fetch` 失敗 → `error.tsx` で拾えます。
+- Server Actions のフォーム送信で「空入力」のようなバリデーションエラー → `error.tsx` では **拾いません**。
 
-```tsx
-<ErrorBoundary fallback={<p>読み込みに失敗しました</p>}>
-  <Suspense fallback={<p>読み込み中...</p>}>
-    <RemoteContent />
-  </Suspense>
-</ErrorBoundary>
-```
+Server Actions のフォームエラーは、例外を投げる代わりに **戻り値でエラー情報を返す** 設計になっています。「送信状態とエラー表示」で扱う `useActionState` がその受け皿です。フォーム送信のエラーを `error.tsx` に落とそうとしても動かないので、混同しないでください。
 
-- **外側** が ErrorBoundary、**内側** が Suspense の順が定番です
-- 途中で Promise が投げられれば Suspense が受け取り、途中で例外が投げられれば ErrorBoundary が受け取ります
+まとめると:
 
-### 次章への布石
-
-次章の Next.js App Router では、**ルートごと** にこの 2 つを書けるようになっています。
-
-- `app/posts/[id]/error.tsx` → そのルート配下の ErrorBoundary
-- `app/posts/[id]/loading.tsx` → そのルート配下の Suspense
-
-ファイルを置くだけで境界が自動で入るので、毎回コンポーネントを囲む必要がなくなります。今回学ぶ「境界で区切って、フォールバックに差し替える」発想は、Next.js でそのまま生きます。
+| 事故の種類 | 担当 |
+|---|---|
+| 存在しない ID / ユーザー | `notFound()` + `not-found.tsx` |
+| fetch 失敗・レンダリング中の `throw` | `error.tsx` |
+| フォームの入力エラー | 「送信状態とエラー表示」の `useActionState`（戻り値） |
 
 ## 演習
 
 ### 途中から始める場合
 
-「TODO アプリを React で作る」で作ったプロジェクトを使い回しても構いませんし、新しいプロジェクトで始めても構いません。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは **新規の小さな演習** として分離して進めるのが楽です。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「動的ルート」で作った `/posts/[id]` を前提にしています。
 
 <details>
 <summary>出発点のファイル</summary>
 
-**`src/main.tsx`**
+**`app/posts/page.tsx`**
 
 ```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
+import Link from "next/link";
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  return (
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <Link href={`/posts/${post.id}`}>
+              <strong>#{post.id}</strong> {post.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
 ```
 
-**`src/App.tsx`**
+**`app/posts/[id]/page.tsx`**
 
 ```tsx
-export default function App() {
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  const post = posts.find((p) => String(p.id) === id);
+
+  if (!post) {
+    return (
+      <>
+        <h1>見つかりません</h1>
+        <p>ID: {id} の記事は存在しない。</p>
+      </>
+    );
+  }
+
   return (
-    <div>
-      <h1>lesson78</h1>
-    </div>
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
   );
+}
+```
+
+**`app/posts/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
 }
 ```
 
 </details>
 
-### ゴール
+### 前回のプロジェクトを開く
 
-- わざと例外を投げる子コンポーネント `Bomb` を `ErrorBoundary` で囲み、画面全体が死なずにフォールバックに切り替わる
-- `Suspense` で `lazy` 読み込みのコンポーネントを囲み、ロード中のフォールバックを確認する
-- 「爆発するボタンを押す前」は通常表示、「押した後」は ErrorBoundary のフォールバックが出ることを確認する
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順
+### 手順 1: `not-found.tsx` を置く
 
-1. `src/ErrorBoundary.tsx` を新規作成して、クラスコンポーネントの ErrorBoundary を用意する
-2. `src/Bomb.tsx` を新規作成する。props で `shouldExplode` を受け取り、`true` のときは `throw new Error(...)` する
-3. `src/LazyGreeting.tsx` を作り、`App.tsx` から `lazy(() => import("./LazyGreeting"))` で読み込む
-4. `App.tsx` に 2 つのセクションを並べる。それぞれ境界で囲む
-
-### 主要ファイルの完成形
-
-**`src/ErrorBoundary.tsx`**
+`app/posts/[id]/not-found.tsx` を新規作成します。
 
 ```tsx
-import { Component, type ReactNode, type ErrorInfo } from "react";
+import Link from "next/link";
 
-type Props = {
-  fallback: ReactNode;
-  children: ReactNode;
-};
-
-type State = {
-  hasError: boolean;
-};
-
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(_error: Error): State {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.log("ErrorBoundary がキャッチ:", error.message);
-    console.log("発生場所:", info.componentStack);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-```
-
-**`src/Bomb.tsx`**
-
-```tsx
-type Props = {
-  shouldExplode: boolean;
-};
-
-export function Bomb({ shouldExplode }: Props) {
-  if (shouldExplode) {
-    throw new Error("Bomb が爆発しました");
-  }
-  return <p>Bomb はまだ安全です</p>;
-}
-```
-
-**`src/LazyGreeting.tsx`**
-
-```tsx
-export default function LazyGreeting() {
-  return <p>こんにちは！（遅れて読み込まれたコンポーネント）</p>;
-}
-```
-
-**`src/App.tsx`**
-
-```tsx
-import { lazy, Suspense, useState } from "react";
-import { ErrorBoundary } from "./ErrorBoundary";
-import { Bomb } from "./Bomb";
-
-const LazyGreeting = lazy(() => import("./LazyGreeting"));
-
-export default function App() {
-  const [exploded, setExploded] = useState(false);
-
+export default function NotFound() {
   return (
-    <div style={{ fontFamily: "system-ui", padding: 16 }}>
-      <h1>lesson78: ErrorBoundary と Suspense</h1>
-
-      <section>
-        <h2>1. ErrorBoundary</h2>
-        <button onClick={() => setExploded(true)}>爆発させる</button>
-        <ErrorBoundary
-          fallback={
-            <div style={{ color: "red" }}>
-              ここだけエラーになりました（他のセクションは生きています）
-            </div>
-          }
-        >
-          <Bomb shouldExplode={exploded} />
-        </ErrorBoundary>
-      </section>
-
-      <section>
-        <h2>2. Suspense</h2>
-        <Suspense fallback={<p>読み込み中...</p>}>
-          <LazyGreeting />
-        </Suspense>
-      </section>
-
-      <section>
-        <h2>3. 組み合わせ</h2>
-        <ErrorBoundary fallback={<p>組み合わせでも守られています</p>}>
-          <Suspense fallback={<p>読み込み中 (組み合わせ)...</p>}>
-            <LazyGreeting />
-          </Suspense>
-        </ErrorBoundary>
-      </section>
-    </div>
+    <>
+      <h1>記事が見つからない</h1>
+      <p>指定された ID の記事は存在しない。</p>
+      <Link href="/posts">一覧に戻る</Link>
+    </>
   );
 }
 ```
 
+### 手順 2: 詳細ページで `notFound()` を呼ぶ
+
+`app/posts/[id]/page.tsx` を書き換えます。見つからないときは `notFound()` を呼ぶ形に変更します。
+
+```tsx
+import { notFound } from "next/navigation";
+
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  const post = posts.find((p) => String(p.id) === id);
+
+  if (!post) {
+    notFound();
+  }
+
+  return (
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
+  );
+}
+```
+
+### 手順 3: `error.tsx` を置く
+
+`app/posts/[id]/error.tsx` を新規作成します。
+
+```tsx
+"use client";
+
+type Props = {
+  error: Error & { digest?: string };
+  reset: () => void;
+};
+
+export default function Error({ error, reset }: Props) {
+  return (
+    <>
+      <h1>読み込み中に問題が発生した</h1>
+      <p>{error.message}</p>
+      <button onClick={reset}>もう一度試す</button>
+    </>
+  );
+}
+```
+
+### 手順 4: わざとエラーを起こす
+
+`app/posts/[id]/page.tsx` の fetch URL をタイポで壊します（例: `typicodee`）。
+
+```tsx
+const res = await fetch("https://jsonplaceholder.typicodee.com/posts");
+```
+
+このままでは `res.json()` の手前で fetch が失敗し、例外が飛びます。`error.tsx` が表示されます。
+
 ### 期待出力
 
-1. 最初の画面には 3 つのセクションが並び、Suspense セクションは一瞬「読み込み中...」が見えた後、グリーティングに置き換わる
-2. 「爆発させる」ボタンを押す → 1 番目のセクションだけ赤字のフォールバックに切り替わる。ページ全体は生きたまま、ヘッダー（`h1`）も他のセクションも残っている
-3. Console に `ErrorBoundary がキャッチ: Bomb が爆発しました` のログが出る
-4. **StrictMode の開発ビルドでは、キャッチされた後もブラウザ Console に赤字のエラーが表示されます**。これは開発時の二重警告で、本番ビルドでは出ません（ErrorBoundary のキャッチ自体は機能しています）。気にせず進めて大丈夫です。
+1. `/posts/1` にアクセス → タイポ URL のせいで `error.tsx` の「読み込み中に問題が発生した」が表示されます。
+2. 「もう一度試す」ボタン → 同じエラーが再発します（URL を直さない限り）。
+3. URL を正しい `typicode.com` に戻して再読み込み → 通常どおり記事が表示されます。
+4. `/posts/999` にアクセス（存在しない ID）→ `not-found.tsx` の「記事が見つからない」と「一覧に戻る」リンクが表示されます。
+5. エラー画面と not-found 画面は **別のファイルで扱われている** ことを確認しましょう。
 
-### 変える
+### 変えてみる
 
-- `fallback` の中身を絵文字なしの自由な HTML に差し替えて、見た目を変える（例: `<div><h3>読み込みエラー</h3><p>あとで試してください</p></div>`）
-- `Bomb` を 2 つ並べ、それぞれ別の ErrorBoundary で囲む → 片方だけ爆発させたときに、もう片方は生きたままになる
-- ErrorBoundary の外側に `Bomb` を置くと画面全体が落ちることを確認する（確認後、内側に戻す）
+1. `not-found.tsx` にイラストや再検索用のテキストを足して、よりユーザーに優しい表示にしましょう。
+2. `error.tsx` の「もう一度試す」の下に `<Link href="/">トップに戻る</Link>` を追加しましょう。
+3. `notFound()` を呼ぶ代わりに直接 `throw new Error("not found")` としてみましょう → `error.tsx` が出ることを確認します（`notFound()` を使わないと 404 ではなく 500 系扱いになる、という違いを体感できます）。
 
 ### 自分で書く
 
-- ErrorBoundary に **「再試行」ボタン** を付ける。`state` に `hasError` を持っているので、押したら `setState({ hasError: false })` 相当の処理でリセットできる（クラスの `this.setState({ hasError: false })` を使う）
-- `LazyGreeting` の読み込みをわざと遅らせる。トップに `await new Promise(r => setTimeout(r, 2000))` 相当の処理を入れるダミーを作り、Suspense のフォールバックが長く見えることを確認する
-- 複数の ErrorBoundary を入れ子にする。内側でキャッチしたエラーは外側に届かないことを確認する
+「存在しないユーザー ID のときの `not-found.tsx`」を `/users/[id]/` 配下に自力で追加してみましょう（「動的ルート」の「自分で書く」で `/users/[id]/page.tsx` を作っていればその続きです）。見た目は posts 側と同じレベルで良いです。
 
 ## まとめ
 
-- ErrorBoundary は「レンダリング中の例外」を境界で受け止め、画面全体の崩壊を防ぐ
-- React 19 でも、ErrorBoundary を書くにはクラスコンポーネントが必要。ただし 1 回書いたら以降は JSX で使うだけ
-- `getDerivedStateFromError` で state を切り替え、`componentDidCatch` でログを残す
-- `<Suspense fallback={...}>` は非同期な待ちの間にフォールバック UI を出す
-- 外側に ErrorBoundary、内側に Suspense、が定番の組み合わせ
-- 次章の Next.js では、この 2 つが `error.tsx` / `loading.tsx` としてルート単位で使えるようになる
+- 「見つからない」ときは `notFound()` + `not-found.tsx` です。
+- 「レンダリング中の例外」は `error.tsx` です（`"use client"` 必須）。
+- 2 つは担当範囲が違います。フォーム送信エラーはどちらでもなく、「送信状態とエラー表示」で学ぶ `useActionState` の戻り値で扱います。
+- 別のレッスンで、フォームをサーバー側の関数（Server Actions）で受け取る仕組みを作り始めます。

@@ -1,353 +1,162 @@
-# lesson69: 送信状態とエラー表示
+# lesson69: Next.js ってなに？
 
 ## ゴール
 
-- `useActionState` の正しいシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を覚えます。
-- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せます。
-- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書けます。
-- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を間違えずに使えます。
+- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できます。
+- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解します。
+- 画面に出る部品がデフォルトで **Server Component** として動くことを知ります。
+- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できます。
 
 ## 解説
 
-### なぜエラー用の別フックが必要か
+### React と Next.js の関係
 
-「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
+4 章 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
 
-エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
+一方で、実際に Web アプリを作ろうとすると、React 単体では足りないものが出てきます。
 
-### `useActionState` のシグネチャ（絶対に覚える）
+- URL に応じてページを切り替える仕組み（ルーティング）
+- SEO やシェア用にページごとのタイトルや OG 画像を設定する仕組み
+- 一部の処理をサーバーで先に走らせ、初期表示を速くする仕組み
+- データ取得やフォーム送信をサーバーに任せる仕組み
 
-```tsx
-"use client";
+こうした「React の周りに必要な土台」を一式まとめて提供するのが **Next.js** です。Next.js は React を内部で使っているので、React のコンポーネントの書き方はそのまま使えます。React の上に乗る大きめの枠組み、と考えてください。
 
-import { useActionState } from "react";
-import { addTodo } from "./actions";
+このコースで使うバージョンは **Next.js 16** / **React 19.2** です。
 
-type AddTodoState = { error?: string };
+### App Router とは
 
-const initialState: AddTodoState = {};
+Next.js には現在 2 つのルーター（URL の担当部分）があります。
 
-const [state, formAction, isPending] = useActionState(addTodo, initialState);
+- 古い方: `pages/` ディレクトリを使う Pages Router
+- 新しい方: `app/` ディレクトリを使う **App Router**
+
+本コースでは新しい **App Router** のみを扱います。古い `pages/` ルーターは使いません。
+
+App Router は **ファイルベースルーティング** です。つまり、`app/` 以下のディレクトリ構造がそのまま URL になります。
+
+```
+app/
+├── page.tsx           → /
+├── about/
+│   └── page.tsx       → /about
+└── todos/
+    └── page.tsx       → /todos
 ```
 
-- 第 1 引数: **action（Server Action の関数）**
-- 第 2 引数: **初期状態**
-- 戻り値: `[state, formAction, isPending]` の 3 要素タプル
+`page.tsx` という名前のファイルが、その URL で表示される中身を書く場所です。ディレクトリ名がそのまま URL のパスになります。
 
-引数の順に注意してください。**action が第 1 引数**、初期状態が第 2 引数です。逆にしないでください。
+### Server Component がデフォルト
 
-戻り値の中身:
+App Router のもう 1 つの大きな特徴は、**コンポーネントが既定でサーバー側で実行される** ことです。これを **Server Component** と呼びます。
 
-- `state`: 現在のアクション戻り値（`action` が最後に `return` したもの）。初回は `initialState` です。
-- `formAction`: **`<form action={formAction}>` に渡す**、ラップ済みの関数です。元の action ではなくこちらを渡します。
-- `isPending`: 送信中かどうかの真偽値です。
+今までの React（4 章）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
 
-### Server Action のシグネチャを変える
+- Server Component: サーバーで動きます。データベース接続やファイル読み込みなど、秘密情報を扱えます。`useState` や `onClick` は使えません。
+- Client Component: ブラウザで動きます。`useState` / イベント / ブラウザ API が使えます。先頭に `"use client"` と書いて明示します（詳しくは「Server Component と Client Component」で扱います）。
 
-`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
+最初は「書いたコンポーネントは何もしなければサーバー側で動く」とだけ覚えておけば十分です。
 
-```ts
-"use server";
+### `app/page.tsx` の最小形
 
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {}; // 成功
-}
-```
-
-- 第 1 引数が `prevState`（前回のアクションの戻り値）です。使わなくても受け取る必要があります。
-- 第 2 引数が `FormData` です。
-- 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
-
-「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
-
-### `useFormStatus` は `<form>` の **子** で呼ぶ
-
-`useFormStatus` は「そのフォームが送信中かどうか」を取るフックです。重要な制約があります。
-
-- **import 元は `react-dom`** です（`react` ではありません）。
-- **`<form>` の子コンポーネント内で呼ぶ必要があります**。フォーム本体（`<form>` を return しているコンポーネント）の中では呼べません。
+App Router で最初に書くトップページは、こんな形です。
 
 ```tsx
-"use client";
-
-import { useFormStatus } from "react-dom";
-
-export function SubmitButton() {
-  const { pending } = useFormStatus();
+export default function Page() {
   return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
+    <main>
+      <h1>Hello, Next.js</h1>
+      <p>最初のページ。</p>
+    </main>
   );
 }
 ```
 
-送信ボタンを別コンポーネントに切り出し、その中で `useFormStatus()` を呼びます。これが定番パターンです。
+- ファイル名は `page.tsx` 固定です。
+- `export default` で関数コンポーネントを 1 つ返します。
+- 関数名は何でも構いません（慣例で `Page` とすることが多いです）。
 
-### import 元の違い（詰まる人が多い）
-
-両者は見た目が似ていますが import 元が違います。**太字で強調**:
-
-- **`useActionState` は `react` から**
-- **`useFormStatus` は `react-dom` から**
-
-間違えると「そんな export はない」というエラーが出ます。最初のうちは毎回見比べながら書くと良いです。
+これだけで、`/`（トップページ）にアクセスしたときにこの JSX が表示されます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Actions の最小形」の `addTodo` を前提にしています。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。
 
-<details>
-<summary>出発点のファイル</summary>
+### 使う環境
 
-**`app/types.ts`**
+本コース5 章 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。4 章 の React + Vite テンプレートとは別物なので、新しく作り直してください。
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
+### 手順
 
-**`app/actions.ts`**
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export type AddTodoResult = { ok: true } | { ok: false; error: string };
-
-export async function addTodo(formData: FormData): Promise<AddTodoResult> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { ok: false, error: "空のままでは追加できません" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return { ok: true };
-}
-```
-
-**`app/todos/page.tsx`**
+1. <https://stackblitz.com/> を開きます。
+2. トップページに並ぶテンプレートカードから **Next.js** を選びます（Node を内部で動かす WebContainers 版、Next.js のロゴ付き）。カードが見当たらないときは検索ボックスに `next` と入れるか、直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます。
+3. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
+4. 中身をすべて消し、次のコードに置き換えます。
 
 ```tsx
-import { addTodo, listTodos } from "../actions";
-
-export default async function TodosPage() {
-  const todos = await listTodos();
-
+export default function Page() {
   return (
-    <>
-      <h1>TODO 一覧</h1>
-      <form action={addTodo}>
-        <input type="text" name="text" placeholder="やることを入力" />
-        <button type="submit">追加</button>
-      </form>
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
+    <main>
+      <h1>Hello, Next.js</h1>
+      <p>最初のページ。</p>
+    </main>
   );
 }
 ```
 
-</details>
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順の進め方（重要）
-
-本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全です。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進めましょう。
-
-順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短いです。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すと良いです:
-
-1. 新しいファイル `app/todos/TodoForm.tsx` を先に **作るだけ作る**（import する `addTodo` の型不一致でエラーが出るが、そのまま進めます）
-2. `app/todos/page.tsx` で `<form>` ブロックを `<TodoForm />` に差し替え
-3. 最後に `app/actions.ts` の `addTodo` を `(prevState, formData) => newState` 形に書き換え
-
-このドキュメント上の掲載は **「どれを書けばいいか」を最初に見せる** ために 手順 1（actions.ts）から順に並べていますが、手を動かす順番は上記の 1 → 2 → 3 でも構いません。どちらでも最終的には同じ形になります。
-
-### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
-
-`app/actions.ts` を書き換えます。
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-```
-
-- 戻り値を `AddTodoState` 型にし、成功時は `{}`、失敗時は `{ error: "..." }` を返します。
-- `prevState` は受け取りますが今回は使いません（それで OK です）。
-
-### 手順 2: フォームを Client Component に切り出す
-
-`useActionState` は Client Component のフックなので、フォーム部分だけを別ファイルに分離します。
-
-`app/todos/TodoForm.tsx`:
-
-```tsx
-"use client";
-
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { addTodo, type AddTodoState } from "../actions";
-
-const initialState: AddTodoState = {};
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
-
-export function TodoForm() {
-  const [state, formAction, isPending] = useActionState(addTodo, initialState);
-
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
-      {state.error && <p className="error">{state.error}</p>}
-      {isPending && <p>通信中...</p>}
-    </form>
-  );
-}
-```
-
-ポイント:
-
-- 1 行目 `"use client"` です。
-- **`useActionState` は `react` から import** します。
-- **`useFormStatus` は `react-dom` から import** します。
-- `<form action={formAction}>` に渡すのは **`formAction`** です（`addTodo` ではありません）。
-- `SubmitButton` を別コンポーネントに切り出して、その中で `useFormStatus()` を呼びます。
-- `state.error` があるときだけ `<p>` に赤文字で表示します。
-- `isPending` でも「通信中...」を出します（冗長ですが違いを確認するためです）。
-
-### 手順 3: `/todos` ページで差し替える
-
-`app/todos/page.tsx` の `<form>` を `<TodoForm />` に差し替えます。
-
-```tsx
-import { listTodos } from "../actions";
-import { TodoForm } from "./TodoForm";
-
-export default async function TodosPage() {
-  const todos = await listTodos();
-
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
-  );
-}
-```
-
-`page.tsx` は Server Component のままです。Client の `TodoForm` を呼ぶだけなので `"use client"` は不要です。
-
-### 手順 4: エラー用の CSS
-
-`app/globals.css` にエラー表示のスタイルを追加します。
-
-```css
-.error {
-  color: #c00;
-  background: #ffe8e8;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .error {
-    color: #ffb0b0;
-    background: #4a1d1d;
-  }
-}
-```
+保存すると、右側のプレビューに **「Hello, Next.js」と「最初のページ。」** が表示されます。
 
 ### 期待出力
 
-1. `/todos` を開いて、何も入力せずに「追加」を押す → 下に赤文字で「空のまま追加はできない」が表示されます（薄い赤背景）。
-2. 「買い物」と入力して「追加」を押す → エラー表示が消え、一覧に「買い物」が追加されます。
-3. 何度か連打する → 送信中はボタンが disabled（グレー）になり「送信中...」と表示されます。隣に「通信中...」も出ます。
-4. DevTools の Network タブを開いておくと、送信ごとに POST が飛んでいるのが見えます。
-
-### よくある間違い
-
-- `useActionState` を `react-dom` から import しようとして「export がない」エラーになる → `react` から import します。
-- `useFormStatus` を `<form>` を返しているコンポーネント自身で呼んでしまう → `pending` が常に `false` になります。子コンポーネントに切り出しましょう。
-- `useActionState(initialState, addTodo)` のように引数を逆にする → 型エラーです。**action が第 1 引数**、初期状態が第 2 引数です。
-- `<form action={addTodo}>` と元の関数を渡す → エラー状態がうまく繋がりません。`<form action={formAction}>` と **ラップ済み** の関数を渡しましょう。
+- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並びます。
+- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示されます。
+- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ています。
 
 ### 変えてみる
 
-1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちを」など）。
-2. エラーの種類を増やしましょう: 先頭の空白文字だけで追加しようとしたときは「空白だけでは追加できない」、5 文字以下のみ許可して「5 文字以内にする」など、`addTodo` 側の判定を足してみましょう。
-3. `useActionState` の初期状態を `{ error: "まずは何か入力" }` にして、初期表示でエラーが出る挙動を確認しましょう（確認したら `{}` に戻します）。
+1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存します。プレビューが更新されることを確認しましょう。
+2. `<p>` を 2 行に増やします。
+
+```tsx
+export default function Page() {
+  return (
+    <main>
+      <h1>自己紹介アプリの入り口</h1>
+      <p>最初のページ。</p>
+      <p>これから少しずつページを増やす。</p>
+    </main>
+  );
+}
+```
+
+### ファイル構造を眺める
+
+左側のツリーから以下を開いて中身を確認しましょう。書き換えは不要です。
+
+- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。「共通レイアウトを作る」で触ります。
+- `app/page.tsx`: 今書き換えたトップページ。
+- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいます。
+
+`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になります。これを別のレッスンで実際にやります。
 
 ### 自分で書く
 
-「Server Actions の最小形」の「自分で書く」で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
+`app/page.tsx` を何も見ずに書き直してみましょう。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格です。
 
 ## まとめ
 
-- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚えましょう。
-- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
-- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
-- **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。
-- このあとの「小さなアプリを仕上げる」では、ここまでの知識を統合して TODO アプリを仕上げます。詳細ページ・メタデータ・`searchParams` によるハイライト表示を足します。
+- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワークです。
+- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
+- `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
+- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
+- 別のレッスンでページを増やして `<Link>` で行き来し、1 章 の自己紹介ページを `/about` として復活させます。
+
+### コラム: RSC ペイロードって何？
+
+Server Component の結果は、実は **HTML そのもの** としてブラウザに届くわけではありません。Next.js はサーバー側で React をレンダリングし、その結果を **React が読める特殊な形式**（RSC ペイロードと呼ばれる）に変換してブラウザに送ります。ブラウザ側の React はそれを受け取って、ページのツリーに差し込みます。
+
+ブラウザの「ソースを表示」で見える HTML は、初回表示用に別で生成された HTML です。ページ遷移（「ページを増やしてリンクで移動する」の `<Link>`）では、RSC ペイロードだけが追加で送られてきて、必要な部分だけがツリーに差し替わります。
+
+本コースでは RSC ペイロードの詳細までは踏み込みませんが、「Server Component は HTML を直接返すのとは違う仕組みで動いている」とだけ覚えておけば、後の章で困りません。

@@ -1,197 +1,80 @@
-# lesson21: スコープとクロージャ
+# lesson21: 繰り返し処理
 
 <script setup>
 const demoJs = `
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
+const todos = ['牛乳を買う', '本を読む', 'ジョギング'];
+
+for (const todo of todos) {
+  console.log('- ' + todo);
 }
 
-const counterA = makeCounter();
-const counterB = makeCounter();
-
-console.log('A:', counterA()); // 1
-console.log('A:', counterA()); // 2
-console.log('B:', counterB()); // 1
-console.log('A:', counterA()); // 3
-console.log('B:', counterB()); // 2
+console.log('合計', todos.length, '件');
 `
 </script>
 
 ## ゴール
 
-- `let` / `const` のブロックスコープと関数スコープを区別できる
-- 「関数の中で作った変数」は外から触れないことを理解する
-- クロージャ（関数が「作られた場所の変数」を覚えているしくみ）を体感する
-- `makeCounter()` のように、関数を呼ぶたびに独立した状態を持たせられる
+- `for...of` で配列の全要素を順に処理できる
+- `forEach` でも同じことができることを知る
 
 ## 解説
 
-### スコープとは
+### 「全部に対して同じことをする」
 
-**変数が有効な範囲** のことを **スコープ** と呼びます。変数は「どこで宣言したか」によって、見える範囲が決まります。
+配列の要素を 1 つずつ取り出して `console.log` したいとき、`todos[0]` / `todos[1]` / `todos[2]` ... と書き並べるのは大変です。要素数が増えるたびに書き足す必要があり、現実的ではありません。
 
-スコープを知らないと、「なぜこの変数が `undefined` なのか」「なぜ外から触れないのか」がわからず、デバッグで迷子になりやすくなります。
+こういう「全部の要素に対して同じことをする」ために、繰り返し処理を使います。
 
-### ブロックスコープ（`let` / `const`）
+### `for...of`
 
-`{` と `}` で囲まれた部分を **ブロック** と呼びます。`let` と `const` で宣言した変数は、そのブロックの中でしか使えません。
-
-```js
-if (true) {
-  const message = "こんにちは";
-  console.log(message); // "こんにちは"
-}
-
-console.log(message); // ReferenceError: message is not defined
-```
-
-- ブロックの中で宣言した変数は、ブロックの外からは見えない
-- `for` ループの `{` と `}` も同じ
+本コースで最初に覚える書き方は `for...of` です。配列専用ではありませんが、配列との相性がよく、書き方が素直です。
 
 ```js
-for (let i = 0; i < 3; i++) {
-  console.log(i); // 0, 1, 2
-}
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-console.log(i); // ReferenceError: i is not defined
+for (const todo of todos) {
+  console.log(todo);
+}
 ```
 
-ループが終わった後、`i` はもう存在しません。
+- `for (const 変数名 of 配列)` と書く
+- `{ ... }` の中が「各要素に対してやりたい処理」
+- ループのたびに `todo` に次の要素が順番に入る
 
-### 関数スコープ
+インデックスは使わず、「要素そのもの」を直接受け取ります。インデックスが必要なときは後の章で別の書き方を学びますが、まずはこの形で十分です。
 
-関数の中で宣言した変数も、関数の外からは見えません。
-
-```js
-function greet() {
-  const message = "こんにちは";
-  console.log(message);
-}
-
-greet(); // "こんにちは"
-console.log(message); // ReferenceError: message is not defined
-```
-
-関数の中は「独立した部屋」と思ってください。中で作った変数は、その部屋を出たら使えません。
-
-### レキシカルスコープ（書かれた場所で決まる）
-
-JavaScript のスコープは **「書かれた場所」** で決まります。呼び出された場所ではありません。これを **レキシカルスコープ** と呼びます。
-
-```js
-const name = "外側";
-
-function outer() {
-  const name = "内側";
-  inner();
-}
-
-function inner() {
-  console.log(name); // "外側"
-}
-
-outer();
-```
-
-`inner` は `outer` から呼ばれていますが、**`inner` が書かれた場所** から見える `name` は外側の `"外側"` です。そのため `"外側"` が出力されます。
-
-### クロージャ
-
-関数は、自分の外側のスコープにある変数を **覚えています**。関数を「外に持ち出しても」その変数を使い続けられます。このしくみを **クロージャ** と呼びます。
-
-```js
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
-}
-
-const counter = makeCounter();
-console.log(counter()); // 1
-console.log(counter()); // 2
-console.log(counter()); // 3
-```
-
-`makeCounter` を呼ぶと、中に作られた `count` と、それを使う関数（戻り値）が一緒に「閉じ込められて」返ってきます。外から `count` に直接触ることはできませんが、返ってきた関数を呼ぶたびに `count` が 1 増えます。
-
-#### 独立したカウンタが複数作れる
-
-`makeCounter()` を 2 回呼ぶと、それぞれが **別の `count`** を持ちます。
-
-```js
-const counterA = makeCounter();
-const counterB = makeCounter();
-
-console.log(counterA()); // 1
-console.log(counterA()); // 2
-console.log(counterB()); // 1 （counterA とは独立）
-console.log(counterA()); // 3
-console.log(counterB()); // 2
-```
-
-`counterA` と `counterB` は、それぞれ自分専用の `count` を抱えています。これが「関数が状態を閉じ込める」しくみです。
-
-下のデモで、独立したカウンタ 2 つがそれぞれ別の `count` を持っている様子を体感できます。`counterA` を 3 回呼んでも `counterB` は影響を受けません。
+下のデモで、配列を 1 件ずつ取り出して `console.log` が順に並ぶ様子を確認できます。
 
 <LiveDemo
   height="220px"
-  :html="`<p>独立した 2 つのカウンタを動かします。</p>`"
+  :html="`<p>配列を順に出力します。</p>`"
   :css="``"
   :js="demoJs"
 />
 
-#### 関数を作って返す（`makeFilter`）
+### `forEach`（軽く触れる）
 
-同じパターンで、**設定を覚えた関数** を作ることもできます。「配列の変換」の `filter` と組み合わせる例を見てみます。
-
-```js
-function makeFilter(status) {
-  return function (todo) {
-    return todo.status === status;
-  };
-}
-
-const isDone = makeFilter("done");
-const isTodo = makeFilter("todo");
-
-const todos = [
-  { text: "牛乳を買う", status: "done" },
-  { text: "本を読む",   status: "todo" },
-  { text: "掃除する",   status: "done" },
-];
-
-console.log(todos.filter(isDone));
-// [{ text: "牛乳を買う", status: "done" }, { text: "掃除する", status: "done" }]
-
-console.log(todos.filter(isTodo));
-// [{ text: "本を読む", status: "todo" }]
-```
-
-`makeFilter("done")` で返ってきた関数は、**`status` が `"done"` だったこと** を覚えています。この関数を `filter` に渡すと、`status === "done"` の要素だけが残ります。
-
-「呼び出し時の引数を覚えた新しい関数を作る」のは、クロージャのとても実用的な使い方です。
-
-### `var` との違い（軽く対比のみ）
-
-古いコードでは `var` を見かけます。`var` はブロックスコープではなく **関数スコープ** で、宣言前に使ってもエラーにならず `undefined` になる（**巻き上げ**）という挙動があります。
+配列には `forEach` というメソッドもあります。書き味が少し違うだけで、できることはほぼ同じです。
 
 ```js
-console.log(a); // undefined （エラーにならない）
-var a = 1;
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-if (true) {
-  var b = 2;
-}
-console.log(b); // 2 （ブロックの外でも見える）
+todos.forEach((todo) => {
+  console.log(todo);
+});
 ```
 
-本コースでは `let` / `const` だけを使います。`var` は「そういう古い書き方がある」とだけ覚えておけば十分です。
+- `(todo) => { ... }` はアロー関数と呼ばれる記法（別のレッスンで詳しく扱う）
+- 配列の各要素に対して、カッコの中の処理が呼ばれる
+
+本コースでは `for...of` を主に使いますが、後のレッスンや実際のコードでは `forEach` もよく見かけます。「同じ意味の別の書き方」として覚えておきます。
+
+### どちらを使う？
+
+- 読みやすさ重視なら `for...of`
+- 既存コードに合わせるなら `forEach`
+
+迷ったら `for...of` で統一して構いません。
 
 ## 演習
 
@@ -214,7 +97,7 @@ console.log(b); // 2 （ブロックの外でも見える）
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson20: 関数</h1>
+    <h1>lesson20: 配列を扱う</h1>
   </body>
 </html>
 ```
@@ -222,41 +105,30 @@ console.log(b); // 2 （ブロックの外でも見える）
 **`script.js`**
 
 ```js
-function add(a, b) {
-  return a + b;
-}
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
 
-const addArrow = (a, b) => {
-  return a + b;
-};
+console.log(todos);
+console.log(todos.length);
+console.log(todos[0]);
+console.log(todos[todos.length - 1]);
 
-const addShort = (a, b) => a + b;
+todos.push("部屋を片付ける");
+console.log(todos);
+console.log(todos.length);
 
-console.log(add(1, 2));
-console.log(addArrow(10, 20));
-console.log(addShort(100, 200));
+const last = todos.pop();
+console.log(last);
+console.log(todos);
 
-function greet(name) {
-  return `こんにちは、${name} さん`;
-}
-
-const message = greet("Alice");
-console.log(message);
-console.log(greet("Bob"));
-
-function introduce(name, age) {
-  return `${name}（${age} 歳）です`;
-}
-
-console.log(introduce("Carol", 30));
+console.log(todos[99]);
 ```
 
 </details>
 
 ### ゴール
 
-- `makeCounter()` で独立したカウンタ `counterA` / `counterB` を作る
-- `makeFilter(status)` で「状態ごとのフィルタ関数」を作り、`filter` に渡す
+- やることリストの配列を `for...of` で全件 Console に出す
+- 同じ処理を `forEach` でも書いてみる
 
 ### 手順
 
@@ -275,7 +147,7 @@ console.log(introduce("Carol", 30));
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson21: スコープとクロージャ</h1>
+    <h1>lesson21: 繰り返し処理</h1>
   </body>
 </html>
 ```
@@ -283,77 +155,55 @@ console.log(introduce("Carol", 30));
 ### `script.js`
 
 ```js
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+
+console.log("--- for...of ---");
+for (const todo of todos) {
+  console.log(todo);
 }
 
-const counterA = makeCounter();
-const counterB = makeCounter();
+console.log("--- forEach ---");
+todos.forEach((todo) => {
+  console.log(todo);
+});
 
-console.log(counterA()); // 1
-console.log(counterA()); // 2
-console.log(counterB()); // 1
-console.log(counterA()); // 3
-console.log(counterB()); // 2
-
-function makeFilter(status) {
-  return function (todo) {
-    return todo.status === status;
-  };
+console.log("--- 合計 ---");
+const numbers = [1, 2, 3, 4, 5];
+let total = 0;
+for (const n of numbers) {
+  total = total + n;
 }
-
-const todos = [
-  { text: "牛乳を買う", status: "done" },
-  { text: "本を読む",   status: "todo" },
-  { text: "掃除する",   status: "done" },
-  { text: "ゴミを出す", status: "todo" },
-];
-
-const isDone = makeFilter("done");
-const isTodo = makeFilter("todo");
-
-console.log(todos.filter(isDone));
-console.log(todos.filter(isTodo));
+console.log(total);
 ```
 
 ### 期待出力
 
 ```
-1
-2
-1
-3
-2
-[{text: "牛乳を買う", status: "done"}, {text: "掃除する", status: "done"}]
-[{text: "本を読む", status: "todo"}, {text: "ゴミを出す", status: "todo"}]
+--- for...of ---
+牛乳を買う
+本を読む
+ジョギング
+--- forEach ---
+牛乳を買う
+本を読む
+ジョギング
+--- 合計 ---
+15
 ```
-
-- `counterA` と `counterB` の出力が独立している（`counterB` を呼んでも `counterA` の値には影響しない）
-- `isDone` / `isTodo` を `filter` に渡すと、それぞれの状態の TODO だけが抽出される
 
 ### 変える
 
-- `makeCounter` の `count = 0` を `count = 10` に変える → `counterA()` の初回が `11` から始まる
-- `makeCounter` の中の `count = count + 1` を `count = count + 2` にする → 2 ずつ増える
-- `makeFilter("todo")` を `makeFilter("done")` に書き換えて、結果が変わることを確認する
+- `todos` の要素を 5 つに増やす → どちらのループも自動で 5 回実行される
+- `console.log(todo)` を `console.log("- " + todo)` に変える → 各行の先頭に `- ` が付く
+- `numbers` の合計処理で、`total = total + n` を `total = total + n * 2` に変える → 出力が `30` になる
 
 ### 自分で書く
 
-- `makeAdder(n)` を作る。`makeAdder(5)` を呼ぶと「引数に 5 を足す関数」が返ってくる。`add5(10)` が `15` を返せば OK（ヒント: 戻り値の関数の中で外側の `n` を使う）
-- `makeGreeter(word)` を作る。`makeGreeter("こんにちは")` を呼ぶと「`(name) => `${word}、${name} さん`` のような関数」が返ってくる。`greetJa("Alice")` で `"こんにちは、Alice さん"` が返れば OK
-- `makeCounter` を改造して、呼ぶと `{ increment, reset, value }` の 3 つの関数を持つオブジェクトを返すようにする（余力があれば）
+- 数値の配列 `scores = [80, 95, 62, 77, 90]` を作り、`for...of` で合計と平均を計算して出す（平均 = 合計 / 要素数）
+- 文字列の配列 `names = ["Alice", "Bob", "Carol"]` を作り、`for...of` で「こんにちは、○○ さん」と 1 人ずつ出力する
 
 ## まとめ
 
-- 変数には **スコープ**（有効な範囲）がある
-- `let` / `const` は **ブロックスコープ**、関数の中の変数は **関数スコープ**
-- JavaScript は **レキシカルスコープ**: 変数の見える範囲は「書かれた場所」で決まる
-- **クロージャ** は「関数が自分の外側の変数を覚えているしくみ」
-- `makeCounter()` のように、関数を呼ぶたびに **独立した状態** を閉じ込めた関数を返せる
-- `makeFilter(status)` のように、**引数を覚えた関数** を作って他のメソッドに渡せる
-- 本コースでは `let` / `const` だけを使う。`var` の古い挙動は覚えなくてよい
-- **ここで体感した「関数が状態を閉じ込める」しくみは、4 章 の「カスタムフック」で再登場します**。`useTodos()` のような関数が内部の state を閉じ込めて、呼び出し側に必要な操作だけを返す、という形で、`makeCounter` / `makeFilter` と同じ発想を React の文脈で使います
+- 配列の全要素を処理するには `for...of` を使う
+- `forEach` でも同じことが書けるが、本コースでは `for...of` を主に使う
+- ループの中で `let` で用意した合計用変数を更新すると、合計や平均も計算できる

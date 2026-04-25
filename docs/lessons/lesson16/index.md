@@ -1,203 +1,415 @@
-# lesson16: 値の種類
-
-<script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
-const demoJs = `
-console.log(typeof 'Alice');
-console.log(typeof 42);
-console.log(typeof true);
-console.log(typeof null);
-console.log(typeof undefined);
-console.log(typeof { name: 'Alice' });
-`
-</script>
+# lesson16: ネイティブ UI（details / dialog / popover）
 
 ## ゴール
 
-- 文字列・数値・真偽値・`null` / `undefined` を区別できる
-- テンプレートリテラルで文字列の中に変数を埋め込める
+- `<details>` / `<summary>` で JS なしに折りたたみを作れる
+- `<dialog>` でモーダルを作り、`showModal()` / `close()` を使える
+- Popover API（`popover` 属性）で非モーダルなポップアップが書ける
+- ネイティブ UI が **アクセシビリティを自動で付けてくれる** ことを理解する
+- 「なぜライブラリより HTML 単独を試すべきか」を説明できる
 
 ## 解説
 
-### 値には「種類」がある
+### なぜ「ネイティブ UI」なのか
 
-JS では、変数に入れる値にいくつかの種類があります。今回は 5 種類を覚えます。
+モーダルや折りたたみを作りたい時、以前は HeadlessUI / Radix UI のようなライブラリを入れるのが普通でした。いまは **HTML 単独で同じことができる** 要素が揃っています。
 
-| 種類 | 例 | 説明 |
-| --- | --- | --- |
-| 文字列 | `"Alice"` / `'hello'` | テキスト。ダブルクオート / シングルクオートで囲む |
-| 数値 | `42` / `3.14` | 整数と小数の両方。クオートを付けない |
-| 真偽値 | `true` / `false` | 「はい / いいえ」の 2 値。条件分岐で使う |
-| `null` | `null` | 「意図的に空」 |
-| `undefined` | `undefined` | 「まだ値がない」 |
+ライブラリを避けられると:
 
-`null` と `undefined` はどちらも「空」を表しますが、ニュアンスが違います。
+- **バンドルサイズが減る**（数十 KB の差が積み重なる）
+- **アクセシビリティが自動**（フォーカストラップ / Escape 閉じ / `role` / `aria-*` が組み込み）
+- **学習コストが減る**（HTML の常識だけで読める）
 
-- `null`: プログラマが「ここは空にしておくぞ」と明示的に入れるもの
-- `undefined`: 変数を宣言しただけで値を入れていないときに、自動で付く初期状態
+このレッスンでは代表的な 3 つを扱います。
 
-当面は「どちらも空を表す」くらいの理解で十分です。使い分けは徐々に身につきます。
+| 要素 / 属性 | 用途 |
+|---|---|
+| `<details>` / `<summary>` | 折りたたみ |
+| `<dialog>` | モーダル（裏側を操作不能に） |
+| `popover` 属性 | 非モーダルなポップアップ（アクションメニュー / toast） |
 
-### 数値と文字列は混ぜない
+### `<details>` と `<summary>` — 折りたたみ
 
-```js
-const a = 1 + 2;       // 3 （数値の足し算）
-const b = "1" + "2";   // "12" （文字列の連結）
-const c = 1 + "2";     // "12" （文字列側に寄せられる）
+FAQ / スポイラー / アコーディオンを **JS なし** で書けます。
+
+```html
+<details>
+  <summary>答えを見る</summary>
+  <p>正解は 42 です。</p>
+</details>
 ```
-
-`+` は数値なら足し算、文字列なら連結になります。片方が文字列だと全体が文字列になる、という挙動だけ頭の片隅に置いておきます。
-
-### テンプレートリテラル
-
-文字列の中に変数を埋め込みたいとき、バッククオート（`` ` ``）で囲む書き方が便利です。これをテンプレートリテラルと呼びます。
-
-```js
-const userName = "Alice";
-const age = 20;
-
-const message = `あなたは ${userName} さんで、${age} 歳です`;
-console.log(message);
-```
-
-- バッククオートで囲む
-- `${ ... }` の中に変数や式を書く
-
-シングルクオート / ダブルクオートで囲んだ文字列では `${ ... }` は使えません。埋め込みたいときは必ずバッククオートを使います。
-
-### デモで確認する
-
-下のデモでは、`typeof` 演算子を使って 6 種類の値の型を順に表示します。Console タブを見ると、それぞれがどの型として扱われるかが分かります。
 
 <LiveDemo
-  height="220px"
-  :html="`<p>各値の型を typeof で確認するデモ</p>`"
-  :css="``"
-  :js="demoJs"
+  height="160px"
+  :html="`
+<details>
+  <summary>答えを見る</summary>
+  <p>正解は 42 です。</p>
+</details>
+
+<details open>
+  <summary>最初から開いている例</summary>
+  <p>open 属性で初期展開できます。</p>
+</details>
+  `"
+  :css="`
+body { font-family: sans-serif; }
+details { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+summary { cursor: pointer; font-weight: bold; }
+  `"
+  :js="``"
 />
 
-`null` が `'object'` と表示されるのは JavaScript の歴史的な仕様です。当面は「そういうものだ」と覚えておけば大丈夫です。
+ポイント:
+
+- `open` 属性で初期状態を制御（`<details open>`）
+- クリックで開閉、Enter / Space でも動作する（キーボード対応は自動）
+- `toggle` イベントで開閉を検知できる
+
+```js
+details.addEventListener("toggle", (e) => {
+  console.log(details.open ? "開いた" : "閉じた");
+});
+```
+
+#### `::details-content` で中身をアニメーション
+
+2024 年以降、`::details-content` 疑似要素と `interpolate-size` 機能で、高さ 0 → auto の **スムーズな開閉アニメーション** が CSS だけで書けるようになりました。
+
+```css
+details::details-content {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.3s, height 0.3s, content-visibility 0.3s allow-discrete;
+  content-visibility: hidden;
+}
+details[open]::details-content {
+  opacity: 1;
+  height: calc-size(auto);
+  content-visibility: visible;
+}
+```
+
+### `<dialog>` — モーダル
+
+以前は `position: fixed` の `<div>` に ARIA を付けてフォーカス管理を書いていました。`<dialog>` はそれを **1 つの要素** に置き換えます。
+
+```html
+<button id="open-btn">開く</button>
+
+<dialog id="my-dialog">
+  <form method="dialog">
+    <p>本当に削除しますか？</p>
+    <button value="cancel">キャンセル</button>
+    <button value="confirm">削除</button>
+  </form>
+</dialog>
+
+<script>
+  const dialog = document.getElementById("my-dialog");
+  document.getElementById("open-btn").addEventListener("click", () => {
+    dialog.showModal();
+  });
+  dialog.addEventListener("close", () => {
+    console.log("戻り値:", dialog.returnValue);
+  });
+</script>
+```
+
+#### 2 つの開き方
+
+| メソッド | 挙動 |
+|---|---|
+| `dialog.showModal()` | **モーダル**。裏側の要素が `inert`（操作不能）になり、Escape で閉じる |
+| `dialog.show()` | **非モーダル**。裏側も操作できる。Escape で閉じない |
+
+普通の「確認ダイアログ」は `showModal()` を使います。
+
+#### `<form method="dialog">` の便利さ
+
+`<form method="dialog">` 内の送信ボタンを押すと、dialog が閉じて、押したボタンの `value` が `dialog.returnValue` に入ります。「キャンセル / 確定」の戻り値が **HTML だけで** 取れます。
+
+#### CSS でスタイル
+
+`<dialog>` がモーダル時に自動で出てくる背景（黒い覆い）は `::backdrop` 疑似要素で装飾できます。
+
+```css
+dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+```
+
+#### 自動で付いてくるアクセシビリティ
+
+- `role="dialog"` が自動
+- `aria-modal="true"` が `showModal()` 時に自動
+- フォーカストラップ（Tab で外に出られない）が自動
+- Escape で閉じる
+- 開いた時にダイアログにフォーカスが入る
+
+これを自前で書くと 100 行は超えます。
+
+### Popover API — 非モーダルなポップアップ
+
+アクションメニュー / ツールチップ / 通知トースト / 設定パネルのような「**モーダルじゃない** けれど出し入れしたい UI」のための API です。**2024 年に Baseline 入り**、2026 年現在は全主要ブラウザで使えます。
+
+#### 最小形
+
+```html
+<button popovertarget="menu">メニュー</button>
+
+<div id="menu" popover>
+  <p>項目 1</p>
+  <p>項目 2</p>
+  <p>項目 3</p>
+</div>
+```
+
+`popover` 属性が付いた要素は、**デフォルトで非表示**。`popovertarget` 属性を持つボタンを押すと開きます。**JS は一行も書きません**。
+
+<LiveDemo
+  height="280px"
+  :html="`
+<button popovertarget='menu'>メニューを開く</button>
+
+<div id='menu' popover>
+  <p><a href='#'>プロフィール</a></p>
+  <p><a href='#'>設定</a></p>
+  <p><a href='#'>ログアウト</a></p>
+</div>
+  `"
+  :css="`
+body { font-family: sans-serif; padding: 16px; }
+button { padding: 8px 16px; }
+[popover] { padding: 16px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+[popover] p { margin: 4px 0; }
+  `"
+  :js="``"
+/>
+
+#### 3 種類の popover 値
+
+| 値 | 閉じる条件 |
+|---|---|
+| `popover` or `popover=\"auto\"` | **外側をクリック**、Escape、他の auto popover が開いた時に閉じる |
+| `popover=\"manual\"` | **自分で close を呼ばない限り閉じない**。toast 向き |
+| `popover=\"hint\"` | tooltip 用。ライトディスミスだが manual と auto の中間 |
+
+#### JS から制御
+
+```js
+const menu = document.getElementById("menu");
+menu.showPopover();  // 開く
+menu.hidePopover();  // 閉じる
+menu.togglePopover(); // トグル
+```
+
+#### `<dialog>` との違い
+
+| | `<dialog>` | Popover |
+|---|---|---|
+| モーダル化 | `showModal()` でできる | できない（常に非モーダル） |
+| 裏側の操作 | モーダル時は `inert` | 常に可能 |
+| 外側クリックで閉じる | 自前実装が必要 | auto popover なら自動 |
+| 用途 | 確認ダイアログ / フォーム | メニュー / tooltip / toast |
+
+**「モーダル = `<dialog>`、非モーダル = popover」** と覚えると迷いません。両方を組み合わせることも可能で、`<dialog popover>` のように書けば「popover として動く dialog」になります。
+
+### Anchor Positioning との組み合わせ
+
+Popover API と相性が良いのが [Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning)（2024 年以降 Chrome 系で対応）。
+
+```css
+button { anchor-name: --menu-btn; }
+
+#menu {
+  position: absolute;
+  position-anchor: --menu-btn;
+  top: anchor(bottom);
+  left: anchor(left);
+}
+```
+
+「ボタンの真下に menu を自動配置」が **JS なし** で書けます。Safari / Firefox の対応はまだ進行中なので、フォールバックを用意するか polyfill を使います。
 
 ## 演習
 
-### 途中から始める場合
-
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
-
-<details>
-<summary>出発点のコード</summary>
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson15</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson15: 最初の JavaScript</h1>
-    <p>DevTools の Console を開いてください。</p>
-  </body>
-</html>
-```
-
-**`script.js`**
-
-```js
-const userName = "Alice";
-let count = 0;
-
-console.log("Hello, JavaScript");
-console.log(userName);
-console.log(count);
-
-count = count + 1;
-console.log(count);
-```
-
-</details>
-
 ### ゴール
 
-- 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
+- `<details>` でアコーディオンを作る
+- `<dialog>` で確認モーダルを作り、戻り値を取る
+- Popover API でアクションメニューを作る
 
-### 手順
+### 手順 1: 新規プロジェクト
 
-1. これまでの `index.html` をそのまま使う（タイトルだけ `lesson16` に変える）
-2. `script.js` を以下の内容に書き換える
-3. プレビューの Console を開く
+```bash
+npm create vite@latest native-ui -- --template vanilla-ts
+cd native-ui
+npm install
+```
 
-### `index.html`
+### 手順 2: index.html
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson16</title>
-    <script defer src="./script.js"></script>
+    <title>Native UI Demo</title>
+    <link rel="stylesheet" href="/src/style.css" />
   </head>
   <body>
-    <h1>lesson16: 値の種類</h1>
+    <main>
+      <h1>ネイティブ UI のショーケース</h1>
+
+      <section>
+        <h2>1. details / summary</h2>
+        <details>
+          <summary>よくある質問 1</summary>
+          <p>答えをここに書きます。</p>
+        </details>
+        <details>
+          <summary>よくある質問 2</summary>
+          <p>複数あっても OK。</p>
+        </details>
+      </section>
+
+      <section>
+        <h2>2. dialog</h2>
+        <button id="open-dialog">削除する</button>
+        <p id="dialog-result">結果: -</p>
+
+        <dialog id="confirm">
+          <form method="dialog">
+            <p>本当に削除しますか？</p>
+            <menu>
+              <button value="cancel">キャンセル</button>
+              <button value="confirm" autofocus>削除</button>
+            </menu>
+          </form>
+        </dialog>
+      </section>
+
+      <section>
+        <h2>3. Popover</h2>
+        <button popovertarget="menu">メニュー</button>
+        <div id="menu" popover>
+          <button>アイテム 1</button>
+          <button>アイテム 2</button>
+          <button>アイテム 3</button>
+        </div>
+      </section>
+    </main>
+    <script type="module" src="/src/main.ts"></script>
   </body>
 </html>
 ```
 
-### `script.js`
+### 手順 3: src/style.css
 
-```js
-const userName = "Alice";
-const age = 20;
-const isStudent = true;
-const nickname = null;
-let score;
+```css
+body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+main { max-width: 700px; margin: 0 auto; }
+section { margin-block: 32px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
 
-console.log(userName);
-console.log(age);
-console.log(isStudent);
-console.log(nickname);
-console.log(score);
+details {
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+summary { cursor: pointer; font-weight: bold; }
 
-const message = `あなたは ${userName} さんで、${age} 歳です`;
-console.log(message);
+button { padding: 8px 16px; cursor: pointer; }
 
-const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
-console.log(summary);
+dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  min-width: 300px;
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+
+[popover] {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+[popover] button { text-align: left; background: none; border: none; padding: 8px; border-radius: 4px; }
+[popover] button:hover { background: #f3f4f6; }
 ```
+
+### 手順 4: src/main.ts
+
+```ts
+const openBtn = document.getElementById("open-dialog") as HTMLButtonElement;
+const dialog = document.getElementById("confirm") as HTMLDialogElement;
+const result = document.getElementById("dialog-result")!;
+
+openBtn.addEventListener("click", () => {
+  dialog.showModal();
+});
+
+dialog.addEventListener("close", () => {
+  result.textContent = `結果: ${dialog.returnValue}`;
+});
+```
+
+### 手順 5: 起動して確認
+
+```bash
+npm run dev
+```
+
+ブラウザで以下を確認します。
+
+1. **details**: タイトルをクリックで開閉。Tab でフォーカスが当たり Enter でも開閉する
+2. **dialog**: 「削除する」→ モーダルが出る。Escape で閉じる。「キャンセル / 削除」で `結果: cancel` or `結果: confirm` が下に表示される
+3. **popover**: 「メニュー」→ メニューが開く。**外側をクリック** で自動で閉じる（light dismiss）
 
 ### 期待出力
 
-```
-Alice
-20
-true
-null
-undefined
-あなたは Alice さんで、20 歳です
-名前: Alice / 学生: true / 点数: undefined
-```
-
-`score` は `let score;` と宣言しただけで値を入れていないので、自動で `undefined` になります。テンプレートリテラルの中に入れると `undefined` という文字列として表示されます。
+- details を開くとアイコンが回転しつつ中身が見える
+- dialog 表示時に裏側がグレーアウトし、Escape で閉じられる
+- dialog を「削除」で閉じると `結果: confirm` と表示
+- popover は JS ゼロで開閉する（`popovertarget` 属性だけで動く）
 
 ### 変える
 
-- `age` を `20` から `"20"`（文字列）に変えて、`age + 1` の結果を `console.log` してみる → `201` になる（文字列連結）
-- `isStudent` を `false` に変えて Console を確認
-- `nickname` を `"あり"` に変えて `summary` の出力に含まれる挙動を確認
+- `<dialog>` の中で `autofocus` を外すと、最初にフォーカスが当たる位置が変わる
+- `popover` を `popover="manual"` に変えると、外側クリックでは閉じなくなる
+- `details[open]` を CSS でデフォルト値にしたり、`::details-content` でアニメーションを付ける
+- dialog の `::backdrop` の背景色 / blur を変える
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 自分の情報（名前・好きな数字・趣味）を 3 つの変数に入れ、「私は ○○ です。好きな数字は ○○ で、趣味は ○○ です。」という 1 行の文をテンプレートリテラルで作って表示する
+- Todo アプリの「削除確認」を `<dialog>` で作る
+- プロフィールメニュー（アバターをクリックでメニュー）を Popover API で作る
+- FAQ ページを `<details>` で組み立てる
 
 ## まとめ
 
-- 値には文字列 / 数値 / 真偽値 / `null` / `undefined` の 5 種類（当面はこれで十分）
-- 文字列の中に変数を埋め込むときはバッククオート + `${ ... }`
-- クオートの種類（`` ` `` と `"` と `'`）を取り違えると `${ ... }` が文字通りに出てしまうので注意
+- `<details>` / `<summary>` は JS ゼロの折りたたみ。`toggle` イベントで検知、`::details-content` でアニメーション可能
+- `<dialog>` はモーダル。`showModal()` / `close()` / `returnValue` の 3 点セットと `<form method="dialog">` で戻り値まで取れる
+- **フォーカストラップ / Escape / ARIA** が自動で付く
+- **Popover API** は非モーダル。アクションメニュー / tooltip / toast に使う
+- 「モーダル = dialog、非モーダル = popover」の役割分担
+- ネイティブ UI を使うと **バンドルが減り、アクセシビリティが自動** になる
+- 別のレッスンでは **Web Components** に進み、「HTML で自作タグを作る」話へ

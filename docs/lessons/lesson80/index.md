@@ -1,298 +1,353 @@
-# lesson80: Loading UI と Streaming
+# lesson80: 送信状態とエラー表示
 
 ## ゴール
 
-- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
-- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
-- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
-- React 19.2 + Next.js 16 の Server Component でどう動くかを、1 つの演習を通して体感する
+- `useActionState` の正しいシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を覚えます。
+- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せます。
+- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書けます。
+- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を間違えずに使えます。
 
 ## 解説
 
-### `loading.tsx` の役割
+### なぜエラー用の別フックが必要か
 
-Server Component でデータ取得を行うと、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
+「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
 
-```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
+エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
-- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
-- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
-
-これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
-
-### ルート単位のローディングだけだと粗い
-
-`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
-
-例: 記事ページに
-
-- 記事本文（速い、キャッシュ済み）
-- 関連記事（遅い、外部 API から取得）
-
-があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
-
-### 部分的 Streaming: `<Suspense>` で囲む
-
-遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
+### `useActionState` のシグネチャ（絶対に覚える）
 
 ```tsx
-// app/posts/[id]/page.tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
+"use client";
 
-export default async function PostPage() {
+import { useActionState } from "react";
+import { addTodo } from "./actions";
+
+type AddTodoState = { error?: string };
+
+const initialState: AddTodoState = {};
+
+const [state, formAction, isPending] = useActionState(addTodo, initialState);
+```
+
+- 第 1 引数: **action**（Server Action の関数）
+- 第 2 引数: **初期状態**
+- 戻り値: `[state, formAction, isPending]` の 3 要素タプル
+
+引数の順に注意してください。**action が第 1 引数**、初期状態が第 2 引数です。逆にしないでください。
+
+戻り値の中身:
+
+- `state`: 現在のアクション戻り値（`action` が最後に `return` したもの）。初回は `initialState` です。
+- `formAction`: **`<form action={formAction}>` に渡す**、ラップ済みの関数です。元の action ではなくこちらを渡します。
+- `isPending`: 送信中かどうかの真偽値です。
+
+### Server Action のシグネチャを変える
+
+`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
+
+```ts
+"use server";
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {}; // 成功
+}
+```
+
+- 第 1 引数が `prevState`（前回のアクションの戻り値）です。使わなくても受け取る必要があります。
+- 第 2 引数が `FormData` です。
+- 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
+
+「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
+
+### `useFormStatus` は `<form>` の **子** で呼ぶ
+
+`useFormStatus` は「そのフォームが送信中かどうか」を取るフックです。重要な制約があります。
+
+- **import 元は `react-dom`** です（`react` ではありません）。
+- **`<form>` の子コンポーネント内で呼ぶ必要があります**。フォーム本体（`<form>` を return しているコンポーネント）の中では呼べません。
+
+```tsx
+"use client";
+
+import { useFormStatus } from "react-dom";
+
+export function SubmitButton() {
+  const { pending } = useFormStatus();
   return (
-    <>
-      <h1>記事本文（すぐ出る）</h1>
-      <p>...本文...</p>
-
-      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
-        <RelatedPosts />
-      </Suspense>
-    </>
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
   );
 }
 ```
 
-- `<h1>` と `<p>` は先にブラウザに届く
-- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
-- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
+送信ボタンを別コンポーネントに切り出し、その中で `useFormStatus()` を呼びます。これが定番パターンです。
 
-これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
+### import 元の違い（詰まる人が多い）
 
-### `loading.tsx` と `<Suspense>` の棲み分け
+両者は見た目が似ていますが import 元が違います。**太字で強調**:
 
-ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
+- **`useActionState` は `react` から**
+- **`useFormStatus` は `react-dom` から**
 
-- **`loading.tsx`（ルート単位）**: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
-- **`<Suspense>`（コンポーネント単位）**: ページの中で遅い領域だけを個別に待たせる
-
-両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
-
-### `error.tsx` との関係
-
-「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
-
-| 何が起きた？ | 担当ファイル |
-|---|---|
-| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
-| 取得に失敗・例外が飛んだ | `error.tsx` |
-
-両方置いておくのが実用的な構成です。
-
-```
-app/
-└── posts/
-    ├── page.tsx
-    ├── loading.tsx
-    └── error.tsx
-```
-
-### スケルトン UI を返すコツ
-
-`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
-
-- 見出しの位置にグレーのバー
-- 本文の位置に複数の細いバー
-- 画像の位置に正方形のプレースホルダ
-
-これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
-
-### 実行順のイメージ
-
-`<Suspense>` を使った Streaming を 1 度追ってみましょう。
-
-1. ブラウザが `/posts/1` にアクセス
-2. Server が `page.tsx` を評価し始める
-3. `<h1>` と `<p>` の部分は即座に生成される
-4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
-5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
-6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
-7. ブラウザが追加分を受け取り、`fallback` を置き換える
-
-「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
+間違えると「そんな export はない」というエラーが出ます。最初のうちは毎回見比べながら書くと良いです。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Actions の最小形」の `addTodo` を前提にしています。
 
 <details>
 <summary>出発点のファイル</summary>
 
-**`app/layout.tsx`**
+**`app/types.ts`**
 
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/streaming">Streaming</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
+**`app/actions.ts`**
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
+
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
 }
 ```
 
-**`app/page.tsx`**
+**`app/todos/page.tsx`**
 
 ```tsx
-export default function Home() {
-  return <h1>Home</h1>;
+import { addTodo, listTodos } from "../actions";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
 }
 ```
 
 </details>
 
-### ゴール
+### 前回のプロジェクトを開く
 
-- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
-- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
-- fetch が終わると fallback が実データに置き換わる
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順
+### 手順の進め方（重要）
 
-1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
-2. `app/streaming/loading.tsx` を置く
-3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
-4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
-5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
+本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全です。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進めましょう。
 
-### 主要ファイルの完成形
+順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短いです。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すと良いです:
 
-**`app/streaming/page.tsx`**
+1. 新しいファイル `app/todos/TodoForm.tsx` を先に **作るだけ作る**（import する `addTodo` の型不一致でエラーが出るが、そのまま進めます）
+2. `app/todos/page.tsx` で `<form>` ブロックを `<TodoForm />` に差し替え
+3. 最後に `app/actions.ts` の `addTodo` を `(prevState, formData) => newState` 形に書き換え
+
+このドキュメント上の掲載は **「どれを書けばいいか」を最初に見せる** ために 手順 1（actions.ts）から順に並べていますが、手を動かす順番は上記の 1 → 2 → 3 でも構いません。どちらでも最終的には同じ形になります。
+
+### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
+
+`app/actions.ts` を書き換えます。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+```
+
+- 戻り値を `AddTodoState` 型にし、成功時は `{}`、失敗時は `{ error: "..." }` を返します。
+- `prevState` は受け取りますが今回は使いません（それで OK です）。
+
+### 手順 2: フォームを Client Component に切り出す
+
+`useActionState` は Client Component のフックなので、フォーム部分だけを別ファイルに分離します。
+
+`app/todos/TodoForm.tsx`:
 
 ```tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
-import { PostsSkeleton } from "./skeleton";
+"use client";
 
-export default function StreamingPage() {
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { addTodo, type AddTodoState } from "../actions";
+
+const initialState: AddTodoState = {};
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1>Streaming デモ</h1>
-      <p>
-        このテキストと見出しは <strong>すぐに</strong> 表示されます。
-        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
-      </p>
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
 
-      <h2>関連記事</h2>
-      <Suspense fallback={<PostsSkeleton />}>
-        <RelatedPosts />
-      </Suspense>
+export function TodoForm() {
+  const [state, formAction, isPending] = useActionState(addTodo, initialState);
 
-      <p>フッター（これも先に出ます）</p>
-    </div>
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.error && <p className="error">{state.error}</p>}
+      {isPending && <p>通信中...</p>}
+    </form>
   );
 }
 ```
 
-**`app/streaming/RelatedPosts.tsx`**
+ポイント:
+
+- 1 行目 `"use client"` です。
+- **`useActionState` は `react` から import** します。
+- **`useFormStatus` は `react-dom` から import** します。
+- `<form action={formAction}>` に渡すのは **`formAction`** です（`addTodo` ではありません）。
+- `SubmitButton` を別コンポーネントに切り出して、その中で `useFormStatus()` を呼びます。
+- `state.error` があるときだけ `<p>` に赤文字で表示します。
+- `isPending` でも「通信中...」を出します（冗長ですが違いを確認するためです）。
+
+### 手順 3: `/todos` ページで差し替える
+
+`app/todos/page.tsx` の `<form>` を `<TodoForm />` に差し替えます。
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-};
+import { listTodos } from "../actions";
+import { TodoForm } from "./TodoForm";
 
-export default async function RelatedPosts() {
-  // わざと 2 秒待つ
-  await new Promise((r) => setTimeout(r, 2000));
-
-  const res = await fetch(
-    "https://jsonplaceholder.typicode.com/posts?_limit=3",
-    { cache: "no-store" }
-  );
-  const posts: Post[] = await res.json();
+export default async function TodosPage() {
+  const todos = await listTodos();
 
   return (
-    <ul>
-      {posts.map((post) => (
-        <li key={post.id}>{post.title}</li>
-      ))}
-    </ul>
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
   );
 }
 ```
 
-**`app/streaming/skeleton.tsx`**
+`page.tsx` は Server Component のままです。Client の `TodoForm` を呼ぶだけなので `"use client"` は不要です。
 
-```tsx
-export function PostsSkeleton() {
-  return (
-    <ul style={{ listStyle: "none", padding: 0 }}>
-      {[0, 1, 2].map((i) => (
-        <li
-          key={i}
-          style={{
-            height: 16,
-            margin: "8px 0",
-            background: "#e5e5e5",
-            borderRadius: 4,
-          }}
-        />
-      ))}
-    </ul>
-  );
+### 手順 4: エラー用の CSS
+
+`app/globals.css` にエラー表示のスタイルを追加します。
+
+```css
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
 }
-```
 
-**`app/streaming/loading.tsx`**
-
-```tsx
-export default function Loading() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
-    </div>
-  );
+@media (prefers-color-scheme: dark) {
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
+  }
 }
 ```
 
 ### 期待出力
 
-1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
-2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
-3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
-4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
+1. `/todos` を開いて、何も入力せずに「追加」を押す → 下に赤文字で「空のまま追加はできない」が表示されます（薄い赤背景）。
+2. 「買い物」と入力して「追加」を押す → エラー表示が消え、一覧に「買い物」が追加されます。
+3. 何度か連打する → 送信中はボタンが disabled（グレー）になり「送信中...」と表示されます。隣に「通信中...」も出ます。
+4. DevTools の Network タブを開いておくと、送信ごとに POST が飛んでいるのが見えます。
 
-DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
+### よくある間違い
 
-### 変える
+- `useActionState` を `react-dom` から import しようとして「export がない」エラーになる → `react` から import します。
+- `useFormStatus` を `<form>` を返しているコンポーネント自身で呼んでしまう → `pending` が常に `false` になります。子コンポーネントに切り出しましょう。
+- `useActionState(initialState, addTodo)` のように引数を逆にする → 型エラーです。**action が第 1 引数**、初期状態が第 2 引数です。
+- `<form action={addTodo}>` と元の関数を渡す → エラー状態がうまく繋がりません。`<form action={formAction}>` と **ラップ済み** の関数を渡しましょう。
 
-- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
-- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
-- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
+### 変えてみる
+
+1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちを」など）。
+2. エラーの種類を増やしましょう: 先頭の空白文字だけで追加しようとしたときは「空白だけでは追加できない」、5 文字以下のみ許可して「5 文字以内にする」など、`addTodo` 側の判定を足してみましょう。
+3. `useActionState` の初期状態を `{ error: "まずは何か入力" }` にして、初期表示でエラーが出る挙動を確認しましょう（確認したら `{}` に戻します）。
 
 ### 自分で書く
 
-- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
-- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
-- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
+「Server Actions の最小形」の「自分で書く」で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
 
 ## まとめ
 
-- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
-- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
-- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
-- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
-- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
-- これでコースのコア内容は揃いました。あとはサイトを仕上げて Vercel にデプロイすれば、他の人に見せられるアプリになります
+- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚えましょう。
+- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
+- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
+- **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。
+- このあとの「小さなアプリを仕上げる」では、ここまでの知識を統合して TODO アプリを仕上げます。詳細ページ・メタデータ・`searchParams` によるハイライト表示を足します。

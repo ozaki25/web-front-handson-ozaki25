@@ -1,231 +1,212 @@
-# lesson66: 動的ルート
+# lesson66: React DevTools（Components / Profiler）
 
 ## ゴール
 
-- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
-- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
-- 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
+- React Developer Tools ブラウザ拡張をインストールできる
+- Components パネルでツリーと state / props を観察できる
+- Profiler パネルで再レンダリングの回数と所要時間を測定できる
+- 「useMemo で計算のメモ化」で書いた `useMemo` が本当にスキップしているかを確認できる
 
 ## 解説
 
-### 動的ルートとは
+### React DevTools とは
 
-「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
+React 公式の **ブラウザ拡張機能** です。Chrome / Firefox / Edge で使えます。インストールすると、ブラウザ標準の DevTools に **2 つのパネル** が追加されます。
 
-App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
+- **Components**: React のコンポーネントツリーを可視化。各コンポーネントの state / props を見られる。値の書き換えもできる
+- **Profiler**: 再レンダリングを記録して、どのコンポーネントが何回再描画され、何 ms かかったかを測定
 
-```
-app/
-└── posts/
-    ├── page.tsx            → /posts（一覧）
-    └── [id]/
-        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
-```
+素の JS のときは DevTools の Elements パネルで DOM を見れば十分でした。React では **JSX → DOM の間に「コンポーネントツリー」** があり、そのツリーを直接観察できるのが DevTools の強みです。
 
-`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
+### インストール
 
-### `params` は Promise になった
+1. Chrome ウェブストアで [React Developer Tools](https://chromewebstore.google.com/detail/fmkadmapgofadopljbjfkapdkoienihi) を検索してインストール（Firefox は Add-ons）
+2. React を使うサイトを開くと、拡張アイコンが有効（青）になる
+3. DevTools を開くと「Components」「Profiler」の 2 つのタブが現れる
 
-Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
+### StackBlitz での制約（重要）
 
-> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
+StackBlitz のプレビュー画面は **iframe の中で動いている** ため、DevTools が親ページ側を見てしまい、React ツリーが拾えないことがあります。
 
-型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
+回避策:
 
-```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  // id を使って処理
-}
-```
+- プレビュー右上の **「Open in New Tab」ボタン** をクリックしてプレビューを **別タブ** で開く
+- 別タブで開いた画面で DevTools を起動すれば、React ツリーが正しく表示される
 
-`PageProps<"/posts/[id]">` の文字列は、**この `page.tsx` があるルート** を書きます。`[id]` の部分がそのまま `params.id` の型に反映されます（`string` 型）。
+それでも拾えない場合の代替動線:
 
-- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
-- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
-- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
+- **CodeSandbox** で同じコードを開く（こちらはプレビューが同一オリジンで動くことが多い）
+- **ローカルで `npm run dev`** を走らせる（StackBlitz に HMR / DevTools が噛み合わない時の最終手段）
 
-### `find` で 1 件だけ取り出す
+本コースはブラウザ完結を建前にしていますが、DevTools の挙動は環境差が出やすい領域です。うまく動かなければ本レッスンの演習はスキップしてもらって構いません（機能理解だけ押さえて先に進めます）。
 
-2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
+### Components パネルの使い方
 
-```ts
-const target = posts.find((p) => p.id === id);
-```
+- 左に **コンポーネントツリー** が表示される（`<App>` → `<TodoInput>`、`<TodoList>` → ...）
+- コンポーネントをクリックすると、右側に **props / hooks**（state） が展開される
+- **state の値をその場で書き換え** もできる（デバッグに便利）
+- ツールバーの歯車 → General で「Highlight updates when components render.」を有効にすると、**再レンダリングした要素の周囲が一瞬光る** ようになる。これが最初の観察ツール
 
-- 見つかったとき: その要素を返します。
-- 見つからないとき: `undefined` を返します。
+### Profiler パネルの使い方
 
-なので、詳細ページでは次のような流れになります。
+1. Profiler タブを開く
+2. 左上の丸い **Record** ボタン（●）を押して記録開始
+3. 画面で操作（ボタンクリック、入力など）を何回か行う
+4. もう一度 Record ボタン（■）を押して記録停止
+5. 記録された **Commit** が一覧で表示される。各 Commit をクリックすると、その瞬間に再レンダリングされたコンポーネントとそれぞれの所要時間が見える
 
-1. 一覧を `fetch` で全部取ってくる（Server Component）。
-2. `await params` で URL の `id` を取り出す。
-3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは後述の「存在しない ID」の処理に渡す（別のレッスン）。
+Profiler のキーポイント:
 
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は別のレッスンで扱います。
-
-### searchParams は今回扱わない
-
-URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 以降 Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」の中で「指定された ID にハイライトを付ける」演習で初めて使います。
+- **灰色** のコンポーネント: 再レンダリングをスキップした
+- **色付き**（黄色〜赤）: 再レンダリングした（濃いほど時間がかかった）
+- 各コンポーネントにホバーすると「なぜ再レンダリングされたか」（props が変わった / state が変わった / 親が再レンダリングした など）も見える
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
+「useMemo で計算のメモ化」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
-<summary>出発点のファイル（`/posts` 部分）</summary>
+<summary>出発点のファイル</summary>
 
-**`app/posts/page.tsx`**
+**`src/App.tsx`**
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+import { useMemo, useState } from "react";
+import "./App.css";
 
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+const BIG_NUMBERS = Array.from({ length: 10000 }, (_, i) => i + 1);
+
+function App() {
+  const [multiplier, setMultiplier] = useState(1);
+  const [color, setColor] = useState<"red" | "blue">("blue");
+
+  const total = useMemo(() => {
+    console.log("computing total...");
+    return BIG_NUMBERS.reduce((a, b) => a + b, 0) * multiplier;
+  }, [multiplier]);
 
   return (
     <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
-          </li>
-        ))}
-      </ul>
+      <h1>useMemo のデモ</h1>
+
+      <section className="box">
+        <h2>合計</h2>
+        <p style={{ color }}>total = {total.toLocaleString()}</p>
+        <button onClick={() => setMultiplier((m) => m + 1)}>
+          multiplier +1（合計が再計算される）
+        </button>
+      </section>
+
+      <section className="box">
+        <h2>無関係な state</h2>
+        <p>現在の色: {color}</p>
+        <button onClick={() => setColor((c) => (c === "blue" ? "red" : "blue"))}>
+          色を切り替え（合計は再計算されないはず）
+        </button>
+      </section>
     </>
   );
 }
+
+export default App;
 ```
 
-**`app/posts/loading.tsx`**
+**`src/App.css`**
 
-```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
+
+.box button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
 }
 ```
+
+このコードをそのまま使って、Profiler で再計算スキップを観察します。
 
 </details>
 
-### 前回のプロジェクトを開く
+### ゴール
 
-「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
+- 「useMemo で計算のメモ化」の `useMemo` を使った「1 万件の合計」アプリで、Profiler を使って再計算スキップを確認する
 
-### 手順 1: 一覧ページを詳細リンク付きに更新
+### 手順
 
-`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
+1. 「useMemo で計算のメモ化」の StackBlitz プロジェクトを開く（もしくは新規に作って「useMemo で計算のメモ化」のコードを貼る）
+2. プレビューを「Open in New Tab」で別タブに開く
+3. 別タブで DevTools を開き、Components と Profiler のタブが表示されていることを確認
 
-```tsx
-import Link from "next/link";
+### ステップ 1: Components パネルで観察
 
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+1. Components タブを選ぶ
+2. 左に `<App>` のツリーが出る。クリックしてみる
+3. 右に `State` 欄で `multiplier: 1` / `color: "blue"` のような値が見える
+4. ツールバー歯車 → General → 「Highlight updates when components render.」を有効化
+5. 画面の「multiplier +1」ボタンを押す → 該当エリアが一瞬枠で囲まれるのが見える
+6. 「色を切り替え」を押す → これも枠で囲まれる。ただし実際には内部の計算は走っていない（次のステップで確認）
 
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+### ステップ 2: Profiler でスキップ確認
 
-  return (
-    <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <Link href={`/posts/${post.id}`}>
-              <strong>#{post.id}</strong> {post.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-```
+1. Profiler タブを選ぶ
+2. 左上の Record ボタン（●）を押す（赤に変わる）
+3. 画面で以下を 1 回ずつ押す:
+   - 「multiplier +1」
+   - 「色を切り替え」
+   - 「色を切り替え」
+4. 停止ボタン（■）を押す
+5. Commit タブに 3 件の Commit が記録されているはず
 
-### 手順 2: 動的ルートのファイルを作る
+各 Commit を見ると:
 
-`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
-
-```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  // URL の id は string、API の id は number なので揃える
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    return (
-      <>
-        <h1>見つかりません</h1>
-        <p>ID: {id} の記事は存在しない。</p>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
-}
-```
-
-ポイント:
-
-- `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
-- `await params` してから `id` を取り出します。
-- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは別のレッスンで扱います。
+- 1 件目（multiplier +1）: `useMemo` の中身が再計算される
+- 2 件目・3 件目（色切り替え）: `useMemo` は再計算されない（灰色表示になる / `total` の値が前回と同じ参照のまま）
 
 ### 期待出力
 
-1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
-2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
-3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
-4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
+- Console に `computing total...` が **1 回目（multiplier +1）だけ** 出る
+- Profiler で「色を切り替え」に対応する Commit では、`App` 全体の再レンダリング時間が小さい
+- Components の state 欄で `multiplier` と `color` の値が変わっていくのが見える
 
-### 変えてみる
+これで「`useMemo` が本当に効いている」ことを視覚的に確認できます。
 
-1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
-2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
-3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`PageProps<"/posts/[postId]">` に合わせて書き直します（グローバル型なので再ビルドすると自動で型が切り替わります）。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
+### 変える
 
-### 自分で書く
+- 「useMemo で計算のメモ化」の `useMemo` を外してみる → Profiler の同じ操作で、色切り替え時にも Console に `computing total...` が出るようになる
+- 「色切り替え」を連打して Profiler で記録 → `useMemo` なしと `useMemo` あり で合計時間を比べる
 
-`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
+### 自分で書く（挑戦）
 
-- URL: `/users/1`
-- API: `https://jsonplaceholder.typicode.com/users`
-- 表示: `name` と `email`、`phone`
+- これまでのレッスンで作った `useTodos` 版の TODO アプリに Profiler をかけ、TODO を 50 件ほど追加して削除ボタンを押したときに `TodoList` がどのくらい時間を使うかを観察する
+- 必要なら `TodoItem` を `React.memo` で包み、`useCallback` で `onDelete` / `onToggle` を安定化して、Profiler で再度計測する
 
-`PageProps<"/users/[id]">` の型定義、`await params`、`find` の 3 点が書ければ合格です。
+### 環境トラブル時
+
+- DevTools に Components / Profiler が出ない → 拡張が無効、または別タブで開いていない
+- Profiler が「No profiling data...」と出続ける → Record ボタンを押した **後** に操作しているか確認
+- StackBlitz で動かない → CodeSandbox / ローカル実行に切り替え、または本レッスンをスキップ
 
 ## まとめ
 
-- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
-- Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
-- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
-- 見つからない場合の「正しい 404 ページ」は別のレッスンで扱います。
-- クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。
+- React DevTools はブラウザ拡張としてインストールする必要がある
+- Components パネル: ツリー / state / props を直接観察できる
+- Profiler パネル: 再レンダリングの回数・時間を測定できる
+- `useMemo` が本当に効いているかは Profiler で確認するのが確実
+- StackBlitz の iframe では動作が不安定。別タブ / CodeSandbox / ローカル実行で回避
+- 以降のレッスンでも「DevTools で確認する」指示が自然に出せるようになる

@@ -9,7 +9,7 @@
 - 章 5「Next.js」全体の **総合演習** として、自分の設計を整理できる
 
 ::: tip 前提
-このレッスンは lesson62「Server Component と Client Component」、lesson63「Server Component でデータ取得」、lesson68「Server Actions の最小形」の発展編です。基本概念は先のレッスンで確認してください。
+このレッスンは lesson73「Server Component と Client Component」、lesson74「Server Component でデータ取得」、lesson79「Server Actions の最小形」の発展編です。基本概念は先のレッスンで確認してください。
 :::
 
 ## 解説
@@ -157,7 +157,7 @@ export default function Sidebar({ children }: { children: React.ReactNode }) {
 
 ### Server Actions との協調
 
-Server Actions（lesson68）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
+Server Actions（lesson79）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
 
 ```tsx
 // app/posts/page.tsx
@@ -346,7 +346,7 @@ export function copyToClipboard(text: string) {
 
 ### Suspense と Loading
 
-データ取得中の UI を **Suspense + Loading UI** で書きます（lesson78 / lesson80 と関連）。
+データ取得中の UI を **Suspense + Loading UI** で書きます（lesson68 / lesson87 と関連）。
 
 ```tsx
 // app/posts/page.tsx

@@ -28,7 +28,7 @@
 |---|---|---|
 | **Vercel Analytics** | PV / 流入元 | Cookieless、Next.js 統合が秒で済む |
 | **Vercel Speed Insights** | Core Web Vitals | 実ユーザーの LCP / INP / CLS を集める |
-| **Google Analytics 4（GA4）** | PV / イベント / コンバージョン | 機能多 / 学習コスト高 / Cookie 必要 |
+| **Google Analytics 4**（GA4） | PV / イベント / コンバージョン | 機能多 / 学習コスト高 / Cookie 必要 |
 | **Plausible / Fathom / Simple Analytics** | PV / 流入元 | プライバシー重視、料金固定 |
 | **PostHog / Mixpanel / Amplitude** | プロダクト分析（イベント深掘り） | 機能フラグ / セッション再生も統合 |
 
@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ### Vercel Speed Insights
 
-実ユーザーの **Core Web Vitals**（lesson96）を集めるツールです。
+実ユーザーの **Core Web Vitals**（lesson101）を集めるツールです。
 
 ```bash
 npm install @vercel/speed-insights
@@ -205,7 +205,7 @@ export function GAPageView({ gaId }: { gaId: string }) {
 実装の選択肢:
 
 - **Cookieless な Vercel Analytics / Plausible / Fathom** に切り替える
-- GA4 を使うなら **同意管理プラットフォーム（CMP）** を入れる：CookieYes、Cookiebot、Osano、Iubenda
+- GA4 を使うなら **同意管理プラットフォーム**（CMP） を入れる：CookieYes、Cookiebot、Osano、Iubenda
 - GA4 の **Consent Mode v2** を使うと、同意がない場合でも「集計値だけ」を匿名で送れる
 
 #### ITP（Intelligent Tracking Prevention）
@@ -231,7 +231,7 @@ function trackPageView(path: string) {
 PV が増えても **すぐ離脱** していたら意味がありません。次の指標を組み合わせて見ます。
 
 - **エンゲージメント時間**: 1 セッションあたりの滞在
-- **直帰率（Bounce Rate）**: 1 ページだけ見て離脱した割合
+- **直帰率**（Bounce Rate）: 1 ページだけ見て離脱した割合
 - **コンバージョン率**: 目的のアクション（購入 / 登録）に至った割合
 
 #### 集約より分解
@@ -423,5 +423,5 @@ npm run dev
 - **GA4** はイベントベースで強力だが、**Cookie 同意 / Consent Mode v2** を意識する必要がある
 - 個人情報（メールアドレスなど）が **URL から漏れて Analytics に送られる事故** を避ける
 - ITP / 3rd-party cookie 廃止の流れで、**1st-party / Cookieless 設計** が主流
-- 「PV だけ見ない」**エンゲージメント / 流入元 / 国 / コンバージョン** を分解して見る
+- 「PV だけを見ない」。**エンゲージメント / 流入元 / 国 / コンバージョン** を分解して見る
 - 別のレッスンでは **OGP と SEO** に進み、サイトの「読まれ方」を整える

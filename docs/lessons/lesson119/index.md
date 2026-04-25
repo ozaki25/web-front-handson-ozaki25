@@ -213,7 +213,7 @@ GitHub は **public リポジトリの push を自動でスキャン** し、AWS
 
 「`.env` を間違って push してしまった」を想定:
 
-1. **すぐにそのキーを無効化（rotate）**
+1. **すぐにそのキーを無効化**（rotate）
    - クラウドサービス（AWS / Stripe / Sentry）の管理画面で **キーを再生成**
    - GitHub に残った時点で **公開済み** とみなす（git history を消しても遅い）
 2. **新しいキーを Vercel / GitHub Secrets に登録**
@@ -416,4 +416,4 @@ git config core.hooksPath .githooks
 - 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
 - **起動時に Zod で env を検証** すると、設定漏れに早く気づける
 - 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める
-- 別のレッスンでは **Content-Security-Policy（CSP）** に進み、ブラウザ側のセキュリティを締める
+- 別のレッスンでは **Content-Security-Policy**（CSP） に進み、ブラウザ側のセキュリティを締める

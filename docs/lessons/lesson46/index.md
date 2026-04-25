@@ -1,287 +1,404 @@
-# lesson46: イベントと配列のイミュータブル更新
+# lesson46: 型ガード（`typeof` / `in` / カスタム）
 
 ## ゴール
 
-- `onClick` など代表的なイベントハンドラを書ける
-- 配列の state を、新しい配列を作って更新する書き方（イミュータブル更新）ができる
-- 「末尾に追加 / 先頭に追加 / id で削除」の 3 パターンを実装できる
+- `typeof` 演算子でプリミティブ型のユニオンを絞り込める。
+- `in` 演算子でオブジェクトのプロパティの有無から型を絞り込める。
+- `Array.isArray` で「配列かどうか」を絞り込める。
+- `function isTodo(x: unknown): x is Todo` のような **ユーザー定義型ガード** を書ける。
+- 「`unknown` と `never`」で受けた `unknown` を、型ガードを通して具体的な型まで絞り込める。
 
 ## 解説
 
-### 配列 state の注意点
+### `unknown` からの接続
 
-「state で状態を持つ」でカウンター（数値）の state を扱いました。配列の state でも考え方は同じですが、**守らないといけないルール** が 1 つあります。
+「`unknown` と `never`」で、`unknown` で受けた値は **そのままでは何もできない** こと、「絞り込む道具」は本レッスンで扱うと予告しました。このレッスンはその続きです。
 
-> **直接 `push` や `splice` で書き換えない**。必ず「新しい配列」を作って渡す。
+`unknown` を扱うには、「この値は実際どの型なのか」を **実行時に確かめる** コードを書きます。TS はそのコードを読んで「このブロックの中では `unknown` ではなく具体的な型として扱ってよい」と判断してくれます。この「コードから型を絞り込む仕組み」を **型ガード** と呼びます。
 
-```tsx
-const [todos, setTodos] = useState<Todo[]>([]);
+### `typeof` 型ガード
 
-// NG: 元の配列を書き換えている
-todos.push(newTodo);
-setTodos(todos); // 同じ配列を渡しているので、React から見れば「変わっていない」
+JS の `typeof` 演算子は、値のプリミティブな種類を文字列で返します。TS はこの `typeof` の結果を読み取って、**分岐の中で型を絞り込みます**。
 
-// OK: 新しい配列を作って渡す
-setTodos((prev) => [...prev, newTodo]);
-```
-
-これを「イミュータブル（immutable、書き換えない）更新」と呼びます。
-
-理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
-
-スプレッド構文 `...`（2 章 の「分割代入とスプレッド」）は、このイミュータブル更新で頻出します。
-
-### よく使う 3 パターン
-
-#### (1) 末尾に追加
-
-```tsx
-setTodos((prev) => [...prev, newTodo]);
-```
-
-`[...prev, newTodo]` は「`prev` を広げて、最後に `newTodo` を足した新しい配列」。
-
-#### (2) 先頭に追加
-
-```tsx
-setTodos((prev) => [newTodo, ...prev]);
-```
-
-順番を入れ替えるだけ。最新のものを上に表示したいときはこちら。
-
-#### (3) id で削除
-
-```tsx
-setTodos((prev) => prev.filter((t) => t.id !== id));
-```
-
-`filter`（2 章 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
-
-### イベントハンドラの型（コピペで与える）
-
-TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペで与える**ものとして覚えてください。意味は追い追い分かります。
-
-```tsx
-import type { MouseEvent, ChangeEvent, FormEvent } from "react";
-
-// ボタンのクリック
-function handleClick(e: MouseEvent<HTMLButtonElement>) {
-  /* ... */
+```ts
+function describe(value: string | number): string {
+  if (typeof value === "string") {
+    return `文字列: ${value.toUpperCase()}`;
+  }
+  return `数値: ${value.toFixed(2)}`;
 }
 
-// input の変化
-function handleChange(e: ChangeEvent<HTMLInputElement>) {
-  /* ... */
+console.log(describe("hello"));
+console.log(describe(3.14));
+```
+
+出力:
+
+```
+文字列: HELLO
+数値: 3.14
+```
+
+- `if (typeof value === "string")` の中では `value` の型は `string` に絞られている。`.toUpperCase()` を呼べる。
+- その外（`if` を通らなかった側）では `number` に絞られている。`.toFixed(2)` を呼べる。
+
+`typeof` で判定できる文字列は `"string"` / `"number"` / `"boolean"` / `"bigint"` / `"symbol"` / `"function"` / `"undefined"` / `"object"` の 8 種類。ここで注意が必要なのは **`typeof null` が `"object"` になる** こと（JS の歴史的経緯）、そして **配列も `typeof` では `"object"`** になること。
+
+### `Array.isArray` で配列を絞り込む
+
+配列かどうかは `typeof` では判定できないので、専用の `Array.isArray` を使います。
+
+```ts
+function length(value: string | string[]): number {
+  if (Array.isArray(value)) {
+    return value.length; // ここでは string[]
+  }
+  return value.length;   // ここでは string
 }
 
-// フォームの送信
-function handleSubmit(e: FormEvent<HTMLFormElement>) {
-  /* ... */
+console.log(length("hello"));         // 5
+console.log(length(["a", "b", "c"])); // 3
+```
+
+`Array.isArray(value)` が `true` のブロックでは `value` が `string[]`、それ以外では `string` として扱われる。
+
+### `in` 演算子で絞り込む
+
+オブジェクトの型のユニオンでは、`in` 演算子で「そのプロパティを持っているか」を見ることで絞り込めます。
+
+```ts
+type TodoItem = { kind: "todo"; text: string };
+type NoteItem = { kind: "note"; body: string };
+type Item = TodoItem | NoteItem;
+
+function render(item: Item): string {
+  if ("text" in item) {
+    return `TODO: ${item.text}`;
+  }
+  return `Note: ${item.body}`;
+}
+
+console.log(render({ kind: "todo", text: "牛乳を買う" }));
+console.log(render({ kind: "note", body: "今日は良い天気" }));
+```
+
+出力:
+
+```
+TODO: 牛乳を買う
+Note: 今日は良い天気
+```
+
+- `"text" in item` が `true` のブロックでは `item` の型が `TodoItem` に絞られる。`item.text` が使える。
+- `false` 側では `NoteItem` に絞られ、`item.body` が使える。
+
+`in` は「文字列 `"プロパティ名"` が、オブジェクトの中に存在するか」を見ます。共通で持っているプロパティ（ここでは `kind`）ではなく、**片方だけが持つプロパティ**（`text` や `body`）で見分けるのがコツです。
+
+なお、`kind` のような **「種類を表す共通プロパティ」** で分岐する方法もあります。こちらの書き方は別のレッスンで **判別共用体** として本格的に扱います。
+
+### ユーザー定義型ガード（`x is Todo`）
+
+組み込みの `typeof` や `in` で足りないときは、**自分で型ガード関数を書きます**。形は次の通り。
+
+```ts
+function isTodo(x: unknown): x is Todo {
+  // この関数が true を返したら、呼び出し側では x の型が Todo になる
 }
 ```
 
-これらの型は `react` パッケージから `import type` で呼びます。`React.MouseEvent` のように名前空間経由で書くこともできますが、新しい JSX ランタイム（Vite の React + TS テンプレート）では名前空間経由だとエラーになる環境があるので、**個別に import する形に統一します**。
+ポイントは戻り値型 `x is Todo` の部分。通常の戻り値型 `boolean` の代わりにこれを書くと、「`true` を返したら **呼び出し側の `x` の型を `Todo` に絞ってよい**」と TS に教えられます。これを **型述語**（type predicate）と呼びます。
 
-とはいえ、**JSX の中にインラインで書くとき**は、型推論が効くので書かなくても OK です。
+具体的に書くと次のようになります（`Todo` は「配列・ユニオン・リテラル型・オプショナル」で育てた `{ id: string; text: string; status: "open" | "done"; memo?: string }`）。
 
-```tsx
-<button onClick={(e) => console.log(e)}>
-  {/* e は MouseEvent<HTMLButtonElement> 型と自動推論される */}
-</button>
+```ts
+import type { Todo } from "./types";
+
+function isTodo(x: unknown): x is Todo {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  if (typeof o.id !== "string") return false;
+  if (typeof o.text !== "string") return false;
+  if (o.status !== "open" && o.status !== "done") return false;
+  if (o.memo !== undefined && typeof o.memo !== "string") return false;
+  return true;
+}
 ```
 
-関数を別の場所で定義するときだけ、上の型をコピペして付けます。
+- 最初の `typeof x !== "object" || x === null` で「そもそもオブジェクトか」を見る。`null` を除く理由は `typeof null === "object"` だから。
+- `x as Record<string, unknown>` は「プロパティアクセスのために一時的に型を付け替える」書き方。`Record<string, unknown>` は「任意の文字列キーを持ち、値は `unknown`」の型。これで `o.id` などを書けるようになるが、個々のプロパティはまだ `unknown` のままなので、この後 1 つずつ `typeof` で確認する。
+- 各プロパティを順に `typeof` で確認。全部通ったら `return true`。
+- `memo` は `?:` なので「あるなら `string`、ないなら `undefined`」を許す。
 
-### スコープ外: オブジェクトの state 更新
+この形の `isTodo` は **5 章 の「Route Handlers」で再び登場します**。サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのに、まさにこの関数を使い回せます。
 
-配列ではなく、**オブジェクト** を state に入れたときの更新（`setUser((prev) => ({ ...prev, age: 30 }))` など）も同じ発想でできます。ただし覚える量を分散させるため、本コースでは **「TODO アプリを React で作る」で扱います**。このレッスンでは配列更新だけに集中します。
+### 型ガードを通した `unknown` の扱い
+
+`isTodo` を使うと、`unknown` を安全に `Todo` として扱えます。
+
+```ts
+const raw: unknown = JSON.parse('{"id":"a1","text":"牛乳","status":"open"}');
+
+if (isTodo(raw)) {
+  console.log(raw.text); // ここでは raw は Todo 型
+} else {
+  console.log("Todo の形ではありません");
+}
+```
+
+- `if (isTodo(raw))` の中では `raw` の型が `unknown` から `Todo` に絞られている。`.text` や `.id` に安全にアクセスできる。
+- `else` 側では絞り込みが成立していないので、`raw` は `unknown` のまま。
+
+これが「`unknown` と `never`」で予告した「`unknown` を絞り込む具体的な方法」です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
-<summary>出発点のファイル</summary>
-
-**`src/types.ts`**
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
 ```ts
 export type Todo = {
   id: string;
   text: string;
+  status: "open" | "done";
+  memo?: string;
 };
 ```
-
-本レッスンで `Todo` 型と配列 state を扱うので、このファイルを先に用意しておきます。
 
 </details>
 
-### ゴール
+### 手順 1: `typeof` 型ガード
 
-- カウンターに「+1」「-1」「リセット」の 3 ボタンを実装
-- `Todo` の配列 state に対して「末尾に追加」「先頭に追加」「id で削除」の 3 パターンを実装
-- いずれの操作も、イミュータブル更新で行う
-
-### 手順
-
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
-2. `src/types.ts` を作成
-3. `src/App.tsx` を書き換える
-
-### `src/types.ts`
+`src/main.ts` を次の内容に置き換える。
 
 ```ts
+function describe(value: string | number): string {
+  if (typeof value === "string") {
+    return `文字列: ${value.toUpperCase()}`;
+  }
+  return `数値: ${value.toFixed(2)}`;
+}
+
+console.log(describe("hello"));
+console.log(describe(3.14));
+```
+
+#### 期待出力
+
+```
+文字列: HELLO
+数値: 3.14
+```
+
+わざと絞り込み **なし** で呼ぼうとしてみる。
+
+```ts
+function describe(value: string | number): string {
+  return value.toUpperCase();
+}
+```
+
+期待されるメッセージ:
+
+```
+Property 'toUpperCase' does not exist on type 'string | number'.
+  Property 'toUpperCase' does not exist on type 'number'.
+```
+
+`string | number` のままでは `string` 限定のメソッドが呼べない。`typeof` で絞ると呼べるようになることを実感する。確認できたら元に戻す。
+
+### 手順 2: `in` 演算子で分岐
+
+```ts
+type TodoItem = { kind: "todo"; text: string };
+type NoteItem = { kind: "note"; body: string };
+type Item = TodoItem | NoteItem;
+
+function render(item: Item): string {
+  if ("text" in item) {
+    return `TODO: ${item.text}`;
+  }
+  return `Note: ${item.body}`;
+}
+
+console.log(render({ kind: "todo", text: "牛乳を買う" }));
+console.log(render({ kind: "note", body: "今日は良い天気" }));
+```
+
+#### 期待出力
+
+```
+TODO: 牛乳を買う
+Note: 今日は良い天気
+```
+
+わざと `if` を外すとどうなるかも確認する。
+
+```ts
+function render(item: Item): string {
+  return `TODO: ${item.text}`;
+}
+```
+
+期待されるメッセージ:
+
+```
+Property 'text' does not exist on type 'Item'.
+  Property 'text' does not exist on type 'NoteItem'.
+```
+
+`Item` のままでは `.text` が `NoteItem` に存在しないため呼べない。`in` で絞ってから呼ぶのが正しい。確認できたら元に戻す。
+
+### 手順 3: `unknown` から `Todo` に絞り込むカスタム型ガード
+
+`src/types.ts` は「配列・ユニオン・リテラル型・オプショナル」で育てた形をそのまま使う。
+
+```ts
+// src/types.ts
 export type Todo = {
   id: string;
   text: string;
+  status: "open" | "done";
+  memo?: string;
 };
 ```
 
-### `src/App.tsx`
+`src/main.ts` を次の内容に置き換える。
 
-```tsx
-import { useState } from "react";
+```ts
 import type { Todo } from "./types";
-import "./App.css";
 
-function App() {
-  const [count, setCount] = useState(0);
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "原稿を書く" },
-  ]);
-
-  // ---- カウンター ----
-  function handlePlus() {
-    setCount((c) => c + 1);
-  }
-  function handleMinus() {
-    setCount((c) => c - 1);
-  }
-  function handleReset() {
-    setCount(0);
-  }
-
-  // ---- TODO ----
-  function addToEnd() {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: `末尾 ${todos.length + 1}`,
-    };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function addToTop() {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: `先頭 ${todos.length + 1}`,
-    };
-    setTodos((prev) => [newTodo, ...prev]);
-  }
-
-  function removeById(id: string) {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  return (
-    <>
-      <section className="box">
-        <h2>カウンター</h2>
-        <p>現在: {count}</p>
-        <button onClick={handlePlus}>+1</button>
-        <button onClick={handleMinus}>-1</button>
-        <button onClick={handleReset}>リセット</button>
-      </section>
-
-      <section className="box">
-        <h2>TODO</h2>
-        <div className="row">
-          <button onClick={addToEnd}>末尾に追加</button>
-          <button onClick={addToTop}>先頭に追加</button>
-        </div>
-        <ul>
-          {todos.map((todo) => (
-            <li key={todo.id}>
-              {todo.text}
-              <button onClick={() => removeById(todo.id)}>削除</button>
-            </li>
-          ))}
-        </ul>
-      </section>
-    </>
-  );
+function isTodo(x: unknown): x is Todo {
+  if (typeof x !== "object" || x === null) return false;
+  const o = x as Record<string, unknown>;
+  if (typeof o.id !== "string") return false;
+  if (typeof o.text !== "string") return false;
+  if (o.status !== "open" && o.status !== "done") return false;
+  if (o.memo !== undefined && typeof o.memo !== "string") return false;
+  return true;
 }
 
-export default App;
+const raw1: unknown = JSON.parse(
+  '{"id":"a1","text":"牛乳を買う","status":"open"}'
+);
+const raw2: unknown = JSON.parse('{"id":"a2"}');
+const raw3: unknown = "just a string";
+
+function show(raw: unknown): void {
+  if (isTodo(raw)) {
+    console.log(`OK: ${raw.id} / ${raw.text} / ${raw.status}`);
+  } else {
+    console.log("NG: Todo の形ではありません");
+  }
+}
+
+show(raw1);
+show(raw2);
+show(raw3);
 ```
 
-`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。2 章 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。
+#### 期待出力
 
-### `src/App.css`
+```
+OK: a1 / 牛乳を買う / open
+NG: Todo の形ではありません
+NG: Todo の形ではありません
+```
 
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
+- `raw1` は `Todo` の形に合致するので `if` に入る。
+- `raw2` は `text` が欠けているため弾かれる。
+- `raw3` はそもそも文字列なので弾かれる。
 
-.box button {
-  margin-right: 8px;
-  padding: 4px 10px;
-  cursor: pointer;
-}
+### 手順 4: 型ガードなしで使おうとしてエラーを見る
 
-.row {
-  margin-bottom: 8px;
-}
+`show` の中で、型ガードを外して直接触ろうとしてみる。
 
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
+```ts
+function show(raw: unknown): void {
+  console.log(raw.text);
 }
 ```
 
-### 期待出力
+期待されるメッセージ:
 
-- 画面上部に「カウンター」ボックス。`+1` を 3 回押すと 3、`-1` を 1 回押すと 2、`リセット` で 0 に戻る
-- 下に「TODO」ボックス。
-  - 初期状態で `牛乳を買う` と `原稿を書く` の 2 件が並ぶ
-  - `末尾に追加` を 2 回押すと、`末尾 3` / `末尾 4` が一番下に追加される
-  - `先頭に追加` を 1 回押すと、`先頭 5` が一番上に追加される
-  - 各行の `削除` ボタンで、その行だけが消える
+```
+'raw' is of type 'unknown'.
+```
 
-### 変える
+`unknown` に対しては絞り込みなしでプロパティアクセスできない。確認できたら型ガード版に戻す。
 
-- `removeById` を次のように書き換えると、**バグ** が起きる。試してから元に戻すこと
-  ```tsx
-  function removeById(id: string) {
-    const index = todos.findIndex((t) => t.id === id);
-    todos.splice(index, 1); // NG: 元の配列を破壊している
-    setTodos(todos); // React から見ると変化していない
-  }
-  ```
-  クリックしても削除されない（実際は配列が変わっているのに、React は「同じ配列」と見て再レンダリングしない）
-- `addToEnd` の `setTodos((prev) => [...prev, newTodo])` を `setTodos((prev) => [newTodo, ...prev])` に書き換えると、動作が `addToTop` と同じになる
+### 手順 5: `Array.isArray` を使う
+
+「`Todo[]` かどうか」を検証するには、まず配列であることを確かめ、次に各要素が `Todo` かを確かめます。
+
+```ts
+function isTodoArray(x: unknown): x is Todo[] {
+  if (!Array.isArray(x)) return false;
+  return x.every((item) => isTodo(item));
+}
+
+const raw4: unknown = JSON.parse(
+  '[{"id":"a1","text":"牛乳","status":"open"},{"id":"a2","text":"本","status":"done"}]'
+);
+const raw5: unknown = JSON.parse('[{"id":"a1"}]');
+
+if (isTodoArray(raw4)) {
+  console.log(`Todo 配列 (${raw4.length} 件)`);
+} else {
+  console.log("Todo 配列ではありません");
+}
+
+if (isTodoArray(raw5)) {
+  console.log(`Todo 配列 (${raw5.length} 件)`);
+} else {
+  console.log("Todo 配列ではありません");
+}
+```
+
+#### 期待出力
+
+```
+Todo 配列 (2 件)
+Todo 配列ではありません
+```
+
+- `Array.isArray(x)` で配列かどうかを先に確認。
+- 各要素に対して `isTodo` を呼び、**全部合格** したら `true` を返す。
+- 戻り値型 `x is Todo[]` と書いているので、`true` が返った後は呼び出し側で `Todo[]` として `.length` / `.map` 等が使える。
+
+### 変えてみる
+
+`Todo` の `status` に `"archived"` を足したとします（型は一時的に `"open" | "done" | "archived"` とする）。`isTodo` の中の `status` チェックを、3 値に対応するよう書き換える。
+
+```ts
+if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
+  return false;
+}
+```
+
+3 つ以上のリテラル値を許す形の書き方に慣れる。確認できたら、本編を壊さないように `Todo` 型も型ガードも元の 2 値に戻しておく。
 
 ### 自分で書く
 
-- 「逆順」ボタンを追加し、クリックで配列を逆順にする（**新しい配列を作る**）
-  - ヒント: `setTodos((prev) => [...prev].reverse())`（`.reverse()` 単体は元の配列を書き換える破壊的メソッド。スプレッドでコピーしてから呼ぶ）
-- 「全消し」ボタンを追加し、クリックで空配列にする
-  - ヒント: `setTodos([])`
+次の型ガードを自分で書く。
+
+1. `isUser(x: unknown): x is User`
+    - `User` 型は `{ id: string; name: string; age: number }` とする（「オブジェクトの型と type エイリアス」で `types.ts` に追加した形）。
+    - 戻り値の「`x is User`」を忘れない。
+2. `isUserArray(x: unknown): x is User[]`
+    - `isTodoArray` を参考に、`Array.isArray` と `.every` を組み合わせて書く。
+
+書けたら、`JSON.parse` で作った `unknown` を 3 パターン（正しい `User` / プロパティ欠け / そもそも配列でない）試し、期待通りに分岐することを確認する。
 
 ## まとめ
 
-- 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
-- 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
-- イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
-- **オブジェクトの state 更新は「TODO アプリを React で作る」で扱う**。このレッスンでは配列に集中
+- 型ガードは「**実行時の確認を通して、TS に型を絞り込ませる**」仕組み。
+- `typeof`: プリミティブ（`string` / `number` / `boolean` など）の判定。`typeof null === "object"` の落とし穴に注意。
+- `Array.isArray`: 配列かどうかの専用判定。
+- `in`: オブジェクトに特定のプロパティがあるかで判定。
+- **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。「`unknown` と `never`」で受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
+- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、5 章 の「Route Handlers」で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
+- 別のレッスンで、`kind` のような **「種類を表すプロパティ」で自動的に絞り込める** 書き方（判別共用体）を学ぶ。型ガード関数を書かなくても、`switch` だけで分岐できるようになる。

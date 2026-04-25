@@ -1,148 +1,138 @@
-# lesson25: import / export でモジュール化
+# lesson25: 分割代入とスプレッド
+
+<script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
+const demoJs = `
+const user = { name: 'Alice', age: 20 };
+const { name, age } = user;
+console.log('取り出し: ' + name + ', ' + age);
+
+const colors = ['red', 'green', 'blue'];
+const [first, ...rest] = colors;
+console.log('first: ' + first);
+console.log('rest: ' + JSON.stringify(rest));
+
+const updated = { ...user, age: 21 };
+console.log('updated: ' + JSON.stringify(updated));
+console.log('元の user: ' + JSON.stringify(user));
+
+const merged = [...colors, 'yellow'];
+console.log('merged: ' + JSON.stringify(merged));
+`
+</script>
 
 ## ゴール
 
-- JS ファイルを複数に分割して、`import` と `export` で繋げられる
-- 名前付き export と `export default` の違いを使い分けられる
-- `<script type="module">` を使ってモジュールを読み込める
-- TODO アプリのロジックを `storage.js` / `render.js` / `main.js` の 3 ファイルに分割できる
+- オブジェクトや配列から値を分割代入で取り出せる
+- スプレッド構文でオブジェクトや配列をコピー・結合できる
+- 2 つの書き方を「取り出す」vs「まとめる・広げる」で使い分けられる
 
 ## 解説
 
-### なぜファイルを分けるのか
+### 最初に注意
 
-1 つの `script.js` に全部書いていくと、だんだん「どの処理がどこにあるか」がわからなくなります。
+分割代入とスプレッドは **見た目が似ていて混同しやすい** 機能です。先に目的の違いを押さえます。
 
-- 保存 / 読み込みのロジック
-- 画面への描画ロジック
-- イベントを受け取るエントリーポイント
+| 構文 | どこに書く | 目的 | イメージ |
+| --- | --- | --- | --- |
+| 分割代入 | 代入の **左辺** | 値を **取り出す** | 箱の中身を取り出す |
+| スプレッド `...` | 代入の **右辺**（配列・オブジェクトの中） | 値を **まとめる・広げる** | 中身を並べ直す |
 
-これらを **役割ごとに別ファイルに分けておく** と、1 ファイルあたりの責任が小さくなり、読みやすくなります。これを **モジュール化** と呼びます。
+この表を意識していれば、コードを読むときに迷いにくくなります。
 
-### モジュールとして読み込む: `type="module"`
+### オブジェクトの分割代入
 
-HTML から JS ファイルを読み込むとき、通常の `<script>` ではなく `<script type="module">` を使います。こうすると、その JS ファイルは「モジュール」として扱われ、`import` / `export` が使えるようになります。
-
-```html
-<script type="module" src="./main.js"></script>
-```
-
-- `type="module"` を付けないと `import` / `export` は使えない
-- `defer` を付けなくても、モジュールは自動的に遅延読み込みされる
-
-### export（外に出す）
-
-他のファイルから使ってほしい関数や値は、`export` で外に出します。書き方は 2 種類あります。
-
-#### 名前付き export
-
-**その名前のまま** 外に出します。1 つのファイルから複数の値を出すときに向きます。
+オブジェクトから特定のプロパティを取り出して、同じ名前の変数に入れます。
 
 ```js
-// math.js
-export function add(a, b) {
-  return a + b;
-}
+const user = { name: "Alice", age: 20 };
 
-export function sub(a, b) {
-  return a - b;
-}
-
-export const PI = 3.14;
+const { name, age } = user;
+console.log(name); // "Alice"
+console.log(age);  // 20
 ```
 
-まとめて最後に書くこともできます。どちらでも動きます。
+`const { name } = user;` のように、欲しいものだけ取り出すこともできます。従来の書き方は `const name = user.name;` で、分割代入はそれを一度に書くための構文です。
+
+### 配列の分割代入
+
+配列の場合は `[` `]` を使います。位置（インデックス）で取り出します。
 
 ```js
-// math.js
-function add(a, b) {
-  return a + b;
-}
-function sub(a, b) {
-  return a - b;
-}
-const PI = 3.14;
+const colors = ["red", "green", "blue"];
 
-export { add, sub, PI };
+const [first, second] = colors;
+console.log(first);  // "red"
+console.log(second); // "green"
 ```
 
-#### デフォルト export
+### オブジェクトのスプレッド
 
-ファイルから **「主役となる 1 つ」だけを出す** 書き方です。1 ファイルにつき 1 つだけ書けます。
+既存のオブジェクトの中身を「展開」して、新しいオブジェクトを作るときに使います。
 
 ```js
-// greeter.js
-export default function greet(name) {
-  return `こんにちは、${name} さん`;
-}
+const user = { name: "Alice", age: 20 };
+
+const copy = { ...user };
+console.log(copy); // { name: "Alice", age: 20 }
+
+const updated = { ...user, age: 21 };
+console.log(updated); // { name: "Alice", age: 21 }
+console.log(user);    // { name: "Alice", age: 20 } （元のオブジェクトは変わらない）
 ```
 
-### import（読み込む）
+- `{ ...user }` で元の中身を展開してコピー
+- 後ろに `age: 21` を書くと、同じキーは上書きされる
+- 元のオブジェクトは変わらない（これを「イミュータブルな更新」と呼ぶ。4 章 で再登場）
 
-別のファイルから `export` したものを受け取ります。パスの末尾には **`.js` まで書きます**（ブラウザで動かすときの決まり）。
+### 配列のスプレッド
 
-#### 名前付き import
-
-`{ }` で囲んで、export したときと同じ名前で受け取ります。
+配列も同じように展開できます。
 
 ```js
-// main.js
-import { add, sub, PI } from "./math.js";
+const a = [1, 2];
+const b = [3, 4];
 
-console.log(add(1, 2)); // 3
-console.log(sub(5, 3)); // 2
-console.log(PI);        // 3.14
+const merged = [...a, ...b];
+console.log(merged); // [1, 2, 3, 4]
+
+const appended = [...a, 100];
+console.log(appended); // [1, 2, 100]
 ```
 
-- `{ add, sub }` のように必要なものだけ受け取れる
-- 名前は export 側と **同じ** にする
+### 分割代入とスプレッドの対比表
 
-#### デフォルト import
+もう一度整理します。
 
-`{ }` を付けず、好きな名前で受け取れます。
+| やりたいこと | 書き方 | 例 |
+| --- | --- | --- |
+| オブジェクトから値を取り出す | `const { key } = obj` | `const { name } = user` |
+| 配列から値を取り出す | `const [a, b] = arr` | `const [first, second] = colors` |
+| オブジェクトをコピー / 一部だけ変える | `{ ...obj, key: newValue }` | `{ ...user, age: 21 }` |
+| 配列をコピー / 結合 / 末尾追加 | `[...arr, newValue]` | `[...todos, "新しい"]` |
 
-```js
-// main.js
-import greet from "./greeter.js";
+「左辺に書く `{ }` / `[ ]`」は取り出す。「右辺の中に書く `...`」はまとめる・広げる。この対比で覚えます。
 
-console.log(greet("Alice")); // "こんにちは、Alice さん"
-```
+### デモで確認する
 
-- `{ }` を付けない
-- 名前は自由に決められる（`greet` でも `hello` でも動く）
+下のデモでは、オブジェクトと配列の分割代入、レスト構文、スプレッドによるコピー・マージを一通り実行します。元の値が変わらないこともあわせて確認できます。
 
-#### 名前付きとデフォルトの混在
+<LiveDemo
+  height="300px"
+  :html="`<p>分割代入とスプレッドをまとめて確認するデモ</p>`"
+  :css="``"
+  :js="demoJs"
+/>
 
-同じファイルから両方 import することもできます。
-
-```js
-import greet, { PI } from "./greeter.js";
-```
-
-### 使い分けの目安
-
-- **複数の関数 / 値を出すファイル** → 名前付き export（本コースではこちらを基本に）
-- **主役が 1 つだけのファイル**（例: 1 つのコンポーネント） → デフォルト export
-
-どちらが正解ということはなく、プロジェクトの方針で決めます。本コースでは **名前付き export を基本** にします。
-
-### `.js` 拡張子は省略しない
-
-Node.js のパッケージ開発では省略されることもありますが、**ブラウザで直接読み込むときは `.js` まで書きます**。
-
-```js
-// OK
-import { add } from "./math.js";
-
-// NG（ブラウザで 404 になる）
-import { add } from "./math";
-```
+`...rest` のように左辺で使うと「残り全部をまとめる」レスト構文になります。右辺で使うスプレッドと見た目は同じですが、役割は「取り出し」側である点に注意します。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -159,7 +149,7 @@ import { add } from "./math";
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson24: 配列の変換</h1>
+    <h1>lesson24: オブジェクト</h1>
   </body>
 </html>
 ```
@@ -167,57 +157,47 @@ import { add } from "./math";
 **`script.js`**
 
 ```js
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
+
+console.log(user);
+console.log(user.name);
+console.log(user.age);
+
+user.age = 21;
+console.log(user.age);
+
+user.city = "Tokyo";
+console.log(user.city);
+console.log(user);
+
+console.log(user.email);
+
 const users = [
   { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
+  { name: "Bob", age: 25 },
   { name: "Carol", age: 30 },
-  { name: "Dave", age: 17 },
 ];
 
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-
-const names = users.map((user) => user.name);
-console.log(names);
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-console.log(adultNames);
-
-const numbers = [1, 2, 3, 4, 5];
-const doubled = numbers.map((n) => n * 2);
-const evens = numbers.filter((n) => n % 2 === 0);
-console.log(doubled);
-console.log(evens);
-console.log(numbers);
-
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-  { id: "a3", text: "ゴミを出す" },
-];
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target);
-
-const missing = todos.find((todo) => todo.id === "zzz");
-console.log(missing);
+for (const u of users) {
+  console.log(`${u.name} は ${u.age} 歳`);
+}
 ```
 
 </details>
 
 ### ゴール
 
-- TODO アプリのロジックを 3 ファイルに分割する
-  - `storage.js`: `localStorage` に配列を保存 / 読み出し（`JSON.parse` は `try` / `catch` で囲む）
-  - `render.js`: 配列を受け取って `<ul>` に `<li>` を並べる
-  - `main.js`: 2 つを import して、画面の初期描画だけを行うエントリ
-- 画面を開くと、`storage.js` に仕込んだ初期データが `<ul>` に並んで表示される
+- （A）`user` オブジェクトから `name` と `age` を分割代入で取り出して表示する
+- （B）分割代入で取り出した値と、既存オブジェクトをスプレッドでマージして新しいオブジェクトを作る
 
 ### 手順
 
-1. 以下 4 ファイルをプロジェクトに作る: `index.html` / `main.js` / `storage.js` / `render.js`
-2. HTML から `<script type="module" src="./main.js">` を読み込む
+1. `index.html` のタイトルを `lesson25` に変える
+2. `script.js` を以下に書き換える
 
 ### `index.html`
 
@@ -228,128 +208,80 @@ console.log(missing);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson25</title>
-    <script type="module" src="./main.js"></script>
+    <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson25: import / export</h1>
-    <ul id="list"></ul>
+    <h1>lesson25: 分割代入とスプレッド</h1>
   </body>
 </html>
 ```
 
-### `storage.js`
-
-`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、後の「fetch で API から取得する」で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
+### `script.js`
 
 ```js
-const STORAGE_KEY = "module-todos";
+// 演習 A: 分割代入
+const user = { name: "Alice", age: 20, city: "Tokyo" };
 
-export function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error);
-    return [];
-  }
-}
+const { name, age } = user;
+console.log(name);
+console.log(age);
 
-export function saveTodos(todos) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
+const colors = ["red", "green", "blue"];
+const [first, second] = colors;
+console.log(first);
+console.log(second);
+
+// 演習 B: スプレッド
+const copy = { ...user };
+console.log(copy);
+
+const updated = { ...user, age: 21 };
+console.log(updated);
+console.log(user);
+
+const a = [1, 2];
+const b = [3, 4];
+const merged = [...a, ...b];
+console.log(merged);
+
+const todos = ["牛乳を買う", "本を読む"];
+const added = [...todos, "ジョギング"];
+console.log(added);
+console.log(todos);
 ```
-
-- `loadTodos()`: 保存されている配列を返す。なければ空配列、壊れていても空配列
-- `saveTodos(todos)`: 配列を文字列に変えて保存
-
-### `render.js`
-
-DOM への描画だけを担当します。「どこに描くか」と「何を描くか」を引数で受け取れるようにしておくと、画面構成が変わっても中身を書き直さずに済みます。
-
-```js
-export function renderTodos(listElement, todos) {
-  listElement.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    listElement.appendChild(li);
-  }
-}
-```
-
-- `listElement.textContent = ""` で一度中身を空にする
-- 配列の各要素に対して `<li>` を作って `<ul>` に追加する
-
-### `main.js`
-
-エントリーポイントです。`storage.js` と `render.js` を import して、初期データがあれば描画、なければ動作確認用の初期データを入れて保存します。
-
-```js
-import { loadTodos, saveTodos } from "./storage.js";
-import { renderTodos } from "./render.js";
-
-const list = document.querySelector("#list");
-
-let todos = loadTodos();
-
-if (todos.length === 0) {
-  todos = [
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "本を読む" },
-    { id: "a3", text: "掃除する" },
-  ];
-  saveTodos(todos);
-}
-
-renderTodos(list, todos);
-```
-
-- 2 つのファイルから必要な関数を **名前付き import** で受け取る
-- 初回起動時だけ、動作確認用のサンプルデータを保存する
-- `renderTodos` に `<ul>` 要素と配列を渡して描画
 
 ### 期待出力
 
-- 画面に以下の 3 行が `<ul>` の中に並ぶ
-
 ```
-牛乳を買う
-本を読む
-掃除する
+Alice
+20
+red
+green
+{name: "Alice", age: 20, city: "Tokyo"}
+{name: "Alice", age: 21, city: "Tokyo"}
+{name: "Alice", age: 20, city: "Tokyo"}
+[1, 2, 3, 4]
+["牛乳を買う", "本を読む", "ジョギング"]
+["牛乳を買う", "本を読む"]
 ```
 
-- DevTools の Application（または Storage）タブ → Local Storage に `module-todos` というキーで JSON 文字列が保存されている
-- Console で `localStorage.setItem("module-todos", "{ broken")` と壊れた文字列をわざと入れてリロード → Console に「保存データの読み込みに失敗しました」と出て、サンプルデータで起動し直される（`try` / `catch` の効果）
-- Console に `Uncaught SyntaxError: Cannot use import statement outside a module` が **出ない** ことを確認（出ていたら `<script type="module">` になっていない）
+スプレッドで作った `updated` や `added` は新しいオブジェクト / 配列で、元の `user` や `todos` は変わらないことを確認します。
 
 ### 変える
 
-- `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `module-todos` を削除してからリロードすると、新しいサンプルが表示される
-- `renderTodos` の `textContent` を `textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
-- `main.js` で `renderTodos(list, todos)` を呼ばないようにコメントアウト → `<ul>` が空のまま
+- 分割代入で `const { name, city } = user;` に変え、`city` の値を取り出す
+- `const [, second, third] = colors;` で先頭を飛ばして 2 番目と 3 番目を取り出す（カンマで位置をずらす）
+- `const updated2 = { ...user, name: "Bob" };` で名前を上書きした新オブジェクトを作る
+- `const added2 = ["先頭", ...todos];` で先頭に追加してみる
 
 ### 自分で書く
 
-- `storage.js` に `clearTodos()` という関数を追加して export する。中身は `localStorage.removeItem(STORAGE_KEY)` だけ。`main.js` から import して、ページ読み込み時に 1 回呼んでみる（動作確認したら外す）
-- `render.js` を **デフォルト export** に書き換える（`export default function renderTodos(...) { ... }`）。`main.js` 側の import を `import renderTodos from "./render.js";` に変えて、同じ動きをすることを確認する
-- 新しいファイル `format.js` を作り、`export function formatTodo(todo) { return `[${todo.id}] ${todo.text}`; }` を書く。`render.js` の中で import して、`<li>` に整形後の文字列を表示する
+- `book = { title: "JS入門", author: "山田", year: 2024 }` を作り、分割代入で `title` と `author` を取り出して「『○○』（○○）」の形で表示
+- 上記 `book` からスプレッドを使って `year` だけ `2025` に変えた新しいオブジェクトを作り、両方とも Console に出して、元は変わらないことを確認
 
 ## まとめ
 
-- ファイルを役割ごとに分けると、読みやすく・変更しやすくなる
-- ブラウザで `import` / `export` を使うには `<script type="module" src="...">` で読み込む
-- **名前付き export**（`export function foo() {}`）と **デフォルト export**（`export default ...`）の 2 種類
-- **名前付き import** は `{ 名前 }` で受け取り、名前は export と同じにする
-- **デフォルト import** は `{ }` なしで、受け取り側で名前を自由に決められる
-- ブラウザで直接読み込む場合、import パスの末尾は **`.js` まで書く**
-- 本コースは **名前付き export を基本** とする
-- 次の **数レッスンで非同期・DOM・イベントを学び、「TODO アプリを作る」で今日作った 3 ファイル構成（`storage.js` / `render.js` / `main.js`）の TODO をそのまま出発点にして、追加・削除・永続化まで仕上げます**。今日作ったファイルは消さずに残しておいてください
-- **ここで体験した「役割ごとにファイルを分ける」発想は、4 章 の「コンポーネントと props」で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります
+- 分割代入は左辺で書く「取り出し」の構文
+- スプレッドは右辺で書く「まとめる・広げる」の構文
+- 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本
+- **この分割代入の書き方は「コンポーネントと props」で `function Greeting({ name }: Props)` のように React の props として再登場する**

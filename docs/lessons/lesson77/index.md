@@ -1,371 +1,231 @@
-# lesson77: JSON を読み書きする
-
-<script setup>
-const demoJs = `
-const output = document.getElementById('output');
-
-const user = {
-  name: 'Alice',
-  age: 20,
-  hobbies: ['読書', 'ランニング'],
-};
-
-const compact = JSON.stringify(user);
-const pretty = JSON.stringify(user, null, 2);
-
-const parsed = JSON.parse(compact);
-
-output.textContent =
-  '--- compact ---\\n' + compact +
-  '\\n\\n--- pretty ---\\n' + pretty +
-  '\\n\\n--- parse 結果 (name だけ取り出す) ---\\n' + parsed.name;
-`
-</script>
+# lesson77: 動的ルート
 
 ## ゴール
 
-- JSON がどんな形式か（object / array / string / number / boolean / null）を説明できる
-- `JSON.stringify` でオブジェクトを文字列にできる。インデントも付けられる
-- `JSON.parse` で文字列をオブジェクトに戻せる
-- 壊れた JSON を `try` / `catch` で安全に扱える（「try / catch でエラー処理」の応用）
-- `replacer` / `reviver` という仕組みが存在することを知っている
+- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
+- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
+- 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
 
 ## 解説
 
-### JSON って何？
+### 動的ルートとは
 
-**JSON（JavaScript Object Notation）** は、オブジェクトや配列を **文字列として表現する** フォーマットです。ファイル保存 / `localStorage` / API との通信 / 設定ファイル、あらゆる場面で使います。
+「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
 
-使える型は次の 6 つだけです。
+App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
 
-- 文字列: `"hello"`（**ダブルクォート必須**）
-- 数値: `12` / `3.14` / `-5`
-- 真偽値: `true` / `false`
-- `null`
-- 配列: `[1, 2, 3]`
-- オブジェクト: `{ "key": "value" }`（キーも **ダブルクォートで囲む**）
-
-JSON の **できないこと** も押さえておきます。
-
-- コメントは書けない
-- `undefined` / 関数 / `Date` オブジェクトはそのまま表現できない（`stringify` 時に消えるか文字列化される）
-- キーをシングルクォートで囲めない
-- 末尾カンマ（trailing comma）は許されない
-
-### `JSON.stringify` でオブジェクト → 文字列
-
-オブジェクトや配列を文字列化します。
-
-```js
-const user = { name: "Alice", age: 20 };
-const text = JSON.stringify(user);
-console.log(text); // '{"name":"Alice","age":20}'
+```
+app/
+└── posts/
+    ├── page.tsx            → /posts（一覧）
+    └── [id]/
+        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
 ```
 
-#### インデント付きで整形する（第 3 引数）
+`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
 
-第 3 引数にスペースの数（または文字列）を渡すと、改行とインデントが入った読みやすい形になります。
+### `params` は Promise になった
 
-```js
-const pretty = JSON.stringify(user, null, 2);
-console.log(pretty);
-// {
-//   "name": "Alice",
-//   "age": 20
-// }
-```
+Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
 
-- 第 2 引数は後で触れる `replacer` です。使わないときは `null`
-- 第 3 引数に `2` を渡すと半角スペース 2 個ずつでインデント
-- 設定ファイルやログ出力など「人間が読む」用途では必ず付けましょう
+> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
 
-#### 消えるもの
+型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
 
-`JSON.stringify` は JSON に表現できない値を静かに落とします。
-
-```js
-const weird = {
-  name: "Alice",
-  greet: () => "hi",      // 関数は消える
-  createdAt: undefined,   // undefined は消える
-};
-
-console.log(JSON.stringify(weird)); // '{"name":"Alice"}'
-```
-
-「保存したのにプロパティが欠ける」事故の原因になります。保存対象は JSON で表せる型だけにそろえましょう。
-
-### `JSON.parse` で文字列 → オブジェクト
-
-文字列を JS の値に戻します。
-
-```js
-const text = '{"name":"Alice","age":20}';
-const user = JSON.parse(text);
-console.log(user.name); // "Alice"
-console.log(user.age);  // 20
-```
-
-#### 壊れた JSON は例外を投げる
-
-構文が合っていない JSON を `parse` すると `SyntaxError` が投げられます。「try / catch でエラー処理」で学んだとおり、**必ず `try` / `catch` で囲む** 前提です。
-
-```js
-function safeParse(raw) {
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    console.log("JSON が壊れています:", error.message);
-    return null;
-  }
+```tsx
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  // id を使って処理
 }
-
-console.log(safeParse('{"ok":true}')); // { ok: true }
-console.log(safeParse("{ broken"));    // null
 ```
 
-`localStorage` から読む / 外部 API から受け取る、といった **自分で書いていない文字列** を扱うときは、この形がテンプレになります。
+`PageProps<"/posts/[id]">` の文字列は、**この `page.tsx` があるルート** を書きます。`[id]` の部分がそのまま `params.id` の型に反映されます（`string` 型）。
 
-### `replacer` と `reviver`（軽く紹介）
+- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
+- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
+- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
 
-`stringify` / `parse` にはフィルタ関数を挟む仕組みがあります。今は「こういう仕組みがある」と知っておけば十分です。
+### `find` で 1 件だけ取り出す
 
-#### `replacer`
+2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
 
-`stringify` の第 2 引数に関数を渡すと、キー・値のペアごとに呼ばれて「何を出力するか」をカスタマイズできます。
-
-```js
-const data = { name: "Alice", password: "secret" };
-const safe = JSON.stringify(data, (key, value) => {
-  if (key === "password") return undefined; // undefined を返すとそのキーは消える
-  return value;
-});
-console.log(safe); // '{"name":"Alice"}'
+```ts
+const target = posts.find((p) => p.id === id);
 ```
 
-パスワードなど「保存したくない値」を除外したいときに使います。
+- 見つかったとき: その要素を返します。
+- 見つからないとき: `undefined` を返します。
 
-#### `reviver`
+なので、詳細ページでは次のような流れになります。
 
-`parse` の第 2 引数に関数を渡すと、復元する値を加工できます。
+1. 一覧を `fetch` で全部取ってくる（Server Component）。
+2. `await params` で URL の `id` を取り出す。
+3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
+4. 見つからないときは後述の「存在しない ID」の処理に渡す（別のレッスン）。
 
-```js
-const text = '{"createdAt":"2026-04-22T00:00:00.000Z","title":"hello"}';
-const obj = JSON.parse(text, (key, value) => {
-  if (key === "createdAt") return new Date(value);
-  return value;
-});
-console.log(obj.createdAt instanceof Date); // true
-```
+この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は別のレッスンで扱います。
 
-文字列化されて消えた `Date` を復元する、といった用途です。本コースの残りでは使いませんが、名前だけ覚えておくと後で読み解きやすくなります。
+### searchParams は今回扱わない
 
-### デモで確認
-
-オブジェクトを `stringify` してインデント付きで表示し、`parse` で戻して取り出す流れを動かしておきましょう。
-
-<LiveDemo
-  height="300px"
-  :html="`
-<button id='btn' onclick='run()'>動かす</button>
-<pre id='output' style='background:#f5f5f5;padding:12px;border-radius:6px;'></pre>
-  `"
-  :css="`
-body { padding: 16px; font-family: system-ui; }
-pre { white-space: pre-wrap; font-size: 14px; }
-  `"
-  :js="demoJs"
-/>
+URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 以降 Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」の中で「指定された ID にハイライトを付ける」演習で初めて使います。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` の 2 ファイルで TODO 配列を JSON 保存・復元します。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
 
 <details>
-<summary>出発点のコード</summary>
+<summary>出発点のファイル（`/posts` 部分）</summary>
 
-**`index.html`**
+**`app/posts/page.tsx`**
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson77</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <h1>lesson77: JSON</h1>
-    <ul id="list"></ul>
-    <pre id="raw"></pre>
-  </body>
-</html>
+```tsx
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  return (
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
 ```
 
-**`main.js`**
+**`app/posts/loading.tsx`**
 
-```js
-const list = document.querySelector("#list");
-const raw = document.querySelector("#raw");
-
-const todos = [
-  { id: "a1", text: "牛乳を買う", done: false },
-  { id: "a2", text: "本を読む", done: true },
-];
-
-for (const todo of todos) {
-  const li = document.createElement("li");
-  li.textContent = todo.text;
-  list.appendChild(li);
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
 }
 ```
 
 </details>
 
-### ゴール
+### 前回のプロジェクトを開く
 
-- TODO 配列を `JSON.stringify` でインデント付き文字列にして画面に出す
-- `localStorage` に保存した JSON を、次回リロード時に `JSON.parse` で復元する
-- 壊れた JSON が入っていても `try` / `catch` で受け止めて空配列から始める
+「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
 
-### 手順
+### 手順 1: 一覧ページを詳細リンク付きに更新
 
-1. `main.js` に `STORAGE_KEY` と `loadTodos` / `saveTodos` を追加する
-2. 初回は初期配列を `saveTodos` で保存し、次回以降は `loadTodos` で復元する
-3. 画面に `<ul>` のリストと、`<pre>` にインデント付き JSON 表示を両方出す
-4. `localStorage.setItem("json-todos", "{ broken")` を Console で叩いてリロードし、復元に失敗しても壊れないことを確認する
+`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
 
-### 主要ファイルの完成形
+```tsx
+import Link from "next/link";
 
-**`index.html`**
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson77</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <h1>lesson77: JSON</h1>
-    <ul id="list"></ul>
-    <h2>保存されている JSON</h2>
-    <pre id="raw"></pre>
-  </body>
-</html>
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  return (
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <Link href={`/posts/${post.id}`}>
+              <strong>#{post.id}</strong> {post.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
 ```
 
-**`main.js`**
+### 手順 2: 動的ルートのファイルを作る
 
-```js
-const STORAGE_KEY = "json-todos";
+`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
 
-function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch (error) {
-    console.log("JSON の復元に失敗:", error.message);
-    return [];
-  }
-}
+```tsx
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
 
-function saveTodos(todos) {
-  const text = JSON.stringify(todos);
-  localStorage.setItem(STORAGE_KEY, text);
-}
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
 
-function render(todos) {
-  const list = document.querySelector("#list");
-  const raw = document.querySelector("#raw");
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
 
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.done ? `[済] ${todo.text}` : todo.text;
-    list.appendChild(li);
+  // URL の id は string、API の id は number なので揃える
+  const post = posts.find((p) => String(p.id) === id);
+
+  if (!post) {
+    return (
+      <>
+        <h1>見つかりません</h1>
+        <p>ID: {id} の記事は存在しない。</p>
+      </>
+    );
   }
 
-  raw.textContent = JSON.stringify(todos, null, 2);
+  return (
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
+  );
 }
-
-let todos = loadTodos();
-
-if (todos.length === 0) {
-  todos = [
-    { id: "a1", text: "牛乳を買う", done: false },
-    { id: "a2", text: "本を読む", done: true },
-    { id: "a3", text: "掃除する", done: false },
-  ];
-  saveTodos(todos);
-}
-
-render(todos);
 ```
+
+ポイント:
+
+- `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
+- `await params` してから `id` を取り出します。
+- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
+- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは別のレッスンで扱います。
 
 ### 期待出力
 
-画面に次の内容が表示されます。
+1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
+2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
+3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
+4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
 
-```
-lesson77: JSON
+### 変えてみる
 
-- 牛乳を買う
-- [済] 本を読む
-- 掃除する
-
-保存されている JSON
-[
-  {
-    "id": "a1",
-    "text": "牛乳を買う",
-    "done": false
-  },
-  {
-    "id": "a2",
-    "text": "本を読む",
-    "done": true
-  },
-  {
-    "id": "a3",
-    "text": "掃除する",
-    "done": false
-  }
-]
-```
-
-- DevTools の Application（または Storage）タブ → Local Storage に `json-todos` というキーが入っている
-- Console で `localStorage.setItem("json-todos", "{ broken")` を実行しリロード → Console に「JSON の復元に失敗」と出て、初期データで再起動する
-
-### 変える
-
-- `JSON.stringify(todos, null, 2)` の `2` を `4` に変える → インデント幅が広がる
-- `JSON.stringify(todos)` と第 3 引数なしにしてみる → `<pre>` が 1 行に詰まる
-- 初期データに `createdAt: new Date()` を足して `stringify` → 日付が文字列として保存される（JSON には `Date` 型がない）
+1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
+2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
+3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`PageProps<"/posts/[postId]">` に合わせて書き直します（グローバル型なので再ビルドすると自動で型が切り替わります）。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
 
 ### 自分で書く
 
-- `<button id="clear">`全消去`</button>` を置き、押すと `localStorage.removeItem(STORAGE_KEY)` してリロードさせる
-- 各 `<li>` の横に「削除」ボタンを付け、配列から `filter` で除いて `saveTodos` → `render` する
-- `replacer` を使って、`done: true` の項目だけを保存する `stringify` を書く（`saveTodos` をもう 1 つ増やす形で OK）
+`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
+
+- URL: `/users/1`
+- API: `https://jsonplaceholder.typicode.com/users`
+- 表示: `name` と `email`、`phone`
+
+`PageProps<"/users/[id]">` の型定義、`await params`、`find` の 3 点が書ければ合格です。
 
 ## まとめ
 
-- JSON は「オブジェクト / 配列 / 文字列 / 数値 / 真偽値 / null」の 6 種類だけで構成される
-- `JSON.stringify` で文字列化。第 3 引数でインデント付き整形ができる
-- `JSON.parse` で文字列から値に戻す。壊れていると例外になる
-- 外部から来た JSON を読むときは **必ず `try` / `catch` で囲む**
-- `replacer` / `reviver` で出力・復元のカスタマイズができる（存在だけ覚える）
-- 次章の TypeScript で、JSON から戻した値の「型を狭める」方法を学んでいく
+- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
+- Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
+- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
+- 見つからない場合の「正しい 404 ページ」は別のレッスンで扱います。
+- クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

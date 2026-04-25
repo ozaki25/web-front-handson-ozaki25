@@ -1,599 +1,292 @@
-# lesson73: 小さなアプリを仕上げる（統合）
+# lesson73: Server Component と Client Component
 
 ## ゴール
 
-- ここまでの知識を統合して「投稿できる TODO アプリ」を完成させます。
-- `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
-- `export const metadata` でサイト共通タイトル、`generateMetadata` で詳細ページの動的タイトルを設定できます。
-- `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
+- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できます。
+- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子にも Client 扱いが伝播することを理解できます。
+- Client Component が Server Component を `import` はできませんが、`children` や props として受け取れることを知っています。
+- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを自分の目で確認できます。
 
 ## 解説
 
-### 今まで作ってきたものを並べる
+### 2 種類のコンポーネントがある
 
-2 章 で素の JS で作った TODO、4 章 の「TODO アプリを React で作る」で React + localStorage に移植した TODO、そして「Server Actions の最小形」「送信状態とエラー表示」で Server Actions 化した TODO。
+App Router では、コンポーネントが 2 種類あります。
 
-ここまでで以下が揃っています:
+- **Server Component**（デフォルト）
+  - サーバー側で React を実行します。
+  - `useState` / `useEffect` / `onClick` など、**ブラウザでしか動かないもの** は使えません。
+  - データベースアクセスや秘密情報を扱えます。
+  - 送り出されたあとはブラウザでは再実行されません。
+- **Client Component**
+  - ブラウザで動きます。4 章 までの React と同じ感覚で書けます。
+  - `useState` / `useEffect` / `onClick` が使えます。
+  - 先頭に `"use client"` を書いて明示します。
 
-- `app/layout.tsx`（「共通レイアウトを作る」）: ナビとフッターを含む共通レイアウト
-- `app/page.tsx`（「Next.js ってなに？」で作った形）: トップページ
-- `app/about/page.tsx`（「ページを増やしてリンクで移動する」）: 1 章 の自己紹介ページを移植
-- `app/posts/page.tsx` / `app/posts/[id]/page.tsx`（「Server Component でデータを取得する」「動的ルート」）: 練習用の記事一覧
-- `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（「Server Actions の最小形」「送信状態とエラー表示」）: 追加フォーム付き一覧
-- `app/actions.ts`（「Server Actions の最小形」「送信状態とエラー表示」）: Server Actions
+4 章 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
 
-このレッスンで足すものは次のとおりです:
+### `"use client"` のルール
 
-1. TODO の **詳細ページ** `/todos/[id]`
-2. 一覧からの削除ボタン
-3. ルートレイアウトの `metadata`（サイト共通）
-4. 詳細ページの `generateMetadata`（動的タイトル）
-5. `/todos?highlight=<id>` のハイライト表示（`searchParams` の初登場）
-
-### `export const metadata`（静的）
-
-ルートレイアウトや静的なページでは、`metadata` という名前の定数を `export` するとタイトル等が設定できます。
+Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
 
 ```tsx
-// app/layout.tsx
-export const metadata = {
-  title: "TODO アプリ",
-  description: "Next.js App Router の学習用アプリ",
-};
-```
+"use client";
 
-`title` `description` 以外にも OG 画像などを指定できますが、本コースでは 2 つに留めます。
+import { useState } from "react";
 
-### `generateMetadata`（動的）
-
-URL ごとにタイトルを変えたいときは、静的な定数では足りません。その場合は **`generateMetadata` 関数** を `export` します。
-
-```tsx
-import type { Metadata } from "next";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/todos/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  return { title: `Todo #${id}` };
+export function Counter() {
+  // ...
 }
 ```
 
-- 関数名は `generateMetadata` 固定です。
-- 引数の型は Next.js 16 のグローバル型 `PageProps<"/todos/[id]">` で受けます（`import` 不要）。`params` は Promise なので `await` します。
-- 戻り値は `export const metadata` と同じ形のオブジェクトです。型は `Metadata` です（`next` から `import type`）。
-- 戻り値を `Promise<Metadata>` と明示すると、誤字やプロパティ名の間違いを TS が拾ってくれます。
+- 必ず **ファイル先頭 1 行目**（`import` より上）です。
+- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
 
-### `searchParams` も Promise
+つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
 
-クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams` です。Next.js 15 以降は `params` と同様に **Promise** になっています。
+### 境界のイメージ
+
+ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
+
+```mermaid
+graph TD
+  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
+  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
+
+  Layout["RootLayout (Server)"]:::server
+  Page["page.tsx (Server)"]:::server
+  Nav["Nav (Server)"]:::server
+  Counter["Counter (Client)"]:::client
+  Form["TodoForm (Client)"]:::client
+
+  Layout --> Page
+  Page --> Nav
+  Page --> Counter
+  Page --> Form
+```
+
+- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
+- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
+- Client の部分は「葉」に配置します。ページ全体を Client にしません。
+
+上記図はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965`、枠 `#95d5b2` / `#62b6cb`、文字 `#ffffff`）を指定しています。
+
+### Client → Server の呼び出しルール
+
+ここがよく詰まるポイントです。
+
+- Client Component が Server Component を **`import` することはできません**。
+- ただし、`children` や props として **受け取ること** は可能です。
+
+つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
 
 ```tsx
-export default async function TodosPage({
-  searchParams,
-}: PageProps<"/todos">) {
-  const { highlight } = await searchParams;
-  // highlight は string | undefined
+// Server Component（親）
+import { ClientWrapper } from "./ClientWrapper";
+import { ServerInfo } from "./ServerInfo";
+
+export default function Page() {
+  return (
+    <ClientWrapper>
+      <ServerInfo />
+    </ClientWrapper>
+  );
 }
 ```
 
-- `PageProps<"/todos">` のグローバル型が `searchParams` を `Promise<{ [key: string]: string | string[] | undefined }>` として推論します。`?highlight=abc` のようなクエリを取り出すときは `await searchParams` してから `highlight` を読みます。
-- `?highlight=abc&foo=bar` のように複数指定されていれば、それぞれのキーが文字列として届きます。
-- 同じキーが複数個（`?foo=1&foo=2`）あると配列になりますが、本レッスンでは扱いません。
+```tsx
+// ClientWrapper.tsx
+"use client";
+
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export function ClientWrapper({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>開閉</button>
+      {open && children}
+    </div>
+  );
+}
+```
+
+`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
+
+### `"use client"` を忘れたときのエラー
+
+`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+```
+
+このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは5 章 の総まとめなので、「共通レイアウトを作る」の共通レイアウト・「Server Actions の最小形」の Server Actions・「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
+このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
 
-<details>
-<summary>出発点のファイル</summary>
+### 前回のプロジェクトを開く
 
-**`app/layout.tsx`**
+5 章 の「共通レイアウトを作る」で作ったプロジェクトを開き直しましょう。
 
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import "./globals.css";
+### 手順 1: Client Component の `Counter` を作る
 
-export const metadata = {
-  title: "My Next App",
-};
+`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Page() {
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
-    </>
-  );
-}
-```
-
-**`app/about/page.tsx`**（「ページを増やしてリンクで移動する」で作った自己紹介ページ。省略可）
-
-**`app/types.ts`**
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-**`app/actions.ts`**
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-```
-
-**`app/todos/TodoForm.tsx`**
+`app/components/Counter.tsx`:
 
 ```tsx
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { addTodo, type AddTodoState } from "../actions";
+import { useState } from "react";
 
-const initialState: AddTodoState = {};
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
+export function Counter() {
+  const [count, setCount] = useState(0);
+  console.log("client render");
   return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
-
-export function TodoForm() {
-  const [state, formAction, isPending] = useActionState(addTodo, initialState);
-
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
-      {state.error && <p className="error">{state.error}</p>}
-      {isPending && <p>通信中...</p>}
-    </form>
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
   );
 }
 ```
 
-**`app/todos/page.tsx`**
+- 1 行目に `"use client"` を書きます。
+- `useState` と `onClick` を使っています。
+- `console.log("client render")` をレンダリング中に仕掛けます。
+
+### 手順 2: Server Component の `page.tsx` に埋め込む
+
+`app/page.tsx` を次のように書き換えます。
 
 ```tsx
-import { listTodos } from "../actions";
-import { TodoForm } from "./TodoForm";
+import { Counter } from "./components/Counter";
 
-export default async function TodosPage() {
-  const todos = await listTodos();
-
+export default function Page() {
+  console.log("server render");
   return (
     <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
+      <h1>ようこそ</h1>
+      <p>Counter は Client Component として動く。</p>
+      <Counter />
     </>
   );
 }
 ```
 
-**`app/globals.css`**（「共通レイアウトを作る」と「送信状態とエラー表示」で書いた共通 CSS + `.error` スタイル）
+- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
+- `console.log("server render")` を仕掛けます。
 
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
+### 手順 3: 境界を確認する
 
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
+1. ブラウザで `/` を開きます。
+2. ブラウザの DevTools → Console を開きます。
+3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
+4. ページを再読み込みします。
 
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
+#### 期待出力
 
-.error {
-  color: #c00;
-  background: #ffe8e8;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
+- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
+- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
+- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
 
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
-  }
-  .site-header a {
-    color: #4ea2ff;
-  }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-  .error {
-    color: #ffb0b0;
-    background: #4a1d1d;
-  }
-}
+これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
+
+### 手順 4: `"use client"` を消してみる
+
+`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
+
+ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
 ```
 
-</details>
+このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
 
-### 前回のプロジェクトを開く
+### 手順 5: Server を Client の children として渡す
 
-「送信状態とエラー表示」で作ったプロジェクトを開き直しましょう。
+以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
 
-### 手順 1: 削除アクションを追加する
-
-`app/actions.ts` に `deleteTodo` を追加します。
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function getTodo(id: string): Promise<Todo | undefined> {
-  return todos.find((t) => t.id === id);
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-
-export async function deleteTodo(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
-  const index = todos.findIndex((t) => t.id === id);
-  if (index >= 0) {
-    todos.splice(index, 1);
-  }
-  revalidatePath("/todos");
-}
-```
-
-- `getTodo(id)` は詳細ページで使います。
-- `deleteTodo` は `FormData` から `id` を取り出し、`splice` で削除します。同じく Server Action です。
-- 削除用フォームは `useActionState` を使わない（戻り値不要）ので `(formData) => void` のシンプルな形です。
-
-### 手順 2: 一覧ページで削除ボタンを出す + ハイライト対応
-
-`app/todos/page.tsx` を書き換えます。`searchParams` を受け取って、ハイライトする行に `className` を付けます。
+`app/components/ClientBox.tsx`:
 
 ```tsx
-import { listTodos, deleteTodo } from "../actions";
-import { TodoForm } from "./TodoForm";
-import Link from "next/link";
+"use client";
 
-export default async function TodosPage({
-  searchParams,
-}: PageProps<"/todos">) {
-  const { highlight } = await searchParams;
-  const todos = await listTodos();
+import type { ReactNode } from "react";
+import { useState } from "react";
 
+export function ClientBox({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>
+        {open ? "閉じる" : "開く"}
+      </button>
+      {open && <div>{children}</div>}
+    </div>
+  );
+}
+```
+
+`app/components/ServerInfo.tsx`:
+
+```tsx
+export function ServerInfo() {
+  // Server Component なので、ここでサーバー時刻が取れる
+  const now = new Date().toISOString();
+  return <p>サーバー時刻: {now}</p>;
+}
+```
+
+`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
+
+```tsx
+import { Counter } from "./components/Counter";
+import { ClientBox } from "./components/ClientBox";
+import { ServerInfo } from "./components/ServerInfo";
+
+export default function Page() {
+  console.log("server render");
   return (
     <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul className="todo-list">
-        {todos.map((todo) => (
-          <li
-            key={todo.id}
-            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
-          >
-            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
-            <form action={deleteTodo} style={{ display: "inline" }}>
-              <input type="hidden" name="id" value={todo.id} />
-              <button type="submit">削除</button>
-            </form>
-          </li>
-        ))}
-      </ul>
-      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
+      <h1>ようこそ</h1>
+      <Counter />
+      <ClientBox>
+        <ServerInfo />
+      </ClientBox>
     </>
   );
 }
 ```
 
-ポイント:
+#### 期待出力
 
-- `PageProps<"/todos">` のグローバル型が `searchParams` を Promise として推論するので、`await searchParams` で `highlight` を取り出します。
-- `todo.id === highlight` のときだけ `todo-item--highlight` クラスを足します。
-- 削除ボタンは `<form action={deleteTodo}>` の中に `<input type="hidden" name="id" value={todo.id} />` を仕込みます。ボタンを押すと `deleteTodo(formData)` が呼ばれます。
-- 詳細ページへのリンクも `<Link href={`/todos/${todo.id}`}>` で追加します。
+- 最初は `サーバー時刻: 2026-...` が見えています。
+- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
+- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
 
-### 手順 3: CSS でハイライト
-
-`app/globals.css` に以下を追加します。
-
-```css
-.todo-list {
-  list-style: none;
-  padding: 0;
-}
-
-.todo-item {
-  padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.todo-item--highlight {
-  background: #fff3a3;
-}
-
-@media (prefers-color-scheme: dark) {
-  .todo-item {
-    border-bottom-color: #333;
-  }
-  .todo-item--highlight {
-    background: #665c1e;
-    color: #fff;
-  }
-}
-```
-
-- 黄色背景 `#fff3a3` がハイライトです（ダーク時は濃い黄土色 `#665c1e` + 白文字で視認性を確保します）。
-
-### 手順 4: 詳細ページ `/todos/[id]` を作る
-
-`app/todos/[id]/page.tsx` を新規作成します。
-
-```tsx
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { getTodo } from "../../actions";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/todos/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const todo = await getTodo(id);
-  return {
-    title: todo ? `Todo: ${todo.text}` : "Todo not found",
-  };
-}
-
-export default async function TodoDetailPage({
-  params,
-}: PageProps<"/todos/[id]">) {
-  const { id } = await params;
-  const todo = await getTodo(id);
-
-  if (!todo) {
-    notFound();
-  }
-
-  return (
-    <>
-      <h1>Todo 詳細</h1>
-      <p>ID: {todo.id}</p>
-      <p>内容: {todo.text}</p>
-      <p>
-        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
-      </p>
-      <p>
-        <Link href="/todos">一覧に戻る</Link>
-      </p>
-    </>
-  );
-}
-```
-
-ポイント:
-
-- `generateMetadata` で動的タイトルを返します。`await params` と `getTodo(id)` を呼びます。
-- 見つからないときは `notFound()` を呼びます（「エラーと見つからないページ」と同じです）。
-- `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
-
-### 手順 5: 詳細ページの `not-found.tsx`
-
-`app/todos/[id]/not-found.tsx`:
-
-```tsx
-import Link from "next/link";
-
-export default function TodoNotFound() {
-  return (
-    <>
-      <h1>Todo が見つからない</h1>
-      <p>指定された ID の Todo は存在しない（または削除された）。</p>
-      <Link href="/todos">一覧に戻る</Link>
-    </>
-  );
-}
-```
-
-### 手順 6: ルートレイアウトの `metadata`
-
-`app/layout.tsx` の `metadata` を書き換えます。
-
-```tsx
-export const metadata = {
-  title: {
-    default: "TODO アプリ",
-    template: "%s | TODO アプリ",
-  },
-  description: "Next.js App Router の学習用 TODO アプリ",
-};
-```
-
-- `title.default`: 子ページで `title` を設定しない場合のデフォルトです。
-- `title.template`: 子ページが自分のタイトルを持つ場合、`%s` の部分に埋め込みます。例えば詳細ページの `generateMetadata` が `{ title: "Todo: 買い物" }` を返すと、実際のタブには **「Todo: 買い物 | TODO アプリ」** と表示されます。
-
-### 期待出力
-
-1. `/todos` を開く → TODO 一覧が表示されます。0 件なら「まだ 1 件もない」のメッセージが出ます。
-2. 「買い物」「課題」「運動」を順に追加 → 3 件の一覧が出ます。各項目は詳細リンクと削除ボタン付きです。
-3. タブのタイトル: 「TODO アプリ」です。
-4. 「買い物」をクリック → `/todos/<id>` に遷移します。タブのタイトルが「Todo: 買い物 | TODO アプリ」に変わります。
-5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になります。
-6. 一覧で「削除」ボタンを押す → その 1 件が消えます。タブのタイトルは「TODO アプリ」のままです。
-7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。タブのタイトルは「Todo not found | TODO アプリ」です。
-8. `/about` は1 章 の自己紹介ページです。タブのタイトルは「TODO アプリ」です（ルートの `default` が適用されます）。
-9. ナビから 3 ページを行き来できます。
-
-### 動作確認チェックリスト
-
-- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（「送信状態とエラー表示」の成果）
-- [ ] 送信中はボタンが disabled になる（「送信状態とエラー表示」の成果）
-- [ ] 追加 → 一覧が自動で更新される（`revalidatePath` の成果）
-- [ ] 削除 → 該当 1 件だけが消える
-- [ ] `/todos?highlight=<id>` でその行だけ黄色背景
-- [ ] `/todos/<id>` の詳細ページのタブタイトルが動的に変わる
-- [ ] `/todos/not-a-real-id` で `not-found.tsx` が出る
-- [ ] `/about` が1 章 の自己紹介と同じ見た目で出る
+もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
 
 ### 変えてみる
 
-1. `<input type="hidden" name="id">` の値を書き換えて送信してみましょう（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認します。
-2. `generateMetadata` で `description` も返してみましょう: `return { title: ..., description: `ID ${id} の TODO` };`
-3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習です。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲みます。
+1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
+2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
 
-### 自分で書く（応用）
+### 自分で書く
 
-TODO に「完了」のフラグを追加する演習です。
-
-- `types.ts` の `Todo` 型に `done: boolean` を追加します。
-- `actions.ts` に `toggleDone(formData: FormData)` を追加し、`id` を受け取って該当 Todo の `done` を反転させます。
-- 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出します。
-- 完了済みの項目はテキストに `text-decoration: line-through` を当てます（CSS に `.todo-item--done` を追加）。
-
-実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターンです。「Server Actions の最小形」「送信状態とエラー表示」でやったことの応用です。
+「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
 
 ## まとめ
 
-- `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
-- `metadata`（静的）と `generateMetadata`（動的）でタブタイトルを制御できます。`template` を使うと子ページのタイトルを共通で包めます。
-- `PageProps<"/todos">` で URL クエリ（`searchParams`）を受け取り、`await` してから条件付きスタイルに反映できます。
-- 2 章 の TODO（素の JS）→ 4 章 の「TODO アプリを React で作る」（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
-- 「Vercel にデプロイする」では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。
-
-### 補足: レイアウトのおさらい
-
-このレッスンまでの `app/` 以下は、おおよそ次の形になっているはずです。
-
-```
-app/
-├── layout.tsx                # 共通レイアウト (Server)
-├── page.tsx                  # トップ (Server)
-├── globals.css
-├── actions.ts                # Server Actions
-├── types.ts                  # Todo 型
-├── components/               # 共通部品
-│   ├── Counter.tsx           # 「Server Component と Client Component」で作った Client コンポーネント
-│   ├── ClientBox.tsx
-│   └── ServerInfo.tsx
-├── about/
-│   ├── page.tsx              # 自己紹介 (Server)
-│   └── about.css
-├── todos/
-│   ├── page.tsx              # TODO 一覧 (Server)
-│   ├── TodoForm.tsx          # 追加フォーム (Client)
-│   └── [id]/
-│       ├── page.tsx          # TODO 詳細 (Server)
-│       └── not-found.tsx
-└── posts/                    # 記事一覧ページの練習用
-    ├── page.tsx
-    ├── loading.tsx
-    └── [id]/
-        ├── page.tsx
-        ├── error.tsx
-        └── not-found.tsx
-```
-
-不要になった練習用ページは消しても、残しても構いません。残すと Vercel 公開後も色々見られて面白いです。
+- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
+- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
+- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
+- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。
+- 別のレッスンで Server Component で実際にデータを `fetch` します。Client では扱いにくかった「サーバー側取得」のうまみを体験しましょう。

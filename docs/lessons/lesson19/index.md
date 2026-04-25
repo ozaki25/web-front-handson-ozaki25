@@ -1,80 +1,105 @@
-# lesson19: 繰り返し処理
+# lesson19: 条件で分岐する
 
 <script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
 const demoJs = `
-const todos = ['牛乳を買う', '本を読む', 'ジョギング'];
+const age = 20;
 
-for (const todo of todos) {
-  console.log('- ' + todo);
+if (age >= 20) {
+  console.log(age + ' 歳: 成人です');
+} else if (age >= 13) {
+  console.log(age + ' 歳: 10 代です');
+} else {
+  console.log(age + ' 歳: 子供です');
 }
 
-console.log('合計', todos.length, '件');
+if (age >= 20 && age < 60) {
+  console.log('働き盛り');
+}
 `
 </script>
 
 ## ゴール
 
-- `for...of` で配列の全要素を順に処理できる
-- `forEach` でも同じことができることを知る
+- `if` / `else if` / `else` で処理を分けられる
+- `===` / `!==` で等しい / 等しくないを判定できる
+- `&&` / `||` / `!` を組み合わせて条件を書ける
 
 ## 解説
 
-### 「全部に対して同じことをする」
-
-配列の要素を 1 つずつ取り出して `console.log` したいとき、`todos[0]` / `todos[1]` / `todos[2]` ... と書き並べるのは大変です。要素数が増えるたびに書き足す必要があり、現実的ではありません。
-
-こういう「全部の要素に対して同じことをする」ために、繰り返し処理を使います。
-
-### `for...of`
-
-本コースで最初に覚える書き方は `for...of` です。配列専用ではありませんが、配列との相性がよく、書き方が素直です。
+### `if` の基本形
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
-
-for (const todo of todos) {
-  console.log(todo);
+if (条件) {
+  // 条件が true のときに実行される
 }
 ```
 
-- `for (const 変数名 of 配列)` と書く
-- `{ ... }` の中が「各要素に対してやりたい処理」
-- ループのたびに `todo` に次の要素が順番に入る
+条件が「真（`true`）」のときだけ、波かっこの中が実行されます。「偽（`false`）」なら飛ばされます。
 
-インデックスは使わず、「要素そのもの」を直接受け取ります。インデックスが必要なときは後の章で別の書き方を学びますが、まずはこの形で十分です。
+### `else` と `else if`
 
-下のデモで、配列を 1 件ずつ取り出して `console.log` が順に並ぶ様子を確認できます。
+「そうでないとき」は `else`、「別の条件も試したい」は `else if` を使います。
+
+```js
+if (age >= 20) {
+  console.log("成人");
+} else if (age >= 13) {
+  console.log("中高生");
+} else {
+  console.log("それ以外");
+}
+```
+
+上から順に条件を見て、最初に `true` になったブロックだけが実行されます。どれも当てはまらなければ `else` が実行されます。
+
+### 比較演算子
+
+| 演算子 | 意味 |
+| --- | --- |
+| `===` | 等しい |
+| `!==` | 等しくない |
+| `>` | 左が右より大きい |
+| `>=` | 左が右以上 |
+| `<` | 左が右より小さい |
+| `<=` | 左が右以下 |
+
+等しいかどうかは **必ず `===` と `!==`** を使います。`==` と `!=` は値の種類が違っても自動で変換して比較する古い演算子で、混乱の原因になるため本コースでは使いません。
+
+### 論理演算子
+
+複数の条件をつなぎたいときに使います。
+
+| 演算子 | 意味 |
+| --- | --- |
+| `&&` | 両方とも `true` のとき `true` |
+| `\|\|` | どちらかが `true` なら `true` |
+| `!` | `true` と `false` を反転 |
+
+```js
+if (age >= 13 && age <= 19) {
+  console.log("10 代");
+}
+
+if (name === "" || name === null) {
+  console.log("名前が未入力");
+}
+
+if (!isStudent) {
+  console.log("学生ではない");
+}
+```
+
+下のデモで、`age` の値を変えると条件分岐の結果が Console にどう出るかを体感できます。`age` を `12` / `20` / `70` に書き換えると出力が変わります。
 
 <LiveDemo
-  height="220px"
-  :html="`<p>配列を順に出力します。</p>`"
+  height="180px"
+  :html="`<p>age の値を変えてデモのソースを書き換えて試してください。</p>`"
   :css="``"
   :js="demoJs"
 />
-
-### `forEach`（軽く触れる）
-
-配列には `forEach` というメソッドもあります。書き味が少し違うだけで、できることはほぼ同じです。
-
-```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
-
-todos.forEach((todo) => {
-  console.log(todo);
-});
-```
-
-- `(todo) => { ... }` はアロー関数と呼ばれる記法（別のレッスンで詳しく扱う）
-- 配列の各要素に対して、カッコの中の処理が呼ばれる
-
-本コースでは `for...of` を主に使いますが、後のレッスンや実際のコードでは `forEach` もよく見かけます。「同じ意味の別の書き方」として覚えておきます。
-
-### どちらを使う？
-
-- 読みやすさ重視なら `for...of`
-- 既存コードに合わせるなら `forEach`
-
-迷ったら `for...of` で統一して構いません。
 
 ## 演習
 
@@ -97,7 +122,7 @@ todos.forEach((todo) => {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: 配列を扱う</h1>
+    <h1>lesson18: 値の種類</h1>
   </body>
 </html>
 ```
@@ -105,35 +130,37 @@ todos.forEach((todo) => {
 **`script.js`**
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+const userName = "Alice";
+const age = 20;
+const isStudent = true;
+const nickname = null;
+let score;
 
-console.log(todos);
-console.log(todos.length);
-console.log(todos[0]);
-console.log(todos[todos.length - 1]);
+console.log(userName);
+console.log(age);
+console.log(isStudent);
+console.log(nickname);
+console.log(score);
 
-todos.push("部屋を片付ける");
-console.log(todos);
-console.log(todos.length);
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
 
-const last = todos.pop();
-console.log(last);
-console.log(todos);
-
-console.log(todos[99]);
+const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
+console.log(summary);
 ```
 
 </details>
 
 ### ゴール
 
-- やることリストの配列を `for...of` で全件 Console に出す
-- 同じ処理を `forEach` でも書いてみる
+- 年齢を表す変数 `age` の値によって「成人 / 未成年」を分岐表示する
+- 年齢を変えて結果が切り替わることを確認する
 
 ### 手順
 
 1. `index.html` のタイトルを `lesson19` に変える
 2. `script.js` を以下に書き換える
+3. Console で結果を確認する
 
 ### `index.html`
 
@@ -147,7 +174,7 @@ console.log(todos[99]);
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson19: 繰り返し処理</h1>
+    <h1>lesson19: 条件で分岐する</h1>
   </body>
 </html>
 ```
@@ -155,55 +182,60 @@ console.log(todos[99]);
 ### `script.js`
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+const age = 20;
+const userName = "Alice";
+const isStudent = true;
 
-console.log("--- for...of ---");
-for (const todo of todos) {
-  console.log(todo);
+if (age >= 20) {
+  console.log(`${userName} さんは成人です`);
+} else {
+  console.log(`${userName} さんは未成年です`);
 }
 
-console.log("--- forEach ---");
-todos.forEach((todo) => {
-  console.log(todo);
-});
-
-console.log("--- 合計 ---");
-const numbers = [1, 2, 3, 4, 5];
-let total = 0;
-for (const n of numbers) {
-  total = total + n;
+if (age >= 13 && age <= 19) {
+  console.log("10 代です");
+} else if (age >= 20 && age < 60) {
+  console.log("大人です");
+} else {
+  console.log("それ以外の年代です");
 }
-console.log(total);
+
+if (isStudent && age >= 20) {
+  console.log("成人の学生です");
+}
+
+if (!isStudent) {
+  console.log("学生ではありません");
+} else {
+  console.log("学生です");
+}
 ```
 
 ### 期待出力
 
+`age = 20` の場合、Console には次のように表示されます。
+
 ```
---- for...of ---
-牛乳を買う
-本を読む
-ジョギング
---- forEach ---
-牛乳を買う
-本を読む
-ジョギング
---- 合計 ---
-15
+Alice さんは成人です
+大人です
+成人の学生です
+学生です
 ```
 
 ### 変える
 
-- `todos` の要素を 5 つに増やす → どちらのループも自動で 5 回実行される
-- `console.log(todo)` を `console.log("- " + todo)` に変える → 各行の先頭に `- ` が付く
-- `numbers` の合計処理で、`total = total + n` を `total = total + n * 2` に変える → 出力が `30` になる
+- `age` を `18` に変える → 「未成年です」「10 代です」「学生です」に変わる（「成人の学生です」の行は出なくなる）
+- `age` を `65` に変える → 「成人です」「それ以外の年代です」「学生です」になる（`isStudent` が `true` のまま）
+- `isStudent` を `false` に変える → 「学生ではありません」に切り替わる
+- `===` と `==`、`!==` と `!=` は本コースでは前者だけを使う。試しに `age == "20"` と書いてみると `true` になる（型が違うのに等しいと判定される）ので、その気持ち悪さだけ体験しておく
 
 ### 自分で書く
 
-- 数値の配列 `scores = [80, 95, 62, 77, 90]` を作り、`for...of` で合計と平均を計算して出す（平均 = 合計 / 要素数）
-- 文字列の配列 `names = ["Alice", "Bob", "Carol"]` を作り、`for...of` で「こんにちは、○○ さん」と 1 人ずつ出力する
+- 変数 `score`（テストの点数）を作り、90 以上なら「A」、70 以上なら「B」、50 以上なら「C」、それ未満なら「D」と出すコードを書く
+- 変数 `hour`（0〜23）を作り、`6 <= hour && hour < 12` なら「おはよう」、`12 <= hour && hour < 18` なら「こんにちは」、そうでなければ「こんばんは」と出すコードを書く
 
 ## まとめ
 
-- 配列の全要素を処理するには `for...of` を使う
-- `forEach` でも同じことが書けるが、本コースでは `for...of` を主に使う
-- ループの中で `let` で用意した合計用変数を更新すると、合計や平均も計算できる
+- `if` / `else if` / `else` で分岐を書く
+- 等しいかの判定は `===` / `!==`（`==` / `!=` は使わない）
+- 複数条件は `&&`（かつ）/ `||`（または）/ `!`（否定）を使い分ける

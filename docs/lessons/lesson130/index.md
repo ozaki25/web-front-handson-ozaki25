@@ -9,7 +9,7 @@
 - 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
 
 ::: tip 前提
-このレッスンは lesson105「ESLint / Prettier / Biome」と lesson113「Vite の仕組み」の発展編です。基本概念は先のレッスンで確認してください。
+このレッスンは lesson110「ESLint / Prettier / Biome」と lesson113「Vite の仕組み」の発展編です。基本概念は先のレッスンで確認してください。
 :::
 
 ## 解説
@@ -45,7 +45,7 @@ JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トラ
 
 ### Biome
 
-[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（lesson105 で扱い済み）。
+[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（lesson110 で扱い済み）。
 
 特徴:
 
@@ -73,7 +73,7 @@ npx biome init
 - 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
 - **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
 
-→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint（型情報を使うルール）** のハイブリッド」が現実的。
+→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
 
 ### Oxc / Oxlint
 
@@ -350,5 +350,5 @@ time npx oxlint .
 - **TypeScript 公式の Go 版**（tsgo）が 2026 年に preview
 - 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
 - 既存プロジェクトは「**速度に困ってから**」で良い
-- 5 年後は **Vite 系（Rolldown + Oxc）** と **Vercel 系（Turbopack + SWC）** の 2 派が併走と予想
+- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
 - 別のレッスンでは **AI を前提にした開発** に進み、本ハンズオンの最終話題に入る

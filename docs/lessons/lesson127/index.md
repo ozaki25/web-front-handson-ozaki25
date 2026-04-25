@@ -12,7 +12,7 @@
 
 ### `localStorage` の限界
 
-lesson81 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+lesson35 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
 - **容量が小さい**（オリジン全体で 5〜10MB）
 - **値は文字列だけ**（オブジェクトは JSON 化が必要）
@@ -382,7 +382,7 @@ useEffect(() => {
 
 - `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
 - 用語: **database / objectStore / transaction / cursor**
-- 生 API は冗長 → **`idb`（薄いラッパー）** か **`Dexie.js`（クラス指向）** を使う
+- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
 - React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
 - 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
 - クォータ / 退去 / `navigator.storage.persist()` を意識する

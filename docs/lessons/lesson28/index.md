@@ -1,365 +1,117 @@
-# lesson28: DOM を操作する
+# lesson28: 非同期処理の基本
 
 <script setup>
 const demoJs = `
-const title = document.querySelector('#title');
-const textBtn = document.querySelector('#btn-text');
-const classBtn = document.querySelector('#btn-class');
-const resetBtn = document.querySelector('#btn-reset');
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
-textBtn.addEventListener('click', () => {
-  title.textContent = '書き換えました';
-  console.log('textContent を変更');
-});
+async function main() {
+  console.log('start');
+  await wait(1000);
+  console.log('1 秒後');
+  await wait(1000);
+  console.log('さらに 1 秒後（計 2 秒）');
+  console.log('end');
+}
 
-classBtn.addEventListener('click', () => {
-  title.classList.toggle('active');
-  console.log("classList.toggle('active') でスタイル切り替え");
-});
-
-resetBtn.addEventListener('click', () => {
-  title.textContent = '最初の見出し';
-  title.classList.remove('active');
-  console.log('元に戻しました');
-});
+main();
 `
 </script>
 
 ## ゴール
 
-- HTML が DOM という木構造（ツリー）として扱われることを絵で理解できる
-- `querySelector` / `getElementById` / `querySelectorAll` を使い分けて要素を取得できる
-- `textContent` と `innerHTML` の違いと、XSS の落とし穴を説明できる
-- `classList` で CSS クラスを付け外しできる
-- `getAttribute` / `setAttribute` / 要素のプロパティ（`link.href` など）で属性を読み書きできる
-- `.value` / `.checked` でフォームの値を読み書きできる
-- `element.style` と `dataset` でスタイルやデータ属性を扱える
-- `createElement` / `appendChild` で要素を作って追加、`remove()` で削除できる
-- `parentElement` / `children` / `nextElementSibling` でツリーをたどれる
+- 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
+- `async` / `await` を使って「結果を待ってから続ける」書き方ができる
+- Promise を「まだ完了していない結果を表す箱」として直感的に理解する
 
 ## 解説
 
-### HTML は DOM という「木」になっている
+### 同期と非同期
 
-ブラウザは HTML を読み込むと、それを **木構造（ツリー構造）のデータ** として保持します。この内部表現が **DOM（Document Object Model）** です。JS から DOM を操作すると、画面の内容を動的に変えられます。
-
-「木」と呼ばれるのは、タグの入れ子関係が木の枝分かれのように表現されるためです。たとえば次の HTML を見てみましょう。
-
-```html
-<html>
-  <head>
-    <title>自己紹介</title>
-  </head>
-  <body>
-    <h1>こんにちは</h1>
-    <ul>
-      <li>コーヒー</li>
-      <li>散歩</li>
-    </ul>
-  </body>
-</html>
-```
-
-これは DOM としては、次のように枝分かれする 1 本の木になります。
-
-<div style="font-family:system-ui, sans-serif; font-size:0.9em; line-height:1.6; background:var(--vp-c-bg-mute); padding:16px 20px; border-radius:6px; margin:12px 0;">
-  <div><code>document</code></div>
-  <div style="padding-left:18px;">└─ <code>&lt;html&gt;</code></div>
-  <div style="padding-left:36px;">├─ <code>&lt;head&gt;</code></div>
-  <div style="padding-left:54px;">│&nbsp;&nbsp;└─ <code>&lt;title&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"自己紹介"</span></div>
-  <div style="padding-left:36px;">└─ <code>&lt;body&gt;</code></div>
-  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;├─ <code>&lt;h1&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"こんにちは"</span></div>
-  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;└─ <code>&lt;ul&gt;</code></div>
-  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"コーヒー"</span></div>
-  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"散歩"</span></div>
-</div>
-
-一番上に `document`（ページ全体を表すオブジェクト）があり、そこから `<html>` 要素が伸び、さらに `<head>` と `<body>` に枝分かれします。それぞれの要素の中身（子要素）も同じようにぶら下がります。
-
-この木を扱うときの呼び方を覚えておくと、あとのコードが読みやすくなります。
-
-- **親**（parent）: 1 段上の要素。`<li>` の親は `<ul>` です。
-- **子**（child）: 1 段下の要素。`<ul>` の子は `<li>` が 2 つです。
-- **兄弟**（sibling）: 同じ親を持つ隣の要素。2 つの `<li>` は互いに兄弟です。
-- **テキストノード**: タグの中身の文字列（例: `"コーヒー"`）。これも木の一部として、タグの下にぶら下がっています。
-
-ブラウザの DevTools の Elements（または「要素」）タブを開くと、まさにこのツリーが左端に展開されて表示されます。手元の Chrome で F12 を押して Elements タブを眺めてみてください。タグをクリックするたびに、ツリーの枝が開いたり閉じたりします。
-
-これまでは Console に出すだけでしたが、本レッスンからは **この木に JS で手を入れて、画面を書き換える** 世界に入ります。
-
-### 要素を取得する: `querySelector` / `getElementById` / `querySelectorAll`
-
-DOM から要素を取り出す方法はいくつかあります。用途に応じて使い分けます。
-
-#### `document.querySelector`: CSS セレクタで 1 つ取る
-
-CSS セレクタで **最初に見つかった 1 つ** を取り出します。
+ここまで書いてきた処理は、上から順にすぐ実行されていました。これを **同期処理** と呼びます。
 
 ```js
-const title = document.querySelector("h1");
-const box = document.querySelector("#box");
-const btn = document.querySelector(".btn");
+console.log("A");
+console.log("B");
+console.log("C");
+// 出力: A → B → C
 ```
 
-- `"h1"`: 要素セレクタ
-- `"#id名"`: id セレクタ
-- `".クラス名"`: クラスセレクタ
-- 複雑なセレクタもそのまま書けます（例: `"ul.menu > li:first-child"`）
-
-見つからない場合は `null` が返ります。
-
-#### `document.getElementById`: id 専用のショートカット
-
-id で取り出すときの専用 API です。`querySelector("#id名")` と同じ結果になりますが、より短く書けます。
+一方で、「ネットワーク通信」「一定時間待つ」など、**時間がかかる処理** もあります。こうした処理は、途中で止まらず後続のコードを先に進めておく仕組みになっています。これを **非同期処理** と呼びます。
 
 ```js
-const title = document.getElementById("title");
-// 上と同じ: document.querySelector("#title")
+console.log("A");
+setTimeout(() => {
+  console.log("B");
+}, 1000);
+console.log("C");
+// 出力: A → C → （1秒後に）B
 ```
 
-引数は **`#` を付けない id 名そのもの** です。`querySelector` と違って CSS セレクタではないので、`#` や `.` を書くと動きません。
+`setTimeout(関数, ミリ秒)` は「指定時間後に関数を呼ぶ」ブラウザの機能です。1 秒待っている間に `C` が先に出る、というのが非同期の挙動です。
 
-見つからない場合はこちらも `null` が返ります。実務では、id 指定に限っては `getElementById` を好む人もいれば、`querySelector` で統一する人もいます。どちらでも動きますが、本コースの演習では **id 指定は `getElementById`、それ以外は `querySelector`** を使い分ける書き方で進めます。
+### Promise というもの
 
-#### `document.querySelectorAll`: CSS セレクタで **全部** 取る
+非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise**（プロミス） という仕組みがあります。
 
-同じセレクタに当てはまる要素をまとめて取り出します。戻り値は **NodeList** という配列っぽいオブジェクトで、`forEach` で 1 件ずつ処理できます。
+- `fetch` は「結果そのもの」ではなく「Promise」を返す
+- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
+- Promise は「いつか結果が入る箱」
+- 結果を取り出すには「箱が埋まるのを待つ」必要がある
+
+本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
+
+### `async` / `await`
+
+関数の前に `async` と書き、Promise を返す処理の前に `await` と書くと、「結果が返ってくるのを待ってから続きを実行」できます。
 
 ```js
-const items = document.querySelectorAll("li");
+async function main() {
+  console.log("start");
+  await wait(1000);   // 1 秒待つ
+  console.log("end"); // 1 秒後に実行される
+}
 
-items.forEach((li) => {
-  console.log(li.textContent);
-});
+main();
 ```
 
-配列メソッド（`map` / `filter` など）は直接は使えません。使いたい場合は `Array.from(items)` で真の配列に変換してから扱います。
+- `async function` は「中で `await` を使える関数」
+- `await Promise` は「その Promise の結果が返るまで待つ」
+- `await` は `async function` の中でしか使えない
 
-> `<script defer>` を使っていれば、HTML の解析が終わってから JS が動くので、要素がまだ存在せず `null` になる事故を防げます。
+### `wait(ms)` 関数（コピペで使う）
 
-### テキストの読み書き: `textContent`
-
-取得した要素の中身のテキストを読み書きします。
+「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
 
 ```js
-const title = document.querySelector("h1");
-
-console.log(title.textContent);    // 元のテキストを読む
-title.textContent = "書き換えました"; // 書き換える
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 ```
 
-### HTML ごと読み書きする: `innerHTML`
+この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
 
-`textContent` は「ただの文字列」として扱いますが、**HTML タグとして解釈しながら** 中身を読み書きしたいときは `innerHTML` を使います。
-
-```js
-const box = document.querySelector("#box");
-
-console.log(box.innerHTML);
-// 書き込むと HTML として解釈される
-box.innerHTML = "<strong>重要</strong> なお知らせ";
-```
-
-この例では `<strong>` が **タグとして** 解釈され、画面には太字の「重要」と続く「なお知らせ」が表示されます。
-
-#### `innerHTML` の落とし穴（XSS）
-
-便利ですが、**ユーザー入力をそのまま `innerHTML` に入れるのは絶対に避けてください**。悪意ある HTML（例: `<script>` タグや `onerror` 属性付きの `<img>`）が入ってきた場合、ブラウザがそれを実行してしまい、**Cookie の盗難やなりすまし投稿** などの攻撃（XSS = Cross-Site Scripting）につながります。
-
-```js
-// NG: 入力をそのまま埋め込むのは危険
-const userInput = getFromUser();   // 例: '<img src=x onerror="alert(1)">'
-box.innerHTML = userInput;         // ブラウザがタグとして実行してしまう
-
-// OK: テキストとして埋め込む（タグは無害化される）
-box.textContent = userInput;
-```
-
-**指針:**
-
-- **ユーザーが入力した値** や **外部 API から来た値** を画面に出すときは、原則 `textContent` を使う
-- `innerHTML` は「自分で書いた安全な HTML 文字列」を流し込むときだけ使う
-- 迷ったら `textContent`
-
-### クラスの操作: `classList`
-
-CSS クラスを付け外しするための専用 API です。
-
-```js
-const box = document.querySelector("#box");
-
-box.classList.add("active");      // クラスを追加
-box.classList.remove("active");   // クラスを削除
-box.classList.toggle("active");   // あれば消す、なければ付ける
-```
-
-CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
-
-### 属性の読み書き: `getAttribute` / `setAttribute` / `removeAttribute`
-
-HTML タグの **属性**（`href` / `src` / `alt` / `disabled` など）を読み書きします。
-
-```js
-const link = document.querySelector("a");
-
-console.log(link.getAttribute("href"));     // 現在の href を読む
-link.setAttribute("href", "https://example.com"); // 書き換える
-link.removeAttribute("target");             // 属性を消す
-```
-
-さらに、よく使う属性はプロパティとしても読み書きできます。たとえば `link.href` / `img.src` / `input.disabled` などです。
-
-```js
-const img = document.querySelector("img");
-img.src = "/photo.png";
-img.alt = "写真";
-```
-
-属性名と同じプロパティがあるときは **プロパティ経由（`img.src = ...`）の方が短く書けます**。使い分けは以下を目安にしてください。
-
-- 標準的な HTML 属性 → プロパティ経由で OK（`link.href` / `img.src` / `input.disabled`）
-- `data-*` など自作の属性 → `getAttribute` / `setAttribute`、または後述の `dataset`
-
-### フォームの値: `.value` / `.checked`
-
-`<input>` / `<textarea>` / `<select>` の値は `.value` で読み書きします。チェックボックスやラジオの入り切りは `.checked` です。
-
-```js
-const nameInput = document.querySelector("#name");
-const agreeCheckbox = document.querySelector("#agree");
-
-console.log(nameInput.value);         // 入力欄の現在の文字列
-nameInput.value = "初期値";            // 入力欄に値を入れる
-
-console.log(agreeCheckbox.checked);   // true / false
-agreeCheckbox.checked = true;         // プログラムからチェックを入れる
-```
-
-`<input type="number">` でも `.value` は **文字列** で返ります。数値として扱いたい場合は `Number(nameInput.value)` のように変換します。
-
-### インラインスタイルを当てる: `element.style`
-
-JS から直接スタイルを当てる場合は `element.style.プロパティ` を使います。CSS のプロパティ名は **キャメルケース** になります（`background-color` → `backgroundColor`）。
-
-```js
-const box = document.querySelector("#box");
-
-box.style.backgroundColor = "steelblue";
-box.style.color = "white";
-box.style.padding = "12px";
-```
-
-ただし、**見た目の切り替えは基本的に CSS 側でクラスを用意して `classList.toggle` する方が保守しやすい** です。`element.style` は、CSS では表現しにくい値（マウス位置に応じた座標や、ドラッグ中の一時的な幅など）を JS から直接計算して当てたいときに使うのが定番です。
-
-### データ属性: `dataset`
-
-HTML の `data-*` 属性は、DOM 要素に **任意のデータをぶら下げる** ための標準的な方法です。JS からは `dataset` 経由で読み書きできます。
-
-```html
-<button id="delete-btn" data-todo-id="42" data-confirm-required="true">削除</button>
-```
-
-```js
-const btn = document.querySelector("#delete-btn");
-
-console.log(btn.dataset.todoId);            // "42"
-console.log(btn.dataset.confirmRequired);   // "true"
-
-btn.dataset.todoId = "99";                  // 書き換えも可能
-```
-
-- `data-todo-id` → `dataset.todoId`（ケバブケース → キャメルケース変換）
-- **値は常に文字列** として扱われるため、数値として使いたい場合は `Number(btn.dataset.todoId)` で変換する
-
-ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。イベントと組み合わせる例は別のレッスンで扱います。
-
-下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
+下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
 
 <LiveDemo
   height="240px"
-  :html="`
-<h1 id='title'>最初の見出し</h1>
-<p>ボタンを押すと JS が DOM を書き換えます。</p>
-<div>
-  <button id='btn-text' type='button'>テキストを書き換える</button>
-  <button id='btn-class' type='button'>クラスを切り替える</button>
-  <button id='btn-reset' type='button'>元に戻す</button>
-</div>
-  `"
-  :css="`
-button { margin-right: 6px; padding: 6px 12px; }
-#title.active {
-  color: white;
-  background: steelblue;
-  padding: 8px 12px;
-  border-radius: 4px;
-}
-  `"
+  :html="`<p>await が実際に時間を待つ様子:</p>`"
+  :css="``"
   :js="demoJs"
 />
 
-### 要素を作って追加: `createElement` / `appendChild`
+### 次への橋渡し
 
-新しい要素を作って、既存の要素の子として追加します。
+**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば別のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
 
-```js
-const ul = document.querySelector("ul");
-
-const li = document.createElement("li");
-li.textContent = "新しい項目";
-ul.appendChild(li);
-```
-
-手順:
-
-1. `document.createElement("li")` で `<li>` 要素を作る（まだ画面には出ていない）
-2. `li.textContent = "..."` で中身のテキストを入れる
-3. `ul.appendChild(li)` で実際にページに追加する
-
-この「作る → テキストを入れる → 追加する」の流れは、以降のレッスンで繰り返し使います。
-
-### 要素を削除する: `element.remove()`
-
-取得した要素を DOM から消すには、その要素自身の `remove()` を呼びます。
-
-```js
-const item = document.querySelector("#old-item");
-item.remove();   // DOM ツリーから取り除く
-```
-
-昔は `parent.removeChild(child)` という書き方が主流でしたが、現代のブラウザでは **`element.remove()` の方が短く直感的** です。本コースでは `remove()` を使います。
-
-削除された要素はページから消えますが、JS の変数にまだ保持している場合は `appendChild` で再度ツリーに戻すこともできます。ただし、この使い方は混乱しやすいので、削除したら忘れる方が安全です。
-
-### ツリーをたどる: `parentElement` / `children` / `nextElementSibling`
-
-最初に紹介した「親 / 子 / 兄弟」の関係は、JS からも辿れます。
-
-```js
-const li = document.querySelector("li");
-
-console.log(li.parentElement);          // 親（例: <ul>）
-console.log(li.children);               // 子要素（HTMLCollection）
-console.log(li.nextElementSibling);     // 次の兄弟
-console.log(li.previousElementSibling); // 前の兄弟
-```
-
-- **`parentElement`**: 1 段上の要素
-- **`children`**: 直接の子要素一覧（配列っぽい `HTMLCollection`、`forEach` や `for...of` で回せます）
-- **`nextElementSibling` / `previousElementSibling`**: 同じ親の隣の要素。末端なら `null`
-
-似た名前で `parentNode` / `childNodes` / `nextSibling` もありますが、こちらはテキストノードや改行ノードまで含むので、**通常はタグだけを対象にする `parentElement` / `children` / `nextElementSibling` を使う** のが無難です。
-
-使いどころの例:
-
-- 「削除」ボタンを押されたら、そのボタンを含む `<li>` ごと消したい → `event.target.parentElement.remove()`
-- `<ul>` の中にある全部の `<li>` をループしたい → `ul.children` を `for...of` で回す
+「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `style.css` も加わります（ファイル作成がまだなら新規作成してください）。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「これまでに作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
 
 <details>
 <summary>出発点のコード</summary>
@@ -373,48 +125,88 @@ console.log(li.previousElementSibling); // 前の兄弟
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson27</title>
-    <script defer src="./script.js"></script>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson27: fetch で API から取得する</h1>
-    <p>DevTools の Console を確認してください。</p>
+    <h1>lesson27: import / export</h1>
+    <ul id="list"></ul>
   </body>
 </html>
 ```
 
-**`script.js`**
+**`storage.js`**
 
 ```js
-async function main() {
-  try {
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
-    const posts = await response.json();
-    console.log("取得件数:", posts.length);
-    console.log("先頭:", posts[0]);
+const STORAGE_KEY = "module-todos";
 
-    for (const post of posts.slice(0, 3)) {
-      console.log(`#${post.id} ${post.title}`);
+export function loadTodos() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
     }
+    return [];
   } catch (error) {
-    console.log("エラーが発生しました");
+    console.log("保存データの読み込みに失敗しました");
     console.log(error);
+    return [];
   }
 }
 
-main();
+export function saveTodos(todos) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+```
+
+**`render.js`**
+
+```js
+export function renderTodos(listElement, todos) {
+  listElement.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    listElement.appendChild(li);
+  }
+}
+```
+
+**`main.js`**
+
+```js
+import { loadTodos, saveTodos } from "./storage.js";
+import { renderTodos } from "./render.js";
+
+const list = document.querySelector("#list");
+
+let todos = loadTodos();
+
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "本を読む" },
+    { id: "a3", text: "掃除する" },
+  ];
+  saveTodos(todos);
+}
+
+renderTodos(list, todos);
 ```
 
 </details>
 
 ### ゴール
 
-- ボタンっぽい見た目の要素のクラスを JS で付け替える
-- JS から新しい `<li>` 要素を作って `<ul>` に追加する
+- `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る
 
 ### 手順
 
-1. `index.html` / `style.css` / `script.js` をそれぞれ以下の内容にする
-2. プレビューを確認する
+1. `index.html` のタイトルを `lesson28` に変える
+2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
 
 ### `index.html`
 
@@ -425,118 +217,71 @@ main();
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson28</title>
-    <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1 id="title">lesson28</h1>
-    <p id="box">このボックスのクラスが切り替わります</p>
-    <ul id="list">
-      <li>既存の項目 1</li>
-      <li>既存の項目 2</li>
-    </ul>
+    <h1>lesson28: 非同期処理の基本</h1>
   </body>
 </html>
-```
-
-### `style.css`
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-}
-
-#box {
-  padding: 12px;
-  border: 1px solid #888;
-  border-radius: 6px;
-}
-
-#box.active {
-  background-color: #ffe58f;
-  color: #222;
-  border-color: #d48806;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  #box {
-    border-color: #aaa;
-  }
-
-  #box.active {
-    background-color: #5a4600;
-    color: #fff;
-    border-color: #e6a817;
-  }
-}
 ```
 
 ### `script.js`
 
 ```js
-const title = document.querySelector("#title");
-console.log(title.textContent);
-title.textContent = "DOM を書き換えました";
-
-const box = document.querySelector("#box");
-box.classList.add("active");
-
-const list = document.querySelector("#list");
-
-const items = ["りんご", "みかん", "ぶどう"];
-for (const item of items) {
-  const li = document.createElement("li");
-  li.textContent = item;
-  list.appendChild(li);
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const newLi = document.createElement("li");
-newLi.textContent = "最後に追加した項目";
-list.appendChild(newLi);
+async function main() {
+  console.log("start");
+  await wait(1000);
+  console.log("1 秒経過");
+  await wait(1000);
+  console.log("2 秒経過");
+  await wait(1000);
+  console.log("3 秒経過");
+  console.log("end");
+}
+
+main();
+
+console.log("main を呼んだ後のコード");
 ```
 
 ### 期待出力
 
-- 画面の見出し: 「DOM を書き換えました」になっている
-- ボックスは背景黄色（または枠色が濃いオレンジ）に変わる
-- リストに `既存の項目 1` / `既存の項目 2` / `りんご` / `みかん` / `ぶどう` / `最後に追加した項目` の 6 項目が並ぶ
-- Console に元のタイトル「lesson28」が出る
+Console に、1 秒ごとに以下が順に追加されます。
+
+```
+start
+main を呼んだ後のコード
+1 秒経過
+2 秒経過
+3 秒経過
+end
+```
+
+ポイント:
+
+- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
+- `main` の内部は `await` があるので、順番に待ちながら進む
+- 合計で「約 3 秒」かけて順番にログが出る
 
 ### 変える
 
-- `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
-- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（別のレッスンでクリックに結び付ける）
-- `items` に要素を 2 つ足して、リストが 8 行になることを確認
-- `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
-- `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認
-- `document.querySelectorAll("li")` で全 `<li>` を取り、`forEach` で `console.log` して件数が合うか確認
+- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
+- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
+- `main()` の呼び出しを削除すると、何も実行されないことを確認
 
 ### 自分で書く
 
-- 新しい段落要素 `<p>` を `createElement` で作り、好きな文章を入れて `document.body.appendChild` で本文末尾に追加する
-- `#title` の `textContent` を、JS 側で `const userName = "..."` と定義した名前を含むテンプレートリテラル（`` `ようこそ、${userName} さん` ``）に置き換える
-- `<a id="mdn" href="https://example.com">MDN</a>` を `index.html` に足し、JS から `setAttribute("href", "https://developer.mozilla.org/ja/")` で書き換える。リンクをクリックして飛び先が変わることを確認する
-- `<li>` の 1 つに `data-fruit="citrus"` を付け、`dataset.fruit` で値を読み取って `console.log` する
-- リストの **最初の `<li>`** を `querySelector("li")` で取り、`remove()` で消す。画面から 1 件減ることを確認する
+- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
+- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
 
 ## まとめ
 
-- DOM は HTML の入れ子を表現した木構造。親 / 子 / 兄弟 の関係で要素がつながる
-- 取得: `querySelector`（1 件）/ `querySelectorAll`（複数）/ `getElementById`（id 専用）
-- テキスト書き換え: `textContent`（安全）。HTML として解釈したい場合だけ `innerHTML`（XSS に注意）
-- クラス: `classList.add` / `remove` / `toggle` / `contains`
-- 属性: `getAttribute` / `setAttribute` / `removeAttribute`、標準属性は `element.プロパティ` でも可
-- フォーム値: `.value` / `.checked`（`.value` は常に文字列）
-- スタイル: 切り替えは CSS + `classList`。動的計算した値を当てるときだけ `element.style.プロパティ`
-- データ属性: `data-*` ↔ `dataset.キー`（ケバブ→キャメル変換）
-- 生成: `createElement` + `appendChild`、削除: `element.remove()`
-- たどる: `parentElement` / `children` / `nextElementSibling`
-- 別のレッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る
+- 同期は「上から順にすぐ実行」、非同期は「時間がかかる処理を待たずに先へ進む」
+- 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
+- `async` 関数の中で `await Promise` すると、結果が返るまで待てる
+- `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
+- **戻り値が Promise の関数・メソッドには `await` が必要**。別のレッスンの `fetch` / `response.json()` で実例を扱う
