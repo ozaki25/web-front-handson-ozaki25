@@ -209,6 +209,7 @@ export default withPwa(withMermaid(
             { text: 'lesson99: Git の基本操作', link: '/lessons/lesson99/' },
             { text: 'lesson100: GitHub の PR とコードレビュー', link: '/lessons/lesson100/' },
             { text: 'lesson101: GitHub Actions で CI', link: '/lessons/lesson101/' },
+            { text: 'lesson102: React Hook Form の基本', link: '/lessons/lesson102/' },
           ],
         },
       ],
