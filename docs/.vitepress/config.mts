@@ -223,6 +223,7 @@ export default withPwa(withMermaid(
             { text: 'lesson113: Vite の仕組みを軽く', link: '/lessons/lesson113/' },
             { text: 'lesson114: エラートラッキング（Sentry）', link: '/lessons/lesson114/' },
             { text: 'lesson115: Web Analytics（Vercel Analytics / GA4）', link: '/lessons/lesson115/' },
+            { text: 'lesson116: OGP と SEO 実践', link: '/lessons/lesson116/' },
           ],
         },
       ],
