@@ -208,6 +208,7 @@ export default withPwa(withMermaid(
             { text: 'lesson98: 画像とフォントの最適化', link: '/lessons/lesson98/' },
             { text: 'lesson99: Git の基本操作', link: '/lessons/lesson99/' },
             { text: 'lesson100: GitHub の PR とコードレビュー', link: '/lessons/lesson100/' },
+            { text: 'lesson101: GitHub Actions で CI', link: '/lessons/lesson101/' },
           ],
         },
       ],
