@@ -114,6 +114,7 @@ export default withPwa(withMermaid(
             { text: 'lesson81: Web Storage で値をブラウザに保存する', link: '/lessons/lesson81/' },
             { text: 'lesson82: URL と History API でページ遷移なしに URL を操作する', link: '/lessons/lesson82/' },
             { text: 'lesson83: デバッグに効く Console API', link: '/lessons/lesson83/' },
+            { text: 'lesson107: 監視系 API（Intersection Observer / ResizeObserver / MutationObserver）', link: '/lessons/lesson107/' },
           ],
         },
         {
