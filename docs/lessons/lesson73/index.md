@@ -114,6 +114,19 @@ export function ClientWrapper({ children }: { children: ReactNode }) {
 
 `ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
 
+### Server → Client へ渡せる props は **シリアライズ可能なもの限定**
+
+Server Component から Client Component へ props を渡すとき、**シリアライズ可能** （JSON で表現できる）な値しか渡せません。具体的には次のとおりです。
+
+- **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
+- **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
+
+これは「Server で計算した結果を Client に渡す = ネットワーク越しに JSON で送る」ためです。`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーで詰まります。実務での回避パターン:
+
+- **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
+- **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
+- **コールバック関数**: 普通の関数は渡せないので、**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せます
+
 ### `"use client"` を忘れたときのエラー
 
 `useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。

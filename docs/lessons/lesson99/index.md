@@ -336,6 +336,8 @@ export function UsersList() {
 }
 ```
 
+> **補足: `role="alert"` を後挿入で使うときの注意**: `role="alert"` を持つ要素は **live region** として扱われ、内容が更新されるとスクリーンリーダーが即座に読み上げます。ただし、エラー発生時に `<p role="alert">` を **新しく描画** する形（上のコードのように `{error && <p role="alert">...}` で出し入れする形）は、SR 実装によっては読み上げが発火しないことがあります。確実に通知したいときは「常設の `<div role="alert">` を空で置いておき、中身だけ差し替える」「`aria-live="assertive"` を併記する」形を検討します。
+
 ### 手順 3: テストを書く
 
 `src/UsersList.test.tsx`:

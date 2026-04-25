@@ -217,7 +217,7 @@ function App() {
 export default App;
 ```
 
-`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。2 章 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。
+`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。2 章 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。**HTTPS / `localhost` で動かす（= secure context の）とき限定** で使える API なので、`file://` で直接開いた HTML では `undefined` になります。本コースは StackBlitz / Vite の dev サーバー（どちらも secure context）で動かすので問題ありませんが、ローカルファイルを直接開く形では動かないことを覚えておきます。
 
 ### `src/App.css`
 

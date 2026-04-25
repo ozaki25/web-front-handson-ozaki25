@@ -126,7 +126,7 @@ Context は便利ですが、何でも入れていい仕組みではありませ
 ### `src/ThemeContext.tsx`
 
 ```tsx
-import { createContext, useContext, useState } from "react";
+import { createContext, useContext, useMemo, useState } from "react";
 import type { ReactNode } from "react";
 
 export type Theme = "light" | "dark";
@@ -145,15 +145,19 @@ type ThemeProviderProps = {
 export function ThemeProvider({ children }: ThemeProviderProps) {
   const [theme, setTheme] = useState<Theme>("light");
 
-  function toggleTheme() {
-    setTheme((prev) => (prev === "light" ? "dark" : "light"));
-  }
-
-  return (
-    <ThemeContext value={{ theme, toggleTheme }}>
-      {children}
-    </ThemeContext>
+  // value はオブジェクトリテラルなので毎レンダリングで新参照になる。
+  // useMemo で参照を安定化し、配下の useTheme 利用コンポーネントの
+  // 不要な再レンダリングを防ぐ。
+  const value = useMemo<ThemeContextValue>(
+    () => ({
+      theme,
+      toggleTheme: () =>
+        setTheme((prev) => (prev === "light" ? "dark" : "light")),
+    }),
+    [theme],
   );
+
+  return <ThemeContext value={value}>{children}</ThemeContext>;
 }
 
 export function useTheme() {
@@ -169,34 +173,7 @@ export function useTheme() {
 - Provider はよく使う形なので、`ThemeProvider` という関数コンポーネントとしてラップしています
 - `useTheme` という **カスタムフック** にしておくと、使う側が `useContext(ThemeContext)` と書かずに済みます（カスタムフックは「カスタムフック」で深掘りします）
 - React 19 から **`<ThemeContext value={...}>`** と直書きできるようになりました（`<ThemeContext.Provider>` も従来どおり動きますが、本コースでは新形式に統一します）
-
-::: details 補足: `value` のオブジェクトは毎レンダリングで新しく作られる
-
-上のコードでは `value={{ theme, toggleTheme }}` と **オブジェクトリテラル** を渡しています。`ThemeProvider` が再レンダリングされるたびに **新しいオブジェクト参照** が `value` に入るため、配下の `useTheme()` を使うコンポーネントすべてが再レンダリングされます。
-
-`theme` が実際に変わったときだけ再レンダリングしたい場合は、`useMemo` で **オブジェクト参照を安定化** します。
-
-```tsx
-import { useMemo, useState } from "react";
-
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>("light");
-
-  const value = useMemo(
-    () => ({
-      theme,
-      toggleTheme: () => setTheme((prev) => (prev === "light" ? "dark" : "light")),
-    }),
-    [theme],
-  );
-
-  return <ThemeContext value={value}>{children}</ThemeContext>;
-}
-```
-
-依存配列 `[theme]` が変わらない限り、同じオブジェクト参照が返されます。本コースの本筋では深追いしませんが、Context の配下が大きくなると効いてくる最適化なので頭の片隅に。
-
-:::
+- **`value` は `useMemo` で安定化** しています。`value={{ theme, toggleTheme }}` のように直書きすると `ThemeProvider` の再レンダリングごとに新しいオブジェクト参照ができ、配下の `useTheme()` 利用者が **値が変わっていないのに** 全員再レンダリングされてしまうため
 
 ### `src/ThemeToggle.tsx`
 
