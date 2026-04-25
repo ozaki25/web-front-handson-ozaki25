@@ -248,13 +248,11 @@ button { anchor-name: --menu-btn; }
 - `<dialog>` で確認モーダルを作り、戻り値を取る
 - Popover API でアクションメニューを作る
 
-### 手順 1: 新規プロジェクト
+### 手順 1: StackBlitz の Vanilla テンプレートを開く
 
-```bash
-npm create vite@latest native-ui -- --template vanilla-ts
-cd native-ui
-npm install
-```
+新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開きます。`index.html` / `style.css` / `script.js` の 3 ファイルが用意されています。
+
+> このコースでは TypeScript はまだ導入していません（3 章 で扱います）。本レッスンは HTML + JS の素のブラウザ機能だけで完結させます。
 
 ### 手順 2: index.html
 
@@ -264,7 +262,7 @@ npm install
   <head>
     <meta charset="UTF-8" />
     <title>Native UI Demo</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
     <main>
@@ -308,12 +306,12 @@ npm install
         </div>
       </section>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script defer src="./script.js"></script>
   </body>
 </html>
 ```
 
-### 手順 3: src/style.css
+### 手順 3: style.css
 
 ```css
 body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
@@ -356,12 +354,12 @@ menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 1
 [popover] button:hover { background: #f3f4f6; }
 ```
 
-### 手順 4: src/main.ts
+### 手順 4: script.js
 
-```ts
-const openBtn = document.getElementById("open-dialog") as HTMLButtonElement;
-const dialog = document.getElementById("confirm") as HTMLDialogElement;
-const result = document.getElementById("dialog-result")!;
+```js
+const openBtn = document.getElementById("open-dialog");
+const dialog = document.getElementById("confirm");
+const result = document.getElementById("dialog-result");
 
 openBtn.addEventListener("click", () => {
   dialog.showModal();
@@ -374,11 +372,7 @@ dialog.addEventListener("close", () => {
 
 ### 手順 5: 起動して確認
 
-```bash
-npm run dev
-```
-
-ブラウザで以下を確認します。
+StackBlitz は保存と同時にプレビューが更新されます。プレビューを「Open in New Tab」で別タブに開き、ブラウザで以下を確認します。
 
 1. **details**: タイトルをクリックで開閉。Tab でフォーカスが当たり Enter でも開閉する
 2. **dialog**: 「削除する」→ モーダルが出る。Escape で閉じる。「キャンセル / 削除」で `結果: cancel` or `結果: confirm` が下に表示される
