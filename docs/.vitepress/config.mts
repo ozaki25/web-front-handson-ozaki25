@@ -232,6 +232,7 @@ export default withPwa(withMermaid(
             { text: 'lesson122: 依存性セキュリティ（npm audit / Dependabot）', link: '/lessons/lesson122/' },
             { text: 'lesson123: OAuth / OIDC / JWT の概念', link: '/lessons/lesson123/' },
             { text: 'lesson124: WebSocket と Server-Sent Events（SSE）', link: '/lessons/lesson124/' },
+            { text: 'lesson125: GraphQL と tRPC の地図', link: '/lessons/lesson125/' },
           ],
         },
       ],
