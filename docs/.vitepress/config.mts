@@ -211,6 +211,7 @@ export default withPwa(withMermaid(
             { text: 'lesson101: GitHub Actions で CI', link: '/lessons/lesson101/' },
             { text: 'lesson102: React Hook Form の基本', link: '/lessons/lesson102/' },
             { text: 'lesson103: Zod でスキーマバリデーション', link: '/lessons/lesson103/' },
+            { text: 'lesson104: 状態管理の地図（TanStack Query / Zustand / Jotai）', link: '/lessons/lesson104/' },
           ],
         },
       ],
