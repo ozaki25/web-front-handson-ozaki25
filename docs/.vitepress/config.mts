@@ -236,6 +236,7 @@ export default withPwa(withMermaid(
             { text: 'lesson126: Service Worker と PWA 深掘り', link: '/lessons/lesson126/' },
             { text: 'lesson127: IndexedDB 入門', link: '/lessons/lesson127/' },
             { text: 'lesson128: React Compiler', link: '/lessons/lesson128/' },
+            { text: 'lesson129: Server Components の設計論', link: '/lessons/lesson129/' },
           ],
         },
       ],
