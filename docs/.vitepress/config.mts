@@ -87,6 +87,7 @@ export default withPwa(withMermaid(
             { text: 'lesson13: Position と z-index', link: '/lessons/lesson13/' },
             { text: 'lesson14: Transition と hover アニメーション', link: '/lessons/lesson14/' },
             { text: 'lesson106: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）', link: '/lessons/lesson106/' },
+            { text: 'lesson108: ネイティブ UI（details / dialog / popover）', link: '/lessons/lesson108/' },
           ],
         },
         {
