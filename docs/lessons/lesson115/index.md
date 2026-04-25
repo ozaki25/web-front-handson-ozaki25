@@ -485,4 +485,3 @@ npm run dev
 - 本格運用するなら **Lit** が今のデファクト
 - React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
 - React 19 以降は Custom Elements の props / event 受け渡しが自然
-- 別のレッスンでは **国際化対応**（Intl API） に進む

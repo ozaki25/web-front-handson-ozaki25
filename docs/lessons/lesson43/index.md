@@ -336,7 +336,7 @@ export type AdminUser = User & {
 
 `main.ts` の呼び出し側を書き換える必要はない。`User & { ... }` の形でも `interface extends` でも、呼び出し側から見たら区別がつかない。
 
-確認できたら、以降のレッスンで使いやすいように **`Todo` を `type` に戻して** おく。
+確認できたら、3 章 の他レッスンで使いやすいように **`Todo` を `type` に戻して** おく。
 
 ```ts
 // src/types.ts
@@ -346,7 +346,7 @@ export type Todo = {
 };
 ```
 
-`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。3 章 の以降の演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば後続レッスンとズレない。
+`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。3 章 の他レッスンの演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば他のレッスンとズレない。
 
 ### 自分で書く
 
@@ -363,5 +363,5 @@ export type Todo = {
 - `interface` は `extends` で継承できる。`type` は `&`（交差型）で同じことができる。
 - ユニオン型・リテラル型・Utility Types の結果に名前を付けるのは **`type` のみ** ができる。
 - 宣言マージという機能もあるが、本コースでは使わない。
-- **本コースは `type` を基本** に使う。読者として `interface` も読める状態にしておき、書くときは `type` に揃える。以降のレッスンの `types.ts` は `type Todo = { ... }` に戻しておく。
+- **本コースは `type` を基本** に使う。読者として `interface` も読める状態にしておき、書くときは `type` に揃える。3 章 の他レッスンの `types.ts` は `type Todo = { ... }` に戻しておく。
 - 別のレッスンで、`Todo` 型に配列・ユニオン・リテラル・オプショナルを足して育てる。

@@ -1,6 +1,6 @@
 # lesson67: TODO アプリを React で作る
 
-4 章 の仕上げです。2 章 の「TODO アプリを作る」で素の JS + DOM で作った TODO アプリを、4 章 で学んだ React + TS に全面移植します。さらに **localStorage で保存・復元する螺旋** を閉じます。4 章 で扱わなかった **オブジェクト state のイミュータブル更新** もここで扱います。
+2 章 の「TODO アプリを作る」で素の JS + DOM で作った TODO アプリを、4 章 で学んだ React + TS に移植します。同時に **localStorage で保存・復元** する形を React で書き直し、**オブジェクト state のイミュータブル更新** も扱います。
 
 想定時間は **60〜120 分** です。焦らず段階的に組み立てましょう。
 
@@ -604,18 +604,9 @@ const [settings, setSettings] = useState<Settings>({ showCount: true });
 
 ## まとめ
 
-4 章 の統合ポイントです。
-
-- 2 章 の「TODO アプリを作る」の素の JS + DOM の TODO が、React + TS + コンポーネント分割 + localStorage + `useEffect` で書き直せました
+- 2 章 の「TODO アプリを作る」の素の JS + DOM の TODO を、React + TS + コンポーネント分割 + localStorage + `useEffect` で書き直しました
 - 3 章 の `Todo` 型を `import type` して、props にも state にも使っています
 - `useState` の初期値関数で **localStorage 書き戻しバグ** を避けました
 - オブジェクト state のイミュータブル更新（`prev => ({ ...prev, ... })`）を体験しました
 
-次は5 章、**Next.js** です。TODO アプリはここからさらに進化します。
-
-- 5 章 の「ページを増やしてリンクで移動する」で1 章 の自己紹介ページを `/about` として復活させます
-- 5 章 の「Server Component でデータを取得する」でデータ取得を Server Component に任せます（ブラウザ側 `fetch` + `useEffect` の罠を避けられます）
-- 5 章 の「Server Actions の最小形」で **Server Actions** を使い、今回書いた `onSubmit` + `preventDefault()` の代わりに `<form action={serverAction}>` で送信をサーバーに届けます
-- 5 章 の「小さなアプリを仕上げる」で TODO アプリが一覧 + 詳細 + 追加フォームを備えた「実用っぽい」形になります
-
-本レッスンの成果物（`App.tsx` / `TodoInput.tsx` / `TodoList.tsx` / `TodoItem.tsx` / `types.ts`）は、5 章 の「Server Actions の最小形」で Server Actions 版に書き換えるときの **出発点** になります。StackBlitz のプロジェクトは残しておくか、ローカルにコピーしておきましょう。
+本レッスンの成果物（`App.tsx` / `TodoInput.tsx` / `TodoList.tsx` / `TodoItem.tsx` / `types.ts`）は、別のレッスン「Server Actions の最小形」で Server Actions 版に書き換えるときの **出発点** になります。StackBlitz のプロジェクトは残しておくか、ローカルにコピーしておきましょう。

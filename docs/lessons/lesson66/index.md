@@ -209,4 +209,4 @@ export default App;
 - Profiler パネル: 再レンダリングの回数・時間を測定できる
 - `useMemo` が本当に効いているかは Profiler で確認するのが確実
 - StackBlitz の iframe では動作が不安定。別タブ / CodeSandbox / ローカル実行で回避
-- 以降のレッスンでも「DevTools で確認する」指示が自然に出せるようになる
+- 他のレッスンで「DevTools で確認する」指示が出てきたときに、迷わず動かせるようになる
