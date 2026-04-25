@@ -309,13 +309,13 @@ Property 'name' is missing in type '{ id: string; role: "admin"; permissions: st
 export interface Id = string | number;
 ```
 
-赤線が出る。期待されるメッセージ:
+赤線が出る。期待されるメッセージ（環境により文面は前後するが、いずれにせよ構文エラーになる）:
 
 ```
 '=' expected.
 ```
 
-構文エラーになる（`interface` の宣言構文は `interface 名前 { ... }` だけなので、`= 型` を書く場所がない）。確認できたら行ごと消して、`type` で書き直す。
+`Interface name cannot be reserved word ...` のように別の文面で出ることもあります。意図は同じで、**`interface` の宣言構文は `interface 名前 { ... }` だけなので、`= 型` を書く場所がない**（= ユニオン型は `interface` では表現できない）ということです。確認できたら行ごと消して、`type` で書き直す。
 
 ```ts
 export type Id = string | number;

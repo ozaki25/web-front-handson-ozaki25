@@ -105,6 +105,8 @@ function label(status: Status): string {
 - `default` に到達する時点で `status` の型は **残りがない** ので `never` 型になる。
 - `never` 型の変数に代入できるのは `never` 型の値だけ。このとき `status` が `never` なので代入が通る。
 
+> **補足: 仕組みは別の topic で深掘り**（narrowing / 型の絞り込み）: TS は `case "open"` を通過したら「`status` の候補から `"open"` が消える」、というふうに **case を進むたびに型を絞り込んで** いきます。3 つ全部処理し終えた `default` の時点で残りが無くなり `never` になる、という流れです。これを **型の絞り込み**（narrowing）と呼び、`if (typeof x === "string")` などにも同じ仕組みが効きます。詳しくは「型の絞り込み」のレッスンで扱います。**今は上の `_exhaustive: never = status` をテンプレとしてコピペで使えれば十分** です。
+
 ここで `Status` に **新しいケースを足した** とします。
 
 ```ts
