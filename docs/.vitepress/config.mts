@@ -225,6 +225,7 @@ export default withPwa(withMermaid(
             { text: 'lesson115: Web Analytics（Vercel Analytics / GA4）', link: '/lessons/lesson115/' },
             { text: 'lesson116: OGP と SEO 実践', link: '/lessons/lesson116/' },
             { text: 'lesson117: CI/CD パイプラインの設計', link: '/lessons/lesson117/' },
+            { text: 'lesson118: フィーチャーフラグ', link: '/lessons/lesson118/' },
           ],
         },
       ],
