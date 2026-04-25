@@ -346,7 +346,18 @@ form.addEventListener("submit", (event) => {
 
 - 「×2」ボタンを追加して、押すとカウントが 2 倍になるようにする
 - フォームに「年齢」入力欄（`<input id="age-input" type="number">`）を追加し、送信時に「◯◯ さん（◯◯ 歳）」の形で表示する
-- カウントが 0 未満になったら `#count-label` に `classList.add("negative")` を付け、CSS で赤色にする（0 以上なら `remove`）
+- カウントが 0 未満になったら `#count-label` に `classList.add("negative")` を付け、CSS で赤色にする（0 以上なら `remove`）。`style.css` には次のような色分けを追加してください。色だけで状態を伝えると見分けにくい人がいるので、本文の前にマイナス記号やテキストを併用するとなお親切です。
+
+```css
+.negative {
+  color: #b91c1c; /* AA を満たす赤 */
+}
+@media (prefers-color-scheme: dark) {
+  .negative {
+    color: #fca5a5; /* ダークでも読める明るい赤 */
+  }
+}
+```
 
 ## まとめ
 

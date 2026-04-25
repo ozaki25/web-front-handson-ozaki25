@@ -10,9 +10,7 @@ fruits.push('cherry');
 console.log(fruits);
 console.log('length: ' + fruits.length);
 console.log('先頭: ' + fruits[0]);
-for (const f of fruits) {
-  console.log('- ' + f);
-}
+console.log('末尾: ' + fruits[fruits.length - 1]);
 `
 </script>
 
@@ -83,7 +81,7 @@ console.log(fruits);  // ["apple", "banana"]
 
 ### デモで確認する
 
-下のデモでは、配列に `push` で要素を足し、`length` とインデックスアクセス、`for...of` でのループ表示を一気に体感できます。
+下のデモでは、配列に `push` で要素を足し、`length` とインデックスアクセスで先頭 / 末尾を取り出す動きを確認できます。配列を全件まわす **ループ構文**（`for...of` / `forEach` / `map` など）は別のレッスン「ループと反復処理」で扱うので、本レッスンでは登場しません。
 
 <LiveDemo
   height="260px"

@@ -284,4 +284,4 @@ green
 - 分割代入は左辺で書く「取り出し」の構文
 - スプレッドは右辺で書く「まとめる・広げる」の構文
 - 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本
-- **この分割代入の書き方は「コンポーネントと props」で `function Greeting({ name }: Props)` のように React の props として再登場する**
+- **この分割代入の書き方は React の props として再登場する**。「コンポーネントと props」で `function Greeting({ name })` のような形で書く（`: Props` 部分は TypeScript の型注釈で、TS の章で改めて扱う）
