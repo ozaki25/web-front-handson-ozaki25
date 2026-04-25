@@ -219,6 +219,7 @@ export default withPwa(withMermaid(
             { text: 'lesson104: 状態管理の地図（TanStack Query / Zustand / Jotai）', link: '/lessons/lesson104/' },
             { text: 'lesson105: ESLint / Prettier / Biome', link: '/lessons/lesson105/' },
             { text: 'lesson109: Web Components 入門', link: '/lessons/lesson109/' },
+            { text: 'lesson112: package.json と npm スクリプト', link: '/lessons/lesson112/' },
           ],
         },
       ],
