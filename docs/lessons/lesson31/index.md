@@ -1,105 +1,92 @@
-# lesson31: イベントで画面を動かす
-
-<script setup>
-const demoJs = `
-let count = 0;
-const btn = document.getElementById('btn');
-const label = document.getElementById('label');
-btn.addEventListener('click', () => {
-  count = count + 1;
-  label.textContent = 'カウント: ' + count;
-});
-`
-</script>
+# lesson31: fetch で API から取得する
 
 ## ゴール
 
-- `addEventListener` でボタンのクリックに反応できる
-- `submit` イベントでフォーム送信に反応できる
-- `event.preventDefault()` でブラウザ既定の動作を止められる
-- カウンターアプリを作る
+- `fetch` で外部 API からデータを取得できる
+- `response.json()` でレスポンスを JS のデータに変換できる
+- `try` / `catch` でエラーを捕まえられる
+- 「`fetch` も `response.json()` も Promise を返すので **両方 `await` が必要**」を覚える
 
 ## 解説
 
-### イベントとは
+### fetch で取得する流れ
 
-ユーザーがボタンを押したり、フォームを送信したり、キーを押したりすると、ブラウザは **イベント** を発生させます。JS でそのイベントを「待ち構えて」処理を登録できます。
-
-### `addEventListener`
-
-「どの要素の」「どのイベントに」「何をする関数を呼ぶか」を指定します。
+ネット越しにデータを取得する標準の関数が `fetch` です。URL を渡すと、レスポンス（応答）を Promise で返します。
 
 ```js
-const btn = document.querySelector("#btn");
-
-btn.addEventListener("click", () => {
-  console.log("クリックされた");
-});
-```
-
-- 第 1 引数: イベント名（`"click"` / `"submit"` / `"input"` など）
-- 第 2 引数: そのイベントが起きたときに呼ばれる関数
-
-### `click` イベント
-
-最もよく使うイベントです。任意の要素に登録できます。
-
-```js
-btn.addEventListener("click", () => {
-  count = count + 1;
-  label.textContent = `カウント: ${count}`;
-});
-```
-
-下のデモはクリックで `count` を増やし、ラベルを書き換える最小の形です。ボタンを押すと数字が増えるのが確認できます。
-
-<LiveDemo
-  height="160px"
-  :html="`
-<button id='btn'>+1</button>
-<span id='label'>カウント: 0</span>
-  `"
-  :css="`
-body { padding: 16px; font-size: 18px; }
-button {
-  padding: 8px 16px;
-  margin-right: 12px;
-  font-size: 1rem;
-  cursor: pointer;
+async function main() {
+  const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const data = await response.json();
+  console.log(data);
 }
-  `"
-  :js="demoJs"
-/>
 
-### `submit` イベントと `preventDefault`
-
-`<form>` を送信したときに発生するのが `submit` イベントです。
-
-ただし、HTML の `<form>` はデフォルトで「送信するとページがリロード（または別 URL に遷移）する」動きをします。JS で処理したいときはこの既定動作を止める必要があります。
-
-```js
-const form = document.querySelector("#form");
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault(); // ページ遷移を止める
-  console.log("送信されました");
-});
+main();
 ```
 
-- イベントハンドラの引数 `event` は「今起きたイベントの情報」
-- `event.preventDefault()` で「ブラウザの既定動作をキャンセル」
+手順を分解すると:
 
-この `preventDefault` は、フォームを JS で扱うときのほぼ定番の呪文です。
+1. `fetch(url)` を呼ぶ → **Promise** が返る
+2. `await` して完了を待つ → `response` オブジェクトが得られる
+3. `response.json()` を呼ぶ → これも **Promise** が返る（ここで `await` を忘れやすい）
+4. `await` して完了を待つ → 実際のデータ（配列やオブジェクト）が得られる
 
-### ハンドラの 2 つの書き方
+### `await` を 2 回書く理由
+
+冒頭で強調したとおり、**戻り値が Promise の関数・メソッドには `await` が必要** です。`fetch` と `response.json()` はどちらも Promise を返すため、両方に `await` を付けます。
+
+`response.json()` の `await` を書き忘れると、Promise オブジェクトがそのまま変数に入ってしまい、データのつもりで使うとおかしな挙動になります（演習で体験します）。
+
+### JSON とは
+
+API が返すデータは、ほとんどの場合 **JSON** というテキスト形式で送られてきます。JS のオブジェクト / 配列と見た目がそっくりなので、`response.json()` を通すと JS のオブジェクトや配列として扱えるようになります。
+
+### エラーを捕まえる: `try` / `catch`
+
+ネットワークの処理は「URL が間違っている」「接続できない」など失敗する可能性があります。失敗に備えて `try` / `catch` で囲みます。
 
 ```js
-btn.addEventListener("click", () => { ... });         // アロー関数
-btn.addEventListener("click", handleClick);           // 関数名を渡す
-function handleClick() { ... }
+async function main() {
+  try {
+    const response = await fetch("https://example.com/this-will-fail");
+    const data = await response.json();
+    console.log(data);
+  } catch (error) {
+    console.log("失敗しました");
+    console.log(error);
+  }
+}
+
+main();
 ```
 
-どちらでも動きます。短ければアロー関数、再利用するなら関数名を渡す、が目安です。
+- `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
+- `error` にはエラー情報が入る
+
+`try` / `catch` は「TODO アプリを作る」の `JSON.parse` でも再利用します。
+
+### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
+
+`fetch` で最初につまずきやすい点があります。**サーバーから 404 や 500 などのエラーステータスが返ってきても、`fetch` は失敗とみなさず `try` / `catch` の `catch` には飛びません**。`catch` に飛ぶのは、
+
+- URL の形式がおかしい
+- ネットワーク接続に失敗した（オフラインなど）
+- DNS で名前解決に失敗した
+
+といった **通信そのものが成立しなかった** ときだけです。HTTP の 404 / 500 は「通信は成功、ただしサーバーが『エラーです』と返してきた」状態なので、`fetch` にとっては成功扱いになります。
+
+HTTP エラーを自分で拾いたいときは、`response.ok` という真偽値（200〜299 のときに `true`）を見て分岐します。本コースの演習では深追いしませんが、次の 1 行を覚えておくと実務で役立ちます。
+
+```js
+if (!response.ok) {
+  throw new Error(`HTTP ${response.status}`);
+}
+```
+
+これを書いておくと、4xx / 5xx のときに `throw` して `catch` に飛ばせます。
+
+### ブラウザ側 fetch の注意（予告）
+
+ブラウザ側で `fetch` を使うと、ローディング状態の管理や競合（複数の fetch が同時に走って結果がずれる）など、考えることが多くなります。本コースでは、こうしたブラウザ側の fetch の難しさを扱わず、**5 章 の Server Component でサーバー側 fetch に任せる** 方針を取ります。本レッスンでは「Console に出す」までに絞ります。
 
 ## 演習
 
@@ -118,96 +105,50 @@ function handleClick() { ... }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson30</title>
-    <link rel="stylesheet" href="./style.css" />
+    <title>lesson29</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1 id="title">lesson30</h1>
-    <p id="box">このボックスのクラスが切り替わります</p>
-    <ul id="list">
-      <li>既存の項目 1</li>
-      <li>既存の項目 2</li>
-    </ul>
+    <h1>lesson29: 非同期処理の基本</h1>
   </body>
 </html>
-```
-
-**`style.css`**
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-}
-
-#box {
-  padding: 12px;
-  border: 1px solid #888;
-  border-radius: 6px;
-}
-
-#box.active {
-  background-color: #ffe58f;
-  color: #222;
-  border-color: #d48806;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  #box {
-    border-color: #aaa;
-  }
-
-  #box.active {
-    background-color: #5a4600;
-    color: #fff;
-    border-color: #e6a817;
-  }
-}
 ```
 
 **`script.js`**
 
 ```js
-const title = document.querySelector("#title");
-console.log(title.textContent);
-title.textContent = "DOM を書き換えました";
-
-const box = document.querySelector("#box");
-box.classList.add("active");
-
-const list = document.querySelector("#list");
-
-const items = ["りんご", "みかん", "ぶどう"];
-for (const item of items) {
-  const li = document.createElement("li");
-  li.textContent = item;
-  list.appendChild(li);
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-const newLi = document.createElement("li");
-newLi.textContent = "最後に追加した項目";
-list.appendChild(newLi);
+async function main() {
+  console.log("start");
+  await wait(1000);
+  console.log("1 秒経過");
+  await wait(1000);
+  console.log("2 秒経過");
+  await wait(1000);
+  console.log("3 秒経過");
+  console.log("end");
+}
+
+main();
+
+console.log("main を呼んだ後のコード");
 ```
 
 </details>
 
 ### ゴール
 
-- 「+1」「-1」「リセット」のボタンを持つカウンターアプリを作る
-- フォームの `submit` を捕まえ、入力した値を `preventDefault` で遷移させずに画面に表示する
+- JSONPlaceholder（無料の練習用 API）から記事一覧を取得して Console に出す
+- URL をわざと壊して `catch` の中が実行されることを確認する
+- `response.json()` の `await` を外して挙動を観察する
 
 ### 手順
 
-1. 3 ファイルを以下の内容にする
-2. プレビューでボタンとフォームの挙動を確認する
+1. `index.html` のタイトルを `lesson31` に変える
+2. `script.js` を以下に書き換える
 
 ### `index.html`
 
@@ -218,139 +159,78 @@ list.appendChild(newLi);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson31</title>
-    <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson31: カウンター</h1>
-
-    <section>
-      <p id="count-label">カウント: 0</p>
-      <button id="inc">+1</button>
-      <button id="dec">-1</button>
-      <button id="reset">リセット</button>
-    </section>
-
-    <hr />
-
-    <section>
-      <h2>フォーム送信</h2>
-      <form id="form">
-        <label for="name-input">名前:</label>
-        <input id="name-input" type="text" />
-        <button type="submit">送信</button>
-      </form>
-      <p id="form-result">（未入力）</p>
-    </section>
+    <h1>lesson31: fetch で API から取得する</h1>
+    <p>DevTools の Console を確認してください。</p>
   </body>
 </html>
-```
-
-### `style.css`
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-  max-width: 480px;
-}
-
-button {
-  margin-right: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-hr {
-  margin: 24px 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-}
 ```
 
 ### `script.js`
 
 ```js
-// カウンター
-let count = 0;
-const label = document.querySelector("#count-label");
-const incBtn = document.querySelector("#inc");
-const decBtn = document.querySelector("#dec");
-const resetBtn = document.querySelector("#reset");
+async function main() {
+  try {
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+    const posts = await response.json();
+    console.log("取得件数:", posts.length);
+    console.log("先頭:", posts[0]);
 
-function render() {
-  label.textContent = `カウント: ${count}`;
+    for (const post of posts.slice(0, 3)) {
+      console.log(`#${post.id} ${post.title}`);
+    }
+  } catch (error) {
+    console.log("エラーが発生しました");
+    console.log(error);
+  }
 }
 
-incBtn.addEventListener("click", () => {
-  count = count + 1;
-  render();
-});
-
-decBtn.addEventListener("click", () => {
-  count = count - 1;
-  render();
-});
-
-resetBtn.addEventListener("click", () => {
-  count = 0;
-  render();
-});
-
-// フォーム
-const form = document.querySelector("#form");
-const nameInput = document.querySelector("#name-input");
-const result = document.querySelector("#form-result");
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = nameInput.value;
-  result.textContent = `こんにちは、${value} さん`;
-});
+main();
 ```
 
 ### 期待出力
 
-- 「+1」を押すと「カウント: 1」「カウント: 2」... と増える
-- 「-1」を押すと減る
-- 「リセット」を押すと 0 に戻る
-- 名前を入力して「送信」を押すと `（未入力）` が「こんにちは、◯◯ さん」に変わる
-- 送信してもページはリロードされない（URL が変わらない、スクロール位置もそのまま）
+Console に次のような内容が出ます（API 側の内容によって文字列は変わる場合があります）。
+
+```
+取得件数: 100
+先頭: {userId: 1, id: 1, title: "sunt aut facere ...", body: "..."}
+#1 sunt aut facere repellat provident occaecati excepturi optio reprehenderit
+#2 qui est esse
+#3 ea molestias quasi exercitationem repellat qui ipsa sit aut
+```
 
 ### 変える
 
-- `preventDefault` の行を **コメントアウト** すると、送信のたびにページが一瞬リロードされることを確認（URL に `?` が付く）。確認できたら戻す
-- 「+1」ボタンを 3 回押したあと「リセット」を押して 0 に戻ることを確認
-- `incBtn.addEventListener("click", ...)` の `"click"` を `"dblclick"`（ダブルクリック）に変えて、動きの違いを見る
+#### URL を壊して `catch` を動かす
+
+`fetch` の URL の途中を適当に壊して（例: `https://jsonplaceholder.typicode.com/no-such-path-xxxxx`）、Console で「エラーが発生しました」が出ることを確認します。
+
+> 注意: JSONPlaceholder はどのパスでも空配列や JSON を返す傾向があるので、ドメインごと壊す（`https://this-domain-does-not-exist-xxxxx.test/posts`）方が確実にエラーになります。
+
+#### `await` を外すとどうなるか
+
+以下のように `response.json()` の `await` を外してみます。
+
+```js
+const posts = response.json(); // await を外す
+console.log(posts);
+console.log(posts.length);
+```
+
+Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これが「Promise をそのまま使ってしまった状態」です。`await` を忘れると値がおかしい、という失敗の形を体験しておきます。
 
 ### 自分で書く
 
-- 「×2」ボタンを追加して、押すとカウントが 2 倍になるようにする
-- フォームに「年齢」入力欄（`<input id="age-input" type="number">`）を追加し、送信時に「◯◯ さん（◯◯ 歳）」の形で表示する
-- カウントが 0 未満になったら `#count-label` に `classList.add("negative")` を付け、CSS で赤色にする（0 以上なら `remove`）
+- URL を `https://jsonplaceholder.typicode.com/users` に変えて、ユーザー一覧を取得し、各ユーザーの `name` と `email` を Console に出す
+- 取得した `posts` の中から「`id` が 10 以下」のものだけを `filter` で抜き出して出す
+- `try` / `catch` の `catch` の中で、エラーが起きたときに `console.log("読み込みに失敗しました")` と日本語メッセージも表示する
 
 ## まとめ
 
-- `要素.addEventListener("click", 関数)` でクリックに反応する
-- フォーム送信は `"submit"` イベント、`event.preventDefault()` で既定動作を止める
-- カウンターや入力フォームは、DOM 操作とイベントを組み合わせる定番の練習題
-- **`preventDefault` は5 章 の「Server Actions の最小形」で登場する Server Actions では、React が自動でやってくれるようになる**（コードから消える）
+- `fetch(url)` と `response.json()` は **どちらも Promise を返す**。両方 `await` が必要
+- `try` / `catch` で失敗に備える
+- `await` を忘れると Promise オブジェクトがそのまま出てきて、後続の処理が壊れる
+- ブラウザ側 fetch の state との組み合わせは罠が多いので、本コースでは5 章 の Server Component で扱う

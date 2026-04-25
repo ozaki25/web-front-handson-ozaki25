@@ -12,7 +12,7 @@
 
 ### `localStorage` の限界
 
-lesson35 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+lesson27 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
 - **容量が小さい**（オリジン全体で 5〜10MB）
 - **値は文字列だけ**（オブジェクトは JSON 化が必要）

@@ -1,148 +1,195 @@
-# lesson27: import / export でモジュール化
+# lesson27: Web Storage で値をブラウザに保存する
+
+<script setup>
+const demoJs = `
+const input = document.querySelector('#note');
+const saveBtn = document.querySelector('#save');
+const loadBtn = document.querySelector('#load');
+const clearBtn = document.querySelector('#clear');
+const output = document.querySelector('#output');
+
+saveBtn.addEventListener('click', () => {
+  localStorage.setItem('demo-note', input.value);
+  output.textContent = 'localStorage に保存しました: ' + input.value;
+});
+
+loadBtn.addEventListener('click', () => {
+  const saved = localStorage.getItem('demo-note');
+  if (saved === null) {
+    output.textContent = '（まだ保存されていません）';
+  } else {
+    input.value = saved;
+    output.textContent = '読み込みました: ' + saved;
+  }
+});
+
+clearBtn.addEventListener('click', () => {
+  localStorage.removeItem('demo-note');
+  input.value = '';
+  output.textContent = '削除しました';
+});
+`
+</script>
 
 ## ゴール
 
-- JS ファイルを複数に分割して、`import` と `export` で繋げられる
-- 名前付き export と `export default` の違いを使い分けられる
-- `<script type="module">` を使ってモジュールを読み込める
-- TODO アプリのロジックを `storage.js` / `render.js` / `main.js` の 3 ファイルに分割できる
+- `localStorage` と `sessionStorage` でブラウザに値を保存・読み出しできる
+- 文字列しか保存できないことを理解し、オブジェクトや配列は `JSON.stringify` / `JSON.parse` 経由で扱える
+- `localStorage` と `sessionStorage` と Cookie の違いを 1 行で説明できる
+- 保存上限と、保存できない場合に備えた `try` / `catch` を書ける
 
 ## 解説
 
-### なぜファイルを分けるのか
+### 3 つの保存場所
 
-1 つの `script.js` に全部書いていくと、だんだん「どの処理がどこにあるか」がわからなくなります。
+ブラウザにデータを保存する仕組みはいくつかあります。本レッスンでは最もよく使う **Web Storage** を中心に扱います。
 
-- 保存 / 読み込みのロジック
-- 画面への描画ロジック
-- イベントを受け取るエントリーポイント
+| 仕組み | 保持期間 | 容量の目安 | 送信 | 主な用途 |
+|---|---|---|---|---|
+| `localStorage` | タブを閉じても残る | 5〜10MB | しない | ユーザー設定、TODO、下書き |
+| `sessionStorage` | タブを閉じると消える | 5〜10MB | しない | 1 セッション限定のフォーム一時保存 |
+| Cookie | 有効期限次第 | 4KB 程度 | **毎リクエスト自動送信** | 認証、サーバー連携 |
 
-これらを **役割ごとに別ファイルに分けておく** と、1 ファイルあたりの責任が小さくなり、読みやすくなります。これを **モジュール化** と呼びます。
+Cookie は **サーバーへ毎回自動で送られる** ため、セッション ID のようにサーバー側で読む必要がある値に使います。クライアント側だけで完結する保存は `localStorage` / `sessionStorage` が基本です。
 
-### モジュールとして読み込む: `type="module"`
+### `localStorage` の使い方
 
-HTML から JS ファイルを読み込むとき、通常の `<script>` ではなく `<script type="module">` を使います。こうすると、その JS ファイルは「モジュール」として扱われ、`import` / `export` が使えるようになります。
-
-```html
-<script type="module" src="./main.js"></script>
-```
-
-- `type="module"` を付けないと `import` / `export` は使えない
-- `defer` を付けなくても、モジュールは自動的に遅延読み込みされる
-
-### export（外に出す）
-
-他のファイルから使ってほしい関数や値は、`export` で外に出します。書き方は 2 種類あります。
-
-#### 名前付き export
-
-**その名前のまま** 外に出します。1 つのファイルから複数の値を出すときに向きます。
+API は 3 つ覚えれば十分です。
 
 ```js
-// math.js
-export function add(a, b) {
-  return a + b;
+// 保存
+localStorage.setItem("theme", "dark");
+
+// 読み出し
+const theme = localStorage.getItem("theme");
+console.log(theme); // "dark"
+
+// 削除
+localStorage.removeItem("theme");
+
+// 全部消す（同一オリジン内のすべての値）
+localStorage.clear();
+```
+
+- キーも値も **文字列** です（後述）
+- 存在しないキーを `getItem` すると **`null`** が返ります
+- 同じキーで `setItem` すると上書きされます
+
+### `sessionStorage` も API は同じ
+
+`localStorage` と全く同じ API を持ちますが、**タブを閉じると消える** 点だけが違います。
+
+```js
+sessionStorage.setItem("step", "2");
+sessionStorage.getItem("step"); // "2"
+```
+
+「タブを開いている間だけ保持したい」値（たとえば複数ページにまたがるウィザードの入力中データ）に向きます。ユーザー設定や TODO のように **次回訪問時も残したい** 値は `localStorage` を選びます。
+
+### 文字列しか保存できない
+
+Web Storage は **文字列だけ** を扱います。数値や真偽値を入れると、読み出したときには文字列に変わっています。
+
+```js
+localStorage.setItem("count", 5);
+localStorage.setItem("isOpen", true);
+
+console.log(localStorage.getItem("count"));  // "5"  ← 文字列
+console.log(localStorage.getItem("isOpen")); // "true" ← 文字列
+```
+
+数値として使いたい場合は `Number(...)`、真偽値は `value === "true"` のように自分で変換します。
+
+### オブジェクトや配列は JSON でくるむ
+
+配列やオブジェクトはそのまま入れても文字列化（`"[object Object]"` など）されてしまい、中身が失われます。**`JSON.stringify` / `JSON.parse` とセット** で使います。
+
+```js
+const todos = [
+  { id: 1, text: "牛乳を買う", done: false },
+  { id: 2, text: "本を返す", done: true },
+];
+
+// 保存するときは文字列化
+localStorage.setItem("todos", JSON.stringify(todos));
+
+// 読み出すときは元の型に戻す
+const saved = localStorage.getItem("todos");
+const loaded = saved === null ? [] : JSON.parse(saved);
+
+console.log(loaded[0].text); // "牛乳を買う"
+```
+
+このパターンは TODO アプリや下書き保存などで頻繁に登場します。「JSON を読み書きする」と「try / catch でエラー処理」で扱った内容をそのまま使います。
+
+### 失敗しうる場所
+
+Web Storage は **必ず成功する API ではありません**。次のケースで例外が飛ぶことがあります。
+
+1. **容量オーバー**: 上限を超えた `setItem` は `QuotaExceededError` で失敗します
+2. **プライベートブラウジング**: ブラウザによっては Web Storage が実質無効化され、`setItem` が失敗します
+3. **壊れた JSON**: 保存時と読み出し時で形が違うと `JSON.parse` が例外を投げます
+
+安全に書くなら `try` / `catch` でくるみ、失敗時は既定値で乗り切ります。
+
+```js
+function loadTodos() {
+  try {
+    const saved = localStorage.getItem("todos");
+    if (saved === null) return [];
+    return JSON.parse(saved);
+  } catch {
+    // 壊れていたら捨てて空で始める
+    return [];
+  }
 }
 
-export function sub(a, b) {
-  return a - b;
-}
-
-export const PI = 3.14;
-```
-
-まとめて最後に書くこともできます。どちらでも動きます。
-
-```js
-// math.js
-function add(a, b) {
-  return a + b;
-}
-function sub(a, b) {
-  return a - b;
-}
-const PI = 3.14;
-
-export { add, sub, PI };
-```
-
-#### デフォルト export
-
-ファイルから **「主役となる 1 つ」だけを出す** 書き方です。1 ファイルにつき 1 つだけ書けます。
-
-```js
-// greeter.js
-export default function greet(name) {
-  return `こんにちは、${name} さん`;
+function saveTodos(todos) {
+  try {
+    localStorage.setItem("todos", JSON.stringify(todos));
+  } catch {
+    // 容量オーバー等。今回は何もしない
+  }
 }
 ```
 
-### import（読み込む）
+### Cookie はクライアントから直接扱わないのが主流
 
-別のファイルから `export` したものを受け取ります。パスの末尾には **`.js` まで書きます**（ブラウザで動かすときの決まり）。
+`document.cookie` という API で読み書きもできますが、**文字列連結と `;` 区切り** で扱う古い API で、実務では以下のいずれかで間接的に触ることが多いです。
 
-#### 名前付き import
+- ログイン認証などのセッション Cookie は、サーバーが `Set-Cookie` ヘッダで返すものを使う（クライアントでは触らない）
+- クライアントから操作する必要があれば、`js-cookie` のような小さなライブラリを使う
 
-`{ }` で囲んで、export したときと同じ名前で受け取ります。
+本コースでは **クライアント側の保存は `localStorage` / `sessionStorage`** に統一します。Cookie は「サーバーとやり取りする値が自動で送られる仕組み」としてだけ覚えておけば十分です。
 
-```js
-// main.js
-import { add, sub, PI } from "./math.js";
+### 小さなデモ
 
-console.log(add(1, 2)); // 3
-console.log(sub(5, 3)); // 2
-console.log(PI);        // 3.14
-```
+下のデモは `localStorage` の超最小例です。何か書いて「保存」を押し、ブラウザのタブを閉じて開き直しても、「読み込み」で復元できます。
 
-- `{ add, sub }` のように必要なものだけ受け取れる
-- 名前は export 側と **同じ** にする
-
-#### デフォルト import
-
-`{ }` を付けず、好きな名前で受け取れます。
-
-```js
-// main.js
-import greet from "./greeter.js";
-
-console.log(greet("Alice")); // "こんにちは、Alice さん"
-```
-
-- `{ }` を付けない
-- 名前は自由に決められる（`greet` でも `hello` でも動く）
-
-#### 名前付きとデフォルトの混在
-
-同じファイルから両方 import することもできます。
-
-```js
-import greet, { PI } from "./greeter.js";
-```
-
-### 使い分けの目安
-
-- **複数の関数 / 値を出すファイル** → 名前付き export（本コースではこちらを基本に）
-- **主役が 1 つだけのファイル**（例: 1 つのコンポーネント） → デフォルト export
-
-どちらが正解ということはなく、プロジェクトの方針で決めます。本コースでは **名前付き export を基本** にします。
-
-### `.js` 拡張子は省略しない
-
-Node.js のパッケージ開発では省略されることもありますが、**ブラウザで直接読み込むときは `.js` まで書きます**。
-
-```js
-// OK
-import { add } from "./math.js";
-
-// NG（ブラウザで 404 になる）
-import { add } from "./math";
-```
+<LiveDemo
+  height="220px"
+  :html="`
+<input id='note' type='text' placeholder='メモを入力' />
+<div>
+  <button id='save' type='button'>保存</button>
+  <button id='load' type='button'>読み込み</button>
+  <button id='clear' type='button'>削除</button>
+</div>
+<p id='output'></p>
+  `"
+  :css="`
+input { padding: 6px 10px; width: 240px; }
+button { margin-right: 6px; padding: 6px 12px; }
+#output { color: #1f4e79; }
+  `"
+  :js="demoJs"
+/>
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -155,201 +202,131 @@ import { add } from "./math";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson26</title>
+    <title>lesson27</title>
+    <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson26: 配列の変換</h1>
+    <h1>下書きメモ</h1>
+    <textarea id="memo" rows="6" cols="40" placeholder="ここに入力"></textarea>
+    <div>
+      <button id="clear" type="button">削除</button>
+      <span id="status"></span>
+    </div>
   </body>
 </html>
+```
+
+**`style.css`**
+
+```css
+body { font-family: sans-serif; padding: 16px; color: #222; background: #fff; }
+textarea { display: block; padding: 8px; font-family: inherit; }
+button { margin-top: 8px; padding: 6px 12px; }
+#status { margin-left: 12px; color: #1f4e79; }
+
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  textarea { color: #eaeaea; background: #2a2a2a; border: 1px solid #555; }
+  #status { color: #9ecbff; }
+}
 ```
 
 **`script.js`**
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-  { name: "Dave", age: 17 },
-];
-
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-
-const names = users.map((user) => user.name);
-console.log(names);
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-console.log(adultNames);
-
-const numbers = [1, 2, 3, 4, 5];
-const doubled = numbers.map((n) => n * 2);
-const evens = numbers.filter((n) => n % 2 === 0);
-console.log(doubled);
-console.log(evens);
-console.log(numbers);
-
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-  { id: "a3", text: "ゴミを出す" },
-];
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target);
-
-const missing = todos.find((todo) => todo.id === "zzz");
-console.log(missing);
+// 空のまま
 ```
 
 </details>
 
 ### ゴール
 
-- TODO アプリのロジックを 3 ファイルに分割する
-  - `storage.js`: `localStorage` に配列を保存 / 読み出し（`JSON.parse` は `try` / `catch` で囲む）
-  - `render.js`: 配列を受け取って `<ul>` に `<li>` を並べる
-  - `main.js`: 2 つを import して、画面の初期描画だけを行うエントリ
-- 画面を開くと、`storage.js` に仕込んだ初期データが `<ul>` に並んで表示される
+- ページを開いたときに、前回の入力内容が復元される
+- 入力するたびに自動で `localStorage` に保存される
+- 「削除」ボタンで保存内容を消せる
 
 ### 手順
 
-1. 以下 4 ファイルをプロジェクトに作る: `index.html` / `main.js` / `storage.js` / `render.js`
-2. HTML から `<script type="module" src="./main.js">` を読み込む
+1. `script.js` を以下の内容にします。
+2. プレビューでテキストエリアに何か書き、タブを閉じて開き直します。
+3. 書いた内容が復元されることを確認します。
 
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson27</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <h1>lesson27: import / export</h1>
-    <ul id="list"></ul>
-  </body>
-</html>
-```
-
-### `storage.js`
-
-`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、後の「fetch で API から取得する」で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
+### `script.js` の完成形
 
 ```js
-const STORAGE_KEY = "module-todos";
+const STORAGE_KEY = "memo-draft";
 
-export function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
+const memo = document.querySelector("#memo");
+const clearBtn = document.querySelector("#clear");
+const status = document.querySelector("#status");
+
+function showStatus(text) {
+  status.textContent = text;
+  setTimeout(() => {
+    status.textContent = "";
+  }, 1500);
+}
+
+function loadMemo() {
   try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
+    const saved = localStorage.getItem(STORAGE_KEY);
+    if (saved !== null) {
+      memo.value = saved;
     }
-    return [];
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error);
-    return [];
+  } catch {
+    // 読み込み不可 → 何もしない
   }
 }
 
-export function saveTodos(todos) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
-```
-
-- `loadTodos()`: 保存されている配列を返す。なければ空配列、壊れていても空配列
-- `saveTodos(todos)`: 配列を文字列に変えて保存
-
-### `render.js`
-
-DOM への描画だけを担当します。「どこに描くか」と「何を描くか」を引数で受け取れるようにしておくと、画面構成が変わっても中身を書き直さずに済みます。
-
-```js
-export function renderTodos(listElement, todos) {
-  listElement.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    listElement.appendChild(li);
+function saveMemo() {
+  try {
+    localStorage.setItem(STORAGE_KEY, memo.value);
+    showStatus("保存しました");
+  } catch {
+    showStatus("保存に失敗しました");
   }
 }
-```
 
-- `listElement.textContent = ""` で一度中身を空にする
-- 配列の各要素に対して `<li>` を作って `<ul>` に追加する
-
-### `main.js`
-
-エントリーポイントです。`storage.js` と `render.js` を import して、初期データがあれば描画、なければ動作確認用の初期データを入れて保存します。
-
-```js
-import { loadTodos, saveTodos } from "./storage.js";
-import { renderTodos } from "./render.js";
-
-const list = document.querySelector("#list");
-
-let todos = loadTodos();
-
-if (todos.length === 0) {
-  todos = [
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "本を読む" },
-    { id: "a3", text: "掃除する" },
-  ];
-  saveTodos(todos);
+function clearMemo() {
+  try {
+    localStorage.removeItem(STORAGE_KEY);
+    memo.value = "";
+    showStatus("削除しました");
+  } catch {
+    showStatus("削除に失敗しました");
+  }
 }
 
-renderTodos(list, todos);
+loadMemo();
+memo.addEventListener("input", saveMemo);
+clearBtn.addEventListener("click", clearMemo);
 ```
-
-- 2 つのファイルから必要な関数を **名前付き import** で受け取る
-- 初回起動時だけ、動作確認用のサンプルデータを保存する
-- `renderTodos` に `<ul>` 要素と配列を渡して描画
 
 ### 期待出力
 
-- 画面に以下の 3 行が `<ul>` の中に並ぶ
-
-```
-牛乳を買う
-本を読む
-掃除する
-```
-
-- DevTools の Application（または Storage）タブ → Local Storage に `module-todos` というキーで JSON 文字列が保存されている
-- Console で `localStorage.setItem("module-todos", "{ broken")` と壊れた文字列をわざと入れてリロード → Console に「保存データの読み込みに失敗しました」と出て、サンプルデータで起動し直される（`try` / `catch` の効果）
-- Console に `Uncaught SyntaxError: Cannot use import statement outside a module` が **出ない** ことを確認（出ていたら `<script type="module">` になっていない）
+- 画面を開くと、前回入力した内容がテキストエリアに復元される
+- テキストエリアに入力するたびに「保存しました」が短く出る
+- 「削除」ボタンを押すと中身が空になり、「削除しました」が出る
+- タブを閉じて開き直しても、削除後は空のまま開く
+- DevTools の Application タブ → Local Storage で、`memo-draft` キーの値が変化する様子を確認できる
 
 ### 変える
 
-- `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `module-todos` を削除してからリロードすると、新しいサンプルが表示される
-- `renderTodos` の `textContent` を `textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
-- `main.js` で `renderTodos(list, todos)` を呼ばないようにコメントアウト → `<ul>` が空のまま
+- `localStorage.setItem` を `sessionStorage.setItem` に書き換えて、タブを閉じると値が消える挙動になることを確認
+- `STORAGE_KEY` を別の文字列（例: `"memo-v2"`）に変えて、以前の値と共存する（キーが違うと別物として扱われる）ことを確認
+- `saveMemo` 内の `localStorage.setItem` をあえて `localStorage.setItem(STORAGE_KEY, JSON.stringify({ text: memo.value, at: Date.now() }))` にして、読み出し側を `JSON.parse` 前提に書き換える。オブジェクトとしての保存パターンを体験する
 
 ### 自分で書く
 
-- `storage.js` に `clearTodos()` という関数を追加して export する。中身は `localStorage.removeItem(STORAGE_KEY)` だけ。`main.js` から import して、ページ読み込み時に 1 回呼んでみる（動作確認したら外す）
-- `render.js` を **デフォルト export** に書き換える（`export default function renderTodos(...) { ... }`）。`main.js` 側の import を `import renderTodos from "./render.js";` に変えて、同じ動きをすることを確認する
-- 新しいファイル `format.js` を作り、`export function formatTodo(todo) { return `[${todo.id}] ${todo.text}`; }` を書く。`render.js` の中で import して、`<li>` に整形後の文字列を表示する
+- 入力された内容が **10000 文字を超えたら** `showStatus("長すぎます")` を出して保存しない、という制限を加える。ヒント: `if (memo.value.length > 10000)` で分岐
+- ページに「テーマ切替」の `<button>` を足し、クリックするたびに `<body>` に `dark` クラスを付け外しする。付いているかどうかを `localStorage` に保存し、次回訪問時に復元する（「DOM を操作する」の `classList.toggle` と組み合わせ）
 
 ## まとめ
 
-- ファイルを役割ごとに分けると、読みやすく・変更しやすくなる
-- ブラウザで `import` / `export` を使うには `<script type="module" src="...">` で読み込む
-- **名前付き export**（`export function foo() {}`）と **デフォルト export**（`export default ...`）の 2 種類
-- **名前付き import** は `{ 名前 }` で受け取り、名前は export と同じにする
-- **デフォルト import** は `{ }` なしで、受け取り側で名前を自由に決められる
-- ブラウザで直接読み込む場合、import パスの末尾は **`.js` まで書く**
-- 本コースは **名前付き export を基本** とする
-- 次の **数レッスンで非同期・DOM・イベントを学び、「TODO アプリを作る」で今日作った 3 ファイル構成（`storage.js` / `render.js` / `main.js`）の TODO をそのまま出発点にして、追加・削除・永続化まで仕上げます**。今日作ったファイルは消さずに残しておいてください
-- **ここで体験した「役割ごとにファイルを分ける」発想は、4 章 の「コンポーネントと props」で React の形に変わって再登場します**。1 つの画面を小さな部品の組み合わせに分け、部品ごとにファイルを分ける、というスタイルになります
+- ブラウザ内保存は `localStorage`（残る）/ `sessionStorage`（タブを閉じると消える）/ Cookie（サーバー送信あり）
+- Web Storage は **文字列しか保存できない**。オブジェクトや配列は `JSON.stringify` / `JSON.parse` とセット
+- 3 つの基本 API: `setItem` / `getItem`（未保存は `null`）/ `removeItem`
+- 失敗するケース（容量オーバー、プライベートブラウジング、壊れた JSON）を `try` / `catch` で吸収する
+- Cookie は実務ではサーバー側が管理するのが主流。クライアントで扱う保存は Web Storage が基本
+- 別のレッスンで、URL と History API を使って「ページ内状態を URL にも反映する」方法を学ぶ

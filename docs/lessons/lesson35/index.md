@@ -1,195 +1,105 @@
-# lesson35: Web Storage で値をブラウザに保存する
+# lesson35: TODO アプリを作る
 
 <script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
 const demoJs = `
-const input = document.querySelector('#note');
-const saveBtn = document.querySelector('#save');
-const loadBtn = document.querySelector('#load');
-const clearBtn = document.querySelector('#clear');
-const output = document.querySelector('#output');
+let items = ['牛乳を買う', '本を読む'];
+const list = document.getElementById('list');
+const btn = document.getElementById('add');
 
-saveBtn.addEventListener('click', () => {
-  localStorage.setItem('demo-note', input.value);
-  output.textContent = 'localStorage に保存しました: ' + input.value;
+function render() {
+  list.innerHTML = items.map((t) => '<li>' + t + '</li>').join('');
+}
+
+btn.addEventListener('click', () => {
+  items = [...items, '項目' + (items.length + 1)];
+  render();
 });
 
-loadBtn.addEventListener('click', () => {
-  const saved = localStorage.getItem('demo-note');
-  if (saved === null) {
-    output.textContent = '（まだ保存されていません）';
-  } else {
-    input.value = saved;
-    output.textContent = '読み込みました: ' + saved;
-  }
-});
-
-clearBtn.addEventListener('click', () => {
-  localStorage.removeItem('demo-note');
-  input.value = '';
-  output.textContent = '削除しました';
-});
+render();
 `
 </script>
 
 ## ゴール
 
-- `localStorage` と `sessionStorage` でブラウザに値を保存・読み出しできる
-- 文字列しか保存できないことを理解し、オブジェクトや配列は `JSON.stringify` / `JSON.parse` 経由で扱える
-- `localStorage` と `sessionStorage` と Cookie の違いを 1 行で説明できる
-- 保存上限と、保存できない場合に備えた `try` / `catch` を書ける
+- 2 章 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
+- 入力・追加・削除できる TODO アプリを HTML + JS で完成させる
+- `localStorage` に保存して、リロードしても残るようにする
+- 後続章で進化させる共通題材として、最終形を StackBlitz に保存する
 
 ## 解説
 
-### 3 つの保存場所
+ここまでのレッスンで積み上げてきた道具で、実際に動く小さなアプリを組み立てます。新しい概念は 1 つだけ: **`localStorage`** です。
 
-ブラウザにデータを保存する仕組みはいくつかあります。本レッスンでは最もよく使う **Web Storage** を中心に扱います。
+### `localStorage` とは
 
-| 仕組み | 保持期間 | 容量の目安 | 送信 | 主な用途 |
-|---|---|---|---|---|
-| `localStorage` | タブを閉じても残る | 5〜10MB | しない | ユーザー設定、TODO、下書き |
-| `sessionStorage` | タブを閉じると消える | 5〜10MB | しない | 1 セッション限定のフォーム一時保存 |
-| Cookie | 有効期限次第 | 4KB 程度 | **毎リクエスト自動送信** | 認証、サーバー連携 |
-
-Cookie は **サーバーへ毎回自動で送られる** ため、セッション ID のようにサーバー側で読む必要がある値に使います。クライアント側だけで完結する保存は `localStorage` / `sessionStorage` が基本です。
-
-### `localStorage` の使い方
-
-API は 3 つ覚えれば十分です。
+ブラウザが提供する「文字列を保存しておける箱」です。ページを閉じてもデータは残り、次に同じページを開いたときに読み出せます。
 
 ```js
-// 保存
-localStorage.setItem("theme", "dark");
-
-// 読み出し
-const theme = localStorage.getItem("theme");
-console.log(theme); // "dark"
-
-// 削除
-localStorage.removeItem("theme");
-
-// 全部消す（同一オリジン内のすべての値）
-localStorage.clear();
+localStorage.setItem("key", "value"); // 保存
+const v = localStorage.getItem("key"); // 取り出し（なければ null）
 ```
 
-- キーも値も **文字列** です（後述）
-- 存在しないキーを `getItem` すると **`null`** が返ります
-- 同じキーで `setItem` すると上書きされます
+- 保存できるのは **文字列だけ**
+- 配列やオブジェクトをそのまま入れることはできない
 
-### `sessionStorage` も API は同じ
+### `JSON.stringify` / `JSON.parse`
 
-`localStorage` と全く同じ API を持ちますが、**タブを閉じると消える** 点だけが違います。
+配列やオブジェクトを文字列に変換 / 戻すための道具です。
 
 ```js
-sessionStorage.setItem("step", "2");
-sessionStorage.getItem("step"); // "2"
+const todos = [{ id: "1", text: "A" }, { id: "2", text: "B" }];
+
+const str = JSON.stringify(todos);
+// '[{"id":"1","text":"A"},{"id":"2","text":"B"}]'
+
+const back = JSON.parse(str);
+// [{ id: "1", text: "A" }, { id: "2", text: "B" }]
 ```
 
-「タブを開いている間だけ保持したい」値（たとえば複数ページにまたがるウィザードの入力中データ）に向きます。ユーザー設定や TODO のように **次回訪問時も残したい** 値は `localStorage` を選びます。
+- `JSON.stringify(値)`: JS のデータを JSON 文字列に
+- `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
 
-### 文字列しか保存できない
+`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **「fetch で API から取得する」で学んだ `try` / `catch` で囲む** のが安全です。
 
-Web Storage は **文字列だけ** を扱います。数値や真偽値を入れると、読み出したときには文字列に変わっています。
+### id をユニークに作る
+
+削除のたびに「どの TODO を消したか」を判断するために、各 TODO には **一意な id** を持たせます。ブラウザ標準の `crypto.randomUUID()` を使うと、衝突しない id 文字列が手に入ります。
 
 ```js
-localStorage.setItem("count", 5);
-localStorage.setItem("isOpen", true);
-
-console.log(localStorage.getItem("count"));  // "5"  ← 文字列
-console.log(localStorage.getItem("isOpen")); // "true" ← 文字列
+const id = crypto.randomUUID();
+// 例: "8a7c3f...-...-..."
 ```
 
-数値として使いたい場合は `Number(...)`、真偽値は `value === "true"` のように自分で変換します。
+### 画面構成
 
-### オブジェクトや配列は JSON でくるむ
+完成系は以下の構造です。
 
-配列やオブジェクトはそのまま入れても文字列化（`"[object Object]"` など）されてしまい、中身が失われます。**`JSON.stringify` / `JSON.parse` とセット** で使います。
+- 画面上部: 入力欄 `<input>` と「追加」ボタン
+- 下部: TODO 一覧 `<ul>`（各行は `<li>` で、テキストと「削除」ボタンを含む）
 
-```js
-const todos = [
-  { id: 1, text: "牛乳を買う", done: false },
-  { id: 2, text: "本を返す", done: true },
-];
+新しい TODO を追加すると一覧の末尾に `<li>` が 1 件増え、削除ボタンを押すとその行だけが消えます。リロードしてもデータが残ります。
 
-// 保存するときは文字列化
-localStorage.setItem("todos", JSON.stringify(todos));
+### デモで確認する
 
-// 読み出すときは元の型に戻す
-const saved = localStorage.getItem("todos");
-const loaded = saved === null ? [] : JSON.parse(saved);
-
-console.log(loaded[0].text); // "牛乳を買う"
-```
-
-このパターンは TODO アプリや下書き保存などで頻繁に登場します。「JSON を読み書きする」と「try / catch でエラー処理」で扱った内容をそのまま使います。
-
-### 失敗しうる場所
-
-Web Storage は **必ず成功する API ではありません**。次のケースで例外が飛ぶことがあります。
-
-1. **容量オーバー**: 上限を超えた `setItem` は `QuotaExceededError` で失敗します
-2. **プライベートブラウジング**: ブラウザによっては Web Storage が実質無効化され、`setItem` が失敗します
-3. **壊れた JSON**: 保存時と読み出し時で形が違うと `JSON.parse` が例外を投げます
-
-安全に書くなら `try` / `catch` でくるみ、失敗時は既定値で乗り切ります。
-
-```js
-function loadTodos() {
-  try {
-    const saved = localStorage.getItem("todos");
-    if (saved === null) return [];
-    return JSON.parse(saved);
-  } catch {
-    // 壊れていたら捨てて空で始める
-    return [];
-  }
-}
-
-function saveTodos(todos) {
-  try {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  } catch {
-    // 容量オーバー等。今回は何もしない
-  }
-}
-```
-
-### Cookie はクライアントから直接扱わないのが主流
-
-`document.cookie` という API で読み書きもできますが、**文字列連結と `;` 区切り** で扱う古い API で、実務では以下のいずれかで間接的に触ることが多いです。
-
-- ログイン認証などのセッション Cookie は、サーバーが `Set-Cookie` ヘッダで返すものを使う（クライアントでは触らない）
-- クライアントから操作する必要があれば、`js-cookie` のような小さなライブラリを使う
-
-本コースでは **クライアント側の保存は `localStorage` / `sessionStorage`** に統一します。Cookie は「サーバーとやり取りする値が自動で送られる仕組み」としてだけ覚えておけば十分です。
-
-### 小さなデモ
-
-下のデモは `localStorage` の超最小例です。何か書いて「保存」を押し、ブラウザのタブを閉じて開き直しても、「読み込み」で復元できます。
+下のデモは、TODO アプリの核となる「配列の state + `render` 関数 + イベントハンドラ」の最小形です。ボタンを押すと配列に要素が追加され、`map` で一覧を組み立て直して画面に描画します。
 
 <LiveDemo
-  height="220px"
-  :html="`
-<input id='note' type='text' placeholder='メモを入力' />
-<div>
-  <button id='save' type='button'>保存</button>
-  <button id='load' type='button'>読み込み</button>
-  <button id='clear' type='button'>削除</button>
-</div>
-<p id='output'></p>
-  `"
-  :css="`
-input { padding: 6px 10px; width: 240px; }
-button { margin-right: 6px; padding: 6px 12px; }
-#output { color: #1f4e79; }
-  `"
+  height="260px"
+  :html="`<button id='add'>項目を追加</button><ul id='list'></ul>`"
+  :css="`button { padding: 6px 12px; margin-bottom: 8px; cursor: pointer; } ul { padding-left: 20px; }`"
   :js="demoJs"
 />
+
+本編ではこの土台に「入力欄からのテキスト追加」「削除ボタン」「`localStorage` による永続化」を重ねていきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは2 章 の総仕上げで、ここまでの演習ファイルがあるとスムーズですが、下のコードでここまでの状態を再現してから演習に入っても同じ状態から始められます。
 
 <details>
 <summary>出発点のコード</summary>
@@ -202,17 +112,31 @@ button { margin-right: 6px; padding: 6px 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson35</title>
+    <title>lesson34</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>下書きメモ</h1>
-    <textarea id="memo" rows="6" cols="40" placeholder="ここに入力"></textarea>
-    <div>
-      <button id="clear" type="button">削除</button>
-      <span id="status"></span>
-    </div>
+    <h1>lesson34: カウンター</h1>
+
+    <section>
+      <p id="count-label">カウント: 0</p>
+      <button id="inc">+1</button>
+      <button id="dec">-1</button>
+      <button id="reset">リセット</button>
+    </section>
+
+    <hr />
+
+    <section>
+      <h2>フォーム送信</h2>
+      <form id="form">
+        <label for="name-input">名前:</label>
+        <input id="name-input" type="text" />
+        <button type="submit">送信</button>
+      </form>
+      <p id="form-result">（未入力）</p>
+    </section>
   </body>
 </html>
 ```
@@ -220,113 +144,397 @@ button { margin-right: 6px; padding: 6px 12px; }
 **`style.css`**
 
 ```css
-body { font-family: sans-serif; padding: 16px; color: #222; background: #fff; }
-textarea { display: block; padding: 8px; font-family: inherit; }
-button { margin-top: 8px; padding: 6px 12px; }
-#status { margin-left: 12px; color: #1f4e79; }
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+  max-width: 480px;
+}
+
+button {
+  margin-right: 4px;
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+hr {
+  margin: 24px 0;
+}
 
 @media (prefers-color-scheme: dark) {
-  body { color: #eaeaea; background: #1a1a1a; }
-  textarea { color: #eaeaea; background: #2a2a2a; border: 1px solid #555; }
-  #status { color: #9ecbff; }
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
+
+  button {
+    background-color: #333;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+
+  input {
+    background-color: #222;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
 }
 ```
 
 **`script.js`**
 
 ```js
-// 空のまま
+// カウンター
+let count = 0;
+const label = document.querySelector("#count-label");
+const incBtn = document.querySelector("#inc");
+const decBtn = document.querySelector("#dec");
+const resetBtn = document.querySelector("#reset");
+
+function render() {
+  label.textContent = `カウント: ${count}`;
+}
+
+incBtn.addEventListener("click", () => {
+  count = count + 1;
+  render();
+});
+
+decBtn.addEventListener("click", () => {
+  count = count - 1;
+  render();
+});
+
+resetBtn.addEventListener("click", () => {
+  count = 0;
+  render();
+});
+
+// フォーム
+const form = document.querySelector("#form");
+const nameInput = document.querySelector("#name-input");
+const result = document.querySelector("#form-result");
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const value = nameInput.value;
+  result.textContent = `こんにちは、${value} さん`;
+});
 ```
 
 </details>
 
-### ゴール
+本レッスンは **3 段構え** です。各段でコミット（ファイル保存）して、次の段に進みます。
 
-- ページを開いたときに、前回の入力内容が復元される
-- 入力するたびに自動で `localStorage` に保存される
-- 「削除」ボタンで保存内容を消せる
+### 共通: HTML と CSS
 
-### 手順
+3 段を通して使います。
 
-1. `script.js` を以下の内容にします。
-2. プレビューでテキストエリアに何か書き、タブを閉じて開き直します。
-3. 書いた内容が復元されることを確認します。
+#### `index.html`
 
-### `script.js` の完成形
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson35 TODO</title>
+    <link rel="stylesheet" href="./style.css" />
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>TODO</h1>
 
-```js
-const STORAGE_KEY = "memo-draft";
+    <form id="form">
+      <input id="input" type="text" placeholder="やることを入力" />
+      <button type="submit">追加</button>
+    </form>
 
-const memo = document.querySelector("#memo");
-const clearBtn = document.querySelector("#clear");
-const status = document.querySelector("#status");
-
-function showStatus(text) {
-  status.textContent = text;
-  setTimeout(() => {
-    status.textContent = "";
-  }, 1500);
-}
-
-function loadMemo() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved !== null) {
-      memo.value = saved;
-    }
-  } catch {
-    // 読み込み不可 → 何もしない
-  }
-}
-
-function saveMemo() {
-  try {
-    localStorage.setItem(STORAGE_KEY, memo.value);
-    showStatus("保存しました");
-  } catch {
-    showStatus("保存に失敗しました");
-  }
-}
-
-function clearMemo() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    memo.value = "";
-    showStatus("削除しました");
-  } catch {
-    showStatus("削除に失敗しました");
-  }
-}
-
-loadMemo();
-memo.addEventListener("input", saveMemo);
-clearBtn.addEventListener("click", clearMemo);
+    <ul id="list"></ul>
+  </body>
+</html>
 ```
 
-### 期待出力
+#### `style.css`
 
-- 画面を開くと、前回入力した内容がテキストエリアに復元される
-- テキストエリアに入力するたびに「保存しました」が短く出る
-- 「削除」ボタンを押すと中身が空になり、「削除しました」が出る
-- タブを閉じて開き直しても、削除後は空のまま開く
-- DevTools の Application タブ → Local Storage で、`memo-draft` キーの値が変化する様子を確認できる
+```css
+body {
+  color: #222;
+  background-color: #fff;
+  font-family: sans-serif;
+  padding: 16px;
+  max-width: 480px;
+}
+
+#form {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+#input {
+  flex: 1;
+  padding: 6px 8px;
+  font-size: 1rem;
+}
+
+button {
+  padding: 6px 12px;
+  cursor: pointer;
+}
+
+#list {
+  list-style: none;
+  padding: 0;
+}
+
+#list li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
+  }
+
+  #input {
+    background-color: #222;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+
+  button {
+    background-color: #333;
+    color: #eaeaea;
+    border: 1px solid #555;
+  }
+
+  #list li {
+    border-bottom-color: #444;
+  }
+}
+```
+
+### ステップ 1: 入力 + 一覧表示
+
+まずは追加だけを作ります。削除や localStorage はまだ考えません。
+
+#### `script.js`（ステップ 1）
+
+**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（「分割代入とスプレッド」で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、4 章 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、2 章 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+
+```js
+const form = document.querySelector("#form");
+const input = document.querySelector("#input");
+const list = document.querySelector("#list");
+
+let todos = [];
+
+function render() {
+  list.textContent = ""; // 一度空にする
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    list.appendChild(li);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (text === "") {
+    return;
+  }
+  const newTodo = {
+    id: crypto.randomUUID(),
+    text: text,
+  };
+  todos = [...todos, newTodo];
+  input.value = "";
+  render();
+});
+
+render();
+```
+
+#### 期待出力（ステップ 1）
+
+- 入力欄に「牛乳を買う」と入力して「追加」を押す → `<ul>` の末尾に `牛乳を買う` の `<li>` が 1 件増える
+- さらに「本を読む」を追加 → 2 件目が末尾に並ぶ
+- 入力欄に何も入れずに「追加」を押しても何も起きない（空文字は弾く）
+- **リロードすると全部消える**（localStorage はまだ使っていない）
+
+ここでいったんファイルを保存（コミット相当）します。
+
+### ステップ 2: 削除ボタンを追加
+
+各 `<li>` に「削除」ボタンを付け、「配列の変換」の `filter` を使って対象を取り除きます。
+
+#### `script.js`（ステップ 2）
+
+```js
+const form = document.querySelector("#form");
+const input = document.querySelector("#input");
+const list = document.querySelector("#list");
+
+let todos = [];
+
+function render() {
+  list.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+
+    const span = document.createElement("span");
+    span.textContent = todo.text;
+    li.appendChild(span);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", () => {
+      todos = todos.filter((t) => t.id !== todo.id);
+      render();
+    });
+    li.appendChild(deleteBtn);
+
+    list.appendChild(li);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (text === "") {
+    return;
+  }
+  const newTodo = {
+    id: crypto.randomUUID(),
+    text: text,
+  };
+  todos = [...todos, newTodo];
+  input.value = "";
+  render();
+});
+
+render();
+```
+
+#### 期待出力（ステップ 2）
+
+- 各行に「削除」ボタンが付いている
+- 「削除」を押すとその行だけが消える（他の行は残る）
+- 3 件追加 → 真ん中の「削除」を押すと、その 1 件だけ消える
+- リロードするとまだ全部消える（localStorage はまだ）
+
+ここでもう一度保存（2 回目のコミット相当）します。
+
+### ステップ 3: `localStorage` で保存・復元
+
+最終形です。TODO の変更があるたびに localStorage に保存し、起動時に読み戻します。
+
+#### `script.js`（最終形）
+
+```js
+const form = document.querySelector("#form");
+const input = document.querySelector("#input");
+const list = document.querySelector("#list");
+
+const STORAGE_KEY = "todo-app-todos";
+
+function loadTodos() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (error) {
+    console.log("保存データの読み込みに失敗しました");
+    console.log(error);
+    return [];
+  }
+}
+
+function saveTodos() {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+
+let todos = loadTodos();
+
+function render() {
+  list.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+
+    const span = document.createElement("span");
+    span.textContent = todo.text;
+    li.appendChild(span);
+
+    const deleteBtn = document.createElement("button");
+    deleteBtn.textContent = "削除";
+    deleteBtn.addEventListener("click", () => {
+      todos = todos.filter((t) => t.id !== todo.id);
+      saveTodos();
+      render();
+    });
+    li.appendChild(deleteBtn);
+
+    list.appendChild(li);
+  }
+}
+
+form.addEventListener("submit", (event) => {
+  event.preventDefault();
+  const text = input.value.trim();
+  if (text === "") {
+    return;
+  }
+  const newTodo = {
+    id: crypto.randomUUID(),
+    text: text,
+  };
+  todos = [...todos, newTodo];
+  saveTodos();
+  input.value = "";
+  render();
+});
+
+render();
+```
+
+#### 期待出力（最終形）
+
+- 3 件追加 → リロード → 3 件がそのまま表示される
+- 削除 → リロード → 削除後の状態が残る
+- 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
+- DevTools の Application（または Storage）タブ → Local Storage の項目で `todo-app-todos` に JSON 文字列が入っているのが確認できる
+- Console で `localStorage.setItem("todo-app-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
 
 ### 変える
 
-- `localStorage.setItem` を `sessionStorage.setItem` に書き換えて、タブを閉じると値が消える挙動になることを確認
-- `STORAGE_KEY` を別の文字列（例: `"memo-v2"`）に変えて、以前の値と共存する（キーが違うと別物として扱われる）ことを確認
-- `saveMemo` 内の `localStorage.setItem` をあえて `localStorage.setItem(STORAGE_KEY, JSON.stringify({ text: memo.value, at: Date.now() }))` にして、読み出し側を `JSON.parse` 前提に書き換える。オブジェクトとしての保存パターンを体験する
+- `STORAGE_KEY` を好きな名前に変える → 以前の保存と別扱いになり、リストが空から始まる
+- 追加時に `todos = [...todos, newTodo]` を `todos = [newTodo, ...todos]` に変えて、新しいものが先頭に来るようにする
+- 入力値の前後の空白を許すように、`trim()` を外してみる（半角スペースだけで追加できてしまう）
 
 ### 自分で書く
 
-- 入力された内容が **10000 文字を超えたら** `showStatus("長すぎます")` を出して保存しない、という制限を加える。ヒント: `if (memo.value.length > 10000)` で分岐
-- ページに「テーマ切替」の `<button>` を足し、クリックするたびに `<body>` に `dark` クラスを付け外しする。付いているかどうかを `localStorage` に保存し、次回訪問時に復元する（「DOM を操作する」の `classList.toggle` と組み合わせ）
+- 「すべて削除」ボタンを追加し、押すと `todos = []` にして保存・再描画する
+- 各 `<li>` をクリックすると `classList.toggle("done")` が切り替わり、CSS で打ち消し線を付ける（打ち消し線の状態自体は保存しなくてよい）
+- 現在の件数を「全 N 件」として画面上部に表示する
 
 ## まとめ
 
-- ブラウザ内保存は `localStorage`（残る）/ `sessionStorage`（タブを閉じると消える）/ Cookie（サーバー送信あり）
-- Web Storage は **文字列しか保存できない**。オブジェクトや配列は `JSON.stringify` / `JSON.parse` とセット
-- 3 つの基本 API: `setItem` / `getItem`（未保存は `null`）/ `removeItem`
-- 失敗するケース（容量オーバー、プライベートブラウジング、壊れた JSON）を `try` / `catch` で吸収する
-- Cookie は実務ではサーバー側が管理するのが主流。クライアントで扱う保存は Web Storage が基本
-- 別のレッスンで、URL と History API を使って「ページ内状態を URL にも反映する」方法を学ぶ
+- TODO アプリの最小構成は **配列の state + `render` 関数 + イベントハンドラ** で作れる
+- 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
+- `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
+- `JSON.parse` は失敗しうるので `try` / `catch` で囲む
+- **この TODO アプリは4 章 の「TODO アプリを React で作る」で React 版に進化し、5 章 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく

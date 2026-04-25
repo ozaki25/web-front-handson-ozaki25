@@ -1,98 +1,117 @@
-# lesson29: fetch で API から取得する
+# lesson29: 非同期処理の基本
+
+<script setup>
+const demoJs = `
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+async function main() {
+  console.log('start');
+  await wait(1000);
+  console.log('1 秒後');
+  await wait(1000);
+  console.log('さらに 1 秒後（計 2 秒）');
+  console.log('end');
+}
+
+main();
+`
+</script>
 
 ## ゴール
 
-- `fetch` で外部 API からデータを取得できる
-- `response.json()` でレスポンスを JS のデータに変換できる
-- `try` / `catch` でエラーを捕まえられる
-- 「`fetch` も `response.json()` も Promise を返すので **両方 `await` が必要**」を覚える
+- 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
+- `async` / `await` を使って「結果を待ってから続ける」書き方ができる
+- Promise を「まだ完了していない結果を表す箱」として直感的に理解する
 
 ## 解説
 
-### fetch で取得する流れ
+### 同期と非同期
 
-ネット越しにデータを取得する標準の関数が `fetch` です。URL を渡すと、レスポンス（応答）を Promise で返します。
+ここまで書いてきた処理は、上から順にすぐ実行されていました。これを **同期処理** と呼びます。
+
+```js
+console.log("A");
+console.log("B");
+console.log("C");
+// 出力: A → B → C
+```
+
+一方で、「ネットワーク通信」「一定時間待つ」など、**時間がかかる処理** もあります。こうした処理は、途中で止まらず後続のコードを先に進めておく仕組みになっています。これを **非同期処理** と呼びます。
+
+```js
+console.log("A");
+setTimeout(() => {
+  console.log("B");
+}, 1000);
+console.log("C");
+// 出力: A → C → （1秒後に）B
+```
+
+`setTimeout(関数, ミリ秒)` は「指定時間後に関数を呼ぶ」ブラウザの機能です。1 秒待っている間に `C` が先に出る、というのが非同期の挙動です。
+
+### Promise というもの
+
+非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise**（プロミス） という仕組みがあります。
+
+- `fetch` は「結果そのもの」ではなく「Promise」を返す
+- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
+- Promise は「いつか結果が入る箱」
+- 結果を取り出すには「箱が埋まるのを待つ」必要がある
+
+本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
+
+### `async` / `await`
+
+関数の前に `async` と書き、Promise を返す処理の前に `await` と書くと、「結果が返ってくるのを待ってから続きを実行」できます。
 
 ```js
 async function main() {
-  const response = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const data = await response.json();
-  console.log(data);
+  console.log("start");
+  await wait(1000);   // 1 秒待つ
+  console.log("end"); // 1 秒後に実行される
 }
 
 main();
 ```
 
-手順を分解すると:
+- `async function` は「中で `await` を使える関数」
+- `await Promise` は「その Promise の結果が返るまで待つ」
+- `await` は `async function` の中でしか使えない
 
-1. `fetch(url)` を呼ぶ → **Promise** が返る
-2. `await` して完了を待つ → `response` オブジェクトが得られる
-3. `response.json()` を呼ぶ → これも **Promise** が返る（ここで `await` を忘れやすい）
-4. `await` して完了を待つ → 実際のデータ（配列やオブジェクト）が得られる
+### `wait(ms)` 関数（コピペで使う）
 
-### `await` を 2 回書く理由
-
-冒頭で強調したとおり、**戻り値が Promise の関数・メソッドには `await` が必要** です。`fetch` と `response.json()` はどちらも Promise を返すため、両方に `await` を付けます。
-
-`response.json()` の `await` を書き忘れると、Promise オブジェクトがそのまま変数に入ってしまい、データのつもりで使うとおかしな挙動になります（演習で体験します）。
-
-### JSON とは
-
-API が返すデータは、ほとんどの場合 **JSON** というテキスト形式で送られてきます。JS のオブジェクト / 配列と見た目がそっくりなので、`response.json()` を通すと JS のオブジェクトや配列として扱えるようになります。
-
-### エラーを捕まえる: `try` / `catch`
-
-ネットワークの処理は「URL が間違っている」「接続できない」など失敗する可能性があります。失敗に備えて `try` / `catch` で囲みます。
+「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
 
 ```js
-async function main() {
-  try {
-    const response = await fetch("https://example.com/this-will-fail");
-    const data = await response.json();
-    console.log(data);
-  } catch (error) {
-    console.log("失敗しました");
-    console.log(error);
-  }
-}
-
-main();
-```
-
-- `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
-- `error` にはエラー情報が入る
-
-`try` / `catch` は「TODO アプリを作る」の `JSON.parse` でも再利用します。
-
-### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
-
-`fetch` で最初につまずきやすい点があります。**サーバーから 404 や 500 などのエラーステータスが返ってきても、`fetch` は失敗とみなさず `try` / `catch` の `catch` には飛びません**。`catch` に飛ぶのは、
-
-- URL の形式がおかしい
-- ネットワーク接続に失敗した（オフラインなど）
-- DNS で名前解決に失敗した
-
-といった **通信そのものが成立しなかった** ときだけです。HTTP の 404 / 500 は「通信は成功、ただしサーバーが『エラーです』と返してきた」状態なので、`fetch` にとっては成功扱いになります。
-
-HTTP エラーを自分で拾いたいときは、`response.ok` という真偽値（200〜299 のときに `true`）を見て分岐します。本コースの演習では深追いしませんが、次の 1 行を覚えておくと実務で役立ちます。
-
-```js
-if (!response.ok) {
-  throw new Error(`HTTP ${response.status}`);
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 ```
 
-これを書いておくと、4xx / 5xx のときに `throw` して `catch` に飛ばせます。
+この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
 
-### ブラウザ側 fetch の注意（予告）
+下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
 
-ブラウザ側で `fetch` を使うと、ローディング状態の管理や競合（複数の fetch が同時に走って結果がずれる）など、考えることが多くなります。本コースでは、こうしたブラウザ側の fetch の難しさを扱わず、**5 章 の Server Component でサーバー側 fetch に任せる** 方針を取ります。本レッスンでは「Console に出す」までに絞ります。
+<LiveDemo
+  height="240px"
+  :html="`<p>await が実際に時間を待つ様子:</p>`"
+  :css="``"
+  :js="demoJs"
+/>
+
+### 次への橋渡し
+
+**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば別のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+
+「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「これまでに作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
 
 <details>
 <summary>出発点のコード</summary>
@@ -106,15 +125,107 @@ if (!response.ok) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson28</title>
-    <script defer src="./script.js"></script>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson28: 非同期処理の基本</h1>
+    <h1>lesson28: import / export</h1>
+    <ul id="list"></ul>
   </body>
 </html>
 ```
 
-**`script.js`**
+**`storage.js`**
+
+```js
+const STORAGE_KEY = "module-todos";
+
+export function loadTodos() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (error) {
+    console.log("保存データの読み込みに失敗しました");
+    console.log(error);
+    return [];
+  }
+}
+
+export function saveTodos(todos) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+```
+
+**`render.js`**
+
+```js
+export function renderTodos(listElement, todos) {
+  listElement.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    listElement.appendChild(li);
+  }
+}
+```
+
+**`main.js`**
+
+```js
+import { loadTodos, saveTodos } from "./storage.js";
+import { renderTodos } from "./render.js";
+
+const list = document.querySelector("#list");
+
+let todos = loadTodos();
+
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "本を読む" },
+    { id: "a3", text: "掃除する" },
+  ];
+  saveTodos(todos);
+}
+
+renderTodos(list, todos);
+```
+
+</details>
+
+### ゴール
+
+- `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る
+
+### 手順
+
+1. `index.html` のタイトルを `lesson29` に変える
+2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson29</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson29: 非同期処理の基本</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
 function wait(ms) {
@@ -137,100 +248,40 @@ main();
 console.log("main を呼んだ後のコード");
 ```
 
-</details>
-
-### ゴール
-
-- JSONPlaceholder（無料の練習用 API）から記事一覧を取得して Console に出す
-- URL をわざと壊して `catch` の中が実行されることを確認する
-- `response.json()` の `await` を外して挙動を観察する
-
-### 手順
-
-1. `index.html` のタイトルを `lesson29` に変える
-2. `script.js` を以下に書き換える
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson29</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson29: fetch で API から取得する</h1>
-    <p>DevTools の Console を確認してください。</p>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-async function main() {
-  try {
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
-    const posts = await response.json();
-    console.log("取得件数:", posts.length);
-    console.log("先頭:", posts[0]);
-
-    for (const post of posts.slice(0, 3)) {
-      console.log(`#${post.id} ${post.title}`);
-    }
-  } catch (error) {
-    console.log("エラーが発生しました");
-    console.log(error);
-  }
-}
-
-main();
-```
-
 ### 期待出力
 
-Console に次のような内容が出ます（API 側の内容によって文字列は変わる場合があります）。
+Console に、1 秒ごとに以下が順に追加されます。
 
 ```
-取得件数: 100
-先頭: {userId: 1, id: 1, title: "sunt aut facere ...", body: "..."}
-#1 sunt aut facere repellat provident occaecati excepturi optio reprehenderit
-#2 qui est esse
-#3 ea molestias quasi exercitationem repellat qui ipsa sit aut
+start
+main を呼んだ後のコード
+1 秒経過
+2 秒経過
+3 秒経過
+end
 ```
+
+ポイント:
+
+- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
+- `main` の内部は `await` があるので、順番に待ちながら進む
+- 合計で「約 3 秒」かけて順番にログが出る
 
 ### 変える
 
-#### URL を壊して `catch` を動かす
-
-`fetch` の URL の途中を適当に壊して（例: `https://jsonplaceholder.typicode.com/no-such-path-xxxxx`）、Console で「エラーが発生しました」が出ることを確認します。
-
-> 注意: JSONPlaceholder はどのパスでも空配列や JSON を返す傾向があるので、ドメインごと壊す（`https://this-domain-does-not-exist-xxxxx.test/posts`）方が確実にエラーになります。
-
-#### `await` を外すとどうなるか
-
-以下のように `response.json()` の `await` を外してみます。
-
-```js
-const posts = response.json(); // await を外す
-console.log(posts);
-console.log(posts.length);
-```
-
-Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これが「Promise をそのまま使ってしまった状態」です。`await` を忘れると値がおかしい、という失敗の形を体験しておきます。
+- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
+- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
+- `main()` の呼び出しを削除すると、何も実行されないことを確認
 
 ### 自分で書く
 
-- URL を `https://jsonplaceholder.typicode.com/users` に変えて、ユーザー一覧を取得し、各ユーザーの `name` と `email` を Console に出す
-- 取得した `posts` の中から「`id` が 10 以下」のものだけを `filter` で抜き出して出す
-- `try` / `catch` の `catch` の中で、エラーが起きたときに `console.log("読み込みに失敗しました")` と日本語メッセージも表示する
+- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
+- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
 
 ## まとめ
 
-- `fetch(url)` と `response.json()` は **どちらも Promise を返す**。両方 `await` が必要
-- `try` / `catch` で失敗に備える
-- `await` を忘れると Promise オブジェクトがそのまま出てきて、後続の処理が壊れる
-- ブラウザ側 fetch の state との組み合わせは罠が多いので、本コースでは5 章 の Server Component で扱う
+- 同期は「上から順にすぐ実行」、非同期は「時間がかかる処理を待たずに先へ進む」
+- 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
+- `async` 関数の中で `await Promise` すると、結果が返るまで待てる
+- `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
+- **戻り値が Promise の関数・メソッドには `await` が必要**。別のレッスンの `fetch` / `response.json()` で実例を扱う

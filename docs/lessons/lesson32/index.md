@@ -1,105 +1,187 @@
-# lesson32: TODO アプリを作る
+# lesson32: JSON を読み書きする
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-let items = ['牛乳を買う', '本を読む'];
-const list = document.getElementById('list');
-const btn = document.getElementById('add');
+const output = document.getElementById('output');
 
-function render() {
-  list.innerHTML = items.map((t) => '<li>' + t + '</li>').join('');
-}
+const user = {
+  name: 'Alice',
+  age: 20,
+  hobbies: ['読書', 'ランニング'],
+};
 
-btn.addEventListener('click', () => {
-  items = [...items, '項目' + (items.length + 1)];
-  render();
-});
+const compact = JSON.stringify(user);
+const pretty = JSON.stringify(user, null, 2);
 
-render();
+const parsed = JSON.parse(compact);
+
+output.textContent =
+  '--- compact ---\\n' + compact +
+  '\\n\\n--- pretty ---\\n' + pretty +
+  '\\n\\n--- parse 結果 (name だけ取り出す) ---\\n' + parsed.name;
 `
 </script>
 
 ## ゴール
 
-- 2 章 の知識（配列 / オブジェクト / 関数 / DOM / イベント / `filter` / `try`/`catch`）を統合する
-- 入力・追加・削除できる TODO アプリを HTML + JS で完成させる
-- `localStorage` に保存して、リロードしても残るようにする
-- 後続章で進化させる共通題材として、最終形を StackBlitz に保存する
+- JSON がどんな形式か（object / array / string / number / boolean / null）を説明できる
+- `JSON.stringify` でオブジェクトを文字列にできる。インデントも付けられる
+- `JSON.parse` で文字列をオブジェクトに戻せる
+- 壊れた JSON を `try` / `catch` で安全に扱える（「try / catch でエラー処理」の応用）
+- `replacer` / `reviver` という仕組みが存在することを知っている
 
 ## 解説
 
-ここまでのレッスンで積み上げてきた道具で、実際に動く小さなアプリを組み立てます。新しい概念は 1 つだけ: **`localStorage`** です。
+### JSON って何？
 
-### `localStorage` とは
+**JSON**（JavaScript Object Notation） は、オブジェクトや配列を **文字列として表現する** フォーマットです。ファイル保存 / `localStorage` / API との通信 / 設定ファイル、あらゆる場面で使います。
 
-ブラウザが提供する「文字列を保存しておける箱」です。ページを閉じてもデータは残り、次に同じページを開いたときに読み出せます。
+使える型は次の 6 つだけです。
 
-```js
-localStorage.setItem("key", "value"); // 保存
-const v = localStorage.getItem("key"); // 取り出し（なければ null）
-```
+- 文字列: `"hello"`（**ダブルクォート必須**）
+- 数値: `12` / `3.14` / `-5`
+- 真偽値: `true` / `false`
+- `null`
+- 配列: `[1, 2, 3]`
+- オブジェクト: `{ "key": "value" }`（キーも **ダブルクォートで囲む**）
 
-- 保存できるのは **文字列だけ**
-- 配列やオブジェクトをそのまま入れることはできない
+JSON の **できないこと** も押さえておきます。
 
-### `JSON.stringify` / `JSON.parse`
+- コメントは書けない
+- `undefined` / 関数 / `Date` オブジェクトはそのまま表現できない（`stringify` 時に消えるか文字列化される）
+- キーをシングルクォートで囲めない
+- 末尾カンマ（trailing comma）は許されない
 
-配列やオブジェクトを文字列に変換 / 戻すための道具です。
+### `JSON.stringify` でオブジェクト → 文字列
 
-```js
-const todos = [{ id: "1", text: "A" }, { id: "2", text: "B" }];
-
-const str = JSON.stringify(todos);
-// '[{"id":"1","text":"A"},{"id":"2","text":"B"}]'
-
-const back = JSON.parse(str);
-// [{ id: "1", text: "A" }, { id: "2", text: "B" }]
-```
-
-- `JSON.stringify(値)`: JS のデータを JSON 文字列に
-- `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
-
-`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **「fetch で API から取得する」で学んだ `try` / `catch` で囲む** のが安全です。
-
-### id をユニークに作る
-
-削除のたびに「どの TODO を消したか」を判断するために、各 TODO には **一意な id** を持たせます。ブラウザ標準の `crypto.randomUUID()` を使うと、衝突しない id 文字列が手に入ります。
+オブジェクトや配列を文字列化します。
 
 ```js
-const id = crypto.randomUUID();
-// 例: "8a7c3f...-...-..."
+const user = { name: "Alice", age: 20 };
+const text = JSON.stringify(user);
+console.log(text); // '{"name":"Alice","age":20}'
 ```
 
-### 画面構成
+#### インデント付きで整形する（第 3 引数）
 
-完成系は以下の構造です。
+第 3 引数にスペースの数（または文字列）を渡すと、改行とインデントが入った読みやすい形になります。
 
-- 画面上部: 入力欄 `<input>` と「追加」ボタン
-- 下部: TODO 一覧 `<ul>`（各行は `<li>` で、テキストと「削除」ボタンを含む）
+```js
+const pretty = JSON.stringify(user, null, 2);
+console.log(pretty);
+// {
+//   "name": "Alice",
+//   "age": 20
+// }
+```
 
-新しい TODO を追加すると一覧の末尾に `<li>` が 1 件増え、削除ボタンを押すとその行だけが消えます。リロードしてもデータが残ります。
+- 第 2 引数は後で触れる `replacer` です。使わないときは `null`
+- 第 3 引数に `2` を渡すと半角スペース 2 個ずつでインデント
+- 設定ファイルやログ出力など「人間が読む」用途では必ず付けましょう
 
-### デモで確認する
+#### 消えるもの
 
-下のデモは、TODO アプリの核となる「配列の state + `render` 関数 + イベントハンドラ」の最小形です。ボタンを押すと配列に要素が追加され、`map` で一覧を組み立て直して画面に描画します。
+`JSON.stringify` は JSON に表現できない値を静かに落とします。
+
+```js
+const weird = {
+  name: "Alice",
+  greet: () => "hi",      // 関数は消える
+  createdAt: undefined,   // undefined は消える
+};
+
+console.log(JSON.stringify(weird)); // '{"name":"Alice"}'
+```
+
+「保存したのにプロパティが欠ける」事故の原因になります。保存対象は JSON で表せる型だけにそろえましょう。
+
+### `JSON.parse` で文字列 → オブジェクト
+
+文字列を JS の値に戻します。
+
+```js
+const text = '{"name":"Alice","age":20}';
+const user = JSON.parse(text);
+console.log(user.name); // "Alice"
+console.log(user.age);  // 20
+```
+
+#### 壊れた JSON は例外を投げる
+
+構文が合っていない JSON を `parse` すると `SyntaxError` が投げられます。「try / catch でエラー処理」で学んだとおり、**必ず `try` / `catch` で囲む** 前提です。
+
+```js
+function safeParse(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.log("JSON が壊れています:", error.message);
+    return null;
+  }
+}
+
+console.log(safeParse('{"ok":true}')); // { ok: true }
+console.log(safeParse("{ broken"));    // null
+```
+
+`localStorage` から読む / 外部 API から受け取る、といった **自分で書いていない文字列** を扱うときは、この形がテンプレになります。
+
+### `replacer` と `reviver`（軽く紹介）
+
+`stringify` / `parse` にはフィルタ関数を挟む仕組みがあります。今は「こういう仕組みがある」と知っておけば十分です。
+
+#### `replacer`
+
+`stringify` の第 2 引数に関数を渡すと、キー・値のペアごとに呼ばれて「何を出力するか」をカスタマイズできます。
+
+```js
+const data = { name: "Alice", password: "secret" };
+const safe = JSON.stringify(data, (key, value) => {
+  if (key === "password") return undefined; // undefined を返すとそのキーは消える
+  return value;
+});
+console.log(safe); // '{"name":"Alice"}'
+```
+
+パスワードなど「保存したくない値」を除外したいときに使います。
+
+#### `reviver`
+
+`parse` の第 2 引数に関数を渡すと、復元する値を加工できます。
+
+```js
+const text = '{"createdAt":"2026-04-22T00:00:00.000Z","title":"hello"}';
+const obj = JSON.parse(text, (key, value) => {
+  if (key === "createdAt") return new Date(value);
+  return value;
+});
+console.log(obj.createdAt instanceof Date); // true
+```
+
+文字列化されて消えた `Date` を復元する、といった用途です。本コースの残りでは使いませんが、名前だけ覚えておくと後で読み解きやすくなります。
+
+### デモで確認
+
+オブジェクトを `stringify` してインデント付きで表示し、`parse` で戻して取り出す流れを動かしておきましょう。
 
 <LiveDemo
-  height="260px"
-  :html="`<button id='add'>項目を追加</button><ul id='list'></ul>`"
-  :css="`button { padding: 6px 12px; margin-bottom: 8px; cursor: pointer; } ul { padding-left: 20px; }`"
+  height="300px"
+  :html="`
+<button id='btn' onclick='run()'>動かす</button>
+<pre id='output' style='background:#f5f5f5;padding:12px;border-radius:6px;'></pre>
+  `"
+  :css="`
+body { padding: 16px; font-family: system-ui; }
+pre { white-space: pre-wrap; font-size: 14px; }
+  `"
   :js="demoJs"
 />
-
-本編ではこの土台に「入力欄からのテキスト追加」「削除ボタン」「`localStorage` による永続化」を重ねていきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンは2 章 の総仕上げで、ここまでの演習ファイルがあるとスムーズですが、下のコードでここまでの状態を再現してから演習に入っても同じ状態から始められます。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` の 2 ファイルで TODO 配列を JSON 保存・復元します。
 
 <details>
 <summary>出発点のコード</summary>
@@ -112,126 +194,53 @@ const id = crypto.randomUUID();
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson31</title>
-    <link rel="stylesheet" href="./style.css" />
-    <script defer src="./script.js"></script>
+    <title>lesson32</title>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson31: カウンター</h1>
-
-    <section>
-      <p id="count-label">カウント: 0</p>
-      <button id="inc">+1</button>
-      <button id="dec">-1</button>
-      <button id="reset">リセット</button>
-    </section>
-
-    <hr />
-
-    <section>
-      <h2>フォーム送信</h2>
-      <form id="form">
-        <label for="name-input">名前:</label>
-        <input id="name-input" type="text" />
-        <button type="submit">送信</button>
-      </form>
-      <p id="form-result">（未入力）</p>
-    </section>
+    <h1>lesson32: JSON</h1>
+    <ul id="list"></ul>
+    <pre id="raw"></pre>
   </body>
 </html>
 ```
 
-**`style.css`**
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-  max-width: 480px;
-}
-
-button {
-  margin-right: 4px;
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-hr {
-  margin: 24px 0;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-}
-```
-
-**`script.js`**
+**`main.js`**
 
 ```js
-// カウンター
-let count = 0;
-const label = document.querySelector("#count-label");
-const incBtn = document.querySelector("#inc");
-const decBtn = document.querySelector("#dec");
-const resetBtn = document.querySelector("#reset");
+const list = document.querySelector("#list");
+const raw = document.querySelector("#raw");
 
-function render() {
-  label.textContent = `カウント: ${count}`;
+const todos = [
+  { id: "a1", text: "牛乳を買う", done: false },
+  { id: "a2", text: "本を読む", done: true },
+];
+
+for (const todo of todos) {
+  const li = document.createElement("li");
+  li.textContent = todo.text;
+  list.appendChild(li);
 }
-
-incBtn.addEventListener("click", () => {
-  count = count + 1;
-  render();
-});
-
-decBtn.addEventListener("click", () => {
-  count = count - 1;
-  render();
-});
-
-resetBtn.addEventListener("click", () => {
-  count = 0;
-  render();
-});
-
-// フォーム
-const form = document.querySelector("#form");
-const nameInput = document.querySelector("#name-input");
-const result = document.querySelector("#form-result");
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const value = nameInput.value;
-  result.textContent = `こんにちは、${value} さん`;
-});
 ```
 
 </details>
 
-本レッスンは **3 段構え** です。各段でコミット（ファイル保存）して、次の段に進みます。
+### ゴール
 
-### 共通: HTML と CSS
+- TODO 配列を `JSON.stringify` でインデント付き文字列にして画面に出す
+- `localStorage` に保存した JSON を、次回リロード時に `JSON.parse` で復元する
+- 壊れた JSON が入っていても `try` / `catch` で受け止めて空配列から始める
 
-3 段を通して使います。
+### 手順
 
-#### `index.html`
+1. `main.js` に `STORAGE_KEY` と `loadTodos` / `saveTodos` を追加する
+2. 初回は初期配列を `saveTodos` で保存し、次回以降は `loadTodos` で復元する
+3. 画面に `<ul>` のリストと、`<pre>` にインデント付き JSON 表示を両方出す
+4. `localStorage.setItem("json-todos", "{ broken")` を Console で叩いてリロードし、復元に失敗しても壊れないことを確認する
+
+### 主要ファイルの完成形
+
+**`index.html`**
 
 ```html
 <!DOCTYPE html>
@@ -239,212 +248,22 @@ form.addEventListener("submit", (event) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson32 TODO</title>
-    <link rel="stylesheet" href="./style.css" />
-    <script defer src="./script.js"></script>
+    <title>lesson32</title>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>TODO</h1>
-
-    <form id="form">
-      <input id="input" type="text" placeholder="やることを入力" />
-      <button type="submit">追加</button>
-    </form>
-
+    <h1>lesson32: JSON</h1>
     <ul id="list"></ul>
+    <h2>保存されている JSON</h2>
+    <pre id="raw"></pre>
   </body>
 </html>
 ```
 
-#### `style.css`
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-  max-width: 480px;
-}
-
-#form {
-  display: flex;
-  gap: 8px;
-  margin-bottom: 12px;
-}
-
-#input {
-  flex: 1;
-  padding: 6px 8px;
-  font-size: 1rem;
-}
-
-button {
-  padding: 6px 12px;
-  cursor: pointer;
-}
-
-#list {
-  list-style: none;
-  padding: 0;
-}
-
-#list li {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 0;
-  border-bottom: 1px solid #ddd;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  #input {
-    background-color: #222;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  button {
-    background-color: #333;
-    color: #eaeaea;
-    border: 1px solid #555;
-  }
-
-  #list li {
-    border-bottom-color: #444;
-  }
-}
-```
-
-### ステップ 1: 入力 + 一覧表示
-
-まずは追加だけを作ります。削除や localStorage はまだ考えません。
-
-#### `script.js`（ステップ 1）
-
-**`const` ではなく `let` を使う理由**: 本コースでは `todos = [...todos, newTodo]` のように **新しい配列を作って差し替える**（「分割代入とスプレッド」で学んだイミュータブルな更新）スタイルで書く。「中身を足す」だけなら `const` のままで `todos.push(...)` でも動くが、4 章 以降の React / Server Actions では「新しい配列を渡す」形が基本になるため、2 章 の段階から同じ書き方に慣れておく。差し替えるには再代入が必要なので、変数宣言は `let` にする。
+**`main.js`**
 
 ```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-let todos = [];
-
-function render() {
-  list.textContent = ""; // 一度空にする
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    list.appendChild(li);
-  }
-}
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  input.value = "";
-  render();
-});
-
-render();
-```
-
-#### 期待出力（ステップ 1）
-
-- 入力欄に「牛乳を買う」と入力して「追加」を押す → `<ul>` の末尾に `牛乳を買う` の `<li>` が 1 件増える
-- さらに「本を読む」を追加 → 2 件目が末尾に並ぶ
-- 入力欄に何も入れずに「追加」を押しても何も起きない（空文字は弾く）
-- **リロードすると全部消える**（localStorage はまだ使っていない）
-
-ここでいったんファイルを保存（コミット相当）します。
-
-### ステップ 2: 削除ボタンを追加
-
-各 `<li>` に「削除」ボタンを付け、「配列の変換」の `filter` を使って対象を取り除きます。
-
-#### `script.js`（ステップ 2）
-
-```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-let todos = [];
-
-function render() {
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-
-    const span = document.createElement("span");
-    span.textContent = todo.text;
-    li.appendChild(span);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "削除";
-    deleteBtn.addEventListener("click", () => {
-      todos = todos.filter((t) => t.id !== todo.id);
-      render();
-    });
-    li.appendChild(deleteBtn);
-
-    list.appendChild(li);
-  }
-}
-
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  input.value = "";
-  render();
-});
-
-render();
-```
-
-#### 期待出力（ステップ 2）
-
-- 各行に「削除」ボタンが付いている
-- 「削除」を押すとその行だけが消える（他の行は残る）
-- 3 件追加 → 真ん中の「削除」を押すと、その 1 件だけ消える
-- リロードするとまだ全部消える（localStorage はまだ）
-
-ここでもう一度保存（2 回目のコミット相当）します。
-
-### ステップ 3: `localStorage` で保存・復元
-
-最終形です。TODO の変更があるたびに localStorage に保存し、起動時に読み戻します。
-
-#### `script.js`（最終形）
-
-```js
-const form = document.querySelector("#form");
-const input = document.querySelector("#input");
-const list = document.querySelector("#list");
-
-const STORAGE_KEY = "todo-app-todos";
+const STORAGE_KEY = "json-todos";
 
 function loadTodos() {
   const raw = localStorage.getItem(STORAGE_KEY);
@@ -458,83 +277,95 @@ function loadTodos() {
     }
     return [];
   } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error);
+    console.log("JSON の復元に失敗:", error.message);
     return [];
   }
 }
 
-function saveTodos() {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+function saveTodos(todos) {
+  const text = JSON.stringify(todos);
+  localStorage.setItem(STORAGE_KEY, text);
+}
+
+function render(todos) {
+  const list = document.querySelector("#list");
+  const raw = document.querySelector("#raw");
+
+  list.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.done ? `[済] ${todo.text}` : todo.text;
+    list.appendChild(li);
+  }
+
+  raw.textContent = JSON.stringify(todos, null, 2);
 }
 
 let todos = loadTodos();
 
-function render() {
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-
-    const span = document.createElement("span");
-    span.textContent = todo.text;
-    li.appendChild(span);
-
-    const deleteBtn = document.createElement("button");
-    deleteBtn.textContent = "削除";
-    deleteBtn.addEventListener("click", () => {
-      todos = todos.filter((t) => t.id !== todo.id);
-      saveTodos();
-      render();
-    });
-    li.appendChild(deleteBtn);
-
-    list.appendChild(li);
-  }
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う", done: false },
+    { id: "a2", text: "本を読む", done: true },
+    { id: "a3", text: "掃除する", done: false },
+  ];
+  saveTodos(todos);
 }
 
-form.addEventListener("submit", (event) => {
-  event.preventDefault();
-  const text = input.value.trim();
-  if (text === "") {
-    return;
-  }
-  const newTodo = {
-    id: crypto.randomUUID(),
-    text: text,
-  };
-  todos = [...todos, newTodo];
-  saveTodos();
-  input.value = "";
-  render();
-});
-
-render();
+render(todos);
 ```
 
-#### 期待出力（最終形）
+### 期待出力
 
-- 3 件追加 → リロード → 3 件がそのまま表示される
-- 削除 → リロード → 削除後の状態が残る
-- 全部削除 → リロード → 空のリストが表示される（`<ul>` の中身が空）
-- DevTools の Application（または Storage）タブ → Local Storage の項目で `todo-app-todos` に JSON 文字列が入っているのが確認できる
-- Console で `localStorage.setItem("todo-app-todos", "{ broken")` のように壊れた JSON をわざと入れてリロードすると、「保存データの読み込みに失敗しました」というメッセージが Console に出つつ、空配列として起動する（`try` / `catch` の効果）
+画面に次の内容が表示されます。
+
+```
+lesson32: JSON
+
+- 牛乳を買う
+- [済] 本を読む
+- 掃除する
+
+保存されている JSON
+[
+  {
+    "id": "a1",
+    "text": "牛乳を買う",
+    "done": false
+  },
+  {
+    "id": "a2",
+    "text": "本を読む",
+    "done": true
+  },
+  {
+    "id": "a3",
+    "text": "掃除する",
+    "done": false
+  }
+]
+```
+
+- DevTools の Application（または Storage）タブ → Local Storage に `json-todos` というキーが入っている
+- Console で `localStorage.setItem("json-todos", "{ broken")` を実行しリロード → Console に「JSON の復元に失敗」と出て、初期データで再起動する
 
 ### 変える
 
-- `STORAGE_KEY` を好きな名前に変える → 以前の保存と別扱いになり、リストが空から始まる
-- 追加時に `todos = [...todos, newTodo]` を `todos = [newTodo, ...todos]` に変えて、新しいものが先頭に来るようにする
-- 入力値の前後の空白を許すように、`trim()` を外してみる（半角スペースだけで追加できてしまう）
+- `JSON.stringify(todos, null, 2)` の `2` を `4` に変える → インデント幅が広がる
+- `JSON.stringify(todos)` と第 3 引数なしにしてみる → `<pre>` が 1 行に詰まる
+- 初期データに `createdAt: new Date()` を足して `stringify` → 日付が文字列として保存される（JSON には `Date` 型がない）
 
 ### 自分で書く
 
-- 「すべて削除」ボタンを追加し、押すと `todos = []` にして保存・再描画する
-- 各 `<li>` をクリックすると `classList.toggle("done")` が切り替わり、CSS で打ち消し線を付ける（打ち消し線の状態自体は保存しなくてよい）
-- 現在の件数を「全 N 件」として画面上部に表示する
+- `<button id="clear">`全消去`</button>` を置き、押すと `localStorage.removeItem(STORAGE_KEY)` してリロードさせる
+- 各 `<li>` の横に「削除」ボタンを付け、配列から `filter` で除いて `saveTodos` → `render` する
+- `replacer` を使って、`done: true` の項目だけを保存する `stringify` を書く（`saveTodos` をもう 1 つ増やす形で OK）
 
 ## まとめ
 
-- TODO アプリの最小構成は **配列の state + `render` 関数 + イベントハンドラ** で作れる
-- 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
-- `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
-- `JSON.parse` は失敗しうるので `try` / `catch` で囲む
-- **この TODO アプリは4 章 の「TODO アプリを React で作る」で React 版に進化し、5 章 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく
+- JSON は「オブジェクト / 配列 / 文字列 / 数値 / 真偽値 / null」の 6 種類だけで構成される
+- `JSON.stringify` で文字列化。第 3 引数でインデント付き整形ができる
+- `JSON.parse` で文字列から値に戻す。壊れていると例外になる
+- 外部から来た JSON を読むときは **必ず `try` / `catch` で囲む**
+- `replacer` / `reviver` で出力・復元のカスタマイズができる（存在だけ覚える）
+- 次章の TypeScript で、JSON から戻した値の「型を狭める」方法を学んでいく
