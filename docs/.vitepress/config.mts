@@ -233,6 +233,7 @@ export default withPwa(withMermaid(
             { text: 'lesson123: OAuth / OIDC / JWT の概念', link: '/lessons/lesson123/' },
             { text: 'lesson124: WebSocket と Server-Sent Events（SSE）', link: '/lessons/lesson124/' },
             { text: 'lesson125: GraphQL と tRPC の地図', link: '/lessons/lesson125/' },
+            { text: 'lesson126: Service Worker と PWA 深掘り', link: '/lessons/lesson126/' },
           ],
         },
       ],
