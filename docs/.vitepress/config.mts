@@ -192,6 +192,13 @@ export default withPwa(withMermaid(
             { text: 'lesson88: Cookie と Web セキュリティ', link: '/lessons/lesson88/' },
           ],
         },
+        {
+          text: '7. 実務で使う周辺知識',
+          collapsed: true,
+          items: [
+            { text: 'lesson89: セマンティック HTML とアクセシビリティの基礎', link: '/lessons/lesson89/' },
+          ],
+        },
       ],
       outline: {
         label: '目次',
