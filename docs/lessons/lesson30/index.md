@@ -321,7 +321,8 @@ SyntaxError <壊れた JSON のメッセージ>
 
 ### 自分で書く
 
-- `safeParse(raw)` という関数を `storage.js` に追加し、`loadValue` の中から使うようにリファクタする
+次の 2 つを順にやってみる。慣れていないうちは 1 つだけでも構わない。
+
 - `main.js` に `parseNumber(text)` という関数を作る。`text` が数値に変換できないとき（`Number(text)` が `NaN`）は `throw new Error("数値ではありません")`。呼び出し側で `try` / `catch` する
 - `storage.js` の `saveValue` にも `try` / `catch` を入れる。`localStorage` の容量オーバーなどで失敗した場合に `console.log` で気付けるようにする
 
@@ -332,4 +333,4 @@ SyntaxError <壊れた JSON のメッセージ>
 - `Error` オブジェクトは `name` / `message` / `stack` を持つ
 - `throw new Error("...")` で自分でもエラーを投げられる
 - 外部データ（`localStorage` / `fetch` の結果 / ユーザー入力）を扱う場所は、ほぼ例外なく `try` / `catch` で囲む
-- 次の「JSON を読み書きする」で、壊れた JSON を扱うパターンをもっと実践的に練習する
+- 別のレッスン「JSON を読み書きする」で、壊れた JSON を扱うパターンをもっと実践的に練習する

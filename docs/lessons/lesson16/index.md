@@ -12,13 +12,15 @@
 
 ### なぜ「ネイティブ UI」なのか
 
-モーダルや折りたたみを作りたい時、以前は HeadlessUI / Radix UI のようなライブラリを入れるのが普通でした。いまは **HTML 単独で同じことができる** 要素が揃っています。
+モーダルや折りたたみを作りたい時、いまは **HTML 単独で同じことができる** 要素が揃っています。JS を書かなくても、Tab キーや Escape キーが効き、スクリーンリーダーも正しく読み上げてくれます。
 
-ライブラリを避けられると:
+HTML 単独でできると嬉しいこと:
 
-- **バンドルサイズが減る**（数十 KB の差が積み重なる）
+- **バンドルサイズが減る**（外部ライブラリを 1 つ削れる）
 - **アクセシビリティが自動**（フォーカストラップ / Escape 閉じ / `role` / `aria-*` が組み込み）
 - **学習コストが減る**（HTML の常識だけで読める）
+
+> コラム: 同じ用途で HeadlessUI / Radix UI のような React 用ライブラリを使う流派もあります。複雑な UI（コンボボックスやスライダー等）はライブラリの方が手が早いですが、本レッスンで扱う「折りたたみ / モーダル / ポップアップ」程度なら **HTML 単独で十分** に書けるようになっているのが現代の前提です。
 
 このレッスンでは代表的な 3 つを扱います。
 
@@ -72,9 +74,9 @@ details.addEventListener("toggle", (e) => {
 });
 ```
 
-#### `::details-content` で中身をアニメーション
+::: details 発展（任意）: `::details-content` で中身をアニメーション
 
-2024 年以降、`::details-content` 疑似要素と `interpolate-size` 機能で、高さ 0 → auto の **スムーズな開閉アニメーション** が CSS だけで書けるようになりました。
+2024 年以降、`::details-content` 疑似要素と `interpolate-size` 機能で、高さ 0 → auto の **スムーズな開閉アニメーション** が CSS だけで書けるようになりました。本レッスンの本筋ではありませんが、興味があれば確認してみてください。
 
 ```css
 details::details-content {
@@ -90,6 +92,8 @@ details[open]::details-content {
   content-visibility: visible;
 }
 ```
+
+:::
 
 ### `<dialog>` — モーダル
 
@@ -223,9 +227,9 @@ menu.togglePopover(); // トグル
 
 **「モーダル = `<dialog>`、非モーダル = popover」** と覚えると迷いません。両方を組み合わせることも可能で、`<dialog popover>` のように書けば「popover として動く dialog」になります。
 
-### Anchor Positioning との組み合わせ
+::: details 発展（任意）: Anchor Positioning との組み合わせ
 
-Popover API と相性が良いのが [Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning)（2024 年以降 Chrome 系で対応）。
+Popover API と相性が良いのが [Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning)（2024 年以降 Chrome 系で対応）です。本レッスンの本筋ではありませんが、興味があれば確認してみてください。
 
 ```css
 button { anchor-name: --menu-btn; }
@@ -239,6 +243,8 @@ button { anchor-name: --menu-btn; }
 ```
 
 「ボタンの真下に menu を自動配置」が **JS なし** で書けます。Safari / Firefox の対応はまだ進行中なので、フォールバックを用意するか polyfill を使います。
+
+:::
 
 ## 演習
 
