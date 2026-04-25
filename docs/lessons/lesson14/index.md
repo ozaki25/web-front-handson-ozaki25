@@ -138,9 +138,9 @@ body { padding: 24px; background: #f5f7fa; }
 
 以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
 
-### このレッスンで揃うもの
+### このレッスンで扱うもの
 
-1 章 で扱ってきた HTML の基本タグ、CSS 基礎、Flexbox、Grid、Position に、今回の Transition を加えると、**静的なページに「動き」を足す** という現代的な CSS の基本が組み合わせられます。残りの「モダン CSS」「ネイティブ UI」と合わせると 1 章 が完成します。
+`transition` で値の変化をなめらかに補間し、`prefers-reduced-motion` で配慮する書き方を学びます。これまでに作った静的なページに「動き」を足せるようになります。
 
 ## 演習
 
@@ -582,17 +582,6 @@ form button:focus {
 - `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。動きが苦手な人への最低限の配慮として覚えておく。
 - DevTools の Rendering タブで `prefers-reduced-motion` をエミュレートして動作確認できる。
 
-### ここまでで揃ったもの
+### 自己紹介ページの再利用
 
-このレッスンまでで、次のことができるようになりました。
-
-- HTML の基本タグ（見出し・段落・リスト・リンク・画像・フォーム・セマンティックタグ）で文書を組み立てられる
-- CSS を外部ファイルで読み込み、セレクタ・擬似クラス・色や文字・余白を指定できる
-- Flexbox（一次元）と Grid（二次元）でモダンなレイアウトを組める
-- `position` で要素を通常の流れから切り離して配置し、`z-index` で前後関係を制御できる
-- `transition` と `transform` で動きを足し、`prefers-reduced-motion` で配慮できる
-- `@media` メディアクエリで画面幅やダークモード、動きの設定に応じてスタイルを変えられる
-
-ここで作った **自己紹介ページ** は、5 章 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。
-
-このあと **「モダン CSS」** で `:has()` / `@container` 等の最新機能、**「ネイティブ UI」** で `<dialog>` / popover を扱い、1 章 を仕上げます。JS 側は 2 章 の「最初の JavaScript」から始めます。
+ここまでで作った **自己紹介ページ** は、5 章 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。

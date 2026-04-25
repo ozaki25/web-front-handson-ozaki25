@@ -209,7 +209,7 @@ async function fetchUser(id: number): Promise<User> {
 
 ### Server Actions / Route Handlers の入力検証
 
-5 章 で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
+**「Server Actions の最小形」「Route Handlers」** で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
 
 ```ts
 "use server";
@@ -426,9 +426,9 @@ export async function fetchPosts(): Promise<Post[]> {
 - `password` と `passwordConfirm` の一致チェックを `refine` で書く
 - 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
 
-### 自分で書く（5 章 を継承する）
+### 自分で書く（既存の TODO アプリを継承する）
 
-5 章 の **「小さなアプリを仕上げる」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これは **本コースの螺旋反復で「同じ TODO アプリの安全性を一段上げる」** 演習です。
+**「小さなアプリを統合する」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これは **本コースの螺旋反復で「同じ TODO アプリの安全性を一段上げる」** 演習です。
 
 1. `actions.ts` の冒頭に Zod スキーマを定義:
 
@@ -470,4 +470,4 @@ export async function fetchPosts(): Promise<Post[]> {
 - **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
 - API レスポンス検証 / Server Actions 入力検証 にも同じスキーマを再利用
 - 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
-- これで7 章 のフォーム 2 連作が完了。次は **状態管理の地図** に進む
+- 別のレッスンで **状態管理の地図（TanStack Query / Zustand / Jotai）** に進み、サーバー状態とクライアント状態の選択肢を整理する

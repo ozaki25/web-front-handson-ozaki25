@@ -42,10 +42,10 @@
 
 本レッスンと別のレッスンで、上から下まで順に触っていきます:
 
-- 本レッスン (lesson97): **Vitest でユニットテスト** — 純粋関数のテスト
-- 次レッスン (lesson98): **Testing Library でコンポーネントテスト**
-- 次々レッスン (lesson99): **MSW で fetch モック**
-- その次 (lesson100): **Playwright で E2E テスト**
+- 本レッスン: **Vitest でユニットテスト** — 純粋関数のテスト
+- **コンポーネントテスト — React Testing Library** で UI 要素を検査
+- **API モック — MSW** で fetch を差し替えてテスト
+- **E2E テスト — Playwright** でブラウザ越しの最重要パスを検証
 
 ### Vitest とは
 

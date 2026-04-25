@@ -425,4 +425,4 @@ npx playwright codegen http://localhost:5173
 - **UI モード** で対話的にデバッグ、**codegen** で操作を録画してテストコード生成
 - 失敗時の **トレース** で CI のエラーをローカル再現
 - MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
-- これで7 章 のテスト 4 連作が完了。次は **Core Web Vitals とパフォーマンス** に進む
+- 別のレッスンで **Core Web Vitals の 3 つの指標と Lighthouse** に進み、ユーザー体験を数値で測る基礎を学ぶ

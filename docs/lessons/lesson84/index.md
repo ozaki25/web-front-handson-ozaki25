@@ -1,9 +1,8 @@
-# lesson84: 小さなアプリを統合する（中間まとめ）
+# lesson84: 小さなアプリを統合する
 
 ## ゴール
 
 - ここまでの知識を統合して「投稿できる TODO アプリ」の主要機能を組み上げます。
-- このあと「Tailwind CSS の紹介」「Metadata API で SEO を整える」「Loading UI と Streaming」を経て、最後に **「Vercel にデプロイする」で公開** することが 5 章 のゴールです。
 - `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
 - `export const metadata` でサイト共通タイトルを設定できます（**動的タイトル / OGP は「Metadata API で SEO を整える」のレッスンで詳しく扱います**）。
 - `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
