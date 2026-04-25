@@ -260,22 +260,42 @@ customElements.define("my-toggle", MyToggle);
 - **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
 - 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
 
-React 19 以降は **Custom Elements を props / event で自然に扱える** ようになりました。昔は `ref` で手動 setAttribute が必要でしたが、いまは React でも普通に書けます。
+React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
+
+ただし、Custom Element が `dispatchEvent` で投げる **CustomEvent**（例: `change` / `select`）を `onChange` のような JSX プロパティで受ける機能は **入っていません**。React のイベントシステムは標準 DOM イベントを合成イベントに繋ぐ仕組みで、Custom Element の独自 CustomEvent は対象外です。CustomEvent を購読したい場合は **`ref` + `addEventListener`** が現実解です。
 
 ```tsx
-// React 19+
-<my-toggle onchange={(e) => console.log(e.detail)} />
+import { useEffect, useRef } from "react";
+
+function ToggleHost() {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ checked: boolean }>).detail;
+      console.log(detail);
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, []);
+
+  return <my-toggle ref={ref} />;
+}
 ```
 
 ::: warning TypeScript で使うときは型宣言が必要
-JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。`global.d.ts` などに次のような **型拡張** を 1 度だけ書きます。
+JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。React 19 では `react` モジュールの `JSX` 名前空間を拡張する形が公式の作法です。
 
 ```ts
-declare global {
+import "react";
+
+declare module "react" {
   namespace JSX {
     interface IntrinsicElements {
       "my-toggle": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement> & { onchange?: (e: CustomEvent<{ checked: boolean }>) => void },
+        React.HTMLAttributes<HTMLElement>,
         HTMLElement
       >;
     }
