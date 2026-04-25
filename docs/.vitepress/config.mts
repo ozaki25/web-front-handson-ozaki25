@@ -226,6 +226,7 @@ export default withPwa(withMermaid(
             { text: 'lesson116: OGP と SEO 実践', link: '/lessons/lesson116/' },
             { text: 'lesson117: CI/CD パイプラインの設計', link: '/lessons/lesson117/' },
             { text: 'lesson118: フィーチャーフラグ', link: '/lessons/lesson118/' },
+            { text: 'lesson119: 環境変数とシークレット管理', link: '/lessons/lesson119/' },
           ],
         },
       ],
