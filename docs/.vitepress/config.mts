@@ -237,6 +237,7 @@ export default withPwa(withMermaid(
             { text: 'lesson127: IndexedDB 入門', link: '/lessons/lesson127/' },
             { text: 'lesson128: React Compiler', link: '/lessons/lesson128/' },
             { text: 'lesson129: Server Components の設計論', link: '/lessons/lesson129/' },
+            { text: 'lesson130: 次世代ツールチェイン（Biome / Oxc / Turbopack）', link: '/lessons/lesson130/' },
           ],
         },
       ],
