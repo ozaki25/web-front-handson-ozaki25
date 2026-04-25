@@ -202,6 +202,7 @@ export default withPwa(withMermaid(
             { text: 'lesson92: テスト入門 — Vitest でユニットテスト', link: '/lessons/lesson92/' },
             { text: 'lesson93: コンポーネントテスト — React Testing Library', link: '/lessons/lesson93/' },
             { text: 'lesson94: API モック — MSW（Mock Service Worker）', link: '/lessons/lesson94/' },
+            { text: 'lesson95: E2E テスト — Playwright', link: '/lessons/lesson95/' },
           ],
         },
       ],
