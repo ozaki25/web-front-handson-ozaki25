@@ -300,23 +300,15 @@ for (const item of items) {
 
 それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
 
-## 3 章 のまとめと次章への予告
+### 補足: `Todo` 型はこの後のレッスンでも使い回す
 
-### 3 章 で作ったもの
+`src/types.ts` に書いた `Todo` 型と、派生させた `TodoDraft` / `TodoSummary` は、別のレッスンでも `import type` して再利用します。
 
-- `src/types.ts` に `Todo` 型を定義した（`id`、`text`、`status`、`memo?`）。
-- `Partial<Todo>` で下書き用の `TodoDraft`、`Pick<Todo, "id" | "text">` で一覧用の `TodoSummary` を派生させた。
-- `export type` / `import type` で型を別ファイルから使い回す形を身につけた。
+- 「コンポーネントと props」のレッスン: コンポーネントに型付き `props` を渡すときの `types.ts` として再登場
+- 「配列を描画する」のレッスン: 配列描画の題材として `Todo[]` をそのまま渡す
+- 「TODO アプリを React で作る」のレッスン: 型の基盤としてそのまま使う
 
-### 次章で何が起きるか
-
-**4 章（React）の「コンポーネントと props」以降で、この `Todo` 型を `import type` してそのまま使います**。
-
-- 「コンポーネントと props」: コンポーネントに型付き `props` を渡すときの `types.ts` として再登場。
-- 「配列を描画する」: 配列描画の題材として `Todo[]` をそのまま渡す。
-- 「TODO アプリを React で作る」: React 版 TODO アプリの型の基盤として、育てた `Todo` 型がそのまま使われる。
-
-つまり、ここまで書いてきた `types.ts` は **この先ずっと生き続けるファイル** です。StackBlitz のプロジェクトは章ごとに作り直しても、`types.ts` の中身はそのままコピーして持っていくのが基本の流れになります。
+StackBlitz のプロジェクトを作り直しても、`types.ts` の中身はコピーして持っていくのが基本です。
 
 ### コラム: その他の Utility Types
 
@@ -327,5 +319,5 @@ for (const item of items) {
 - Utility Types は「既にある型から新しい型を派生させる道具」。手で別の `type` を書く代わりに、仕組みで自動追従させる。
 - `Partial<T>`: すべて省略可能にする。下書きや更新の差分に使える。
 - `Pick<T, K>`: 特定のプロパティだけ取り出す。一覧用の軽い型に使える。
-- `Todo` 型から `TodoDraft` と `TodoSummary` を派生させた。この `Todo` 型は4 章 の「コンポーネントと props」以降で React の props として `import type` して再利用する。
+- `Todo` 型から `TodoDraft` と `TodoSummary` を派生させた。この `Todo` 型は React の「コンポーネントと props」のレッスンで `import type` して再利用する。
 - 他の Utility Types（`Readonly` / `Record` / `Omit` / `Required` など）は本コースでは扱わない。必要になったら公式ドキュメントを参照する。
