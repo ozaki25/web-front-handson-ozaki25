@@ -211,13 +211,13 @@ words.sort(new Intl.Collator("de").compare);
 ```js
 const lf = new Intl.ListFormat("ja", { style: "long", type: "conjunction" });
 lf.format(["りんご", "バナナ", "みかん"]);
-// => "りんご、バナナ、およびみかん"
+// => "りんご、バナナ、みかん"
 
 new Intl.ListFormat("en", { type: "conjunction" }).format(["a", "b", "c"]);
 // => "a, b, and c"
 ```
 
-`type: "disjunction"` なら「A、B、または C」「a, b, or c」になります。
+日本語の `conjunction` には英語の "and" / "および" のような連結語は付きません（CLDR / ICU のルール）。`type: "disjunction"` なら「A、B、または C」「a, b, or c」になります。
 
 ### `Intl.PluralRules`
 
@@ -409,6 +409,8 @@ npm run dev
 | `ja-JP` | 2026年4月25日土曜日 10:30 | ￥1,234,568 | 3 日前 / 5 分後 / 昨年 |
 | `en-US` | Saturday, April 25, 2026 at 10:30 AM | $1,234,567.89 | 3 days ago / in 5 minutes / last year |
 | `de-DE` | Samstag, 25. April 2026 um 10:30 | 1.234.567,89 € | vor 3 Tagen / in 5 Minuten / letztes Jahr |
+
+> 上の出力は **ICU / CLDR バージョン** によって細部が変わります。例えば `en-US` の AM/PM 直前のスペースは新しい ICU では **NNBSP**（U+202F、見た目は半角スペース）に置き換わっており、`ja-JP` の通貨記号も実装によって `¥`（U+00A5）と `￥`（U+FFE5）が入れ替わります。スペースや記号の違いで `===` の文字列比較に失敗することがあるので、出力をそのまま比較する処理を書かないようにします。
 
 リストとソート順もロケールに追従します。
 
