@@ -116,6 +116,7 @@ export default withPwa(withMermaid(
             { text: 'lesson82: URL と History API でページ遷移なしに URL を操作する', link: '/lessons/lesson82/' },
             { text: 'lesson83: デバッグに効く Console API', link: '/lessons/lesson83/' },
             { text: 'lesson107: 監視系 API（Intersection Observer / ResizeObserver / MutationObserver）', link: '/lessons/lesson107/' },
+            { text: 'lesson110: Intl API で国際化の基礎', link: '/lessons/lesson110/' },
           ],
         },
         {
