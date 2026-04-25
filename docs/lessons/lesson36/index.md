@@ -338,4 +338,4 @@ applyFilterFromUrl();
 - `history.pushState(null, "", newUrl)` で **ページ再読み込みなし** に URL を書き換えられる。履歴に残したくないときは `replaceState`
 - ユーザーの戻る / 進むは `popstate` で検知し、URL から状態を読み直して画面を描き直す
 - この「URL と画面を同期させる」仕組みが SPA の基礎。5 章 の Next.js ルーティングもこの延長線上にある
-- 別のレッスンで、デバッグで便利な Console API（`table` / `group` / `time` など `log` 以外）を紹介する
+- 別のレッスン「Console API」では、デバッグで便利な `table` / `group` / `time` など `log` 以外のメソッドを扱う
