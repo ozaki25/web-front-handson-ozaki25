@@ -86,6 +86,7 @@ export default withPwa(withMermaid(
             { text: 'lesson12: CSS Grid で二次元レイアウト', link: '/lessons/lesson12/' },
             { text: 'lesson13: Position と z-index', link: '/lessons/lesson13/' },
             { text: 'lesson14: Transition と hover アニメーション', link: '/lessons/lesson14/' },
+            { text: 'lesson106: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）', link: '/lessons/lesson106/' },
           ],
         },
         {
