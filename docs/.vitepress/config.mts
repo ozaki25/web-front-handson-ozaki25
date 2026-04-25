@@ -198,6 +198,7 @@ export default withPwa(withMermaid(
           items: [
             { text: 'lesson89: セマンティック HTML とアクセシビリティの基礎', link: '/lessons/lesson89/' },
             { text: 'lesson90: ARIA 属性とキーボード操作', link: '/lessons/lesson90/' },
+            { text: 'lesson91: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）', link: '/lessons/lesson91/' },
           ],
         },
       ],
