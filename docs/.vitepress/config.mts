@@ -228,6 +228,7 @@ export default withPwa(withMermaid(
             { text: 'lesson118: フィーチャーフラグ', link: '/lessons/lesson118/' },
             { text: 'lesson119: 環境変数とシークレット管理', link: '/lessons/lesson119/' },
             { text: 'lesson120: Content-Security-Policy（CSP）実践', link: '/lessons/lesson120/' },
+            { text: 'lesson121: CORS の詳細', link: '/lessons/lesson121/' },
           ],
         },
       ],
