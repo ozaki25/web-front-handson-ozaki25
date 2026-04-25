@@ -57,7 +57,7 @@ export default defineConfig({
 |---|---|
 | `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
 | `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
-| `framer-motion` 全部読み込み | `motion/react` の必要モジュールだけ |
+| `motion/react`（旧 `framer-motion`、2024 年に `motion` パッケージへ改称）を `import * as motion` で全部読み込み | `import { motion } from "motion/react"` の named import で必要分だけ |
 | Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
 | 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
 | アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
@@ -333,7 +333,7 @@ dist/
 
 - バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
 - **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
-- 肥大化の典型（lodash 全部 import / moment / framer-motion 全部 / 画像 JS バンドル）を覚える
+- 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
 - **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
 - Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
 - Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意

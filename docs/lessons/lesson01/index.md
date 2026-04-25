@@ -37,6 +37,7 @@ HTML の部品は次のような形で書きます。
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>ページのタイトル</title>
   </head>
   <body>
@@ -45,6 +46,8 @@ HTML の部品は次のような形で書きます。
   </body>
 </html>
 ```
+
+**`<meta name="viewport">`** はスマートフォンで等倍表示するための指定です。これがないと、モバイル端末では「PC 画面を縮めて表示」する挙動になり、文字が極小になって読めません。**初出のテンプレに必ず入れる定型** として覚えておきます。以降のレッスンでもこの骨格を土台に使います。
 
 それぞれの意味はこうです。
 
@@ -100,6 +103,7 @@ DevTools（開発者ツール）は、ブラウザに付いている「ページ
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>はじめての HTML</title>
   </head>
   <body>

@@ -283,10 +283,45 @@ export default App;
 - `src/Card.tsx` を作って、`title` を `<h2>` で、`children` を `<div>` で包んで表示する `Card` コンポーネントを実装
 - `App.tsx` で `Card` を 2 個使ってみる（中身は自由）
 
+### もう一歩: 既存の HTML 要素 props を再利用する
+
+ボタンや input をラップして「色だけ変えた `<Button>`」のようなコンポーネントを作るとき、**HTML 要素の標準 props**（`type` / `disabled` / `onClick` / `aria-*` など全部）を一から型定義し直すのは大変です。React は次の 2 つのヘルパーを用意しています。
+
+```tsx
+import type { ComponentProps, PropsWithChildren } from "react";
+
+// (A) <button> の全 props を継承し、color だけ追加
+type ButtonProps = ComponentProps<"button"> & {
+  color?: "primary" | "danger";
+};
+
+function Button({ color = "primary", ...rest }: ButtonProps) {
+  return <button className={`btn btn-${color}`} {...rest} />;
+}
+
+// (B) children を受け取る型を 1 行で
+type CardProps = PropsWithChildren<{ title: string }>;
+
+function Card({ title, children }: CardProps) {
+  return (
+    <article>
+      <h2>{title}</h2>
+      <div>{children}</div>
+    </article>
+  );
+}
+```
+
+- `ComponentProps<"button">` は **`<button>` 要素のすべての props 型** を取り出します（`type`、`disabled`、`onClick` 等）。`<input>` / `<a>` 等にも同様に使えます
+- `PropsWithChildren<T>` は `T & { children?: ReactNode }` の省略形
+
+本コースの主役は手書きの `type` エイリアスですが、**HTML 要素ラップ系コンポーネント** ではこれらが定型句として頻出するので、見たときに読めるように頭の片隅に置いておきます。
+
 ## まとめ
 
 - props は「コンポーネントの引数」。オブジェクトの分割代入（2 章 の「分割代入とスプレッド」）で受け取る
 - 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
 - オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
 - `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
+- HTML 要素をラップするときは `ComponentProps<"button">` で標準 props を継承、`PropsWithChildren<T>` で children 付きを 1 行で書ける（補足）
 - コンポーネント名は必ず大文字始まり

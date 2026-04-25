@@ -137,7 +137,7 @@ Testing Library は **アクセシブルなクエリを優先** することを�
 ```tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
+import userEvent from "@testing-library/user-event";
 import { Counter } from "./Counter";
 
 describe("Counter", () => {
@@ -198,7 +198,7 @@ export function NameForm() {
 ```tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
+import userEvent from "@testing-library/user-event";
 import { NameForm } from "./NameForm";
 
 describe("NameForm", () => {
@@ -348,7 +348,7 @@ export function NameForm() {
 ```tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
+import userEvent from "@testing-library/user-event";
 import { Counter } from "./Counter";
 
 describe("Counter", () => {
@@ -393,7 +393,7 @@ describe("Counter", () => {
 ```tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
+import userEvent from "@testing-library/user-event";
 import { NameForm } from "./NameForm";
 
 describe("NameForm", () => {
