@@ -338,4 +338,4 @@ console.log(
 - `console.count` / `countReset` で呼び出し回数を数える
 - `console.assert(条件, メッセージ)` は条件が偽の時だけ出る軽いガード
 - `console.trace` でスタックトレース、`%c` + CSS で装飾
-- 2 章（JavaScript）はここで一区切り。本コースの残りの章（TypeScript / React / Next.js）でも、今回の API は日常的に使います
+- 本レッスンで扱った Console API は、TypeScript / React / Next.js のレッスンでも日常的に使う

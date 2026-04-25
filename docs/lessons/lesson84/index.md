@@ -94,7 +94,7 @@ export default async function TodosPage({
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは5 章 の総まとめなので、「共通レイアウトを作る」の共通レイアウト・「Server Actions の最小形」の Server Actions・「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「共通レイアウトを作る」の共通レイアウト、「Server Actions の最小形」の Server Actions、「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
 
 <details>
 <summary>出発点のファイル</summary>
