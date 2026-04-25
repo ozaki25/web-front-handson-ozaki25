@@ -217,9 +217,10 @@ export default async function RelatedPosts() {
   // わざと 2 秒待つ
   await new Promise((r) => setTimeout(r, 2000));
 
+  // Next.js 16 では fetch の既定が no-store なので明示は不要だが、
+  // 「キャッシュしない」を明示したい場合の書き方として残している。
   const res = await fetch(
-    "https://jsonplaceholder.typicode.com/posts?_limit=3",
-    { cache: "no-store" }
+    "https://jsonplaceholder.typicode.com/posts?_limit=3"
   );
   const posts: Post[] = await res.json();
 

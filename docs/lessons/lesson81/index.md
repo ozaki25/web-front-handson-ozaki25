@@ -93,7 +93,7 @@ Next.js 16 では Route Handlers と Proxy の **どちらも既定が Node.js**
 ### ゴール
 
 - `/api/todos` に `GET` と `POST` を実装する
-- サーバー側で `isTodoLike` 型ガードで入力検証
+- サーバー側で `isTodoInput` 型ガードで入力検証
 - クライアント側で `isTodoArray` 型ガードで受信検証
 - DevTools Console から `fetch` を叩いて動作確認
 
