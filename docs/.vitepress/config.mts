@@ -200,6 +200,7 @@ export default withPwa(withMermaid(
             { text: 'lesson90: ARIA 属性とキーボード操作', link: '/lessons/lesson90/' },
             { text: 'lesson91: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）', link: '/lessons/lesson91/' },
             { text: 'lesson92: テスト入門 — Vitest でユニットテスト', link: '/lessons/lesson92/' },
+            { text: 'lesson93: コンポーネントテスト — React Testing Library', link: '/lessons/lesson93/' },
           ],
         },
       ],
