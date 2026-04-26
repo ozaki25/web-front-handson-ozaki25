@@ -337,6 +337,8 @@ function LegacyComponent() {
 
 ## 演習
 
+> **このレッスンはローカル前提**: React Compiler の Babel プラグインを Next.js のビルドパイプラインに統合する都合上、**ローカルでの Node.js 実行を前提** にしています。StackBlitz の Next.js テンプレでも同じ手順は走りますが、ビルド時間が長くなり Compiler の確認が分かりにくいので、ローカル環境での実行を推奨します。
+
 ### ゴール
 
 - Next.js 16 で React Compiler を有効化する

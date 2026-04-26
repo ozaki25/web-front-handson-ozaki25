@@ -223,7 +223,7 @@ id = true;
 Type 'boolean' is not assignable to type 'string | number'.
 ```
 
-続けて、リテラル型のユニオンを試す。
+赤線を確認したら、**`id = true;` の行は消して** 次に進む（残しておくと後続コードが実行されない可能性がある）。続けて、リテラル型のユニオンを試す。
 
 ```ts
 let status: "open" | "done" | "archived";
