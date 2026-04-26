@@ -27,7 +27,7 @@ resetBtn.addEventListener('click', () => {
 
 ## ゴール
 
-このレッスンは DOM 操作の入り口です。**主役は次の 3 つ** です。
+このレッスンは DOM 操作の入り口です。**主役はこの 3 つ** です。
 
 - HTML が DOM という木構造として扱われることを絵で理解できる
 - `querySelector` / `getElementById` で要素を取得し、`textContent` で文字を読み書きできる

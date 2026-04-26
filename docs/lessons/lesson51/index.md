@@ -128,14 +128,10 @@ createRoot(document.getElementById("root")!).render(
 
 ### 手順
 
-1. ブラウザで [https://stackblitz.com/](https://stackblitz.com/) を開く
-2. トップ画面の「Start a new project」セクションから、**Vite のロゴ付きの react-ts** （あるいは「React + Vite + TS」「React TypeScript Vite」などと表記） のテンプレートを選ぶ
-   - 旧 Create React App（CRA）ベースの「React」テンプレートも並んでいることがあるが、本コースでは **必ず「Vite」側** を選ぶ
-   - 「Vanilla TypeScript」「Next.js」は今回は選ばない
-3. 直接次の URL を開いても同じテンプレートが立ち上がる → [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts)
-4. 左のファイルツリーから `src/App.tsx` を開く
-5. 中身を下記の内容に書き換える
-6. 右のプレビューで確認する
+1. ブラウザで直リンク [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts) を開く（**Vite + React + TypeScript** のテンプレートが立ち上がる。本コースでは旧 Create React App ではなく必ずこの Vite 版を使う）
+2. 左のファイルツリーから `src/App.tsx` を開く
+3. 中身を下記の内容に書き換える
+4. 右のプレビューで確認する
 
 ### `src/App.tsx`
 

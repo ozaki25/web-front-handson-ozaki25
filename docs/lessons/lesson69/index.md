@@ -90,10 +90,9 @@ export default function Page() {
 
 ### 手順
 
-1. <https://stackblitz.com/> を開きます。
-2. トップページに並ぶテンプレートカードから **Next.js** を選びます（Node を内部で動かす WebContainers 版、Next.js のロゴ付き）。カードが見当たらないときは検索ボックスに `next` と入れるか、直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます。
-3. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
-4. 中身をすべて消し、次のコードに置き換えます。
+1. 直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます（Next.js の hello-world テンプレートが Node を内部で動かす WebContainers 上で立ち上がります。初回は依存インストールに数十秒〜 1 分ほどかかります）。
+2. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
+3. 中身をすべて消し、次のコードに置き換えます。
 
 ```tsx
 export default function Page() {

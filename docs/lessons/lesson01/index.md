@@ -94,9 +94,8 @@ DevTools（開発者ツール）は、ブラウザに付いている「ページ
 
 ### 手順
 
-1. <https://stackblitz.com/> を開く。
-2. トップページに並ぶテンプレートカードの中から **HTML / CSS / JS**（Vanilla） を選ぶ（HTML5 のロゴが目印。TypeScript と書かれたものではない方）。カードが見当たらないときは画面の検索ボックスに `html` と入れて絞り込むか、直リンク <https://stackblitz.com/edit/web-platform> を開く。
-3. 最初から `index.html` が用意されている。中身を一度すべて消して、下のコードに置き換える。
+1. 直リンク <https://stackblitz.com/edit/web-platform> を開く（HTML / CSS / JS のシンプルなテンプレートが立ち上がる）。
+2. 最初から `index.html` が用意されている。中身を一度すべて消して、下のコードに置き換える。
 
 ```html
 <!DOCTYPE html>
