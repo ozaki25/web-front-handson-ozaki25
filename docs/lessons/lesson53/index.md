@@ -315,7 +315,7 @@ function Card({ title, children }: CardProps) {
 - `ComponentProps<"button">` は **`<button>` 要素のすべての props 型** を取り出します（`type`、`disabled`、`onClick` 等）。`<input>` / `<a>` 等にも同様に使えます
 - `PropsWithChildren<T>` は `T & { children?: ReactNode }` の省略形
 
-本コースの主役は手書きの `type` エイリアスですが、**HTML 要素ラップ系コンポーネント** ではこれらが定型句として頻出するので、見たときに読めるように頭の片隅に置いておきます。
+本コースで中心に扱うのは手書きの `type` エイリアスですが、**HTML 要素ラップ系コンポーネント** ではこれらが定型句として頻出するので、見たときに読めるように頭の片隅に置いておきます。
 
 ## まとめ
 

@@ -27,13 +27,13 @@ resetBtn.addEventListener('click', () => {
 
 ## ゴール
 
-このレッスンは DOM 操作の入り口です。**主役はこの 3 つ** です。
+このレッスンは DOM 操作の入り口です。今回学ぶことは次の 3 つです。
 
 - HTML が DOM という木構造として扱われることを絵で理解できる
 - `querySelector` / `getElementById` で要素を取得し、`textContent` で文字を読み書きできる
 - `classList` で CSS クラスを付け外しできる
 
-主役の 3 つを身につけたら、必要に応じて以下も使えるようになります（本文後半の **補足** で扱います）。
+これに加えて、必要に応じて以下も扱えるようになります（本文後半の **補足** で扱います）。
 
 - `innerHTML` の使い分けと XSS の落とし穴
 - `getAttribute` / `setAttribute` での属性操作
@@ -42,7 +42,7 @@ resetBtn.addEventListener('click', () => {
 - `createElement` / `appendChild` / `remove()` での要素生成・削除
 - `parentElement` / `children` / `nextElementSibling` でのツリー走査
 
-**初回は主役の 3 つだけ覚えれば十分** です。残りは「実際に必要になったときに本レッスンの補足を見直す」運用で OK。
+**まずは上の 3 つだけ覚えれば十分** です。残りは「実際に必要になったときに本レッスンの補足を見直す」運用で OK。
 
 ## 解説
 

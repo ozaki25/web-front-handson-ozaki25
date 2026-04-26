@@ -180,7 +180,7 @@ curl -I https://jsonplaceholder.typicode.com/posts/1 \
 ## まとめ
 
 - キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
-- `Cache-Control` でモードを指定。`max-age` / `no-cache` / `no-store` / `immutable` が主役
+- `Cache-Control` でモードを指定。よく使うのは `max-age` / `no-cache` / `no-store` / `immutable`
 - `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
 - 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
 - DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く
