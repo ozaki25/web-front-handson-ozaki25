@@ -404,6 +404,15 @@ await reg.sync.register("send-message");
 | `screenshots` | インストール画面（form_factor で広 / 狭を区別） |
 | `shortcuts` | アプリ長押しでのクイックメニュー |
 
+> **補足: `theme_color` をダーク/ライトで切り替える**: マニフェストの `theme_color` は単一値ですが、HTML の `<meta name="theme-color">` には `media` 属性を付けて **OS のテーマ設定に応じて切り替え** できます。
+>
+> ```html
+> <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+> <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
+> ```
+>
+> こうすると iOS / Android のダークモード利用者には暗い `theme_color` が、ライトモード利用者には明るい色が反映されます。マニフェストの `theme_color` はインストール後のフォールバックとして残り、`<meta>` が上書きする形になります。
+
 ### よくある罠
 
 - **HTTPS でないと動かない**（localhost 以外）

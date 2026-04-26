@@ -83,6 +83,19 @@ import type { Todo } from "./types";
 const todos: Todo[] = [];
 ```
 
+> **補足: HMR でも消したくないときは `globalThis` に退避**: `next dev` の HMR は **モジュールごと** に再評価するため、`const todos = []` は再評価で空に戻ります。学習中に「保存しただけで TODO が消える」が気になるなら、グローバルオブジェクト（プロセス内で 1 つ）に退避する次の書き方を使えます。
+>
+> ```ts
+> "use server";
+> import type { Todo } from "./types";
+>
+> const g = globalThis as unknown as { __todos?: Todo[] };
+> g.__todos ??= [];
+> const todos: Todo[] = g.__todos;
+> ```
+>
+> `globalThis` はモジュール再評価をまたいでも値を持ち続けるため、HMR で配列が初期化されません。**本番では別インスタンスで動くため依然消える** ので、これはあくまで「学習中の dev で消えにくくする」だけのトリックです。本番は DB / KV を使います。
+
 - サーバーのプロセスが生きている間は `todos` が残ります（同じプロセス内の呼び出しは同じ配列を共有します）。
 - **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（「Vercel にデプロイする」末尾でも再度注意を書きます）。
 
