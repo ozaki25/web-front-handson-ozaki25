@@ -1,4 +1,4 @@
-# lesson85: Tailwind CSS の紹介（次のステップ）
+# lesson85: Tailwind CSS の紹介
 
 ## ゴール
 
