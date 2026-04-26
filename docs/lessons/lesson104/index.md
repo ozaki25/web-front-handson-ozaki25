@@ -37,7 +37,7 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
     "react-dom": "^19.2.0"
   },
   "devDependencies": {
-    "vite": "^7.0.0",
+    "vite": "^8.0.0",
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.9.0"
   }
@@ -320,7 +320,7 @@ npm install -D vitest          # devDependencies に入る
   "devDependencies": {
     "@vitejs/plugin-react": "^5.0.0",
     "typescript": "^5.9.0",
-    "vite": "^7.0.0",
+    "vite": "^8.0.0",
     "vitest": "^3.0.0"
   }
 }

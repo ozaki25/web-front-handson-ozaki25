@@ -223,15 +223,15 @@ export function useWebSocket(url: string) {
 
 `useEffect` のクリーンアップで **必ず close** すること。React 19 / Strict Mode で **2 度マウント** されて接続が漏れる事故を防げます。
 
-#### Next.js の **Edge Runtime** は WebSocket を持てない
+#### Next.js の Route Handler で WebSocket を持つときの注意
 
-Next.js の Route Handler / Edge Functions は、現状 **WebSocket サーバーをホストできない**（Vercel / Cloudflare Workers の制約による）。WebSocket が必要なら:
+Next.js の Route Handler は **Node.js Runtime / Edge Runtime** の 2 種類があり、`export const runtime` で切り替えられます。WebSocket をホストできるかは Runtime とデプロイ先で大きく変わります。
 
-- **専用の Node サーバー**（同じ Next.js プロジェクトの **`server.ts`** や別サービス）
-- **PartyKit / Cloudflare Durable Objects**（WebSocket 専用 Edge）
-- **Pusher / Ably / Supabase Realtime** の SaaS
+- **Edge Runtime（Vercel Edge / Cloudflare Workers）**: WebSocket サーバー側はホストできない。ブラウザ向けの `WebSocket` クライアントとしての利用や SSE の配信は OK
+- **Node.js Runtime + 通常の Node プロセス（`next start` 等）**: 実験的な「**Route Handler の WebSocket Upgrade**」サポートが入りつつあるが、Vercel の **サーバーレス関数では長時間接続を保てない** ため実運用は不向き
+- **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実解
 
-がよく選ばれます。SSE は Vercel の Route Handler でも動きます。
+SSE（一方向ストリーミング）は Vercel の Route Handler でも動きますが、Edge / Node どちらでも **接続時間の上限** に注意します（Vercel Hobby は 10〜60 秒程度）。
 
 ### マネージドサービス
 
