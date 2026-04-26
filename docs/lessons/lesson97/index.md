@@ -91,6 +91,24 @@ export default defineConfig({
 - `npm run test`: **watch モード** で起動。ファイル変更を検知して再実行
 - `npm run test:run`: 1 回だけ実行（CI 用）
 
+> **CI で動かす最小例**: GitHub Actions なら `.github/workflows/test.yml` に下記を置くだけで PR / push 時に毎回テストが走ります。詳細は別のレッスン「GitHub Actions とは」で扱います。
+>
+> ```yaml
+> name: test
+> on: [push, pull_request]
+> jobs:
+>   test:
+>     runs-on: ubuntu-latest
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: 22
+>           cache: npm
+>       - run: npm ci
+>       - run: npm run test:run
+> ```
+
 ### 最小のテスト
 
 テストファイルは `*.test.ts` / `*.test.tsx` / `*.spec.ts` の命名で書きます。Vitest が自動で見つけて実行します。

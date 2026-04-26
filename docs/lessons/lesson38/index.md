@@ -290,6 +290,8 @@ function FadeInSection({ children }: { children: React.ReactNode }) {
 }
 ```
 
+> **`options` を毎レンダリング新しく作らない**: 上のフックの `useEffect` の依存配列に `options` を入れているため、**呼び出し側が `useIntersection({ threshold: 0.2 })` のようにオブジェクトリテラルを直書きすると、毎レンダリングで新参照になり Observer が再生成される無限ループ気味の挙動** に陥ります。実用するときは、呼び出し側で `useMemo(() => ({ threshold: 0.2 }), [])` で安定化するか、`threshold` などのプリミティブ値を引数として受け取って `useIntersection(0.2)` のようなシグネチャにする方が安全です。
+
 `useEffect` のクリーンアップで `disconnect` するのを忘れないようにします（メモリリーク防止）。
 
 ## 演習

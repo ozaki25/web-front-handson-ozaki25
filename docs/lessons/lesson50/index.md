@@ -128,6 +128,7 @@ import Button from "@/components/Button";          // 短い別名
 - TypeScript は **型チェックのためだけ** に解釈する。**実行時の解決は別**
 - バンドラ（Vite / webpack / esbuild）にも **同じエイリアスを教える** 必要がある
 - Vite なら `vite.config.ts` の `resolve.alias`、Next.js は **tsconfig.json から自動で読む**
+- `paths` に書く値は **ベースとなる位置からの相対パス**。`create-next-app` は `"@/*": ["./src/*"]` ではなく `"@/*": ["./*"]` を出力するなど、**プロジェクトに `src/` があるかどうか** で値が変わるので、自動生成された値をそのまま使うのが安全
 
 ### `jsx`
 
