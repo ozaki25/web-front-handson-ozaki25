@@ -289,11 +289,18 @@ type ThemeStore = {
   toggle: () => void;
 };
 
+// 初期値は OS 設定 (prefers-color-scheme) を尊重する
+const prefersDark =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-color-scheme: dark)").matches;
+
 export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: "light",
+  theme: prefersDark ? "dark" : "light",
   toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
 }));
 ```
+
+> **`aria-pressed` と `prefers-color-scheme`**: 切替ボタン側には `aria-pressed={theme === "dark"}` を付けて、スクリーンリーダーに「現在 ON / OFF どちらの状態か」を伝えます。初期値は `prefers-color-scheme: dark` を見て OS 設定に揃えると、ダークモード設定の利用者が **明るい画面で迎えられる事故** を防げます。
 
 ### 手順 3: 統合した App
 
@@ -332,7 +339,11 @@ export default function App() {
     >
       <h1>状態管理の地図</h1>
 
-      <button onClick={toggleTheme}>
+      <button
+        type="button"
+        aria-pressed={theme === "dark"}
+        onClick={toggleTheme}
+      >
         テーマ: {theme}（クリックで切替 — Zustand）
       </button>
 

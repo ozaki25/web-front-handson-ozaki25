@@ -182,7 +182,7 @@ CI でも `doppler run --` 経由でビルドすれば、**GitHub Secrets を一
 ```bash
 # gitleaks（OSS、Go 製）
 brew install gitleaks
-gitleaks detect
+gitleaks git .            # リポジトリ履歴全体をスキャン
 
 # pre-commit フックで自動化
 git config core.hooksPath .githooks
@@ -192,7 +192,8 @@ git config core.hooksPath .githooks
 
 ```sh
 #!/bin/sh
-gitleaks protect --staged --no-banner || exit 1
+# v8.18 以降は protect サブコマンドが廃止。git --pre-commit --staged で代替する
+gitleaks git --pre-commit --staged --no-banner || exit 1
 ```
 
 #### 3. GitHub の Secret Scanning
@@ -204,7 +205,7 @@ GitHub は **public リポジトリの push を自動でスキャン** し、AWS
 ```json
 {
   "lint-staged": {
-    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks protect --staged --no-banner"]
+    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks git --pre-commit --staged --no-banner"]
   }
 }
 ```

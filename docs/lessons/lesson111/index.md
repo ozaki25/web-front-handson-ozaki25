@@ -280,7 +280,8 @@ lighthouse:
 
 - API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
 - workflow ファイルに **平文で書かない**
-- Pull Request からの workflow は **secrets が読めない** 設定（`pull_request_target` を使う場合は厳重注意）
+- **fork からの Pull Request** に対する `pull_request` トリガーでは **secrets は読めません**（空文字列になります）。これは「fork してきた攻撃者が悪意ある workflow を入れて secrets を盗む」サプライチェーン攻撃を防ぐためです。CI で secrets が必要な処理は「自分のリポジトリ内のブランチからの PR」だけで動くように分けます
+- `pull_request_target` を使うと fork PR でも secrets が読めますが、**fork の悪意あるコードがそのまま走るため極めて危険** です。利用は「ラベル付けや welcome コメント等、コードを実行しない処理に限る」のが鉄則です
 
 ### 環境（Environment）の活用
 
