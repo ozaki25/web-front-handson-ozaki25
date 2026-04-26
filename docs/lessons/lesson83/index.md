@@ -185,6 +185,22 @@ export function ClientView() {
 
 本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
 
+### 補足: 環境ごとに値を分ける（Production / Preview / Development）
+
+Vercel など主要なホスティングでは、環境変数を **Production / Preview / Development の 3 つ** に分けて設定できます。実務ではこの 3 つに **別々の値** を入れるのが定石です。
+
+- **Production**: 本番ドメイン（`https://my-app.com`）で読み込まれる値
+- **Preview**: PR ごとに作られるプレビュー URL（`https://my-app-pr-42.vercel.app` のような）で読み込まれる値
+- **Development**: ローカルの `.env.development.local` で読み込まれる値（個人開発機向け）
+
+たとえば DB やアナリティクス、フィーチャーフラグの SDK key は **Preview と Production で別の環境** を指すように設定します。同じ値を使い回すと、
+
+- Preview の動作確認が **本番 DB のデータを書き換える事故** を起こす
+- A/B テスト・アナリティクスの計測値に **開発者の挙動が混ざる**
+- 本番フラグを **誤って Preview から ON にしてしまう**
+
+といった事故になります。Vercel なら `Settings → Environment Variables` で各変数に対して **適用環境にチェックを入れる** UI があるので、新規追加時は「3 つ全部にチェック」ではなく **環境ごとに必要な値を分ける** ことを意識してください。
+
 ## まとめ
 
 - 環境変数は `.env.local` に `KEY=VALUE` で書く
