@@ -265,15 +265,33 @@ GA4 / Plausible / PostHog などはホスティング先を問わず動きます
 
 ```tsx
 "use client";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import Script from "next/script";
 
 export function ConsentBanner({ gaId }: { gaId: string }) {
   const [accepted, setAccepted] = useState(false);
+  const acceptBtnRef = useRef<HTMLButtonElement>(null);
 
   useEffect(() => {
     setAccepted(localStorage.getItem("ga-consent") === "yes");
   }, []);
+
+  // 表示直後にフォーカスを「同意する」ボタンに当てる
+  useEffect(() => {
+    if (!accepted) {
+      acceptBtnRef.current?.focus();
+    }
+  }, [accepted]);
+
+  // Esc キーで閉じる（保留扱い: 同意せず一時的に隠すだけ）
+  useEffect(() => {
+    if (accepted) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setAccepted(true);
+    }
+    window.addEventListener("keydown", onKey);
+    return () => window.removeEventListener("keydown", onKey);
+  }, [accepted]);
 
   const accept = () => {
     localStorage.setItem("ga-consent", "yes");
@@ -291,15 +309,25 @@ export function ConsentBanner({ gaId }: { gaId: string }) {
         </>
       )}
       {!accepted && (
-        <div role="dialog" aria-label="Cookie 同意">
-          <p>このサイトは GA4 で利用状況を計測しています。</p>
-          <button onClick={accept}>同意する</button>
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-labelledby="consent-title"
+          aria-describedby="consent-desc"
+        >
+          <h2 id="consent-title">Cookie 同意</h2>
+          <p id="consent-desc">このサイトは GA4 で利用状況を計測しています。</p>
+          <button ref={acceptBtnRef} type="button" onClick={accept}>
+            同意する
+          </button>
         </div>
       )}
     </>
   );
 }
 ```
+
+> **`aria-modal` と focus 制御の最小三点**: バナー / モーダルとして読み上げてもらうには `aria-modal="true"` と **アクセシブルな名前**（`aria-labelledby` / `aria-label`）の指定、**初期フォーカスを内部の操作対象に当てる**（上の例では「同意する」ボタン）、**Esc で閉じる** の三点が最小ラインです。複雑な focus trap（背後にフォーカスを移さない厳密な実装）まで自前で書くより、本格的な要件は次に説明する CMP に任せるのが現実的です。
 
 実運用では地域判定 / 拒否時の挙動 / 設定リンクなど追加要件があるので、**プロダクションでは CMP を使う** のが現実的。
 
