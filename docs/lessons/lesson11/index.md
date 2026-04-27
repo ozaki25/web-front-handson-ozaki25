@@ -2,15 +2,12 @@
 
 これまで学んだ HTML / CSS を組み合わせて、**自己紹介ページをカードが横並びに並ぶ形まで仕上げます**。さらに、画面幅によって横並びと縦並びが切り替わる「レスポンシブ」対応も入れます。
 
-このレッスンは演習量が多いので **想定時間は 60 分** です。焦らずじっくり手を動かしてください。
-
 ## ゴール
 
 - Flexbox（`display: flex`）で要素を横並びにできる。
 - `gap` / `justify-content` / `align-items` で間隔や揃え方を指定できる。
 - `@media` メディアクエリで「画面幅が狭いときだけ別のスタイルを当てる」ができる。
 - これまでのレッスンの知識を統合して、自己紹介ページを完成させる。
-- **最終成果物（HTML と CSS）を保存しておき、5 章 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとして再利用する準備ができている**。
 
 ## 解説
 
@@ -427,25 +424,25 @@ footer {
 PC 幅（600px より広い）:
 
 <div style="font-family:system-ui, sans-serif; max-width:520px; margin:8px 0;">
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; display:flex; justify-content:space-between;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937; display:flex; justify-content:space-between;">
     <span>ヘッダー: 私の名前</span>
     <span>ナビゲーション</span>
   </div>
   <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0;">
-    <div style="border:1px solid #64748b; padding:12px; background:#fff;">
+    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
       <div style="font-size:0.85em; color:#475569;">カード 1</div>
       <div>画像 / 見出し / 本文</div>
     </div>
-    <div style="border:1px solid #64748b; padding:12px; background:#fff;">
+    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
       <div style="font-size:0.85em; color:#475569;">カード 2</div>
       <div>画像 / 見出し / 本文</div>
     </div>
-    <div style="border:1px solid #64748b; padding:12px; background:#fff;">
+    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
       <div style="font-size:0.85em; color:#475569;">カード 3</div>
       <div>画像 / 見出し / 本文</div>
     </div>
   </div>
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937;">
     フッター: © 私の名前
   </div>
 </div>
@@ -453,14 +450,14 @@ PC 幅（600px より広い）:
 スマホ幅（600px 以下）:
 
 <div style="font-family:system-ui, sans-serif; max-width:220px; margin:8px 0;">
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937;">
     <div>私の名前</div>
     <div>ナビゲーション</div>
   </div>
-  <div style="border:1px solid #64748b; padding:12px; background:#fff; margin-top:8px;">カード 1</div>
-  <div style="border:1px solid #64748b; padding:12px; background:#fff; margin-top:8px;">カード 2</div>
-  <div style="border:1px solid #64748b; padding:12px; background:#fff; margin-top:8px;">カード 3</div>
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; margin-top:8px;">© 私の名前</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 1</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 2</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 3</div>
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937; margin-top:8px;">© 私の名前</div>
 </div>
 
 ### ステップ 1: HTML の骨格を作る

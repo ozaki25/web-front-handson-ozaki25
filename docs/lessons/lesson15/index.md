@@ -1,4 +1,4 @@
-# lesson15: モダン CSS（:has と Container Queries）
+# lesson15: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）
 
 ## ゴール
 
