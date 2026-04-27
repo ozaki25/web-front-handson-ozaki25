@@ -443,7 +443,7 @@ export async function fetchPosts(): Promise<Post[]> {
 
 ### 自分で書く（既存の TODO アプリを継承する）
 
-**「小さなアプリを統合する」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これは **本コースの螺旋反復で「同じ TODO アプリの安全性を一段上げる」** 演習です。
+**「小さなアプリを統合する」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これまでに作った TODO アプリに **同じテーマで一段上の改善を入れる** 演習です。
 
 1. `actions.ts` の冒頭に Zod スキーマを定義:
 
