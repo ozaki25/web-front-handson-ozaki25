@@ -571,7 +571,7 @@ export async function createPost(prev: any, formData: FormData) {
 
 before / after で「Client にバンドルされる JS」が減っていれば成功です（Network タブで JS の合計サイズを見る）。
 
-### 補足: 単独の任意課題
+### 単独の任意課題
 
 - DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
 - React Compiler（lesson126）と組み合わせて、`useMemo` を消した状態で動かす

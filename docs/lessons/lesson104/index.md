@@ -62,7 +62,7 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 
 普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
 
-#### 補足: `optionalDependencies` / `bundledDependencies`
+#### `optionalDependencies` / `bundledDependencies`
 
 たまに見かけますが、めったに使いません。`optionalDependencies` は「入らなくても続行」、`bundledDependencies` は「自分のパッケージに同梱」。
 

@@ -185,7 +185,7 @@ export function ClientView() {
 
 本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
 
-### 補足: 環境ごとに値を分ける（Production / Preview / Development）
+### 環境ごとに値を分ける（Production / Preview / Development）
 
 Vercel など主要なホスティングでは、環境変数を **Production / Preview / Development の 3 つ** に分けて設定できます。実務ではこの 3 つに **別々の値** を入れるのが定石です。
 

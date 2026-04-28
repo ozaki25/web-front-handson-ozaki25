@@ -91,7 +91,7 @@ Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / 
 
 「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
 
-### 補足: Lighthouse タブで Core Web Vitals を測る
+### Lighthouse タブで Core Web Vitals を測る
 
 Performance タブの録画は **詳細を追える代わりに見方を覚える必要** があります。最初に手を出すべきは Performance タブの隣にある **Lighthouse タブ** です。`Analyze page load` を押すだけで、ページに対して点数とレポートが出ます。
 

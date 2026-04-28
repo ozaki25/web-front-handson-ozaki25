@@ -475,7 +475,7 @@ export default function CompiledComponent() { /* ... */ }
 
 これが「Compiler が効いている」直接的な証拠になります。手元に成果物がない場合は、`useMemo` を多用した小さいリスト + フィルタの例を新規に作って試します。
 
-### 補足: 単独の任意課題
+### 単独の任意課題
 
 - `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
 - ベンチマーク（lesson101 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る

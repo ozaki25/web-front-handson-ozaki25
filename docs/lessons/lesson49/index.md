@@ -300,7 +300,7 @@ for (const item of items) {
 
 それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
 
-### 補足: `Todo` 型は別のレッスンでも使い回す
+### `Todo` 型は別のレッスンでも使い回す
 
 `src/types.ts` に書いた `Todo` 型と、派生させた `TodoDraft` / `TodoSummary` は、別のレッスンでも `import type` して再利用します。
 

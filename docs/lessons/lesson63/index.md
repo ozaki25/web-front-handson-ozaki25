@@ -200,7 +200,7 @@ export default App;
 - ブラウザ側で `fetch` を `useEffect` で呼ぶパターンは、競合状態、ローディング、エラー管理など罠が多いので、本コースでは扱いません。データ取得は 5 章（Next.js）の **Server Component** にサーバー側 `fetch` としてまとめます
 - 別のレッスン **「TODO アプリを React で作る」** では、`useEffect` を **localStorage への保存** に使います（依存配列に `todos` を渡す形）。2 章 の「TODO アプリを作る」で作った「リロードしても消えない TODO」を、React 版でも取り戻します
 
-### 補足: 開発時に effect が 2 回呼ばれる（StrictMode）
+### 開発時に effect が 2 回呼ばれる（StrictMode）
 
 `npm run dev` で動かすと、`mounted: 初期タイトルをセット` の console.log が **2 回** 出ることがあります。これは Vite / Next.js のテンプレが既定で **`<React.StrictMode>` でアプリを包んでいる** ためで、開発中にだけ effect が **マウント → クリーンアップ → 再マウント** の順で走ります。「クリーンアップ漏れ」「同じ API を 2 回叩いてしまう書き方」を早期に気づかせるための仕組みで、**バグではありません**。
 

@@ -143,7 +143,7 @@ console.log(title.textContent);    // 元のテキストを読む
 title.textContent = "書き換えました"; // 書き換える
 ```
 
-### 補足: HTML ごと読み書きする `innerHTML`
+### HTML ごと読み書きする `innerHTML`
 
 `textContent` は「ただの文字列」として扱いますが、**HTML タグとして解釈しながら** 中身を読み書きしたいときは `innerHTML` を使います。
 
@@ -190,7 +190,7 @@ box.classList.toggle("active");   // あれば消す、なければ付ける
 
 CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
 
-### 補足: 属性の読み書き `getAttribute` / `setAttribute` / `removeAttribute`
+### 属性の読み書き `getAttribute` / `setAttribute` / `removeAttribute`
 
 HTML タグの **属性**（`href` / `src` / `alt` / `disabled` など）を読み書きします。
 
@@ -215,7 +215,7 @@ img.alt = "写真";
 - 標準的な HTML 属性 → プロパティ経由で OK（`link.href` / `img.src` / `input.disabled`）
 - `data-*` など自作の属性 → `getAttribute` / `setAttribute`、または後述の `dataset`
 
-### 補足: フォームの値 `.value` / `.checked`
+### フォームの値 `.value` / `.checked`
 
 `<input>` / `<textarea>` / `<select>` の値は `.value` で読み書きします。チェックボックスやラジオの入り切りは `.checked` です。
 
@@ -232,7 +232,7 @@ agreeCheckbox.checked = true;         // プログラムからチェックを入
 
 `<input type="number">` でも `.value` は **文字列** で返ります。数値として扱いたい場合は `Number(nameInput.value)` のように変換します。
 
-### 補足: インラインスタイル `element.style`
+### インラインスタイル `element.style`
 
 JS から直接スタイルを当てる場合は `element.style.プロパティ` を使います。CSS のプロパティ名は **キャメルケース** になります（`background-color` → `backgroundColor`）。
 
@@ -246,7 +246,7 @@ box.style.padding = "12px";
 
 ただし、**見た目の切り替えは基本的に CSS 側でクラスを用意して `classList.toggle` する方が保守しやすい** です。`element.style` は、CSS では表現しにくい値（マウス位置に応じた座標や、ドラッグ中の一時的な幅など）を JS から直接計算して当てたいときに使うのが定番です。
 
-### 補足: データ属性 `dataset`
+### データ属性 `dataset`
 
 HTML の `data-*` 属性は、DOM 要素に **任意のデータをぶら下げる** ための標準的な方法です。JS からは `dataset` 経由で読み書きできます。
 
@@ -293,7 +293,7 @@ button { margin-right: 6px; padding: 6px 12px; }
   :js="demoJs"
 />
 
-### 補足: 要素を作って追加 `createElement` / `appendChild`
+### 要素を作って追加 `createElement` / `appendChild`
 
 新しい要素を作って、既存の要素の子として追加します。
 
@@ -313,7 +313,7 @@ ul.appendChild(li);
 
 この「作る → テキストを入れる → 追加する」の流れは、以降のレッスンで繰り返し使います。
 
-### 補足: 要素を削除する `element.remove()`
+### 要素を削除する `element.remove()`
 
 取得した要素を DOM から消すには、その要素自身の `remove()` を呼びます。
 
@@ -326,7 +326,7 @@ item.remove();   // DOM ツリーから取り除く
 
 削除された要素はページから消えますが、JS の変数にまだ保持している場合は `appendChild` で再度ツリーに戻すこともできます。ただし、この使い方は混乱しやすいので、削除したら忘れる方が安全です。
 
-### 補足: ツリーをたどる `parentElement` / `children` / `nextElementSibling`
+### ツリーをたどる `parentElement` / `children` / `nextElementSibling`
 
 最初に紹介した「親 / 子 / 兄弟」の関係は、JS からも辿れます。
 

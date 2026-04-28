@@ -117,7 +117,7 @@ function App() {
 - `ref` を普通の props として受け取って、中の `<input>` に渡すだけ
 - 型は `react` から `Ref<HTMLInputElement>` を `import type` で取る
 
-### 補足: `useRef` の型と `RefObject<T | null>`
+### `useRef` の型と `RefObject<T | null>`
 
 `useRef<HTMLInputElement>(null)` の戻り値の型は `RefObject<HTMLInputElement | null>` です（React 19 で型定義が整理されました）。`current` プロパティは `HTMLInputElement | null` 型なので、**読むときに必ず null チェックが要る** のはこのためです。
 

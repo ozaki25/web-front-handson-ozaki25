@@ -124,7 +124,7 @@ export const metadata: Metadata = {
 
 最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
 
-### 補足: OG 画像 / canonical / robots（実務 SEO 三点セット）
+### OG 画像 / canonical / robots（実務 SEO 三点セット）
 
 公開サイトでは次の 3 つを揃えるのがほぼ必須です。
 

@@ -64,7 +64,7 @@ export default function RootLayout({
 
 本レッスンではこのデフォルトをそのまま使います。`display` を明示する必要はありません。
 
-### 補足: フォント差し替え時の CLS と `next/font` の自動対策
+### フォント差し替え時の CLS と `next/font` の自動対策
 
 「読込中はシステムフォント → 届いたら Web フォント」と差し替わるとき、文字幅の差で **要素の高さや改行位置がずれて画面がガタッと動く** ことがあります。これは Core Web Vitals の **CLS**（Cumulative Layout Shift）として計測される、SEO 上もマイナスの現象です。
 
