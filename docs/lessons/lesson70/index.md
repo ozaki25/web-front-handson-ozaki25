@@ -172,7 +172,7 @@ export default function TodosPage() {
 </html>
 ```
 
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx`（別のレッスンで扱います）が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
+これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx` が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
 
 `app/about/page.tsx`:
 

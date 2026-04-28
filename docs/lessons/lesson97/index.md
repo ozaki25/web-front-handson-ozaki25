@@ -40,12 +40,7 @@
 
 ピラミッドの考え方は **「下が広く、上が狭い」** です。ユニットを多く書き、E2E は最重要パスだけに絞ります。E2E は「ログイン → 商品購入」のような **失敗するとビジネス的に致命的な経路** に投資する、というのが 2026 年の定番です。
 
-本レッスンと別のレッスンで、上から下まで順に触っていきます:
-
-- 本レッスン: **Vitest でユニットテスト** — 純粋関数のテスト
-- **コンポーネントテスト — React Testing Library** で UI 要素を検査
-- **API モック — MSW** で fetch を差し替えてテスト
-- **E2E テスト — Playwright** でブラウザ越しの最重要パスを検証
+本レッスンでは **Vitest でユニットテスト**（純粋関数のテスト）を扱います。コンポーネントテスト（Testing Library）、API モック（MSW）、E2E（Playwright）はそれぞれ別の章で扱います。
 
 ### Vitest とは
 
@@ -91,7 +86,7 @@ export default defineConfig({
 - `npm run test`: **watch モード** で起動。ファイル変更を検知して再実行
 - `npm run test:run`: 1 回だけ実行（CI 用）
 
-> **CI で動かす最小例**: GitHub Actions なら `.github/workflows/test.yml` に下記を置くだけで PR / push 時に毎回テストが走ります。詳細は別のレッスン「GitHub Actions とは」で扱います。
+> **CI で動かす最小例**: GitHub Actions なら `.github/workflows/test.yml` に下記を置くだけで PR / push 時に毎回テストが走ります。
 >
 > ```yaml
 > name: test

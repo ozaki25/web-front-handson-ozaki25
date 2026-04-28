@@ -266,7 +266,7 @@ btn.dataset.todoId = "99";                  // 書き換えも可能
 - `data-todo-id` → `dataset.todoId`（ケバブケース → キャメルケース変換）
 - **値は常に文字列** として扱われるため、数値として使いたい場合は `Number(btn.dataset.todoId)` で変換する
 
-ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。イベントと組み合わせる例は別のレッスンで扱います。
+ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。
 
 下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
 
@@ -508,7 +508,7 @@ list.appendChild(newLi);
 ### 変える
 
 - `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
-- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する（別のレッスンでクリックに結び付ける）
+- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する
 - `items` に要素を 2 つ足して、リストが 8 行になることを確認
 - `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
 - `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認

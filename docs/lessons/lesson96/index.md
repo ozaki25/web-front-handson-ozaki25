@@ -209,7 +209,7 @@ Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストール
 ### 自分で書く
 
 - `@axe-core/playwright` を使った E2E a11y テストのサンプルを読んで、雰囲気を掴む（実装は「テスト入門」で Playwright を導入するレッスンと合わせて）
-- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン（7 章「ESLint / Prettier / Biome」のレッスンで扱う予定）
+- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン
 
 ## まとめ
 

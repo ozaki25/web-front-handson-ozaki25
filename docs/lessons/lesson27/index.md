@@ -120,7 +120,7 @@ const loaded = saved === null ? [] : JSON.parse(saved);
 console.log(loaded[0].text); // "牛乳を買う"
 ```
 
-このパターンは TODO アプリや下書き保存などで頻繁に登場します。`JSON.stringify` / `JSON.parse` の詳細は別のレッスン「JSON を読み書きする」、`try` / `catch` の詳細は別のレッスン「try / catch でエラー処理」で扱います。今は「**配列を保存するなら `JSON.stringify`、取り出すなら `JSON.parse`**」というパターンだけ覚えておけば本レッスンの演習はこなせます。
+このパターンは TODO アプリや下書き保存などで頻繁に登場します。今は「**配列を保存するなら `JSON.stringify`、取り出すなら `JSON.parse`**」というパターンだけ覚えておけば本レッスンの演習はこなせます。
 
 ### 失敗しうる場所
 

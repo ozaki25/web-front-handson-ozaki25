@@ -300,16 +300,6 @@ for (const item of items) {
 
 それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
 
-### `Todo` 型は別のレッスンでも使い回す
-
-`src/types.ts` に書いた `Todo` 型と、派生させた `TodoDraft` / `TodoSummary` は、別のレッスンでも `import type` して再利用します。
-
-- 「コンポーネントと props」のレッスン: コンポーネントに型付き `props` を渡すときの `types.ts` として再登場
-- 「配列を描画する」のレッスン: 配列描画の題材として `Todo[]` をそのまま渡す
-- 「TODO アプリを React で作る」のレッスン: 型の基盤としてそのまま使う
-
-StackBlitz のプロジェクトを作り直しても、`types.ts` の中身はコピーして持っていくのが基本です。
-
 ### コラム: その他の Utility Types
 
 `Readonly<T>` / `Record<K, V>` / `Omit<T, K>` / `Required<T>` などは本コースでは扱いません。必要な場面に出会ったら TS 公式ドキュメント（<https://www.typescriptlang.org/docs/handbook/utility-types.html>）の該当項目を読めば、基本の使い方はすぐ身につきます。Utility Types はどれも「既にある型から別の型を作る」という同じ考え方の延長線上にあります。

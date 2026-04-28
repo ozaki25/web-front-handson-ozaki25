@@ -321,7 +321,7 @@ type FetchResult<T> =
   | { kind: "error"; message: string };
 ```
 
-- この `FetchResult` は別のレッスンで学ぶジェネリクスを先取りしている形。`T` にどんな型を入れても使える。
+- この `FetchResult` はジェネリクスの形。`T` にどんな型を入れても使える。
 - `function render(r: FetchResult<string>): string` を書き、`"idle"` は `"待機中"`、`"loading"` は `"読み込み中"`、`"success"` は `data` をそのまま、`"error"` は `message` を返すようにする。
 - `default:` で `const _: never = r;` の網羅性チェックを付ける。
 

@@ -119,8 +119,6 @@ Expected 2 arguments, but got 1.
 Expected 2 arguments, but got 3.
 ```
 
-省略できる引数を作る方法は「配列・ユニオン・リテラル型・オプショナル」でオプショナルプロパティと合わせて扱います。
-
 ## 演習
 
 ### 途中から始める場合

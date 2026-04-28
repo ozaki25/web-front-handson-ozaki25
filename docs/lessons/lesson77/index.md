@@ -61,9 +61,9 @@ const target = posts.find((p) => p.id === id);
 1. 一覧を `fetch` で全部取ってくる（Server Component）。
 2. `await params` で URL の `id` を取り出す。
 3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは 404 を返す（別のレッスンで扱います）。
+4. 見つからないときは 404 を返す。
 
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作り、「見つからなかったときの 404 表示」は別のレッスンで扱います。
+この段階ではシンプルに「一覧から `find` で取り出して表示」までを作ります。
 
 ### 実務では「単件 fetch」が原則
 
@@ -213,7 +213,7 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 - `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
 - `await params` してから `id` を取り出します。
 - `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。正式な 404 ページは別のレッスンで扱います。
+- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。
 
 ### 期待出力
 
@@ -243,4 +243,3 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 - `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
 - Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
 - 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
-- クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

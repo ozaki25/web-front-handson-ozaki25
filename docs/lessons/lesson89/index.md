@@ -127,7 +127,7 @@ Set-Cookie: session=abc123; HttpOnly
 
 Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページをリロード → 一覧から 1 行クリックすると、Headers / Payload / Preview / Response / Timing の各パネルで詳細が見られます。
 
-この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。別のレッスンで DevTools の各タブを詳しく扱うので、本レッスンの演習は DevTools の入り口までで十分です。
+この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。
 
 ## 演習
 
@@ -187,7 +187,7 @@ curl -v https://jsonplaceholder.typicode.com/posts/1
 ### 自分で書く
 
 - DevTools の Network タブで、最近よく見るサイト（自分のポートフォリオ・ブログ等）を開き、**1 つの HTML ページを開くときにいくつのリクエストが発生しているか** を数えてみる
-- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンスで、別のレッスンで仕組みを扱う
+- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンス
 
 ## まとめ
 

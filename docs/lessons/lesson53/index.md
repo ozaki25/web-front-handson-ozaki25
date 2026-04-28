@@ -149,7 +149,7 @@ export function Greeting({ name, age, children }: GreetingProps) {
 - **コンポーネント名は必ず大文字始まり**（`Greeting` / `Card`）。小文字で書くと JSX が通常の HTML タグとして解釈されてしまう
 - `export function ...` で名前付きエクスポートするのが本コースの基本形
 
-`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。条件表示の詳しい話は「条件で出し分ける」で扱います。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
+`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
 
 ## 演習
 

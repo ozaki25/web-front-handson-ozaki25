@@ -51,7 +51,7 @@ function Hello() {
 }
 ```
 
-この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。JSX の詳しい書き方は別のレッスンで扱います。
+この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。
 
 ### Vite / npm / `package.json` の最低限
 
@@ -149,7 +149,7 @@ function App() {
 export default App;
 ```
 
-`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です（詳しくは別のレッスン）。
+`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です。
 
 ### 期待出力
 

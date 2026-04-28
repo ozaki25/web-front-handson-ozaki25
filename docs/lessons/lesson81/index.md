@@ -318,7 +318,6 @@ export async function OPTIONS() {
 
 - **同一オリジン**（自分のサイト内）から叩く場合は CORS 設定は不要（`fetch("/api/todos")` で動く）
 - **別オリジンから Cookie を送りたい** 場合は `Access-Control-Allow-Credentials: true` と、`Access-Control-Allow-Origin: *` ではなく **特定オリジンの明示** が必要
-- 詳しくは別のレッスン **「CORS の詳細」** で扱います
 
 ## まとめ
 

@@ -4,7 +4,7 @@
 
 - ここまでの知識を統合して「投稿できる TODO アプリ」の主要機能を組み上げます。
 - `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
-- `export const metadata` でサイト共通タイトルを設定できます（**動的タイトル / OGP は「Metadata API で SEO を整える」のレッスンで詳しく扱います**）。
+- `export const metadata` でサイト共通タイトルを設定できます。
 - `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
 
 ## 解説
@@ -28,10 +28,6 @@
 2. 一覧からの削除ボタン
 3. ルートレイアウトの `metadata`（サイト共通の静的タイトル）
 4. `/todos?highlight=<id>` のハイライト表示（`searchParams` の初登場）
-
-::: tip 動的タイトル（generateMetadata）と OGP は別レッスンで
-詳細ページ用の **`generateMetadata`** や OGP（`openGraph`）の細かい指定は **「Metadata API で SEO を整える」** のレッスンで深掘りします。本レッスンでは synthesis の集中度を保つため、ルートレイアウトの **静的 `metadata`** のみ扱います。
-:::
 
 ### `export const metadata`（静的）
 
@@ -88,7 +84,7 @@ export default async function TodosPage({
 - インスタンスが**複数並行**で動くと、ユーザー A が追加した TODO がユーザー B のインスタンスには見えない
 - **コールドスタート**でインスタンスが落ちると配列ごと消える
 
-実務では **DB**（Postgres / SQLite / D1 など）や **KV**（Vercel KV / Upstash）、ユーザー単位なら `cookies()` 経由のセッションに永続化します。本コースでは概念に集中するため in-memory のままですが、デプロイの章で扱うときは「永続化を別のレッスンで足す」と前提を切り替えます。
+実務では **DB**（Postgres / SQLite / D1 など）や **KV**（Vercel KV / Upstash）、ユーザー単位なら `cookies()` 経由のセッションに永続化します。本コースでは概念に集中するため in-memory のままです。
 
 ## 演習
 
@@ -476,7 +472,7 @@ export default async function TodoDetailPage({
 
 - 見つからないときは `notFound()` を呼びます（「エラーと見つからないページ」と同じです）。
 - `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
-- 詳細ページの **動的タイトル**（`generateMetadata`）は「Metadata API で SEO を整える」のレッスンで扱います。ここではブラウザのタブが共通の「TODO アプリ」のままで OK です。
+- ここではブラウザのタブが共通の「TODO アプリ」のままで OK です。
 
 ### 手順 5: 詳細ページの `not-found.tsx`
 
@@ -535,7 +531,7 @@ export const metadata = {
 ### 変えてみる
 
 1. `<input type="hidden" name="id">` の値を書き換えて送信してみましょう（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認します。
-2. ルートレイアウトの `metadata.title` を `{ default: "TODO アプリ", template: "%s | TODO アプリ" }` に変えると、子ページで `metadata.title` を設定したときに自動でサフィックスが付きます。「Metadata API で SEO を整える」のレッスンで詳しく扱います。
+2. ルートレイアウトの `metadata.title` を `{ default: "TODO アプリ", template: "%s | TODO アプリ" }` に変えると、子ページで `metadata.title` を設定したときに自動でサフィックスが付きます。
 3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習です。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲みます。
 
 ### 自分で書く（応用）

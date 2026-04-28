@@ -224,9 +224,9 @@ export default App;
 - ヒント: `const evens = useMemo(() => BIG_NUMBERS.filter((n) => n % 2 === 0), []);`
 - `BIG_NUMBERS` は固定なので依存配列は `[]` で OK
 
-### 「React DevTools」への前振り
+### React DevTools Profiler
 
-「本当にスキップされているか」を React DevTools Profiler で計測する方法は、「React DevTools」で扱います。
+「本当にスキップされているか」は React DevTools Profiler で計測できます。
 
 ## まとめ
 

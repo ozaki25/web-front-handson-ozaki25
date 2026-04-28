@@ -160,7 +160,7 @@ export const metadata: Metadata = {
 - **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
 - **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
 
-実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。詳しくは別のレッスン「OGP と SEO 実践」で扱います。
+実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
 
 ### favicon / apple-touch-icon は **ファイル配置だけで OK**
 

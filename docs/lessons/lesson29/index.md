@@ -62,7 +62,7 @@ console.log("C");
 
 本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
 
-> **補足: 本レッスンで Promise を返すのは `wait(ms)` だけ**: 「Promise を返す処理」がどれかを今この時点で見分ける必要はありません。本レッスンの演習では `wait(ms)` 1 つだけが Promise を返すと覚えれば十分で、`fetch` などは別レッスン「fetch でデータを取る」で再登場します。
+> **補足: 本レッスンで Promise を返すのは `wait(ms)` だけ**: 「Promise を返す処理」がどれかを今この時点で見分ける必要はありません。本レッスンの演習では `wait(ms)` 1 つだけが Promise を返すと覚えれば十分です。
 
 ### `async` / `await`
 
@@ -105,7 +105,7 @@ function wait(ms) {
 
 ### 次への橋渡し
 
-**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば別のレッスンで出てくる `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
 
 「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 

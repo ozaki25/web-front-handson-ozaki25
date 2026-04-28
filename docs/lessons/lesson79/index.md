@@ -28,7 +28,7 @@ React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React 
 `<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
 
 - クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
-- 戻り値はありません（あっても無視されます。戻り値を使いたいときは別のレッスンの `useActionState`）。
+- 戻り値はありません（あっても無視されます。戻り値を使いたいときは `useActionState` を使います）。
 - 関数は **必ず `async`** です。
 
 ### `"use server"` の配置ルール
@@ -206,7 +206,7 @@ export async function addTodo(formData: FormData): Promise<AddTodoResult> {
 - `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
 - `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
 - `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
-- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体**（discriminated union） そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。この型は別のレッスンで `useActionState` と結合するとき効きます。
+- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体**（discriminated union） そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。
 
 ### 手順 3: `/todos` を本物のページにする
 
@@ -258,7 +258,7 @@ export default async function TodosPage() {
 
 ### スコープ外
 
-- 送信中のボタン無効化、空入力エラー表示は 別のレッスン で追加します。本レッスンでは最小形に集中します。
+- 送信中のボタン無効化、空入力エラー表示は本レッスンでは扱いません。最小形に集中します。
 - `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
 
 ### 自分で書く

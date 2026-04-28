@@ -300,7 +300,7 @@ Next.js の App Router では **Server Component が直接 DB を叩ける**（`
 - 初期表示は **Server Component が直接 DB / 外部 API**
 - 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
 
-「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代。Server Actions / Server Components の詳細は別のレッスン「Server Component と Client Component」「Server Actions の最小形」「Server Components の設計論」で扱います。
+「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代です。
 
 ### よくある質問
 
