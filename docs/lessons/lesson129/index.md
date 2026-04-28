@@ -387,7 +387,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
 ```
 
-`app/layout.tsx` に Script を追加（前述の最小例の通り）。
+`app/layout.tsx` に Script を追加（「Next.js に追加（最小）」で示したコードの通り）。
 
 ### 手順 4: カスタムイベントを送るボタン
 

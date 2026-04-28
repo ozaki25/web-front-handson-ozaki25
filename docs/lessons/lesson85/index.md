@@ -175,7 +175,7 @@ export default function Page() {
 - `text-3xl`（フォントサイズ）、`font-bold`（太字）
 - `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
 
-1 章 で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが見えると思います。本コースで CSS の仕組みを先に押さえたのが効いてきます。
+1 章で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが分かります。本コースで CSS の仕組みを先に押さえたのが効いてきます。
 
 ### 期待出力
 

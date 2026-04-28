@@ -147,7 +147,7 @@ import { add } from "./math";
 <details>
 <summary>出発点のコード</summary>
 
-これは **新規 StackBlitz から始める方向け** の最小スターターです（直前レッスンの完成形を厳密に再現したものではないため、内容は import / export の題材練習用に絞っています）。
+これは **新規 StackBlitz から始める方向け** の最小スターターです（「Web Storage で値をブラウザに保存する」レッスンの完成形を厳密に再現したものではないため、内容は import / export の題材練習用に絞っています）。
 
 **`index.html`**
 

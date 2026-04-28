@@ -14,7 +14,7 @@
 - `<label for>` ではなく `<label>` で囲む 2 つ目の書き方（参考）
 - `placeholder` の使い分け / `autocomplete`
 
-**まずは上の 3 つだけ覚えれば十分** です。バリデーションは React 章の React Hook Form や Zod で再訪します。
+**まずは上の 3 つだけ覚えれば十分** です。バリデーションは React Hook Form や Zod のレッスンで扱います。
 
 ## 解説
 
@@ -60,7 +60,7 @@
 
 ### `<button>`
 
-ボタン。フォームの中に置いた `<button>` は、既定でフォームを送信する動きになります（後のレッスンで詳しく扱う）。
+ボタン。フォームの中に置いた `<button>` は、既定でフォームを送信する動きになります（「イベントで画面を動かす」のレッスンで詳しく扱います）。
 
 ```html
 <button type="submit">送信</button>
@@ -241,7 +241,7 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 
 </details>
 
-### 前レッスンの状態から始める
+### これまで作ったプロジェクトを使う
 
 これまでのプロジェクトを開きます。`<main>` の中にセクションが 4 つ並び、`<header>` / `<footer>` が付いた状態です。
 
