@@ -478,4 +478,3 @@ export const POST = yoga;
 - **どれが正解** ではなく、プロジェクトとチームに合わせて選ぶ
 - 共存（外向き REST + 内向き tRPC）も実用解
 - Next.js App Router の **Server Components / Server Actions** が「API すら不要」の選択肢として加わった
-- 別のレッスンでは **Service Worker / PWA 深掘り** に進み、オフライン対応を見る

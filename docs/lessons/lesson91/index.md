@@ -184,4 +184,3 @@ curl -I https://jsonplaceholder.typicode.com/posts/1 \
 - `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
 - 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
 - DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く
-- 別のレッスンで、複数のリクエストを同時に投げる時に効いてくる **同時接続数と HTTP/2 / HTTP/3** の話に進む

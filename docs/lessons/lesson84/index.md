@@ -552,7 +552,7 @@ TODO に「完了」のフラグを追加する演習です。
 ## まとめ
 
 - `/todos` 一覧、`/todos/[id]` 詳細、`/about` 自己紹介、の 3 本柱が繋がりました。
-- ルートレイアウトの `metadata` でサイト共通のタブタイトルを設定しました（動的タイトル / OGP は「Metadata API で SEO を整える」で扱います）。
+- ルートレイアウトの `metadata` でサイト共通のタブタイトルを設定しました。
 - `PageProps<"/todos">` で URL クエリ（`searchParams`）を受け取り、`await` してから条件付きスタイルに反映できます。
 - 2 章 の TODO（素の JS）→ 4 章 の「TODO アプリを React で作る」（React + localStorage）→ 本レッスン（Next.js + Server Actions）と、**同じ TODO アプリが 3 回進化** しました。
 - 「Vercel にデプロイする」では、今作ったアプリを **Vercel で公開** します。StackBlitz → GitHub → Vercel の流れを踏みます。

@@ -417,4 +417,3 @@ export default function Dashboard() {
 - A/B テストはフラグの仲間。SaaS は両方こなす
 - フラグは増える → **寿命を管理して定期清掃**
 - Server / Edge で評価して **クライアントのチラつき** を避ける
-- 別のレッスンでは **CSP（Content-Security-Policy）実践** に進み、セキュリティヘッダで XSS を防ぐ実装を学ぶ

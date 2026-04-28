@@ -453,4 +453,3 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 - **Trusted Types** で `innerHTML = userInput` を型レベルで禁止
 - CSP と一緒に **STS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / COOP / COEP** も設定する
 - CSP Evaluator / Mozilla Observatory で診断
-- 別のレッスンでは **CORS** に進み、API 越しのアクセス制御へ

@@ -413,4 +413,3 @@ export default function App() {
 - 既存 ESLint 資産を活かすなら **Biome（基本）+ ESLint**（型情報を要するルール） のハイブリッド
 - `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
 - Husky + lint-staged で commit 時の自動 Lint / Format
-- 別のレッスンでは **モダン CSS** に進む

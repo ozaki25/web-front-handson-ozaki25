@@ -579,4 +579,3 @@ form button:focus {
 - `absolute` は最も近い `relative` / `absolute` / `fixed` の祖先を基準に浮く。
 - `fixed` は画面（ビューポート）を基準に固定。スクロールしても動かない。
 - `z-index` で前後の重なりを制御できる（`position` が `static` 以外のときだけ効く）。
-- 別のレッスンで、`:hover` で色や位置をなめらかに変化させる `transition` を学ぶ。1 章 の締めで、自己紹介ページに動きを足す。

@@ -341,4 +341,3 @@ dist/
 - **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
 - Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
 - Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意
-- 別のレッスンでは画像 / フォントの最適化に進む（**LCP の最重要要因**）

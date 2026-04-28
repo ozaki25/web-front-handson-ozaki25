@@ -442,4 +442,3 @@ export default function App() {
 - エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
 - `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
 - `isSubmitting` で送信中の UI 制御
-- 別のレッスンでは **Zod** で型安全な複雑バリデーションに進み、サーバーとの連携も統一する

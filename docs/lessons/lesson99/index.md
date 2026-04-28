@@ -419,4 +419,3 @@ npm run test
 - テストごとに `server.use(...)` でハンドラを上書きできる
 - `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
 - `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知
-- 別のレッスンでは **Playwright で E2E テスト** に進む。MSW は E2E でも同じハンドラを使い回せる

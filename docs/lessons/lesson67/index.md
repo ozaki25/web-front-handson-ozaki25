@@ -608,5 +608,3 @@ const [settings, setSettings] = useState<Settings>({ showCount: true });
 - 3 章 の `Todo` 型を `import type` して、props にも state にも使っています
 - `useState` の初期値関数で **localStorage 書き戻しバグ** を避けました
 - オブジェクト state のイミュータブル更新（`prev => ({ ...prev, ... })`）を体験しました
-
-本レッスンの成果物（`App.tsx` / `TodoInput.tsx` / `TodoList.tsx` / `TodoItem.tsx` / `types.ts`）は、別のレッスン「Server Actions の最小形」で Server Actions 版に書き換えるときの **出発点** になります。StackBlitz のプロジェクトは残しておくか、ローカルにコピーしておきましょう。

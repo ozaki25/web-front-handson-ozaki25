@@ -243,5 +243,4 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 - `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
 - Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
 - 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
-- 見つからない場合の「正しい 404 ページ」は別のレッスンで扱います。
 - クエリ文字列（`?key=value`）を受け取る `searchParams` は「小さなアプリを仕上げる」で初登場します。

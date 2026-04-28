@@ -333,4 +333,3 @@ SyntaxError <壊れた JSON のメッセージ>
 - `Error` オブジェクトは `name` / `message` / `stack` を持つ
 - `throw new Error("...")` で自分でもエラーを投げられる
 - 外部データ（`localStorage` / `fetch` の結果 / ユーザー入力）を扱う場所は、ほぼ例外なく `try` / `catch` で囲む
-- 別のレッスン「JSON を読み書きする」で、壊れた JSON を扱うパターンをもっと実践的に練習する

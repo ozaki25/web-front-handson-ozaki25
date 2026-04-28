@@ -406,4 +406,3 @@ npm run dev
 - **Refresh Token** で Access Token を短命に保つ
 - **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
 - **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
-- 別のレッスンでは **WebSocket / SSE** に進み、リアルタイム通信の選択肢を広げる

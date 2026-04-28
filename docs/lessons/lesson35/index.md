@@ -544,4 +544,3 @@ render();
 - 追加は `[...todos, newTodo]`、削除は `todos.filter((t) => t.id !== id)` のようにイミュータブルに書く
 - `localStorage` は文字列しか保存できないので `JSON.stringify` / `JSON.parse` を使う
 - `JSON.parse` は失敗しうるので `try` / `catch` で囲む
-- **この TODO アプリは4 章 の「TODO アプリを React で作る」で React 版に進化し、5 章 の「Server Actions の最小形」以降で Server Actions を使った Next.js 版になる**。今の最終形を StackBlitz に保存しておく

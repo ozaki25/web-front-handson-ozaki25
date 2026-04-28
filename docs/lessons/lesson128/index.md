@@ -425,4 +425,3 @@ npm run dev
 - `release` / `environment` で **退行**（regression） を可視化
 - **Breadcrumbs** と **Session Replay** で再現が容易になる
 - 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
-- 別のレッスンでは **Vercel Analytics と GA4** に進み、ユーザー行動とパフォーマンスの計測へ

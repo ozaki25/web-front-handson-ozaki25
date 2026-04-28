@@ -417,4 +417,3 @@ git config core.hooksPath .githooks
 - 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
 - **起動時に Zod で env を検証** すると、設定漏れに早く気づける
 - 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める
-- 別のレッスンでは **Content-Security-Policy**（CSP） に進み、ブラウザ側のセキュリティを締める

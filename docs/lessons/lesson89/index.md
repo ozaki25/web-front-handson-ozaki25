@@ -197,4 +197,3 @@ curl -v https://jsonplaceholder.typicode.com/posts/1
 - メソッドは `GET` / `POST` / `PUT` / `DELETE` を基本に、冪等性を意識して使う
 - ステータスコードは 2xx / 3xx / 4xx / 5xx で大分類。細かい違い（401 vs 403 など）は都度覚える
 - ヘッダには `Host` / `User-Agent` / `Accept` / `Content-Type` / `Cache-Control` / `Set-Cookie` などがあり、DevTools の Network タブで実物を観察できる
-- 別のレッスンで、その **DevTools の各タブ** を読み方から押さえる

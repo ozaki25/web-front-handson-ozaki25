@@ -286,4 +286,3 @@ end
 - 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
 - `async` 関数の中で `await Promise` すると、結果が返るまで待てる
 - `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
-- **戻り値が Promise の関数・メソッドには `await` が必要**。別のレッスンの `fetch` / `response.json()` で実例を扱う

@@ -208,4 +208,3 @@ Vercel など主要なホスティングでは、環境変数を **Production / 
 - **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
 - シークレットには絶対に `NEXT_PUBLIC_` を付けない
 - `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない
-- 本番（Vercel）での設定は「Vercel にデプロイする」で扱う

@@ -433,4 +433,3 @@ function useCounter(initial: number): {
 - state のロジックだけを切り出して、UI 側を身軽にできる
 - 2 章 の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
 - フックのルールは 2 つ: トップレベルで呼ぶ / React 関数（コンポーネントまたはフック）の中でだけ呼ぶ
-- localStorage 連携は別のレッスン「TODO アプリを React で作る」で扱う

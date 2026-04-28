@@ -329,4 +329,3 @@ clearBtn.addEventListener("click", clearMemo);
 - 3 つの基本 API: `setItem` / `getItem`（未保存は `null`）/ `removeItem`
 - 失敗するケース（容量オーバー、プライベートブラウジング、壊れた JSON）を `try` / `catch` で吸収する
 - Cookie は実務ではサーバー側が管理するのが主流。クライアントで扱う保存は Web Storage が基本
-- 別のレッスンで、URL と History API を使って「ページ内状態を URL にも反映する」方法を学ぶ

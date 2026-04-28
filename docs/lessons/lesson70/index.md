@@ -473,5 +473,3 @@ export default function Page() {
 - ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
 - 1 章 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
-- 別のレッスンで、ヘッダーやフッターの繰り返しを `layout.tsx` にまとめます。
-- ここで使った `<img src="https://placehold.co/...">` は、**5 章 の「next/image で画像最適化」で Next.js の `<Image>` コンポーネントに差し替えます**。画像の自動最適化（遅延読み込み・サイズ最適化・WebP 変換）と `remotePatterns` の設定もそこで扱います。

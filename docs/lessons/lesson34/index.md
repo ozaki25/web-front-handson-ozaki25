@@ -364,4 +364,3 @@ form.addEventListener("submit", (event) => {
 - `要素.addEventListener("click", 関数)` でクリックに反応する
 - フォーム送信は `"submit"` イベント、`event.preventDefault()` で既定動作を止める
 - カウンターや入力フォームは、DOM 操作とイベントを組み合わせる定番の練習題
-- **`preventDefault` は5 章 の「Server Actions の最小形」で登場する Server Actions では、React が自動でやってくれるようになる**（コードから消える）

@@ -392,4 +392,3 @@ export default function App() {
 - **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
 - **SWR** は TanStack Query のシンプル代替
 - まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ
-- 別のレッスンでは **モダン CSS**（:has / Container Queries / View Transitions） に進む

@@ -387,4 +387,3 @@ useEffect(() => {
 - 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
 - クォータ / 退去 / `navigator.storage.persist()` を意識する
 - オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番
-- 別のレッスンでは **React Compiler** に進み、`useMemo` / `useCallback` 不要時代の React を見る

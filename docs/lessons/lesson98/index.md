@@ -488,4 +488,3 @@ npm run test
 - ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
 - `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
 - 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
-- 別のレッスンでは fetch を含むコンポーネントのテスト（**MSW** で API モック）に進む

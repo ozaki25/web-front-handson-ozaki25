@@ -491,4 +491,3 @@ export default function CompiledComponent() { /* ... */ }
 - 段階導入は **`compilationMode: "annotation"`** から
 - 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
 - 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい
-- 別のレッスンでは **Server Components の設計** に進む

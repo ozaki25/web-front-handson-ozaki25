@@ -375,5 +375,3 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 - フォームは `<form>` の中に `<input>` / `<textarea>` / `<button>` を並べて作る。
 - `name` 属性は送信のキー、`required` はブラウザに必須チェックを頼む合図。
 - `<label for>` を入力の `id` と合わせると、ラベルクリックで入力にフォーカスが移る。アクセシビリティにも効く。
-- 送信処理そのものはまだ書いていない。2 章 の JavaScript で `<form>` の送信を止めて値を取り出し、4 章 / 5 章 で React / Next.js の形に進化させる。
-- 別のレッスンで、ついに CSS でページに見た目を付けていく。

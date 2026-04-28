@@ -296,4 +296,3 @@ DevTools の Network タブで `/streaming` のレスポンスを見ると、最
 - `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
 - fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
 - React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
-- 別のレッスンで **Vercel にデプロイする** と、ここまでに作ったアプリを公開できる

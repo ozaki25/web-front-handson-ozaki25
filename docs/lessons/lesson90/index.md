@@ -186,4 +186,3 @@ Lighthouse は試験環境（あなたの PC）で測るので、本番の数値
 - **Performance**: 録画してページロードや JS 実行のボトルネックを可視化
 - **Sources**: JS にブレークポイントを貼ってデバッガで止める
 - デバイスモードで画面幅や prefers-color-scheme を強制切り替え
-- 別のレッスンで、Network タブの `304 Not Modified` の正体、つまり **HTTP キャッシュ** の仕組みを扱う

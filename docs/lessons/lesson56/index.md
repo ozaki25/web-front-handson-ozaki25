@@ -284,4 +284,3 @@ export default App;
 - 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
 - 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
 - イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
-- **オブジェクトの state 更新は「TODO アプリを React で作る」で扱う**。このレッスンでは配列に集中

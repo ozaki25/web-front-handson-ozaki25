@@ -197,4 +197,3 @@ Type 'string' is not assignable to type 'number'.
 - 型注釈は `const 変数名: 型名 = 値` の形で書く。プリミティブ型は `string` / `number` / `boolean` の 3 つから。
 - 右辺から型が自動で決まる **型推論** もあるので、実務では型注釈を省略する場面も多い。
 - 型が合わないと、エディタの赤線と `tsc` の両方が `Type 'X' is not assignable to type 'Y'.` のような形で教えてくれる。
-- 別のレッスンで、関数の引数と戻り値に型を付ける。2 章 で書いた関数を TS 化していく。

@@ -302,4 +302,3 @@ export default function Page() {
 - `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
 - Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
 - `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。
-- 別のレッスンで Server Component で実際にデータを `fetch` します。Client では扱いにくかった「サーバー側取得」のうまみを体験しましょう。

@@ -581,7 +581,3 @@ form button:focus {
 - `transform: translateY()` / `scale()` はレイアウトを壊さずに位置・大きさを変えられる。
 - `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。動きが苦手な人への最低限の配慮として覚えておく。
 - DevTools の Rendering タブで `prefers-reduced-motion` をエミュレートして動作確認できる。
-
-### 自己紹介ページの再利用
-
-ここまでで作った **自己紹介ページ** は、5 章 の「ページを増やしてリンクで移動する」で Next.js の `/about` ページとしてもう一度登場します。HTML と CSS のファイルはそのまま保存しておきましょう。`class` を `className` に、`<label for>` を `<label htmlFor>` に、`<img>` の自己閉じタグに `/` を足すだけで、ほぼそのまま Next.js の JSX になります。

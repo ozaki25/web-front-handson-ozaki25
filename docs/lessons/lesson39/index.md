@@ -434,4 +434,3 @@ npm run dev
 - 何度も使う整形は **インスタンスを使い回す** ほうが速い
 - 多言語化ライブラリ（next-intl / react-i18next）は **Intl API の上に辞書管理** を載せたもの
 - 小規模な表示整形なら Intl だけで十分。本格的な翻訳管理があるなら next-intl など
-- 別のレッスンでは **tsconfig.json / package.json** に進み、プロジェクト設定の基礎を固める

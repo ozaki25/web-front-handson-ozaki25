@@ -437,4 +437,3 @@ npx playwright codegen http://localhost:5173
 - 失敗時の **トレース** で CI のエラーをローカル再現
 - MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
 - ローディング表示には `role="status"` または `aria-busy="true"` を付け、`getByRole('status')` で待ち合わせると、見た目が変わってもテストが安定する
-- 別のレッスンで **Core Web Vitals の 3 つの指標と Lighthouse** に進み、ユーザー体験を数値で測る基礎を学ぶ

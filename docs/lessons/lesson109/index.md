@@ -327,4 +327,3 @@ git branch -d feature/colors    # ローカルブランチも削除
 - マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
 - ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
 - `gh` CLI でコマンドラインからほぼ全操作が可能
-- 別のレッスンでは **GitHub Actions で CI** を組み込み、PR の段階で Lint / テスト / ビルドを自動実行する

@@ -398,4 +398,3 @@ npm ci
 - `scripts` は `npm run xxx` で起動。`&&` で連結、`pre` / `post` で連鎖
 - `npx` / `pnpm dlx` / `bunx` で **一度だけ実行** できる
 - `engines` と `.nvmrc` でチーム間の Node のバージョンを揃える
-- 別のレッスンでは **Vite の仕組み** に進んで、開発サーバーとビルドの中身を覗く

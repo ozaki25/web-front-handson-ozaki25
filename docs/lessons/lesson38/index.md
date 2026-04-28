@@ -468,4 +468,3 @@ StackBlitz は保存と同時にプレビューが更新されます。以下を
 - **MutationObserver** は DOM の構造変化を検知。普通のアプリでは出番が少ないが「他人が触る DOM」相手で活躍
 - スクロールイベントで `getBoundingClientRect()` を呼ぶ古いパターンは **Observer に置き換える**
 - React では `useEffect` のクリーンアップで `disconnect` を忘れない
-- 別のレッスンでは **ネイティブ UI コンポーネント**（dialog / popover / details）に進む

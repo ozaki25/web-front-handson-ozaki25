@@ -255,4 +255,3 @@ export default App;
 - 配列の描画は `配列.map((item) => <JSX />)` でおこなう
 - 各要素に **ユニークな `key`** を付ける（インデックスは避ける）
 - `for` / `appendChild` を書く素の JS と違い、React は「前のツリーとの差分」を自分で計算して DOM を更新する
-- 型（`Todo`）は3 章 の `types.ts` から `import type` で再利用できる

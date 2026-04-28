@@ -433,4 +433,3 @@ import App from "@/App";
 - `lib` で使える型、`types` で読み込む型パッケージを制御
 - `noEmit: true` にして **型チェック専用** にし、変換はバンドラに任せるのが現代流
 - `extends` でベース設定を継承できる。`@tsconfig/strictest` などの公式バンドルもある
-- 別のレッスンでは **package.json** に進み、依存と scripts の話を整理する

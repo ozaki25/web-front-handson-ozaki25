@@ -400,5 +400,3 @@ if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
 - `Array.isArray`: 配列かどうかの専用判定。
 - `in`: オブジェクトに特定のプロパティがあるかで判定。
 - **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。「`unknown` と `never`」で受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
-- このレッスンで書いた **`isTodo(x: unknown): x is Todo` のシグネチャは、5 章 の「Route Handlers」で再登場する**。サーバーで受け取った JSON ボディが `Todo` の形かを検証する用途で、そのまま使い回せる。
-- 別のレッスンで、`kind` のような **「種類を表すプロパティ」で自動的に絞り込める** 書き方（判別共用体）を学ぶ。型ガード関数を書かなくても、`switch` だけで分岐できるようになる。

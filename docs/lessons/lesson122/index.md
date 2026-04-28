@@ -435,4 +435,3 @@ export default function Chat() {
 - マネージド: **Pusher / Ably / Supabase Realtime / PartyKit / Liveblocks**
 - React の `useEffect` で **必ずクリーンアップ** で接続を閉じる
 - アイドル切断対策に **ハートビート**、`wss://` を使う
-- 別のレッスンでは **GraphQL / tRPC** に進み、API 設計の選択肢を広げる

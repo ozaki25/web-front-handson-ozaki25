@@ -373,4 +373,3 @@ lesson32: JSON
 - `JSON.parse` で文字列から値に戻す。壊れていると例外になる
 - 外部から来た JSON を読むときは **必ず `try` / `catch` で囲む**
 - `replacer` / `reviver` で出力・復元のカスタマイズができる（存在だけ覚える）
-- 次章の TypeScript で、JSON から戻した値の「型を狭める」方法を学んでいく

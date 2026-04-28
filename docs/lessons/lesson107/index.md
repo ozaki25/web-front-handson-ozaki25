@@ -351,4 +351,3 @@ time npx oxlint .
 - 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
 - 既存プロジェクトは「**速度に困ってから**」で良い
 - 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
-- 別のレッスン **「AI を前提にした開発」** で Copilot / Cursor / Claude Code を扱う

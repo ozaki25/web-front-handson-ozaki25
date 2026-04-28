@@ -332,4 +332,3 @@ export function heavyFunction() {
 - 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
 - プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
 - Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
-- 別のレッスンでは **Sentry でエラートラッキング** に進む

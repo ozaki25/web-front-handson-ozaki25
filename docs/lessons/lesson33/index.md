@@ -534,4 +534,3 @@ list.appendChild(newLi);
 - データ属性: `data-*` ↔ `dataset.キー`（ケバブ→キャメル変換）
 - 生成: `createElement` + `appendChild`、削除: `element.remove()`
 - たどる: `parentElement` / `children` / `nextElementSibling`
-- 別のレッスンで「クリックしたら〜」のイベントと組み合わせて、動きのある画面を作る

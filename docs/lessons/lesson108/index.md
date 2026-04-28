@@ -396,5 +396,3 @@ git log --oneline --graph
 - ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
 - コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
 - リモート: `remote add origin URL` / `push` / `pull` / `fetch`
-- 本レッスンの演習では学習目的で **main に直接 commit** していますが、**実務では feature ブランチ + Pull Request 経由** が基本です（次の「GitHub の PR とコードレビュー」で扱います）。
-- 別のレッスンでは **GitHub の PR とコードレビュー** に進む

@@ -208,7 +208,6 @@ const res = await fetch(
 - `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
 - Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ**（Cache Components） を使います。
 - ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
-- このあとの「動的ルート」では URL の一部をパラメータとして受け取る動的ルート `[id]` を作ります。2 章 で学んだ `find` が再登場します。
 
 ### コラム: `loading.tsx` の裏で動く Suspense
 
