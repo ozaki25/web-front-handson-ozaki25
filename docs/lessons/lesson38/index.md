@@ -91,7 +91,7 @@ lazyImages.forEach((img) => observer.observe(img));
 ビューポートの 200px 手前で `src` をセットして読み込みを開始します。読み込み済みの要素は `unobserve` で監視解除すると効率的。
 
 ::: tip ネイティブの loading="lazy" との関係
-画像 / iframe には `loading="lazy"` 属性が標準であります。**画像なら属性で十分**。Intersection Observer を使うのは **任意の DOM 要素** や **「画面に入ったらアニメーション」** など、属性では届かない場面です。
+画像 / iframe には `loading="lazy"` 属性が標準です。**画像なら属性で十分**。Intersection Observer を使うのは **任意の DOM 要素** や **「画面に入ったらアニメーション」** など、属性では届かない場面です。
 :::
 
 #### 例 2: 無限スクロール

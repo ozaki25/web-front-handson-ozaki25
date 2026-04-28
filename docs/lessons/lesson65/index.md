@@ -212,7 +212,7 @@ function App() {
 export default App;
 ```
 
-本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props を `onToggle` も受け取る形に拡張します。演習本体のコードがそのまま上書きになります。
+本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props に `onToggle` を追加します。演習本体のコードがそのまま上書きになります。
 
 </details>
 
