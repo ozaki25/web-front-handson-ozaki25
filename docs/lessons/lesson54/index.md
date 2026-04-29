@@ -1,240 +1,246 @@
-# lesson54: コンポーネントと props
+# lesson53: JSX を書く
+
+<script setup>
+const closeScript = '<' + '/script>'
+const demoHtml =
+  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
+  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
+  '<div id="root"></div>'
+
+const demoJs = `
+// 本来 JSX で書く <h1 className="title">Hello, React</h1> は
+// ビルド時に React.createElement(...) に変換されます。
+// このデモは CDN から React を読み込み、変換後の形を直接書いています。
+// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
+// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
+const h = React.createElement;
+
+function App() {
+  const name = 'Alice';
+  return h(
+    'div',
+    null,
+    h('h1', { className: 'title' }, 'Hello, React'),
+    h('p', null, 'こんにちは、' + name + ' さん')
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(h(App));
+`
+</script>
 
 ## ゴール
 
-- コンポーネントを分けて再利用できる
-- `type` で props の型を定義し、`import type` して使える
-- `children` を受け取って自由な中身を差し込めるコンポーネントが書ける
+- JSX の基本ルールを理解し、HTML との違いを説明できる
+- JSX の中に `{式}` で JS の値を埋め込める
+- `className` / キャメルケースの属性 / フラグメントを使い分けられる
 
 ## 解説
 
-### 2 章 の「分割代入とスプレッド」と同じ書き方
+### JSX は「JS の中に書く HTML 風の文法」
 
-本題の前に、1 行で接続しておきます。
-
-2 章 の「分割代入とスプレッド」で学んだオブジェクトの分割代入を思い出してください。
-
-```ts
-const user = { name: "Alice", age: 20 };
-const { name, age } = user; // 取り出す
-```
-
-React コンポーネントの props も、**全く同じ書き方**で値を取り出します。「2 章 の「分割代入とスプレッド」の再登場」と思ってください。
+「React ってなに？」で、コンポーネントは JSX を返す関数だと紹介しました。
 
 ```tsx
-function Greeting({ name }: GreetingProps) {
-  return <p>こんにちは、{name} さん</p>;
+function Hello() {
+  return <h1>Hello, React</h1>;
 }
 ```
 
-### props とは
+この `<h1>Hello, React</h1>` の部分が **JSX** です。見た目は HTML ですが、JS の中に直接書いています。Vite（内部で TypeScript / Babel）が、裏で JS に変換してから動かしています。
 
-コンポーネントを関数として見たとき、props は **引数** です。呼び出し側から値を渡し、コンポーネントの中で使います。HTML タグに属性を付ける感覚で書けます。
+HTML とは次の点で違います。本コースでは、よくぶつかる 3 点をまず覚えます。
 
-```tsx
-<Greeting name="Alice" />
-<Greeting name="Bob" />
-```
+1. 属性名がキャメルケース（`onclick` → `onClick`、`tabindex` → `tabIndex`）
+2. `class` 属性は `className` に変わる
+3. 自己閉じタグにスラッシュが必要（`<img src="..." />`、`<br />`）
 
-同じ `Greeting` コンポーネントを、`name` を変えながら何回でも使い回せます。
+「`for`（`<label for="...">`）→ `htmlFor`」も同じ仲間ですが、実用頻度が上がるのは5 章（フォーム）なので、ここでは頭の片隅に。
 
-### 型付き props
+### `{式}` で JS の値を埋め込む
 
-TypeScript で書くときは、props の形を型で表します。3 章 の「オブジェクトの型と type エイリアス」で学んだ `type` エイリアスをそのまま使います。
-
-```tsx
-type GreetingProps = {
-  name: string;
-};
-
-function Greeting({ name }: GreetingProps) {
-  return <p>こんにちは、{name} さん</p>;
-}
-```
-
-- `GreetingProps` は「`name` という string を持つオブジェクト」の型
-- `function Greeting({ name }: GreetingProps)` は「props（`GreetingProps`）を受け取り、その中の `name` を取り出して使う関数」
-
-オブジェクト分割代入と同じ書き方がそのまま効きます。
-
-### `import type` で型を別ファイルから持ってくる
-
-3 章 の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
-
-```ts
-// src/types.ts
-import type { ReactNode } from "react";
-
-export type GreetingProps = {
-  name: string;
-  age?: number;
-  children?: ReactNode;
-};
-```
+JSX の中で `{ ... }` と書くと、中の JS の**式**が評価されます。
 
 ```tsx
-// src/Greeting.tsx
-import type { GreetingProps } from "./types";
-```
+const name = "Alice";
+const age = 20;
 
-- `import type { ... }` は「**型だけ** を持ってくる」という書き方
-- ビルド後の JS には残らない（実行時のコストはゼロ）
-- `ReactNode` は `react` パッケージから import する。`React.ReactNode` のように名前空間経由で書くこともできるが、新しい Vite テンプレート（自動 JSX ランタイム前提）では名前空間経由だと「`React` が見つからない」エラーが出やすいので、**個別に import する形に統一する**
-
-### オプショナルプロパティ `?`
-
-`age?: number` は「`age` は省略しても OK」という意味です。書く側は `<Greeting name="Alice" />` でも `<Greeting name="Alice" age={20} />` でも動きます。省略された場合、`age` の値は `undefined` になります。
-
-### `children`（コピペで与える `ReactNode`）
-
-コンポーネントのタグの**中身**を受け取りたいことがあります。例えばこう書きたい。
-
-```tsx
-<Card>
-  <h2>タイトル</h2>
-  <p>本文</p>
-</Card>
-```
-
-`Card` の中身（`<h2>` と `<p>`）を、`Card` の中の好きな場所にはめ込みたい。この「中身」を受け取る特別な props の名前が **`children`** です。
-
-型は `ReactNode` を使います（`react` パッケージから `import type` する）。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
-
-```tsx
-import type { ReactNode } from "react";
-
-type CardProps = {
-  title: string;
-  children?: ReactNode;
-};
-
-function Card({ title, children }: CardProps) {
-  return (
-    <div className="card">
-      <h2>{title}</h2>
-      <div className="card-body">{children}</div>
-    </div>
-  );
-}
-```
-
-使う側は、タグの中に何でも書けます。
-
-```tsx
-<Card title="お知らせ">
-  <p>本日は休業です。</p>
-</Card>
-```
-
-### コンポーネントの作り方（ファイル分割）
-
-コンポーネントが増えてきたら、1 ファイル 1 コンポーネントに分けます。
-
-```tsx
-// src/Greeting.tsx
-import type { GreetingProps } from "./types";
-
-export function Greeting({ name, age, children }: GreetingProps) {
+function Profile() {
   return (
     <div>
-      <p>こんにちは、{name} さん</p>
-      {age !== undefined && <p>{age} 歳です</p>}
-      {children}
+      <p>名前: {name}</p>
+      <p>来年は {age + 1} 歳</p>
+      <p>今: {new Date().toLocaleTimeString()}</p>
     </div>
   );
 }
 ```
 
-- ファイル名はコンポーネント名に合わせる（大文字始まり）
-- **コンポーネント名は必ず大文字始まり**（`Greeting` / `Card`）。小文字で書くと JSX が通常の HTML タグとして解釈されてしまう
-- `export function ...` で名前付きエクスポートするのが本コースの基本形
+- 変数（`name`、`age`）を埋め込める
+- 式（`age + 1`、関数呼び出し）を埋め込める
+- `if` 文や `for` 文のような**文**は書けない。あくまで**式**だけ
 
-`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
+`if` で分岐したいときは三項演算子や `&&` を使います。
+
+### `className`（`class` との違い）
+
+HTML では `<div class="card">` でしたが、JSX では **`className`** を使います。
+
+```tsx
+function Card() {
+  return <div className="card">カードの中身</div>;
+}
+```
+
+なぜかというと、JSX は JS に変換されるので、`class` が JS の予約語（クラス構文に使う）と衝突するためです。本コースではクラス構文自体は扱いませんが、**JSX では必ず `className`** と覚えておきます。
+
+CSS 側の書き方は変わりません。これまで通り `.card { ... }` と書いて読み込めば効きます。
+
+### 属性はキャメルケース
+
+HTML の属性名は全て小文字でしたが、JSX では複数単語の属性名をキャメルケース（途中で大文字）にします。
+
+| HTML | JSX |
+| --- | --- |
+| `onclick` | `onClick` |
+| `onchange` | `onChange` |
+| `tabindex` | `tabIndex` |
+| `maxlength` | `maxLength` |
+| `aria-label` | `aria-label`（`aria-*` と `data-*` はそのまま） |
+
+数は多いですが、書いて間違えたらエディタが赤線で教えてくれます。慣れの世界です。
+
+### 要素は 1 つしか返せない → フラグメント
+
+JSX のルールとして、コンポーネントは **1 つの要素** しか `return` できません。次のコードは動きません。
+
+```tsx
+// NG: 複数の要素を並べて返している
+function Broken() {
+  return (
+    <h1>タイトル</h1>
+    <p>本文</p>
+  );
+}
+```
+
+解決策は 2 つあります。
+
+#### (a) `<div>` で囲む
+
+```tsx
+function Ok1() {
+  return (
+    <div>
+      <h1>タイトル</h1>
+      <p>本文</p>
+    </div>
+  );
+}
+```
+
+単純ですが、意味のない `<div>` が DOM に増えてしまいます。
+
+#### (b) フラグメント `<>...</>`
+
+```tsx
+function Ok2() {
+  return (
+    <>
+      <h1>タイトル</h1>
+      <p>本文</p>
+    </>
+  );
+}
+```
+
+`<>` と `</>` はフラグメントと呼ばれる特殊なタグで、**DOM に何も出さずに** 中身だけを並べてくれます。余計な `<div>` を増やしたくないときに使います。
+
+本コースでは原則フラグメントを使います。
+
+### 複数行の JSX は `( ... )` で囲む
+
+`return` の後で改行したい場合は、全体を丸括弧で囲みます。
+
+```tsx
+function Multi() {
+  return (
+    <div>
+      <h1>タイトル</h1>
+      <p>本文</p>
+    </div>
+  );
+}
+```
+
+囲まないと「`return` の直後で改行」した時点で `undefined` が返ると解釈されて、JSX が実行されません。本コースの例はほぼ複数行なので、常に `(` で開く癖を付けておきます。
+
+### コメントの書き方
+
+JSX の中では、`{/* ... */}` のように書きます。
+
+```tsx
+function WithComment() {
+  return (
+    <div>
+      {/* ここはタイトル */}
+      <h1>タイトル</h1>
+    </div>
+  );
+}
+```
+
+JS のコメント `// ...` をそのまま書くと JSX として解釈されてしまうので、必ず `{/* ... */}` にします。
+
+### JSX は `React.createElement` に変換されている
+
+JSX はブラウザが直接理解できる文法ではありません。ビルド時に `React.createElement(...)` という関数呼び出しに変換されてから動きます。下のデモでは CDN から React を読み込み、**変換後の `React.createElement` を直接書いて** 同じ結果を出しています。`App` コンポーネントから返している「タグみたいに見えるもの」の正体はこの関数呼び出しだ、というイメージを掴んでください。
+
+<LiveDemo
+  height="240px"
+  :html="demoHtml"
+  :js="demoJs"
+/>
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
-
-<details>
-<summary>出発点のファイル（3 章 の <code>types.ts</code> を再掲）</summary>
-
-**`src/types.ts`**
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-このレッスン本体では `Todo` 型自体は使いませんが、以降のレッスンで再利用するのでここで用意しておいても構いません。
-
-</details>
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
 
 ### ゴール
 
-- `Greeting` コンポーネントを別ファイルに切り出し、`App` から 3 パターンで呼び出す
-- 型 `GreetingProps` を `types.ts` に置き、`import type` で使う
-- `children` に JSX を差し込めることを確認する
+- 自分の名前と現在時刻を JSX で埋め込んで表示する
+- `className` で CSS を当てる
+- フラグメントで複数の要素を並べて返す
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
-2. `src/types.ts` を新規作成
-3. `src/Greeting.tsx` を新規作成
-4. `src/App.tsx` を書き換える
-
-### `src/types.ts`
-
-```ts
-import type { ReactNode } from "react";
-
-export type GreetingProps = {
-  name: string;
-  age?: number;
-  children?: ReactNode;
-};
-```
-
-### `src/Greeting.tsx`
-
-```tsx
-import type { GreetingProps } from "./types";
-
-export function Greeting({ name, age, children }: GreetingProps) {
-  return (
-    <div className="greeting">
-      <p>こんにちは、{name} さん</p>
-      {age !== undefined && <p>{age} 歳です</p>}
-      {children}
-    </div>
-  );
-}
-```
+1. これまでの StackBlitz をそのまま使う（別プロジェクトを新規作成しても OK）
+2. `src/App.tsx` を書き換える
+3. `src/App.css` を書き換える（テンプレートに既にあるはず。なければ作る）
+4. 保存して画面を確認する
 
 ### `src/App.tsx`
 
 ```tsx
-import { Greeting } from "./Greeting";
 import "./App.css";
 
 function App() {
+  const name = "Alice";
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+
   return (
     <>
-      <h1>Greeting デモ</h1>
-
-      {/* (1) 名前のみ */}
-      <Greeting name="Alice" />
-
-      {/* (2) 名前 + 年齢 */}
-      <Greeting name="Bob" age={25} />
-
-      {/* (3) 名前 + children にメッセージ */}
-      <Greeting name="Carol">
-        <p>今日はよい天気ですね。</p>
-      </Greeting>
+      <h1 className="title">プロフィール</h1>
+      <p className="greeting">
+        こんにちは、{name} さん（{hour}:{minute}）
+      </p>
+      <p>来年は {20 + 1} 歳</p>
+      {/* フラグメントで複数要素を並べている */}
     </>
   );
 }
@@ -245,83 +251,53 @@ export default App;
 ### `src/App.css`
 
 ```css
-.greeting {
-  border: 1px solid #ccc;
-  padding: 8px 12px;
-  margin: 8px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
+.title {
+  color: #2b7a78;
 }
 
+.greeting {
+  color: #333;
+  background-color: #f0f8f7;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+/* ダークモード */
 @media (prefers-color-scheme: dark) {
+  .title {
+    color: #7ec8c4;
+  }
   .greeting {
     color: #eee;
-    background-color: #202020;
-    border-color: #555;
+    background-color: #1f2a2a;
   }
 }
 ```
 
 ### 期待出力
 
-画面にカード風のブロックが 3 つ、縦に並びます。
+- 画面上部に `プロフィール` という見出し（緑寄りの色）
+- その下に `こんにちは、Alice さん（14:35）`（数字は現在の時分。薄い背景が付く）
+- さらに下に `来年は 21 歳`
 
-1. `こんにちは、Alice さん`（1 行だけ）
-2. `こんにちは、Bob さん` / `25 歳です`（2 行）
-3. `こんにちは、Carol さん` / `今日はよい天気ですね。`（2 行、2 行目は `children` として渡した `<p>`）
+時刻は開いた時刻によって変わります。
 
 ### 変える
 
-- `<Greeting name="Bob" age={25} />` の `age` を消して `<Greeting name="Bob" />` にすると、2 枚目のカードが 1 行だけになることを確認
-- `<Greeting name="Carol">` の中身を `<ul><li>りんご</li><li>みかん</li></ul>` に変えると、`children` がリストとして表示される
-- `name` を消して `<Greeting age={30} />` と書くと、TypeScript が赤線で「`name` が足りない」と教えてくれる（`name` は必須のため）
+- `const name = "Alice";` をあなたの名前に変える
+- `className="greeting"` を `className="title"` に差し替えると、見出しのスタイルが段落にも当たる
+- フラグメントの `<>` を `<div>` に、`</>` を `</div>` に差し替えて、DevTools で違いを見る（`<div>` だと DOM に `div` が増える）
 
 ### 自分で書く
 
-- `types.ts` に `type CardProps = { title: string; children?: ReactNode }` を追加（`ReactNode` は `react` から `import type`）
-- `src/Card.tsx` を作って、`title` を `<h2>` で、`children` を `<div>` で包んで表示する `Card` コンポーネントを実装
-- `App.tsx` で `Card` を 2 個使ってみる（中身は自由）
-
-### もう一歩: 既存の HTML 要素 props を再利用する
-
-ボタンや input をラップして「色だけ変えた `<Button>`」のようなコンポーネントを作るとき、**HTML 要素の標準 props**（`type` / `disabled` / `onClick` / `aria-*` など全部）を一から型定義し直すのは大変です。React は次の 2 つのヘルパーを用意しています。
-
-```tsx
-import type { ComponentProps, PropsWithChildren } from "react";
-
-// (A) <button> の全 props を継承し、color だけ追加
-type ButtonProps = ComponentProps<"button"> & {
-  color?: "primary" | "danger";
-};
-
-function Button({ color = "primary", ...rest }: ButtonProps) {
-  return <button className={`btn btn-${color}`} {...rest} />;
-}
-
-// (B) children を受け取る型を 1 行で
-type CardProps = PropsWithChildren<{ title: string }>;
-
-function Card({ title, children }: CardProps) {
-  return (
-    <article>
-      <h2>{title}</h2>
-      <div>{children}</div>
-    </article>
-  );
-}
-```
-
-- `ComponentProps<"button">` は **`<button>` 要素のすべての props 型** を取り出します（`type`、`disabled`、`onClick` 等）。`<input>` / `<a>` 等にも同様に使えます
-- `PropsWithChildren<T>` は `T & { children?: ReactNode }` の省略形
-
-本コースで中心に扱うのは手書きの `type` エイリアスですが、**HTML 要素ラップ系コンポーネント** ではこれらが定型句として頻出するので、見たときに読めるように頭の片隅に置いておきます。
+- 変数 `hobby` を追加して「趣味は ○○ です」という `<p>` を増やす
+- `<p>` のどれかに `className="greeting"` を付けて色を変える
+- `{/* ここにコメント */}` を 1 行加えて、レンダリング結果に出ないことを確認する
 
 ## まとめ
 
-- props は「コンポーネントの引数」。オブジェクトの分割代入（2 章 の「分割代入とスプレッド」）で受け取る
-- 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
-- オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
-- `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
-- HTML 要素をラップするときは `ComponentProps<"button">` で標準 props を継承、`PropsWithChildren<T>` で children 付きを 1 行で書ける（補足）
-- コンポーネント名は必ず大文字始まり
+- JSX は「JS の中に書く HTML 風の文法」。裏で JS に変換される
+- `{式}` で JS の値を埋め込める。文（`if`、`for`）は書けない
+- `class` → **`className`**、属性はキャメルケース、自己閉じタグは `/`
+- コンポーネントは 1 つの要素しか返せない。並べたいときは **フラグメント `<>...</>`**
+- 複数行は `( ... )` で囲む。コメントは `{/* ... */}`

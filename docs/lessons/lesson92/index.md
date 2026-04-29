@@ -1,186 +1,188 @@
-# lesson92: HTTP キャッシュ
+# lesson91: DevTools の読み方
 
 ## ゴール
 
-- ブラウザがリソースをキャッシュしている場所（メモリ / ディスク）を説明できる
-- `Cache-Control` の主要ディレクティブ（`public` / `private` / `max-age` / `no-cache` / `no-store` / `immutable`）の違いを説明できる
-- 強キャッシュ（期限内はサーバーに聞かない）と 弱キャッシュ（サーバーに聞くが中身は省略）の違いを説明できる
-- `ETag` / `Last-Modified` と `304 Not Modified` の関係を説明できる
-- キャッシュ起因で「新しいデプロイが反映されない」古典的なハマりを避ける実務パターンを知る
+- Chrome DevTools の主要なタブ（Elements / Console / Network / Application / Performance / Sources）がそれぞれ何を見る場所か説明できる
+- ページを開いたときに発生している全リクエストを Network タブで一覧できる
+- Application タブで Cookie / Local Storage / Session Storage を確認できる
+- Performance タブで録画したページロードを眺めて、どの段階が遅いか大まかに判断できる
+- Sources タブで JS のブレークポイントを貼って止められる
 
 ## 解説
 
-### そもそもキャッシュはなぜ要るか
+### DevTools はブラウザ付属の開発ツール
 
-ブラウザがリソース（HTML / CSS / JS / 画像）を取りに行くのは、毎回遅くてトラフィックもかかります。一度取ったものを **同じなら再利用する** のがキャッシュです。効き方の強い順に、次の 3 段階があると覚えると整理しやすいです。
+DevTools はブラウザ本体に組み込まれた、開発者向けの道具箱です。本コースで **最もよく使う 1 つの道具** と言えます。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
 
-1. **強キャッシュ**: サーバーに問い合わせもしない。ローカルのキャッシュから即配る
-2. **弱キャッシュ**（条件付きリクエスト）: サーバーに「変わってますか？」だけ聞く。変わってなければ `304 Not Modified` が返り、ボディは送られてこない
-3. **キャッシュなし**: 毎回フルで取りに行く
+### 開き方
 
-どのモードになるかは、レスポンスヘッダ `Cache-Control` / `ETag` / `Last-Modified` で決まります。
-
-### `Cache-Control` の主要ディレクティブ
-
-サーバーがレスポンスヘッダに **`Cache-Control: ...`** を付けて「このリソースはどう扱っていいか」をブラウザに伝えます。代表的なものを並べます。
-
-| ディレクティブ | 意味 |
+| 操作 | ショートカット |
 |---|---|
-| `public` | 誰でも（ブラウザ / 中間キャッシュ / CDN）キャッシュしてよい |
-| `private` | ブラウザ本体だけキャッシュしてよい。CDN には持たせない |
-| `max-age=N` | N 秒間は新鮮。その間はサーバーに聞かない（強キャッシュ） |
-| `s-maxage=N` | 中間キャッシュ（CDN 等）向けの max-age。ブラウザは無視 |
-| `no-cache` | 毎回サーバーに問い合わせ（弱キャッシュは効く）。ボディは返ってこないこともある |
-| `no-store` | 一切キャッシュしない。毎回フルで取り直し |
-| `must-revalidate` | 期限が切れたら **必ず** 再検証（古いキャッシュを出さない） |
-| `immutable` | 期限内は絶対に変わらない。リロードでも再検証しない |
-| `stale-while-revalidate=N` | 期限切れから N 秒はそのまま返して、裏で再検証 |
+| DevTools を開く / 閉じる | Windows / Linux: `F12` または `Ctrl+Shift+I` / Mac: `Cmd+Opt+I` |
+| 直接 Elements タブを開く | ページで右クリック → 「検証」 |
+| 直接 Console を開く | Windows / Linux: `Ctrl+Shift+J` / Mac: `Cmd+Opt+J` |
+| デバイスモード（スマホ幅） | `Ctrl+Shift+M` / `Cmd+Shift+M` |
 
-混乱しやすいのは `no-cache` と `no-store` です:
+### Elements タブ: DOM と CSS を見る・いじる
 
-- **`no-cache`**: キャッシュ **は** する。ただし使う前に毎回サーバーに聞く
-- **`no-store`**: キャッシュ **しない**
+「DOM を操作する」で扱った **DOM ツリー** の現在状態が、ここに展開されます。左側のタグをクリックすると、ページ内の対応要素がハイライトされます。右側には、その要素に当たっている **計算済みの CSS** と、どの CSS ファイルの何行目から来たかが表示されます。
 
-名前と挙動が逆に見えるので、都度仕様を見に行く癖を付けるのが安全です。
+覚えておきたい操作:
 
-### 強キャッシュ: `max-age` の世界
+- タグをダブルクリックすると中身のテキストを編集できる（プレビュー確認用、保存されない）
+- 右ペインの `Styles` でプロパティのチェックを外すと **その場で無効化** できる（どのスタイルが効いているかの切り分けに便利）
+- `Computed` タブで、実際に当たっている最終値（ブラウザが計算した後のピクセル値など）を確認
+- `Box Model` 図で margin / border / padding / content のサイズを数値で確認
 
-レスポンスにこういうヘッダが付いていたとします。
+本コースの 1 章（HTML / CSS）の演習中、画面が思った通りに並ばないときは、まずここで **どのスタイルが当たっているか** を目で確認するのが近道です。
 
-```
-Cache-Control: public, max-age=3600
-```
+### Console タブ: JS を打つ・ログを見る
 
-これは「このリソースを **1 時間**（3600 秒）は新鮮とみなす」という意味です。この間はブラウザは **サーバーに一切問い合わせずに** ローカルのキャッシュを使います。
+「デバッグに効く Console API」で扱った `console.log` 系の出力がここに流れ込みます。さらに **その場で JS を打って実行できる** のが Console の強みです。
 
-DevTools の Network タブで見ると、`Size` 列が **`(memory cache)`** や **`(disk cache)`** になり、サーバーに行かなかったことが表示されます。
+```js
+// Console に直接打って Enter
+document.title
+> "lesson91: DevTools の読み方"
 
-```
-Size        Status
-(disk cache) 200
+document.querySelectorAll("a").length
+> 18
 ```
 
-`max-age` が切れるまでは、コードをいじってデプロイし直しても **古いファイルが配られ続けます**。これがキャッシュ起因の「デプロイしたのに反映されない」問題の典型です。
+エラーが出たときは Console にスタックトレースが出ます。行番号をクリックすると、該当ファイルが Sources タブで開きます。
 
-### 弱キャッシュ: `304 Not Modified` の世界
+`console.log` をコードに書き足さなくても、Console に現在のページの値を問い合わせられる、というのは画面を書き換えずに調査できる大きな武器です。
 
-`max-age` が切れた、または `no-cache` が付いているリソースは、ブラウザがサーバーに **「これ、まだ有効？」** と確認しに行きます。この確認のために使うのが `ETag` と `Last-Modified` です。
+### Network タブ: 通信を見る
 
-レスポンスに `ETag` が付いていたら、ブラウザは次回のリクエストに `If-None-Match` ヘッダで同じ値を送ります。
+「ブラウザと HTTP の基本」で触った、**リクエスト / レスポンスの実物** をここで観察します。
 
-```
-# 初回レスポンス
-HTTP/1.1 200 OK
-Cache-Control: no-cache
-ETag: "abc123"
-Content-Type: image/png
-...（画像ボディ）
+主な見どころ:
 
-# 2 回目のリクエスト
-GET /logo.png HTTP/1.1
-If-None-Match: "abc123"
+- **一覧**: ページを開いたときに発生した全リクエストが時系列に並ぶ
+- **Method / Status / Type / Size / Time**: 各列で「どのメソッドでどのファイルをどう取ったか」がわかる
+- **1 行クリック**: Headers / Payload / Preview / Response / Timing の 5 つのパネルで詳細
+- **Preserve log**: チェックすると、ページ遷移しても過去のログが消えない（リダイレクトの追跡に便利）
+- **Disable cache**: DevTools を開いているあいだ、ブラウザキャッシュを無効化する（キャッシュ確認用。通常はオフにしておく）
+- **Throttling**: 「Slow 3G」などに切り替えて回線が遅い状況を再現できる
 
-# サーバーのレスポンス
-HTTP/1.1 304 Not Modified
-（ボディは空）
-```
+Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / `Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
 
-サーバーは「変わってない」と分かれば **ボディを送らずに 304 だけ返す** ので、通信量はほぼゼロになります。ブラウザは手元のキャッシュを使います。
+### Application タブ: 保存されているデータを見る
 
-`Last-Modified` の場合は `If-Modified-Since` ヘッダで日時を送り返します。考え方は同じです。`ETag` のほうが識別が厳密で、現代では主流です。
+ブラウザ側に溜まっている各種ストレージの中身を確認・編集できます。
 
-### 実務での定番パターン: 「ハッシュ付きファイル名 + immutable」
+- **Local Storage / Session Storage**: 「Web Storage」で保存した値が、キーと値のペアで見られる。その場で編集・削除も可能
+- **Cookies**: 現在のドメインに対する Cookie 一覧。`Name` / `Value` / `Domain` / `HttpOnly` / `Secure` / `SameSite` などの属性が一覧できる
+- **IndexedDB**: より大容量のデータベース系 API。本コースでは扱わないが眺めるだけはしておく
+- **Cache Storage**: Service Worker が保存しているキャッシュ
+- **Service Workers**: 登録されている Service Worker（本サイトでも PWA で 1 つ登録されている）
 
-Web アプリの CSS / JS は「ビルドのたびに中身が変わる可能性があるが、変わったときは URL も変えておく」という運用が主流です。
+「Web Storage」と「Cookie と Web セキュリティ」の内容を実地で確認する場所です。
 
-```
-/assets/main.CEDo5b9P.css
-/assets/main.8c29f6e4.js
-```
+### Performance タブ: ページロードと実行を録画する
 
-`CEDo5b9P` のようなハッシュ（コード内容から計算した識別子）をファイル名に入れておき、**中身が変われば URL も変わる** ようにします。すると、サーバーは次のヘッダを安全に付けられます。
+`Record` ボタン（黒丸）を押して一連の操作 → `Stop` を押すと、その間のブラウザの挙動が細かく記録されます。
 
-```
-Cache-Control: public, max-age=31536000, immutable
-```
+- **FPS**: 描画フレームレートの推移
+- **Main**: メインスレッドが何をしていたか（JS 実行 / スタイル計算 / レイアウト / 描画）の時間軸
+- **Network**: 各リクエストの発生と完了のタイミング
+- **Frames**: 個々の描画フレームのスクリーンショット
 
-1 年間（31536000 秒）は絶対に変えないと宣言します。`immutable` は「リロードされても再検証しない」という追加の念押しです。
+「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
 
-中身を更新したければ、ビルド時にハッシュが変わって **別の URL** になるので、HTML から参照される URL もそれに合わせて書き換わります。古いキャッシュは持ち続けてもらってよく、新しい URL は新規リクエストとして取りに行くだけです。
+### Lighthouse タブで Core Web Vitals を測る
 
-一方 **HTML 自体** は `no-cache` または短い `max-age` にしておきます。HTML が古いキャッシュを使うと、新しいハッシュ入りの `<link>` / `<script>` タグに切り替わらないためです。
+Performance タブの録画は **詳細を追える代わりに見方を覚える必要** があります。最初に手を出すべきは Performance タブの隣にある **Lighthouse タブ** です。`Analyze page load` を押すだけで、ページに対して点数とレポートが出ます。
 
-### Vercel / VitePress など現代のホスティングは既定が賢い
+実務で見るのは点数より **Core Web Vitals** と呼ばれる 3 指標です。Google の検索ランキング要因にもなっているため、SEO とパフォーマンスは一体です。
 
-Vercel を使うと、静的アセットには自動で `immutable` が付き、HTML には短いキャッシュが付く形になっています。VitePress のビルド出力もハッシュ付きファイル名です。本コースのような教材サイトでは **設定を触らなくてもキャッシュ運用は成立** しています。
+- **LCP** (Largest Contentful Paint): 一番大きい要素（メインの画像 / 見出し）が描画されるまでの時間。**2.5 秒以下** が目安
+- **INP** (Interaction to Next Paint): クリック / タップ / キーボード入力に反応して次の描画が出るまでの時間。**200ms 以下** が目安
+- **CLS** (Cumulative Layout Shift): 表示中にレイアウトが何回ガタッとずれるかの累積。**0.1 以下** が目安
 
-> **補足**: ブラウザキャッシュは「最も外側」のキャッシュです。1 つのリクエストには複数のキャッシュ層が関与しています。**ブラウザキャッシュ → CDN（Vercel Edge / Cloudflare 等）→ 中間プロキシ → オリジンサーバー** の順に問い合わせていき、どこかでヒットした時点で返ってきます。Next.js を使う場合はさらにアプリ内部にも **fetch のレスポンスキャッシュ**（`force-cache` / `revalidate`）と **Router Cache**（クライアント側のページ単位キャッシュ）があります。本レッスンで扱っているのは一番外側のブラウザキャッシュだけですが、「古い値が返ってくる」事故が起きたら **どの層で固まっているか** を切り分けるのが調査の入口です。
+Lighthouse は試験環境（あなたの PC）で測るので、本番の数値とは少しずれます。本番の実ユーザー指標は **Google Search Console** の Core Web Vitals レポートや **Web Vitals API** で取得します。
 
-とはいえ、仕組みを知らないと「トップだけ更新されて中ページが古い」「CSS だけ反映されない」といった症状に遭遇したときに原因が分からなくなるので、`Cache-Control` の値を読めるようになっておくことは重要です。
+### Sources タブ: JS をデバッガで止める
 
-### デバッグのコツ
+ソースコードを眺めて、行番号をクリックすると **ブレークポイント** が貼れます。そこに実行が到達すると、その行で JS が一時停止し、変数の値を確認できます。
 
-キャッシュまわりの調査では次を覚えておいてください。
+- **行番号クリック**: 基本のブレークポイント
+- **右クリック → Conditional breakpoint**: 条件式が真のときだけ止まる
+- **`debugger;` 文**: コード側に書いておけば、その行に来たときに止まる
+- **Watch / Scope**: 止まっている時点での変数の値を確認
 
-- **DevTools の Disable cache**: Network タブを開いているあいだ、キャッシュを無効化できる。開発中はオンにしておくと安心
-- **Hard reload**: `Ctrl+Shift+R` / `Cmd+Shift+R` で強制再読込（キャッシュを無視）
-- **Application → Clear storage**: 特定のサイトのキャッシュ・ストレージを一括削除
-- **Network タブの Size 列**: `(memory cache)` / `(disk cache)` / 実サイズ で、どこから来たか判断
-- **Network タブで行をクリック → Headers**: `Cache-Control` / `ETag` の実際の値を確認
+`console.log` で追うより一段深い調査が必要なときに使います。本コースでは軽く紹介するに留めますが、使えるようになるとバグ探しの速度が何倍にもなります。
+
+### ショートカットで覚えておくと捗るもの
+
+- **`Ctrl+Shift+F` / `Cmd+Opt+F`**: 全ソース横断検索（Sources タブ）。ライブラリ内を含めて grep できる
+- **`Ctrl+P` / `Cmd+P`**: Sources でファイル名クイックオープン
+- **`Ctrl+L` / `Cmd+K`**: Console を全消去
+- **`$0`**: Elements タブで最後に選択した要素を Console から参照
+
+### モバイル / レスポンシブ確認: デバイスモード
+
+`Ctrl+Shift+M` / `Cmd+Shift+M` でツールバー上部にデバイス選択が出ます。`iPhone SE (375×667)` / `Pixel 7` / 任意サイズ（Responsive）で表示を切り替えられます。1 章 の「Flexbox とレスポンシブ」や「CSS Grid」の演習で使ったはずです。
+
+「メディアを確認」（`more options` メニュー内）で `prefers-color-scheme: dark` / `prefers-reduced-motion` などを強制的にオン / オフできます。ダークモード対応の確認に便利です。
 
 ## 演習
 
 ### ゴール
 
-- 実際のサイトのレスポンスヘッダから `Cache-Control` / `ETag` を読み取る
-- 強キャッシュ・弱キャッシュ・キャッシュなしを切り替えたときの Network タブの見え方の違いを体感する
-- `curl` で条件付きリクエストを自分で送って `304` を取得する
+- DevTools を 1 通り触って、本文で説明した各タブの役割を体感する
+- Application タブで本サイトの localStorage を確認する
+- Network タブで 1 リクエストを選び、ヘッダ・ボディ・Timing を読み取れる
+- Performance タブでページロードを録画して眺める
 
-### 手順 1: DevTools で観察する
+### 手順
 
-1. 本教材サイト（または任意の Web サイト）を開きます
-2. DevTools の Network タブを開き、リロードします
-3. 1 行クリックして `Headers` → `Response Headers` を確認します
-4. `Cache-Control` と `ETag` の値をメモします
-5. もう一度リロードします。同じ行の `Status` が `304` になる（または `Size` が `(disk cache)` になる）ことを確認します
-6. `Disable cache` にチェックを入れてリロードします。全行が `200` に戻り、Size が実サイズになることを確認します
+本サイト（この教材）のページを開いた状態で、以下を順に試します。
 
-### 手順 2: `curl` で条件付きリクエストを送る
-
-`ETag` の挙動を手で確かめます。ターミナルで次を実行してください。
-
-```bash
-# 1 回目: ETag を含むレスポンスヘッダを取る
-curl -I https://jsonplaceholder.typicode.com/posts/1
-```
-
-出力の中の `etag: "..."` の値をメモします。次にこの ETag を付けて 2 回目のリクエストを送ります。
-
-```bash
-# 2 回目: 先ほどの ETag を If-None-Match で送り返す
-curl -I https://jsonplaceholder.typicode.com/posts/1 \
-  -H 'If-None-Match: "W/\"xxxxxxxxxxxx\""'
-```
-
-`-H` で送る値は、1 回目の `etag:` の値をそのまま入れてください（バックスラッシュのエスケープが必要な場合もあります）。成功すると **`HTTP/2 304`** が返り、ボディは送られてきません。
-
-手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
+1. **Elements タブ**
+   - F12 で DevTools を開く
+   - 左のツリーで `<body>` を展開し、見出しや段落のタグを辿る
+   - 右ペインの `Styles` で、見出しの `color` のチェックを外して色が消えることを確認（再度チェックで戻る）
+2. **Console タブ**
+   - `document.title` と打って Enter、ページタイトルが返ることを確認
+   - `document.querySelectorAll("h2").length` で、このページの `<h2>` の個数を取得
+3. **Network タブ**
+   - ページをリロード（`F5` / `Cmd+R`）
+   - 一覧のうち **`.js`** の 1 つをクリックし、`Headers` タブで `status: 200` と `content-type: application/javascript` を確認
+   - `Timing` タブで TTFB（Time To First Byte）と Content Download の 2 つの時間を確認
+4. **Application タブ**
+   - 左ペインから `Local Storage` → `https://...`（このサイトの URL）を選択
+   - `lesson-progress` 系のキーがあれば、それは「完了ボタン」を押した進捗データ
+   - 試しに 1 つのキーを選んで **Delete ボタン** で消す → ページをリロード → 該当レッスンの完了マークが消えることを確認
+5. **Performance タブ**
+   - 左上の丸い `Record` ボタンを押す
+   - ページを一度リロード
+   - 5 秒ほど経ったら `Stop`
+   - `Main` 行をドラッグで拡大して、どの時間帯に何が起きていたか（Loading / Scripting / Rendering 等の色分け）を眺める
+6. **Sources タブ**
+   - 左ペインで **Workers** / **Origin** を展開し、自分のサイトの `.js` ファイルを 1 つ開く
+   - 行番号をクリックしてブレークポイントを貼る
+   - ページをリロード → 該当行で停止することを確認（停止したら上部の再生ボタンで続行）
 
 ### 変える
 
-- DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
-- `Hard reload`（`Ctrl+Shift+R` / `Cmd+Shift+R`）を試す。`Disable cache` と同様だが、開発者ツールが閉じていてもキャッシュを無視できる
-- Network タブで `Throttling` を `Slow 4G` に。キャッシュから取っているときはほぼ無影響だが、キャッシュを無効にして比較すると体感差が大きい
+- Network タブで `Disable cache` のチェックを入れて、もう一度リロードする。Size 列に `(memory cache)` や `(disk cache)` と出ていた行が **実サイズ** になることを確認
+- Network タブの Throttling を `Slow 4G` に切り替え、ページをリロード。感覚として遅くなることと、Timing の値が伸びることを確認。元に戻す
+- デバイスモード（`Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE を選び、本サイトのレイアウトがスマホ向けに切り替わることを確認
 
 ### 自分で書く
 
-- 「`no-cache` と `no-store` の違いを 2 行で説明する」文章を書いてみる（本文を隠した状態で挑戦）
-- `Cache-Control: public, max-age=31536000, immutable` が付いたリソースをリロードしたとき、Network タブでどう見えるか予想し、実際に本サイトの `/assets/*.css` などで確認する
+- 自分でよく開くサイト（SNS / ニュース / ポートフォリオなど）で Network タブを開き、**HTML 1 つ読むのに何個のリクエストが発生しているか** 数える
+- そのうち Status が `304`（キャッシュ使用）になっているリクエストの数もメモしておく
 
 ## まとめ
 
-- キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
-- `Cache-Control` でモードを指定。よく使うのは `max-age` / `no-cache` / `no-store` / `immutable`
-- `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
-- 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
-- DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く
+- DevTools は開発の生命線。`F12` や右クリック「検証」で常に開ける場所にしておく
+- **Elements**: DOM と CSS を見る・いじる。スタイルのチェック外しで切り分け
+- **Console**: ログ閲覧 + その場で JS 実行
+- **Network**: 通信の全履歴。メソッド / ステータス / Timing / ヘッダ / ボディ
+- **Application**: Web Storage / Cookie / IndexedDB / Service Worker
+- **Performance**: 録画してページロードや JS 実行のボトルネックを可視化
+- **Sources**: JS にブレークポイントを貼ってデバッガで止める
+- デバイスモードで画面幅や prefers-color-scheme を強制切り替え

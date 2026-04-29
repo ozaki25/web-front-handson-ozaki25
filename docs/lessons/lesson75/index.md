@@ -1,216 +1,304 @@
-# lesson75: Server Component でデータを取得する
+# lesson74: Server Component と Client Component
 
 ## ゴール
 
-- `async` な Server Component を書けるようになります。
-- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
-- `loading.tsx` でローディング UI を挟めるようになります。
-- Next.js 16 の Server Component での fetch は **既定でキャッシュしない** ことを知り、キャッシュしたいときの書き方（`"use cache"` ディレクティブ / `fetch` オプション）を見分けられます。
+- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できます。
+- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子にも Client 扱いが伝播することを理解できます。
+- Client Component が Server Component を `import` はできませんが、`children` や props として受け取れることを知っています。
+- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを自分の目で確認できます。
 
 ## 解説
 
-### Server Component は `async` にできる
+### 2 種類のコンポーネントがある
 
-4 章 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
+App Router では、コンポーネントが 2 種類あります。
+
+- **Server Component**（デフォルト）
+  - サーバー側で React を実行します。
+  - `useState` / `useEffect` / `onClick` など、**ブラウザでしか動かないもの** は使えません。
+  - データベースアクセスや秘密情報を扱えます。
+  - 送り出されたあとはブラウザでは再実行されません。
+- **Client Component**
+  - ブラウザで動きます。4 章 までの React と同じ感覚で書けます。
+  - `useState` / `useEffect` / `onClick` が使えます。
+  - 先頭に `"use client"` を書いて明示します。
+
+4 章 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
+
+### `"use client"` のルール
+
+Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
 
 ```tsx
-export default async function Page() {
-  const data = await fetch("https://...").then((r) => r.json());
-  return <div>{data.title}</div>;
+"use client";
+
+import { useState } from "react";
+
+export function Counter() {
+  // ...
 }
 ```
 
-- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
-- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
+- 必ず **ファイル先頭 1 行目**（`import` より上）です。
+- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
 
-ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（4 章 の「useEffect の基本」末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
+つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
 
-### `loading.tsx` でローディング UI
+### 境界のイメージ
 
-`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
+ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
 
+```mermaid
+graph TD
+  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
+  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
+
+  Layout["RootLayout (Server)"]:::server
+  Page["page.tsx (Server)"]:::server
+  Nav["Nav (Server)"]:::server
+  Counter["Counter (Client)"]:::client
+  Form["TodoForm (Client)"]:::client
+
+  Layout --> Page
+  Page --> Nav
+  Page --> Counter
+  Page --> Form
 ```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
 
-`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
+- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
+- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
+- Client の部分は「葉」に配置します。ページ全体を Client にしません。
 
-### Next.js 16 のキャッシュは「明示的に opt-in」
+上記図はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965`、枠 `#95d5b2` / `#62b6cb`、文字 `#ffffff`）を指定しています。
 
-Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったため、Next.js 15 以降は **fetch のデフォルトがキャッシュしない** 動作に切り替わっています。毎リクエストで取り直します。
+### Client → Server の呼び出しルール
 
-キャッシュしたい場合は明示的に指定します。書き方は 2 系統あります。
+ここがよく詰まるポイントです。
 
-#### 従来の方法: `fetch` のオプション
+- Client Component から Server Component を **`import` できません**。
+- ただし、`children` や props として **受け取ること** は可能です。
 
-第 2 引数で挙動を切り替える、以前から使える書き方です。
+つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
 
 ```tsx
-// (1) 強くキャッシュ: 一度取ったらずっと使い回す
-await fetch(url, { cache: "force-cache" });
+// Server Component（親）
+import { ClientWrapper } from "./ClientWrapper";
+import { ServerInfo } from "./ServerInfo";
 
-// (2) 一定時間ごとに再取得: 60 秒間はキャッシュ、60 秒経ったら次のアクセスで新しく取る
-await fetch(url, { next: { revalidate: 60 } });
-
-// (3) タグ単位で無効化: Server Actions から revalidateTag('posts') を呼ぶとこのキャッシュが切れる
-await fetch(url, { next: { tags: ["posts"] } });
-```
-
-#### 新しい方法: `"use cache"` ディレクティブ（Cache Components）
-
-Next.js 16 で導入された **Cache Components** のパターンです。コンポーネントや関数の先頭に `"use cache"` と書くと、その結果全体をキャッシュ対象にします。`next.config.ts` で `cacheComponents: true` を有効にしたときに使えます。
-
-```tsx
-// next.config.ts
-const nextConfig = {
-  cacheComponents: true, // Cache Components を有効化
-};
-export default nextConfig;
-```
-
-```tsx
-// 関数単位: fetch をまとめてキャッシュ
-import { cacheLife, cacheTag } from "next/cache";
-
-async function getPosts() {
-  "use cache";
-  cacheLife("hours"); // 1 時間単位でキャッシュ
-  cacheTag("posts");  // 'posts' タグで無効化対象にする
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  return res.json();
+export default function Page() {
+  return (
+    <ClientWrapper>
+      <ServerInfo />
+    </ClientWrapper>
+  );
 }
 ```
 
 ```tsx
-// コンポーネント単位: 描画結果ごとキャッシュ
-async function PostList() {
-  "use cache";
-  const posts = await fetch("https://jsonplaceholder.typicode.com/posts").then((r) => r.json());
-  return <ul>{posts.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+// ClientWrapper.tsx
+"use client";
+
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export function ClientWrapper({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>開閉</button>
+      {open && children}
+    </div>
+  );
 }
 ```
 
-- **`"use cache"` を書いた関数 / コンポーネント全体** がキャッシュされる
-- `cacheLife("minutes" | "hours" | "days" | "weeks" | ...)` でキャッシュ寿命を設定
-- `cacheTag("...")` で `revalidateTag` から無効化できるタグを付ける
-- 書く場所はファイル先頭（ファイル全体）/ 関数先頭 / コンポーネント先頭のいずれか
+`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
 
-> **補足: `cacheComponents` を有効にしていない状態で `"use cache"` を書くとビルドエラー**: `next.config.ts` で `cacheComponents: true` を入れていないファイルに `"use cache"` を書くと、`Error: "use cache" requires the cacheComponents experimental flag to be enabled` のようなエラーで **ビルドが落ちます**。本レッスンの演習では `cacheComponents` を有効にしないので、キャッシュしたい場合は `fetch` オプション（`force-cache` / `next.revalidate` / `next.tags`）の方を使います。
+### Server → Client へ渡せる props は **シリアライズ可能なもの限定**
 
-本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。「キャッシュしたいときに 2 系統の選択肢がある」ことだけ頭に入れておけば十分です。本格的に使うのは実務に入ってからで構いません。
+Server Component から Client Component へ props を渡すとき、**シリアライズ可能** （JSON で表現できる）な値しか渡せません。具体的には次のとおりです。
 
-ここで話しているキャッシュは **Server Component のデータ取得** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
+- **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
+- **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
+
+これは「Server で計算した結果を Client に渡す = ネットワーク越しに JSON で送る」ためです。`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーで詰まります。実務での回避パターン:
+
+- **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
+- **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
+- **コールバック関数**: 普通の関数は渡せないので、**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せます
+
+### `"use client"` を忘れたときのエラー
+
+`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+```
+
+このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンの記事一覧演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート(<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>)を開けば、本文の手順だけで完結します。中心となるのは `app/posts/page.tsx` と `app/posts/loading.tsx` の新規作成です。手順 3 のヘッダーリンク追加は `app/layout.tsx` にナビがあれば足せますが、無ければスキップして構いません。
+このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
 
-### 前回のプロジェクトを開く
+### 既存のプロジェクトを使う
 
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
+「共通レイアウトを作る」のレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順 1: `/posts` ページを作る
+### 手順 1: Client Component の `Counter` を作る
 
-`app/posts/page.tsx` を新規作成します。
+`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
+
+`app/components/Counter.tsx`:
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+"use client";
 
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+import { useState } from "react";
 
+export function Counter() {
+  const [count, setCount] = useState(0);
+  console.log("client render");
+  return (
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
+  );
+}
+```
+
+- 1 行目に `"use client"` を書きます。
+- `useState` と `onClick` を使っています。
+- `console.log("client render")` をレンダリング中に仕掛けます。
+
+### 手順 2: Server Component の `page.tsx` に埋め込む
+
+`app/page.tsx` を次のように書き換えます。
+
+```tsx
+import { Counter } from "./components/Counter";
+
+export default function Page() {
+  console.log("server render");
   return (
     <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
-          </li>
-        ))}
-      </ul>
+      <h1>ようこそ</h1>
+      <p>Counter は Client Component として動く。</p>
+      <Counter />
     </>
   );
 }
 ```
 
-- `async function` で書いています（Server Component だから許されます）。
-- `fetch` も `response.json()` も `await` が必要です（2 章 で学んだ fetch と同じです）。
-- `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
-- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
+- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
+- `console.log("server render")` を仕掛けます。
 
-> **補足: `Post[]` への型キャストは「信頼している」だけ**: `await res.json()` の戻り値は実際は `unknown` で、上のコードは「外部 API は約束通りの形を返してくる」と **信じている** 状態です。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように **実行時に形をチェック** します。
+### 手順 3: 境界を確認する
 
-### 手順 2: `loading.tsx` を置く
+1. ブラウザで `/` を開きます。
+2. ブラウザの DevTools → Console を開きます。
+3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
+4. ページを再読み込みします。
 
-`app/posts/loading.tsx` を新規作成します。
+#### 期待出力
+
+- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
+- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
+- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
+
+これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
+
+### 手順 4: `"use client"` を消してみる
+
+`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
+
+ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+```
+
+このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
+
+### 手順 5: Server を Client の children として渡す
+
+以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
+
+`app/components/ClientBox.tsx`:
 
 ```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
+"use client";
+
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export function ClientBox({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>
+        {open ? "閉じる" : "開く"}
+      </button>
+      {open && <div>{children}</div>}
+    </div>
+  );
 }
 ```
 
-- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
-- ファイル名は `loading.tsx` 固定です。
-
-### 手順 3: ヘッダーにリンクを追加
-
-`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
+`app/components/ServerInfo.tsx`:
 
 ```tsx
-<li>
-  <Link href="/posts">Posts</Link>
-</li>
+export function ServerInfo() {
+  // Server Component なので、ここでサーバー時刻が取れる
+  const now = new Date().toISOString();
+  return <p>サーバー時刻: {now}</p>;
+}
 ```
 
-### 期待出力
+`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
 
-1. ブラウザで `/posts` を開きます。
-2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
-3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
-4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
+```tsx
+import { Counter } from "./components/Counter";
+import { ClientBox } from "./components/ClientBox";
+import { ServerInfo } from "./components/ServerInfo";
+
+export default function Page() {
+  console.log("server render");
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <Counter />
+      <ClientBox>
+        <ServerInfo />
+      </ClientBox>
+    </>
+  );
+}
+```
+
+#### 期待出力
+
+- 最初は `サーバー時刻: 2026-...` が見えています。
+- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
+- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
+
+もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
 
 ### 変えてみる
 
-1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
-2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
-3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
-
-### キャッシュ指定を試す（任意）
-
-`fetch` の第 2 引数に以下を指定して挙動の違いを見てみましょう。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良いです。
-
-```tsx
-const res = await fetch(
-  "https://jsonplaceholder.typicode.com/posts",
-  { next: { revalidate: 60 } },
-);
-```
+1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
+2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
 
 ### 自分で書く
 
-`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
+「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
 
 ## まとめ
 
-- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
-- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
-- Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ**（Cache Components） を使います。
-- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
-
-### コラム: `loading.tsx` の裏で動く Suspense
-
-`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
-
-本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。
+- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
+- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
+- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
+- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。

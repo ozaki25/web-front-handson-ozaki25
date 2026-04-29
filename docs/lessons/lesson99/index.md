@@ -1,37 +1,62 @@
-# lesson99: コンポーネントテスト — React Testing Library
+# lesson98: テスト入門 — Vitest でユニットテスト
 
 ## ゴール
 
-- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
-- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
-- `userEvent` でクリック / 入力をシミュレートできる
-- 状態変化（`useState`）を含むコンポーネントのテストが書ける
-- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
+- なぜテストを書くか、何が報われるかを自分の言葉で説明できる
+- Vitest をプロジェクトにセットアップできる
+- `describe` / `it` / `expect` の基本構文を読める・書ける
+- 純粋関数（純関数）のユニットテストを書ける
+- watch モードで「コードを直したらテストが即走る」体験を得る
+- テストピラミッド（ユニット 70% / 結合 20% / E2E 10%）の考え方を知る
 
 ## 解説
 
-### React Testing Library の思想
+### なぜテストを書くか
 
-React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
+「テストは時間の無駄」と感じる人もいます。しかし実務では次のリターンがあります。
 
-1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
-2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
+1. **デグレ防止**: 一度直したバグが、別の修正でまた壊れることを自動検知
+2. **リファクタリングの安心感**: テストが通っていれば、内部実装を大胆に書き換えられる
+3. **設計のフィードバック**: テストが書きにくいコードは、責務が混ざっている兆候。設計改善のシグナル
+4. **ドキュメント代わり**: テストが「この関数はこう動く」の生きた説明になる
 
-これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
+逆にテストが要らない / 後回しでよいケース:
 
-- 内部実装をリファクタしてもテストは壊れない
-- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
+- 試作で捨てる前提のコード
+- 1 度だけ使うスクリプト
+- UI のピクセル単位の見た目（人間の目で確認する方が速い）
 
-### セットアップ
+本コースは学習教材なのでテストは書いていませんが、**実務に出るときの必修科目** です。
 
-「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
+### テストピラミッド
+
+テストには規模の違いがあります。
+
+| 種類 | 速度 | 安定 | 範囲 | 比率の目安 |
+|---|---|---|---|---|
+| ユニット | 速い（ms） | 安定 | 関数 1 つ | 70% |
+| コンポーネント / 結合 | 中間 | 中間 | コンポーネント / 複数モジュール | 20% |
+| E2E | 遅い（秒） | 不安定 | アプリ全体 | 10% |
+
+ピラミッドの考え方は **「下が広く、上が狭い」** です。ユニットを多く書き、E2E は最重要パスだけに絞ります。E2E は「ログイン → 商品購入」のような **失敗するとビジネス的に致命的な経路** に投資する、というのが 2026 年の定番です。
+
+本レッスンでは **Vitest でユニットテスト**（純粋関数のテスト）を扱います。コンポーネントテスト（Testing Library）、API モック（MSW）、E2E（Playwright）はそれぞれ別の章で扱います。
+
+### Vitest とは
+
+**Vitest** は Vite の上で動くテストランナーです。Jest（昔からある定番）と同じ書き方で、**Vite と同じ設定（TypeScript / JSX / 環境変数 / プラグイン）が自動で効く** のが大きな利点です。冷起動が Jest より一桁速いと言われています。
+
+2026 年現在、新規プロジェクトでは **Vitest が第一候補** です。Jest は既存資産との互換のために残るケースが多いです。
+
+### Vitest のセットアップ
+
+新規 Vite プロジェクトに Vitest を入れるとき:
 
 ```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
+npm install -D vitest @vitejs/plugin-react jsdom
 ```
 
-`vitest.config.ts` を更新:
+`vitest.config.ts` を作成:
 
 ```ts
 import { defineConfig } from "vitest/config";
@@ -40,404 +65,280 @@ import react from "@vitejs/plugin-react";
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: "jsdom",  // ブラウザ風 DOM を提供
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
+    environment: "jsdom",  // ブラウザ風 DOM を提供（コンポーネントテスト用）
+    globals: true,         // describe / it / expect を import なしで使える
+    setupFiles: ["./vitest.setup.ts"], // 共通の前処理を書く場合
   },
 });
 ```
 
-`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
+`package.json` に scripts を足す:
 
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
-
-### 最小のコンポーネントテスト
-
-テスト対象:
-
-```tsx
-// src/Greeting.tsx
-type Props = { name: string };
-
-export function Greeting({ name }: Props) {
-  return <h1>こんにちは、{name} さん</h1>;
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  }
 }
 ```
 
-テスト:
+- `npm run test`: **watch モード** で起動。ファイル変更を検知して再実行
+- `npm run test:run`: 1 回だけ実行（CI 用）
 
-```tsx
-// src/Greeting.test.tsx
+> **CI で動かす最小例**: GitHub Actions なら `.github/workflows/test.yml` に下記を置くだけで PR / push 時に毎回テストが走ります。
+>
+> ```yaml
+> name: test
+> on: [push, pull_request]
+> jobs:
+>   test:
+>     runs-on: ubuntu-latest
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: 22
+>           cache: npm
+>       - run: npm ci
+>       - run: npm run test:run
+> ```
+
+### 最小のテスト
+
+テストファイルは `*.test.ts` / `*.test.tsx` / `*.spec.ts` の命名で書きます。Vitest が自動で見つけて実行します。
+
+```ts
+// src/math.ts
+export function add(a: number, b: number): number {
+  return a + b;
+}
+```
+
+```ts
+// src/math.test.ts
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { Greeting } from "./Greeting";
+import { add } from "./math";
 
-describe("Greeting", () => {
-  it("名前を含む挨拶を表示する", () => {
-    render(<Greeting name="Alice" />);
-    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
+describe("add", () => {
+  it("正の数を 2 つ足す", () => {
+    expect(add(2, 3)).toBe(5);
+  });
+
+  it("負の数も足せる", () => {
+    expect(add(-1, -2)).toBe(-3);
+  });
+
+  it("0 を足すと変わらない", () => {
+    expect(add(10, 0)).toBe(10);
   });
 });
 ```
 
-3 つの基本要素:
+3 つの基本構造:
 
-- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
-- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
-- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
+- **`describe(名前, () => {...})`**: テストをグループ化
+- **`it(条件, () => {...})`**: 1 つのテストケース。`test(...)` でも同じ
+- **`expect(値).toBe(期待値)`**: アサーション（期待を表明）
 
-### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
+`globals: true` を有効にしているので、`import` を省いてもエラーにはなりませんが、**明示的に import するのが推奨** です（IDE の補完が効くため）。
 
-要素を探す関数は **接頭辞** で挙動が変わります。
+### よく使うアサーション
 
-| 接頭辞 | 見つからない時 | 用途 |
-|---|---|---|
-| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
-| `queryBy*` | `null` を返す | 「無いはず」を確認する |
-| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
-
-例:
-
-```tsx
-// 「保存」ボタンが必ずある
-const button = screen.getByRole("button", { name: "保存" });
-
-// エラーメッセージは「無いはず」（成功時）
-expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
-
-// fetch が終わった後に現れるユーザー名
-const userName = await screen.findByText("Alice");
+```ts
+expect(value).toBe(5);              // === で比較（プリミティブ）
+expect(obj).toEqual({ a: 1 });      // 構造比較（オブジェクト / 配列）
+expect(arr).toContain("apple");     // 配列が要素を含むか
+expect(str).toMatch(/hello/);       // 文字列が正規表現にマッチするか
+expect(value).toBeNull();           // null かどうか
+expect(value).toBeUndefined();      // undefined かどうか
+expect(value).toBeTruthy();         // truthy（真値）か
+expect(value).toBeFalsy();          // falsy（偽値）か
+expect(fn).toThrow("エラーメッセージ"); // 関数が例外を投げるか
+expect(arr).toHaveLength(3);        // 配列 / 文字列の長さ
 ```
 
-### クエリの優先順位
+`toBe` と `toEqual` の使い分けは要注意。
 
-Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
+```ts
+expect({ a: 1 }).toBe({ a: 1 });    // NG: 別オブジェクトなので fail
+expect({ a: 1 }).toEqual({ a: 1 }); // OK: 構造が同じなので pass
+```
 
-| 優先度 | クエリ | 何を見るか |
-|---|---|---|
-| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
-| 2 | `getByLabelText` | フォームの `<label>` テキスト |
-| 3 | `getByPlaceholderText` | input の placeholder |
-| 4 | `getByText` | 表示テキスト |
-| 5 | `getByDisplayValue` | input の現在値 |
-| 6 | `getByAltText` | img の alt |
-| 7 | `getByTitle` | title 属性 |
-| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
+オブジェクト / 配列は `toEqual`、それ以外は `toBe` と覚えてください。
 
-**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
+### `beforeEach` と `afterEach`
 
-### `userEvent` でユーザー操作をシミュレート
+各テストの前後に共通処理を入れたい場合に使います。
 
-ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Counter } from "./Counter";
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
 
 describe("Counter", () => {
-  it("ボタンを押すと数が増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
+  let count: number;
 
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
+  beforeEach(() => {
+    count = 0;  // 各テスト前にリセット
   });
 
-  it("複数回押すと累積する", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
+  it("増やすと 1 になる", () => {
+    count++;
+    expect(count).toBe(1);
+  });
 
-    const button = screen.getByRole("button", { name: "+1" });
-    await user.click(button);
-    await user.click(button);
-    await user.click(button);
-
-    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
+  it("リセット後も 0 から始まる", () => {
+    expect(count).toBe(0);  // beforeEach のおかげで毎回 0 から
   });
 });
 ```
 
-`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
+### 非同期コードのテスト
 
-### フォーム入力のテスト
-
-`<input>` への入力は `user.type` でシミュレートします。
-
-```tsx
-import { useState } from "react";
-
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setSubmitted(name);
-      }}
-    >
-      <label htmlFor="name">お名前</label>
-      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
-```
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    const input = screen.getByLabelText("お名前");
-    const button = screen.getByRole("button", { name: "送信" });
-
-    await user.type(input, "Alice");
-    await user.click(button);
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
-
-  it("入力が空のままだと挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-});
-```
-
-`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
-
-### よく使う追加マッチャ（jest-dom）
-
-`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
-
-```tsx
-expect(element).toBeInTheDocument();        // DOM に存在する
-expect(element).toHaveTextContent("hello"); // テキストを含む
-expect(element).toBeVisible();              // 見える状態
-expect(input).toHaveValue("Alice");         // input の値
-expect(checkbox).toBeChecked();             // チェック済み
-expect(button).toBeDisabled();              // disabled 属性付き
-expect(element).toHaveClass("active");      // CSS クラス付き
-expect(element).toHaveAttribute("href", "/about");
-```
-
-これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
-
-### テスト間で DOM / タイマーが漏れる落とし穴
-
-RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
-
-- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。
-- **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
+`async / await` で書くと自然に通ります。
 
 ```ts
-import { afterEach, vi } from "vitest";
-afterEach(() => {
-  vi.useRealTimers();
+import { describe, it, expect } from "vitest";
+
+async function fetchUser(id: number) {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve({ id, name: "Alice" }), 10)
+  );
+}
+
+describe("fetchUser", () => {
+  it("ユーザーを取得する", async () => {
+    const user = await fetchUser(1);
+    expect(user).toEqual({ id: 1, name: "Alice" });
+  });
 });
 ```
+
+「Promise のテスト」を意識しなくても、関数を `async` にして `await` を書くだけで OK です。
+
+### watch モードで開発する
+
+`npm run test` で立ち上がる watch モードでは、
+
+- ファイル変更を検知して自動再実行
+- 失敗したテストを表示しっぱなしにして、対応するファイルを直すと即パス確認
+- キーボード操作で **filter**（特定のテストだけ実行）/ **rerun**（全部再実行）/ **quit** ができる
+
+開発しながらテストを書く / 直す体験は、watch モードがあるとないとで雲泥の差です。
 
 ## 演習
 
 ### ゴール
 
-- React + RTL のセットアップを `vitest.config.ts` に反映する
-- カウンターコンポーネントのテストを書ける
-- 簡単なフォームのテストを書ける
-- `getByRole` / `getByLabelText` を優先して使える
+- Vitest をセットアップできる
+- 「文字列を処理する関数」のユニットテストを 5 件書ける
+- watch モードで「直したら即通る」を体感する
 
 ### 途中から始める場合
 
-「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
+新規 StackBlitz の Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-vanilla-ts>）を開きます。テンプレートには Vitest が入っていないので追加します。
 
-### 手順 1: 依存パッケージをインストール
+### 手順 1: Vitest をインストール
+
+ターミナル（StackBlitz の場合は下部の Terminal タブ）で:
 
 ```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
+npm install -D vitest
 ```
 
-### 手順 2: 設定ファイルを更新
+> 注: 本レッスンはコンポーネントテストではないので `@vitejs/plugin-react` / `jsdom` は不要です。React Testing Library のレッスンで足します。
 
-`vitest.config.ts`:
+### 手順 2: 設定ファイルを作る
+
+プロジェクトルートに `vitest.config.ts` を作成:
 
 ```ts
 import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  plugins: [react()],
   test: {
-    environment: "jsdom",
     globals: true,
-    setupFiles: ["./vitest.setup.ts"],
   },
 });
 ```
 
-`vitest.setup.ts` を新規作成:
+`package.json` の `scripts` に以下を追加:
 
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-### 手順 3: テスト対象のコンポーネントを書く
-
-`src/Counter.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-      <button onClick={() => setCount((c) => c - 1)}>-1</button>
-      <button onClick={() => setCount(0)}>リセット</button>
-    </div>
-  );
+```json
+{
+  "scripts": {
+    "test": "vitest"
+  }
 }
 ```
 
-`src/NameForm.tsx`:
+### 手順 3: テスト対象のコードを書く
 
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
+`src/string-utils.ts` を作成:
 
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
+```ts
+export function reverse(s: string): string {
+  return s.split("").reverse().join("");
+}
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (name.trim()) {
-      setSubmitted(name);
-    }
-  }
+export function isPalindrome(s: string): boolean {
+  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return cleaned === reverse(cleaned);
+}
 
-  return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="name">お名前</label>
-      <input
-        id="name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
+export function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + "...";
 }
 ```
 
 ### 手順 4: テストを書く
 
-`src/Counter.test.tsx`:
+`src/string-utils.test.ts` を作成:
 
-```tsx
+```ts
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Counter } from "./Counter";
+import { reverse, isPalindrome, truncate } from "./string-utils";
 
-describe("Counter", () => {
-  it("初期値は 0", () => {
-    render(<Counter />);
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+describe("reverse", () => {
+  it("文字列を反転する", () => {
+    expect(reverse("hello")).toBe("olleh");
   });
 
-  it("+1 ボタンで増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("-1 ボタンで減る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "-1" }));
-
-    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
-  });
-
-  it("リセットボタンで 0 に戻る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "リセット" }));
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+  it("空文字は空文字のまま", () => {
+    expect(reverse("")).toBe("");
   });
 });
-```
 
-`src/NameForm.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.type(screen.getByLabelText("お名前"), "Alice");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+describe("isPalindrome", () => {
+  it("回文は true", () => {
+    expect(isPalindrome("racecar")).toBe(true);
+    expect(isPalindrome("level")).toBe(true);
   });
 
-  it("空のまま送信しても挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
+  it("回文でなければ false", () => {
+    expect(isPalindrome("hello")).toBe(false);
   });
 
-  it("入力中の値が input に反映される", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
+  it("大文字小文字を無視する", () => {
+    expect(isPalindrome("RaceCar")).toBe(true);
+  });
 
-    const input = screen.getByLabelText("お名前");
-    await user.type(input, "Bob");
+  it("記号と空白を無視する", () => {
+    expect(isPalindrome("A man, a plan, a canal: Panama")).toBe(true);
+  });
+});
 
-    expect(input).toHaveValue("Bob");
+describe("truncate", () => {
+  it("最大長以内なら変えない", () => {
+    expect(truncate("hello", 10)).toBe("hello");
+  });
+
+  it("超えたら切り詰めて ... を付ける", () => {
+    expect(truncate("hello world", 5)).toBe("hello...");
+  });
+
+  it("ちょうどなら変えない", () => {
+    expect(truncate("hello", 5)).toBe("hello");
   });
 });
 ```
@@ -448,43 +349,49 @@ describe("NameForm", () => {
 npm run test
 ```
 
-すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
+Vitest が起動し、watch モードで全テストが走ります。すべて緑のチェックで pass すれば成功です。
 
 ### 期待出力
 
 ```
- PASS  src/Counter.test.tsx (4)
- PASS  src/NameForm.test.tsx (3)
+ PASS  src/string-utils.test.ts (10)
+   PASS  reverse (2)
+     PASS  文字列を反転する
+     PASS  空文字は空文字のまま
+   PASS  isPalindrome (4)
+     PASS  回文は true
+     PASS  回文でなければ false
+     PASS  大文字小文字を無視する
+     PASS  記号と空白を無視する
+   PASS  truncate (3)
+     PASS  最大長以内なら変えない
+     PASS  超えたら切り詰めて ... を付ける
+     PASS  ちょうどなら変えない
 
- Test Files  2 passed (2)
-      Tests  7 passed (7)
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
 ```
+
+実際の Vitest 出力では緑のチェックマーク記号がそれぞれの行頭に付きます。すべて緑になれば OK です。
 
 ### 変える
 
-- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
-- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
-- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
+- `truncate("hello world", 5)` の期待値を `"hello world"` に変えてみる。fail することを確認（fail 表示で「実際は何が返ったか」が示される）。元に戻す
+- `string-utils.ts` の `truncate` の `+ "..."` を消してみる。watch モードが即座に該当テストの fail を表示する。元に戻す
+- 新しい関数 `wordCount(s: string): number`（空白で区切った単語数を返す）を `string-utils.ts` に足し、テストも 3 件書く
 
 ### 自分で書く
 
-- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
-  - 入力欄 + 「追加」ボタン
-  - 追加されたら入力欄が空になる
-  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
-- テストで以下を検証:
-  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
-  - 送信後に input が空になる
-  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
-
-`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
+- 配列を扱う関数を作ってテストを書く
+  - `unique<T>(arr: T[]): T[]`（重複を除いた配列）
+  - `chunk<T>(arr: T[], size: number): T[][]`（配列を size ごとに分割）
+- 各関数で **境界値**（空配列 / 1 要素 / size より小さい配列）も忘れずテストする
 
 ## まとめ
 
-- React Testing Library は「ユーザーの見え方」をテストする思想
-- `render` / `screen` でコンポーネントを描画して DOM クエリ
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
-- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
-- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
-- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
-- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
+- テストはデグレ防止 / リファクタリング安心 / 設計フィードバック / ドキュメント代わりの 4 つで報われる
+- テストピラミッド: ユニット 70% / 結合 20% / E2E 10% を目安
+- **Vitest** は Vite の上で動くテストランナー。Jest 互換の書き味で 10x 速い
+- 基本構造: `describe(名前, () => { it(条件, () => { expect(値).toBe(期待値) }) })`
+- アサーション: `toBe` はプリミティブ / `toEqual` はオブジェクト・配列
+- watch モードでファイル変更検知 → 即再実行で開発体験が大きく向上

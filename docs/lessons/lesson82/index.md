@@ -1,329 +1,367 @@
-# lesson82: Route Handlers（`app/api/.../route.ts`）
+# lesson81: 送信状態とエラー表示
 
 ## ゴール
 
-- Next.js で HTTP API エンドポイントを作れる（`GET` / `POST`）
-- Server Actions との使い分けの指針を持つ
-- 3 章 の「型ガード」の型ガードを **サーバー側の入力検証** と **クライアント側の受信検証** 両方に使える
-- Proxy との **ランタイムと役割の違い**（どちらも Node.js 既定、Route Handlers はデータ / Proxy は前処理）を理解する
+- `useActionState` の正しいシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を覚えます。
+- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せます。
+- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書けます。
+- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を間違えずに使えます。
 
 ## 解説
 
-### Server Actions と Route Handlers の違い
+### なぜエラー用の別フックが必要か
 
-5 章 の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
+「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
 
-一方、もっと一般的な用途、例えば:
+エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
-- モバイルアプリ・別サイトから API を叩きたい
-- `fetch('/api/todos')` で JSON を取得・送信したい
-- 認証ヘッダや CORS を扱いたい
+### `useActionState` のシグネチャ（絶対に覚える）
 
-といった場面では **Route Handlers** を使います。
+```tsx
+"use client";
 
-使い分け:
+import { useActionState } from "react";
+import { addTodo } from "./actions";
 
-| 用途 | Server Actions | Route Handlers |
-|---|---|---|
-| 同一 Next.js 内のフォーム送信 | こちらが基本 | 補助的 |
-| 外部クライアント（モバイル・他サイト）が叩く | 不可 | こちらが基本 |
-| 戻り値を UI に結合 | `useActionState` で楽 | 手動で `fetch` + state |
-| 認証ヘッダや CORS が必要 | 向かない | 向く |
+type AddTodoState = { error?: string };
 
-両方が使えるときは Server Actions を優先するのが楽です。**外部から叩く可能性があるなら Route Handlers** と覚えてください。
+const initialState: AddTodoState = {};
 
-### Route Handlers の書き方
+const [state, formAction, isPending] = useActionState(addTodo, initialState);
+```
 
-`app/api/xxx/route.ts` を作り、HTTP メソッド名の関数を `export` します。
+- 第 1 引数: **action**（Server Action の関数）
+- 第 2 引数: **初期状態**
+- 戻り値: `[state, formAction, isPending]` の 3 要素タプル
+
+引数の順に注意してください。**action が第 1 引数**、初期状態が第 2 引数です。逆にしないでください。
+
+戻り値の中身:
+
+- `state`: 現在のアクション戻り値（`action` が最後に `return` したもの）。初回は `initialState` です。
+- `formAction`: **`<form action={formAction}>` に渡す**、ラップ済みの関数です。元の action ではなくこちらを渡します。
+- `isPending`: 送信中かどうかの真偽値です。
+
+### Server Action のシグネチャを変える
+
+`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
 
 ```ts
-// app/api/todos/route.ts
-import { NextResponse } from "next/server";
+"use server";
 
-const todos = [{ id: "1", text: "牛乳を買う" }];
-
-export async function GET() {
-  return NextResponse.json({ todos });
-}
-
-export async function POST(request: Request) {
-  const body = await request.json();
-  // body.text を todos に追加して返す
-  return NextResponse.json({ ok: true });
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {}; // 成功
 }
 ```
 
-- ファイル名は **`route.ts`** 固定（`page.tsx` とは別のファイル）
-- URL は `app/api/todos/route.ts` → `/api/todos`
-- `GET` / `POST` / `PUT` / `DELETE` / `PATCH` を同じファイルに並べられる
-- 戻り値は **`NextResponse`（`next/server` から import）を基本に統一** します。素の `Response.json(...)` でも動きますが、Cookie 操作・リダイレクト・型補完が揃っているので `NextResponse` を推奨
+- 第 1 引数が `prevState`（前回のアクションの戻り値）です。使わなくても受け取る必要があります。
+- 第 2 引数が `FormData` です。
+- 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
 
-### 入力検証と受信検証
+「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
 
-Route Handlers を作るときに **型ガード**（3 章 の「型ガード」） が活きます。
+### `useFormStatus` は `<form>` の **子** で呼ぶ
 
-- **サーバー側**: `POST` の中で `await request.json()` した値は **型が `any`** になる（外部から何が来るか分からない）。そのまま `body.text` を使うと TS の型チェックは効くが、実行時は壊れうる
-- **クライアント側**: `fetch('/api/todos')` で受け取った JSON も **何が返るか TS からは見えない**。同じく検証が必要
+`useFormStatus` は「そのフォームが送信中かどうか」を取るフックです。重要な制約があります。
 
-役割分離:
+- **import 元は `react-dom`** です（`react` ではありません）。
+- **`<form>` の子コンポーネント内で呼ぶ必要があります**。フォーム本体（`<form>` を return しているコンポーネント）の中では呼べません。
 
-- サーバー側は **入力検証** → 不正なリクエストを弾く
-- クライアント側は **受信検証** → サーバーが想定と違う JSON を返してきたときに壊れないようにする
+```tsx
+"use client";
 
-両方で「型ガード」の `isTodo` のような型ガードを書きます。実務では Zod などのスキーマバリデーションライブラリが多く使われますが、本コースでは型ガードの基礎だけを押さえます。
+import { useFormStatus } from "react-dom";
 
-### ランタイムの話
+export function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
+```
 
-Next.js の「サーバー側で動くもの」には **2 つのランタイム** があります。
+送信ボタンを別コンポーネントに切り出し、その中で `useFormStatus()` を呼びます。これが定番パターンです。
 
-- **Node.js ランタイム**: `fs` など Node API が使える
-- **Edge ランタイム**: `fs` などは使えない。起動が速く、世界中のエッジで動く
+### import 元の違い（詰まる人が多い）
 
-Next.js 16 では Route Handlers と Proxy の **どちらも既定が Node.js** になりました（以前の Middleware は Edge 既定でしたが、Proxy への改名にあわせて Node.js 既定に）。`export const runtime = "edge"` を明示すれば Edge で動かすこともできます。両者の違いは **役割** です。
+両者は見た目が似ていますが import 元が違います。**太字で強調**:
 
-- **Route Handlers**: データを返す / 受けるエンドポイント（REST / Webhook）
-- **Proxy**: リクエスト前の軽量な分岐（認証ガード / リダイレクト）
+- **`useActionState` は `react` から**
+- **`useFormStatus` は `react-dom` から**
+
+間違えると「そんな export はない」というエラーが出ます。最初のうちは毎回見比べながら書くと良いです。
+
+### 冪等性と二重送信への備え
+
+`isPending` でボタンを `disabled` にすれば、ユーザーが送信中にもう一度ボタンを押すことは防げます。ただし、これはクライアント側の親切な UI でしかなく、本番では次のような事態に備えてサーバー側でも対策します。
+
+- ユーザーが「送信」を押した直後に **ネットワーク切断** で結果が返ってこず、**手動でリロード後に再送信** する
+- ブラウザの戻る/進む / フォームの再送信ダイアログで **同じリクエストが 2 回飛ぶ**
+
+「同じ操作が 2 回届いても結果が変わらない」という性質を **冪等性** と呼びます。Server Action / API を冪等にする実務の定番パターンは次のとおりです。
+
+- **クライアントが `requestId`（ランダム UUID）を生成して送る**: サーバーは `requestId` を DB のユニーク制約付きで保存し、2 回目は無視する
+- **state machine**: TODO の `status` が `done` のときに再度 `done` 化する操作は no-op にする
+- **upsert / `ON CONFLICT DO NOTHING`**: 同じ ID の挿入を 2 回受けてもエラーにせず無視
+
+本コースでは扱いませんが、`useActionState` で `isPending` を見て disabled にする UI 側の対策と、Server 側の冪等性は **両方そろってはじめて安全** という前提を頭に入れておきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/types.ts` の `isTodo` 型ガードは3 章 の「型ガード」と揃えた形なので、3 章 を先に終えていなくてもそのまま貼って使えます。既に「Server Actions の最小形」「送信状態とエラー表示」で `app/types.ts` を作っている場合は、下記の型ガードを追記する形で構いません。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Actions の最小形」の `addTodo` を前提にしています。
 
-### ゴール
+<details>
+<summary>出発点のファイル</summary>
 
-- `/api/todos` に `GET` と `POST` を実装する
-- サーバー側で `isTodoInput` 型ガードで入力検証
-- クライアント側で `isTodoArray` 型ガードで受信検証
-- DevTools Console から `fetch` を叩いて動作確認
-
-### 手順
-
-1. これまでのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
-2. `app/types.ts` に `Todo` 型を置く（既にあるなら再利用）
-3. `app/api/todos/route.ts` を新規作成
-4. `app/todos/page.tsx`（Client 検証用の画面）を更新
-
-### `app/types.ts`
+**`app/types.ts`**
 
 ```ts
 export type Todo = {
   id: string;
   text: string;
 };
-
-// 型ガード: unknown から Todo に絞り込む
-export function isTodo(value: unknown): value is Todo {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return typeof obj.id === "string" && typeof obj.text === "string";
-}
-
-// 配列全体を検証
-export function isTodoArray(value: unknown): value is Todo[] {
-  return Array.isArray(value) && value.every(isTodo);
-}
-
-// 「text だけの入力」を検証するガード（id はサーバー側で作る）
-export function isTodoInput(value: unknown): value is { text: string } {
-  if (typeof value !== "object" || value === null) return false;
-  const obj = value as Record<string, unknown>;
-  return typeof obj.text === "string" && obj.text.trim().length > 0;
-}
 ```
 
-3 章 の「型ガード」で `isTodo` の骨格を書きました。ここで配列用と入力用の派生を追加しています。
-
-### `app/api/todos/route.ts`
+**`app/actions.ts`**
 
 ```ts
-import { NextResponse } from "next/server";
-import type { Todo } from "../../types";
-import { isTodoInput } from "../../types";
+"use server";
 
-// モジュールトップレベルでインメモリ保持（「Server Actions の最小形」と同じ割り切り）
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
 const todos: Todo[] = [];
 
-export async function GET() {
-  return NextResponse.json({ todos });
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
 }
 
-export async function POST(request: Request) {
-  const body: unknown = await request.json();
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
 
-  // サーバー側の入力検証
-  if (!isTodoInput(body)) {
-    return NextResponse.json(
-      { ok: false, error: "text が必要です" },
-      { status: 400 },
-    );
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
   }
-
-  const newTodo: Todo = { id: crypto.randomUUID(), text: body.text.trim() };
-  todos.push(newTodo);
-  return NextResponse.json({ ok: true, todo: newTodo });
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
 }
 ```
 
-ポイント:
+**`app/todos/page.tsx`**
 
-- `await request.json()` の戻り値は `unknown`（実際は `any` だが、今回は意図的に `unknown` で受けて検証を強制）
-- `isTodoInput` で検証し、失敗したら 400 を返す
-- 成功時は `ok: true` と作成した Todo を返す
+```tsx
+import { addTodo, listTodos } from "../actions";
 
-### DevTools Console からの動作確認
+export default async function TodosPage() {
+  const todos = await listTodos();
 
-プレビューを別タブで開き、Console で次を実行します。
-
-```js
-// GET
-const res = await fetch("/api/todos");
-const data = await res.json();
-console.log(data); // { todos: [] }
-
-// POST（正常）
-const res2 = await fetch("/api/todos", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ text: "本を返す" }),
-});
-console.log(await res2.json());
-// { ok: true, todo: { id: "...", text: "本を返す" } }
-
-// POST（異常: text 欠落）
-const res3 = await fetch("/api/todos", {
-  method: "POST",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ foo: "bar" }),
-});
-console.log(res3.status); // 400
-console.log(await res3.json());
-// { ok: false, error: "text が必要です" }
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
 ```
 
-### Client 側の受信検証
+</details>
 
-`app/todos/page.tsx`（Server Component）に、受信した JSON を型ガードで検証する Client Component を組み合わせます。
+### 前回のプロジェクトを開く
 
-`app/todos/TodoFetcher.tsx`（新規）:
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
+
+### 手順の進め方（重要）
+
+本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全です。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進めましょう。
+
+順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短いです。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すと良いです:
+
+1. 新しいファイル `app/todos/TodoForm.tsx` を先に **作るだけ作る**（import する `addTodo` の型不一致でエラーが出るが、そのまま進めます）
+2. `app/todos/page.tsx` で `<form>` ブロックを `<TodoForm />` に差し替え
+3. 最後に `app/actions.ts` の `addTodo` を `(prevState, formData) => newState` 形に書き換え
+
+このドキュメント上の掲載は **「どれを書けばいいか」を最初に見せる** ために 手順 1（actions.ts）から順に並べていますが、手を動かす順番は上記の 1 → 2 → 3 でも構いません。どちらでも最終的には同じ形になります。
+
+### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
+
+`app/actions.ts` を書き換えます。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+```
+
+- 戻り値を `AddTodoState` 型にし、成功時は `{}`、失敗時は `{ error: "..." }` を返します。
+- `prevState` は受け取りますが今回は使いません（それで OK です）。
+
+### 手順 2: フォームを Client Component に切り出す
+
+`useActionState` は Client Component のフックなので、フォーム部分だけを別ファイルに分離します。
+
+`app/todos/TodoForm.tsx`:
 
 ```tsx
 "use client";
 
-import { useEffect, useState } from "react";
-import type { Todo } from "../types";
-import { isTodoArray } from "../types";
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { addTodo, type AddTodoState } from "../actions";
 
-export function TodoFetcher() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-  const [error, setError] = useState<string | null>(null);
+const initialState: AddTodoState = {};
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await fetch("/api/todos");
-        const data: unknown = await res.json();
-
-        // 受信検証: サーバーが想定と違う形を返したら拒否する
-        if (typeof data !== "object" || data === null || !("todos" in data)) {
-          setError("レスポンスの形式が不正です");
-          return;
-        }
-        const maybeTodos = (data as { todos: unknown }).todos;
-        if (!isTodoArray(maybeTodos)) {
-          setError("todos が Todo 配列ではありません");
-          return;
-        }
-
-        setTodos(maybeTodos);
-      } catch (e) {
-        setError("通信に失敗しました");
-      }
-    })();
-  }, []);
-
-  if (error) return <p className="error">エラー: {error}</p>;
+function SubmitButton() {
+  const { pending } = useFormStatus();
   return (
-    <ul>
-      {todos.map((t) => (
-        <li key={t.id}>{t.text}</li>
-      ))}
-    </ul>
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
+
+export function TodoForm() {
+  const [state, formAction, isPending] = useActionState(addTodo, initialState);
+
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.error && <p className="error">{state.error}</p>}
+      {isPending && <p>通信中...</p>}
+    </form>
   );
 }
 ```
 
 ポイント:
 
-- `data: unknown` で受ける。これで TS は型ガードなしでは `data.todos` に触らせない
-- `isTodoArray` で検証、失敗時はエラー state にする
-- 3 章 の「型ガード」で学んだ `unknown` → `Todo` の絞り込みを **そのまま実務で使う** 形
+- 1 行目 `"use client"` です。
+- **`useActionState` は `react` から import** します。
+- **`useFormStatus` は `react-dom` から import** します。
+- `<form action={formAction}>` に渡すのは **`formAction`** です（`addTodo` ではありません）。
+- `SubmitButton` を別コンポーネントに切り出して、その中で `useFormStatus()` を呼びます。
+- `state.error` があるときだけ `<p>` に赤文字で表示します。
+- `isPending` でも「通信中...」を出します（冗長ですが違いを確認するためです）。
+
+### 手順 3: `/todos` ページで差し替える
+
+`app/todos/page.tsx` の `<form>` を `<TodoForm />` に差し替えます。
+
+```tsx
+import { listTodos } from "../actions";
+import { TodoForm } from "./TodoForm";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+`page.tsx` は Server Component のままです。Client の `TodoForm` を呼ぶだけなので `"use client"` は不要です。
+
+### 手順 4: エラー用の CSS
+
+`app/globals.css` にエラー表示のスタイルを追加します。
+
+```css
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
+  }
+}
+```
 
 ### 期待出力
 
-- `/api/todos` に GET → `{ todos: [...] }` JSON が返る
-- POST で追加できる、正常時 200、text 欠落時 400
-- `/todos` ページで一覧が表示される。サーバーが壊れた JSON を返すとエラーメッセージが出る
+1. `/todos` を開いて、何も入力せずに「追加」を押す → 下に赤文字で「空のまま追加はできない」が表示されます（薄い赤背景）。
+2. 「買い物」と入力して「追加」を押す → エラー表示が消え、一覧に「買い物」が追加されます。
+3. 何度か連打する → 送信中はボタンが disabled（グレー）になり「送信中...」と表示されます。隣に「通信中...」も出ます。
+4. DevTools の Network タブを開いておくと、送信ごとに POST が飛んでいるのが見えます。
 
-### 変える
+### よくある間違い
 
-- `app/api/todos/route.ts` に `DELETE` メソッドを追加してみる（`request.url` からクエリ `?id=xxx` を取って削除）
-- `isTodoInput` で「text が 100 文字以上なら弾く」を足してみる
-- サーバー側の `NextResponse.json({ ok: false, error: "..." }, { status: 400 })` の status を他の値（422 や 500）に変えて挙動を比べる
+- `useActionState` を `react-dom` から import しようとして「export がない」エラーになる → `react` から import します。
+- `useFormStatus` を `<form>` を返しているコンポーネント自身で呼んでしまう → `pending` が常に `false` になります。子コンポーネントに切り出しましょう。
+- `useActionState(initialState, addTodo)` のように引数を逆にする → 型エラーです。**action が第 1 引数**、初期状態が第 2 引数です。
+- `<form action={addTodo}>` と元の関数を渡す → エラー状態がうまく繋がりません。`<form action={formAction}>` と **ラップ済み** の関数を渡しましょう。
+
+### 変えてみる
+
+1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちを」など）。
+2. エラーの種類を増やしましょう: 先頭の空白文字だけで追加しようとしたときは「空白だけでは追加できない」、5 文字以下のみ許可して「5 文字以内にする」など、`addTodo` 側の判定を足してみましょう。
+3. `useActionState` の初期状態を `{ error: "まずは何か入力" }` にして、初期表示でエラーが出る挙動を確認しましょう（確認したら `{}` に戻します）。
 
 ### 自分で書く
 
-- `/api/posts/route.ts` に `GET` を実装し、適当な記事 3 件を JSON で返す
-- `/posts` ページで Client 側から `fetch` して、`isPostArray` 型ガードで検証して表示する
-
-### 実務では
-
-本コースでは型ガードを手書きしましたが、実務では **Zod** のようなスキーマバリデーションライブラリがよく使われます。`z.object({ text: z.string().min(1) }).parse(body)` の 1 行で同じ検証が書けるため、プロジェクトが育ったら Zod の導入を検討する価値があります。
-
-### 別オリジンから叩かれる場合（CORS の最小例）
-
-Route Handlers は **Server Actions と違い、別オリジンから直接 fetch できる** 形態です。ブラウザは別オリジンへの POST など「単純でないリクエスト」を送る前に **OPTIONS（プリフライト）リクエスト** を自動で投げ、サーバーから許可ヘッダが返ったら本リクエストを送ります。
-
-```ts
-// app/api/todos/route.ts
-export async function POST(request: Request) {
-  // ... 通常の処理 ...
-  return NextResponse.json(
-    { ok: true },
-    {
-      headers: {
-        "Access-Control-Allow-Origin": "https://allowed.example.com",
-        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-        "Access-Control-Allow-Headers": "Content-Type",
-      },
-    },
-  );
-}
-
-// プリフライト用の OPTIONS ハンドラ
-export async function OPTIONS() {
-  return new Response(null, {
-    status: 204,
-    headers: {
-      "Access-Control-Allow-Origin": "https://allowed.example.com",
-      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Max-Age": "86400",
-    },
-  });
-}
-```
-
-ポイント:
-
-- **同一オリジン**（自分のサイト内）から叩く場合は CORS 設定は不要（`fetch("/api/todos")` で動く）
-- **別オリジンから Cookie を送りたい** 場合は `Access-Control-Allow-Credentials: true` と、`Access-Control-Allow-Origin: *` ではなく **特定オリジンの明示** が必要
+「Server Actions の最小形」の「自分で書く」で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
 
 ## まとめ
 
-- Route Handlers は `app/api/.../route.ts` の HTTP API
-- 戻り値は `NextResponse.json(...)` に統一
-- Server Actions と Route Handlers は棲み分け（表を参照）
-- サーバー側は **入力検証**、クライアント側は **受信検証** の両方で型ガードを使う
-- 3 章 の「型ガード」の `isTodo` がそのまま実務で使える
-- Proxy / Route Handlers はどちらも Next.js 16 から既定 Node.js。役割（Route Handlers = データのやり取り / Proxy = 軽量な前処理）で分担する
+- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚えましょう。
+- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
+- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
+- **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。

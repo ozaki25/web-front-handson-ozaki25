@@ -1,343 +1,240 @@
-# lesson103: バンドルサイズの最適化とコード分割
+# lesson102: Core Web Vitals の 3 つの指標と Lighthouse
 
 ## ゴール
 
-- バンドルサイズが LCP や INP に効く理由を説明できる
-- Vite のビルド出力を **Visualizer** で可視化できる
-- `import("...")` の **動的インポート** でコードを分割できる
-- `React.lazy` + `<Suspense>` でルート / コンポーネント単位の遅延読み込みができる
-- 「最初の 1 画面で **必要なコードだけ** を送る」考え方を持てる
-- Tree shaking が効く / 効かない書き方を区別できる
+- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
+- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
+- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
+- 75 パーセンタイル評価の意味を説明できる
+- DevTools の Performance パネルで CWV を計測できる
+- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
 
 ## 解説
 
-### バンドルサイズと CWV の関係
+### Core Web Vitals とは
 
-ブラウザは JS を **ダウンロード → パース → 実行** してから初めて画面を描画できます。バンドルが大きいと:
+**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
 
-- ダウンロードに時間がかかる → **LCP 悪化**
-- パース・実行で **メインスレッドが詰まる** → **INP 悪化**
-- 大きな `<script>` が `<body>` を遮る → **First Paint も遅延**
+| 指標 | 何を測る | Good | Needs Improvement | Poor |
+|---|---|---|---|---|
+| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
+| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
+| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
 
-特にモバイル + 遅い回線では 100KB 違うだけで体感が劇的に変わります。**「送らないコードが最速」** が鉄則です。
+「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
 
-### バンドル分析: rollup-plugin-visualizer
+### LCP: 最大コンテンツが見えるまで
 
-Vite は **Rollup** をベースにビルドします。`rollup-plugin-visualizer` を入れると、ビルド成果物の中身を **木構造の図** で見られます。
+LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
+
+LCP が遅くなる主な原因:
+
+1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
+2. **サーバーレスポンスが遅い**（TTFB が長い）
+3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
+4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
+
+主な対策:
+
+- 画像最適化（`next/image` 系のレッスン参照）
+- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
+- JS のコード分割（バンドルサイズ最適化のレッスン参照）
+- 重要な画像 / フォントを `<link rel="preload">` で先読み
+
+### INP: 反応の遅さ
+
+INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+
+INP が悪くなる主な原因:
+
+1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
+2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
+3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
+
+対策:
+
+- イベントハンドラ内の処理を軽くする
+- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
+- 重い処理を **Web Worker** に逃がす
+- リスト描画は **仮想スクロール**（`react-window` 等）
+- `requestIdleCallback` で空き時間に処理
+
+### CLS: レイアウトのガタつき
+
+CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
+
+CLS が悪くなる主な原因:
+
+1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
+2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
+3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
+
+対策:
+
+- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
+- 動的挿入は **下から** か、placeholder で確保したスペースに収める
+- フォントは `next/font` のようなツールで先読み・サブセット化
+- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
+
+### しきい値は「75 パーセンタイル」で評価する
+
+Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
+
+評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
+
+### Lighthouse vs Real User Monitoring（RUM）
+
+CWV を計測する方法は 2 系統あります。
+
+#### Lighthouse（ラボデータ）
+
+Chrome DevTools 内蔵の Lighthouse（7 章「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
+
+- 利点: その場ですぐ計測できる、デプロイ前に確認できる
+- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
+
+主に **開発時のデバッグ** に向きます。
+
+#### RUM（フィールドデータ / 実ユーザー測定）
+
+実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
+
+- 利点: 本物のユーザー体験を反映
+- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
+
+代表的なツール:
+
+- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
+- **Google Search Console** — Core Web Vitals レポート
+- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
+- **web-vitals ライブラリ** + 任意の解析サービスへ送信
+
+Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
+
+### web-vitals ライブラリで RUM を仕込む
+
+自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
 
 ```bash
-npm install -D rollup-plugin-visualizer
+npm install web-vitals
 ```
-
-`vite.config.ts`:
 
 ```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { visualizer } from "rollup-plugin-visualizer";
+// src/web-vitals.ts
+import { onLCP, onINP, onCLS } from "web-vitals";
 
-export default defineConfig({
-  plugins: [
-    react(),
-    visualizer({
-      open: true,        // ビルド後に自動でブラウザで開く
-      filename: "stats.html",
-      gzipSize: true,    // gzip 圧縮後のサイズも表示
-      brotliSize: true,  // brotli 圧縮後のサイズも表示
-    }),
-  ],
-});
-```
-
-`npm run build` を実行すると `dist/` 出力後に `stats.html` がブラウザで開き、各依存パッケージのサイズが視覚的に分かります。意外なほど大きいライブラリ（例: `moment`、`lodash` 全部）が見つかることがあります。
-
-### よくある肥大化パターン
-
-| パターン | 解決策 |
-|---|---|
-| `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
-| `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
-| `motion/react`（旧 `framer-motion`、2024 年に `motion` パッケージへ改称）を `import * as motion` で全部読み込み | `import { motion } from "motion/react"` の named import で必要分だけ |
-| Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
-| 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
-| アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
-
-「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
-
-### コード分割（Code Splitting）
-
-「最初の 1 画面で必要なコードだけ送る」を実現するのが **コード分割** です。アプリ全体を 1 つの大きなバンドルにせず、**画面 / 機能ごとに小さな chunk** に分けます。
-
-#### 1. 動的インポート `import("...")`
-
-JavaScript 標準の **動的 `import()`** を使うと、その行に到達するまでファイルを読み込みません。
-
-```ts
-// 静的 import: ビルド時に main bundle に含まれる
-import { heavyFunction } from "./heavy";
-
-// 動的 import: 実行時に必要になったら別 chunk として読み込む
-button.addEventListener("click", async () => {
-  const { heavyFunction } = await import("./heavy");
-  heavyFunction();
-});
-```
-
-ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
-
-### 2. React.lazy + `<Suspense>`
-
-React コンポーネントを動的に読み込むには `React.lazy` を使います。
-
-```tsx
-import { lazy, Suspense } from "react";
-
-// 通常の import
-// import { HeavyChart } from "./HeavyChart";
-
-// 動的 import + lazy
-const HeavyChart = lazy(() => import("./HeavyChart"));
-
-function App() {
-  const [showChart, setShowChart] = useState(false);
-
-  return (
-    <div>
-      <button onClick={() => setShowChart(true)}>グラフを表示</button>
-      {showChart && (
-        <Suspense
-          fallback={
-            <p role="status" aria-live="polite">グラフ読み込み中...</p>
-          }
-        >
-          <HeavyChart />
-        </Suspense>
-      )}
-    </div>
-  );
+function sendToAnalytics(metric: { name: string; value: number; id: string }) {
+  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
+  console.log(metric);
+  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
 }
+
+onLCP(sendToAnalytics);
+onINP(sendToAnalytics);
+onCLS(sendToAnalytics);
 ```
 
-`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。fallback 要素には `role="status"` と `aria-live="polite"` を付けるのがおすすめです。スクリーンリーダーが「読み込み中」を発話してくれるようになり、何も無いまま黙って待たせる事故を防げます。
+本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
 
-#### 3. Next.js でのコード分割
+### DevTools の Performance パネルで計測
 
-Next.js の App Router は **デフォルトで自動コード分割** をします。`app/posts/page.tsx` の中身は `/posts` を訪れた時だけ送られ、トップ `/` には含まれません。
+Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
 
-明示的に分割したい時は `next/dynamic` を使います:
+1. F12 → **Performance** タブ
+2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
+3. レポートが表示される
+   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
+   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
+   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
 
-```tsx
-import dynamic from "next/dynamic";
-
-const Chart = dynamic(() => import("./Chart"), {
-  loading: () => <p>読み込み中...</p>,
-  ssr: false,  // クライアント側でだけ実行
-});
-
-export default function Page() {
-  return <Chart />;
-}
-```
-
-`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
-
-### Tree Shaking の落とし穴
-
-**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
-
-#### 効く書き方（named import）
-
-```ts
-import { format } from "date-fns";
-// 使うのは format だけ。他の関数はバンドルされない
-```
-
-#### 効きにくい書き方
-
-```ts
-import * as dateFns from "date-fns";
-dateFns.format(...);
-// すべての export を読み込む可能性が上がる
-```
-
-```ts
-import _ from "lodash";
-// CommonJS の lodash は tree shaking が効かない。lodash 全部が含まれる
-```
-
-代替策:
-
-- `lodash` → `lodash-es`（ESM 版） or 個別関数 import（`import debounce from "lodash/debounce"`）
-- `moment` → `dayjs` / `date-fns`
-- 大きな UI ライブラリ → 個別パッケージ化されているものを選ぶ（Chakra UI v3、Radix UI のように）
-
-### `package.json` の `sideEffects: false`
-
-ライブラリ作者向けですが、自作のライブラリで Tree Shaking を効かせるには `package.json` に `sideEffects: false` を書きます。
-
-```json
-{
-  "name": "my-lib",
-  "sideEffects": false
-}
-```
-
-「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
+DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
 
 ## 演習
 
 ### ゴール
 
-- 既存の Vite + React プロジェクトに `rollup-plugin-visualizer` を入れる
-- `stats.html` を見てバンドル内容を可視化する
-- `React.lazy` でページ単位のコード分割を体験する
-- ビルド前後でサイズの違いを比較する
+- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
+- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
+- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
 
-### 途中から始める場合
+### 手順 1: Lighthouse で CWV を計測
 
-新規 Vite + React + TypeScript テンプレートを作ります（StackBlitz でも可）。
+1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
+2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
+3. レポートを確認:
+   - 全体スコア
+   - **Largest Contentful Paint**（LCP の値）
+   - **Cumulative Layout Shift**（CLS の値）
+   - **Interaction to Next Paint**（条件次第で出る）
 
-```bash
-npm create vite@latest perf-sample -- --template react-ts
-cd perf-sample
-npm install
-npm install -D rollup-plugin-visualizer
-```
+### 手順 2: PageSpeed Insights で RUM を見る
 
-### 手順 1: Visualizer を有効化
+1. <https://pagespeed.web.dev/> にアクセス
+2. URL を入れて Analyze
+3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
+4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
 
-`vite.config.ts`:
+実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
 
-```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { visualizer } from "rollup-plugin-visualizer";
+### 手順 3: DevTools Performance で観察
 
-export default defineConfig({
-  plugins: [
-    react(),
-    visualizer({
-      open: true,
-      filename: "dist/stats.html",
-      gzipSize: true,
-    }),
-  ],
-});
-```
-
-### 手順 2: わざと大きなコンポーネントを作る
-
-`src/HeavyChart.tsx`:
-
-```tsx
-export function HeavyChart() {
-  // 実際のグラフライブラリの代わりに、大きな配列を生成
-  const data = Array.from({ length: 1000 }, (_, i) => ({
-    label: `点 ${i}`,
-    value: Math.sin(i / 50) * 100 + 100,
-  }));
-
-  return (
-    <div>
-      <h2>グラフ（モック）</h2>
-      <ul>
-        {data.slice(0, 20).map((d) => (
-          <li key={d.label}>
-            {d.label}: {d.value.toFixed(2)}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-```
-
-### 手順 3: lazy で読み込む
-
-`src/App.tsx`:
-
-```tsx
-import { lazy, Suspense, useState } from "react";
-
-const HeavyChart = lazy(() =>
-  import("./HeavyChart").then((m) => ({ default: m.HeavyChart }))
-);
-
-export default function App() {
-  const [show, setShow] = useState(false);
-
-  return (
-    <main>
-      <h1>パフォーマンス演習</h1>
-      <button onClick={() => setShow(true)}>グラフを表示</button>
-
-      {show && (
-        <Suspense fallback={<p>読み込み中...</p>}>
-          <HeavyChart />
-        </Suspense>
-      )}
-    </main>
-  );
-}
-```
-
-`HeavyChart` は **named export** なので `lazy` の中で `default` に変換しています。`export default function HeavyChart() {...}` にすれば変換は不要です。
-
-### 手順 4: ビルドして可視化
-
-```bash
-npm run build
-```
-
-ビルド完了後、自動で `stats.html` がブラウザで開きます。
-
-- 中央の大きなブロックが React 本体
-- 別の小さな chunk として `HeavyChart` のコードが分かれているはず
-- **Initial bundle**（最初に送られる JS）から `HeavyChart` が外れている
+1. Chrome で対象ページを開く
+2. F12 → **Performance** タブ
+3. 左上の **Record**（黒丸） を押す
+4. ページをリロード（`Ctrl + R`）
+5. ページが落ち着いたら **Stop**
+6. タイムラインで:
+   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
+   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
+   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
 
 ### 期待出力
 
-`dist/assets/` を見ると、複数の `.js` ファイルがあるはずです。
+Lighthouse:
 
-```
-dist/
-├── index.html
-├── assets/
-│   ├── index-XXXXX.js     ← Initial bundle (App.tsx + React)
-│   └── HeavyChart-XXXXX.js ← lazy でロードされる別 chunk
-└── stats.html
-```
+- **Performance** スコアが 90 以上なら良好
+- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
 
-開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
+PageSpeed Insights:
 
-- 最初に index-XXXXX.js が読み込まれる
-- 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
-
-の流れが見えます。
+- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
 
 ### 変える
 
-- `lazy` の動的 import を **静的 import** に戻してみる（`import { HeavyChart } from "./HeavyChart"`）。再ビルドすると `HeavyChart` のコードが Initial bundle に統合され、`stats.html` 上で 1 つの大きな塊になることを確認
-- `HeavyChart` の中身を増やしてみる（`Array.from({ length: 100000 }, ...)`）。バンドル内のサイズが目に見えて増える
-- `import * as dateFns from "date-fns"` を入れて、tree shaking が効いていない場合に何が起きるか観察（事前に `npm install date-fns`）
+- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
+- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
+- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
-- `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
-- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
+新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
 
-### Next.js での実例
+```bash
+npm create vite@latest cwv-sample -- --template vanilla-ts
+cd cwv-sample
+npm install web-vitals
+```
 
-教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
+`src/main.ts`:
 
-それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
+```ts
+import { onLCP, onINP, onCLS } from "web-vitals";
+
+onLCP(console.log);
+onINP(console.log);
+onCLS(console.log);
+
+document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
+```
+
+`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
 
 ## まとめ
 
-- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
-- **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
-- 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
-- **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
-- Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
-- Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意
+- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
+- 2024 年 3 月に **FID は INP に置き換わった**
+- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
+- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
+- **PageSpeed Insights** が両方を一覧表示してくれる
+- DevTools の **Performance パネル** で詳細を時系列に見る
+- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託

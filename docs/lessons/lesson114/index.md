@@ -1,334 +1,316 @@
-# lesson114: Zod でスキーマバリデーション
+# lesson113: React Hook Form の基本
 
 ## ゴール
 
-- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
-- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
-- `parse` / `safeParse` の違いと使いどころを知る
-- `z.infer<typeof schema>` で型を自動導出できる
-- React Hook Form と組み合わせて型安全なフォームを作れる
-- API レスポンスの検証や Server Actions の入力検証にも応用できる
-- Valibot / Arktype など代替ライブラリの存在を知る
+- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
+- RHF を `npm install` してフォームに導入できる
+- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
+- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
+- `formState.errors` でエラーメッセージを表示できる
+- `defaultValues` で初期値を入れる
+- `watch` / `setValue` / `reset` の使い分けを知る
 
 ## 解説
 
-### TypeScript の型だけでは足りない
+### 制御コンポーネントの限界
 
-TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
+これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
 
-```ts
-type User = { id: number; name: string };
-
-async function getUser(): Promise<User> {
-  const res = await fetch("/api/user");
-  return res.json();   // 本当に User 型？
-}
+```tsx
+const [name, setName] = useState("");
+const [email, setEmail] = useState("");
+const [message, setMessage] = useState("");
+// ...
+<input value={name} onChange={(e) => setName(e.target.value)} />
+<input value={email} onChange={(e) => setEmail(e.target.value)} />
+<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
 ```
 
-`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
+シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
 
-実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
+- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
+- **コードが冗長**: state と setter の宣言が増える
+- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
+- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
 
-### Zod とは
+これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
 
-Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+### React Hook Form とは
 
-1. **実行時バリデーション**: 不正な値を弾く
-2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
+RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
 
-「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
+- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
+- **少ないコード** で大きなフォームを書ける
+- **バリデーション + エラー管理** が組み込み
+
+2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
 
 ### インストール
 
 ```bash
-npm install zod
+npm install react-hook-form
 ```
 
-### 基本のスキーマ
+### 最小のフォーム
 
-```ts
-import { z } from "zod";
-
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  email: z.email(),
-  age: z.number().int().min(0).max(150),
-  isAdmin: z.boolean(),
-});
-
-type User = z.infer<typeof UserSchema>;
-// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
-```
-
-`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
-
-> **補足: `z.infer<typeof X>` の `typeof` は型レベルの取得**: ここでの `typeof UserSchema` は、JS の値レベル `typeof`（`typeof x === "string"` のような演算子）とは別物です。TypeScript には型を扱う専用の `typeof` があり、「**変数の型を取り出す**」役割を持ちます。`UserSchema` は値（オブジェクト）として存在しますが、その値の **型** を取り出して `z.infer<...>` に渡すことで「スキーマから型を自動導出」できます。`z.infer<typeof X>` という書き方をひとつのイディオムとして覚えてしまって構いません。
-
-### 組み込み修飾メソッド
-
-```ts
-z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
-z.email("メール形式で")                                 // メール（v4 から top-level）
-z.url("URL 形式で")                                    // URL（v4 から top-level）
-z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
-z.number().int("整数で").positive("正の数で")           // 整数 + 正
-z.number().min(0).max(100)                             // 範囲
-z.string().optional()                                   // string | undefined
-z.string().nullable()                                   // string | null
-z.string().default("デフォルト")                        // デフォルト値
-```
-
-> **Zod v4（2025 リリース）の変更点**: `z.string().email()` / `.url()` / `.uuid()` / `.datetime()` は v4 で **top-level の `z.email()` / `z.url()` / `z.uuid()` / `z.iso.datetime()` に再編** されました。v3 系の書き方も互換のため動きますが、新規コードは v4 形式が推奨です。
-
-### 配列とユニオン
-
-```ts
-const TodoSchema = z.object({
-  id: z.uuid(),
-  title: z.string().min(1),
-  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
-  tags: z.array(z.string()),
-  createdAt: z.iso.datetime(),                // ISO 8601
-});
-
-type Todo = z.infer<typeof TodoSchema>;
-```
-
-### `parse` と `safeParse`
-
-スキーマで値を検証する 2 つの方法:
-
-#### `parse`: 失敗時に例外を投げる
-
-```ts
-try {
-  const user = UserSchema.parse(data);
-  console.log(user.name);  // 型は User
-} catch (err) {
-  if (err instanceof z.ZodError) {
-    console.log(err.issues);  // どこで失敗したかの詳細
-  }
-}
-```
-
-#### `safeParse`: 失敗時にも値を返す
-
-```ts
-const result = UserSchema.safeParse(data);
-if (result.success) {
-  console.log(result.data.name);
-} else {
-  console.log(result.error.issues);
-}
-```
-
-`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
-
-### React Hook Form と統合
-
-`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
-
-```bash
-npm install @hookform/resolvers
-```
+`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
 
 ```tsx
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
 
-const ContactSchema = z.object({
-  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
-  email: z.email("メールアドレスの形式が正しくありません"),
-  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
-  message: z.string().min(10, "10 文字以上で入力してください"),
-});
-
-type ContactFormValues = z.infer<typeof ContactSchema>;
+type FormValues = {
+  name: string;
+  email: string;
+};
 
 export function ContactForm() {
   const {
     register,
     handleSubmit,
     formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
+  } = useForm<FormValues>();
 
-  function onSubmit(data: ContactFormValues) {
-    console.log("検証済みデータ:", data);
+  function onSubmit(data: FormValues) {
+    console.log(data);
   }
 
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <input {...register("name")} />
-      {errors.name && <p>{errors.name.message}</p>}
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-required="true"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name", { required: "必須です" })}
+        />
+        {errors.name && <p role="alert">{errors.name.message}</p>}
+      </div>
 
-      <input type="email" {...register("email")} />
-      {errors.email && <p>{errors.email.message}</p>}
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-required="true"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email", { required: "必須です" })}
+        />
+        {errors.email && <p role="alert">{errors.email.message}</p>}
+      </div>
 
-      <input type="number" {...register("age")} />
-      {errors.age && <p>{errors.age.message}</p>}
-
-      <textarea {...register("message")} />
-      {errors.message && <p>{errors.message.message}</p>}
-
-      <button type="submit" disabled={isSubmitting}>送信</button>
+      <button type="submit" disabled={isSubmitting}>
+        送信
+      </button>
     </form>
   );
 }
 ```
 
-利点:
+主な要素:
 
-- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
-- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
-- **エラーメッセージ** が日本語で出せる
+- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
+- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
+- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
+- **`formState.errors`**: バリデーションエラーが格納される
+- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
 
-### `z.coerce` で型変換
+### バリデーションオプション
 
-`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
+`register` の第 2 引数で各種ルールを指定できます。
 
-```ts
-z.coerce.number()       // 文字列 → 数値
-z.coerce.boolean()      // 文字列 / 数値 → boolean
-z.coerce.date()         // 文字列 → Date
+```tsx
+{...register("password", {
+  required: "パスワードは必須です",
+  minLength: { value: 8, message: "8 文字以上で入力してください" },
+  maxLength: { value: 100, message: "100 文字以内で入力してください" },
+  pattern: {
+    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+    message: "英字と数字を混ぜてください",
+  },
+})}
 ```
 
-> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
->
-> ```ts
-> age: z.preprocess(
->   (v) => (v === "" || v === null ? undefined : v),
->   z.coerce.number().int("整数で").min(18, "18 歳以上")
-> )
-> ```
->
-> または `z.string().min(1, "必須です").transform(Number).pipe(z.number().int())` のように **string で受けてから変換** する書き方でも回避できます。
+`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
 
-### API レスポンスの検証
+```tsx
+{...register("age", {
+  validate: (value) => {
+    if (value < 18) return "18 歳以上である必要があります";
+    if (value > 120) return "値が大きすぎます";
+    return true; // OK
+  },
+})}
+```
 
-サーバーから返ってきたデータが想定通りかを検証します。
+### `defaultValues` で初期値
 
-```ts
-async function fetchUser(id: number): Promise<User> {
-  const res = await fetch(`/api/users/${id}`);
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
+編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
+
+```tsx
+const { register, handleSubmit } = useForm<FormValues>({
+  defaultValues: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
+```
+
+非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
+
+```tsx
+const { register, handleSubmit, reset } = useForm<FormValues>();
+
+useEffect(() => {
+  fetch("/api/me")
+    .then((r) => r.json())
+    .then((user) => reset(user));
+}, [reset]);
+```
+
+### `watch` で値を購読
+
+特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
+
+```tsx
+const { watch, register } = useForm<FormValues>();
+const subscribe = watch("subscribe");
+
+return (
+  <>
+    <label>
+      <input type="checkbox" {...register("subscribe")} />
+      購読する
+    </label>
+
+    {subscribe && (
+      <div>
+        <label>頻度</label>
+        <select {...register("frequency")}>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週</option>
+        </select>
+      </div>
+    )}
+  </>
+);
+```
+
+`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
+
+### `setValue` でプログラム的に値を設定
+
+```tsx
+const { setValue } = useForm<FormValues>();
+
+// 別のボタンや非同期処理から値を入れる
+setValue("name", "Bob");
+```
+
+「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
+
+### `reset` でフォームを初期化
+
+送信成功後にフォームを空にする:
+
+```tsx
+async function onSubmit(data: FormValues) {
+  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
+  reset();  // 入力をクリア
 }
 ```
 
-これで API 仕様変更による不正レスポンスを早期に検知できます。
+### 送信中の表示
 
-### Server Actions / Route Handlers の入力検証
+`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
 
-**「Server Actions の最小形」「Route Handlers」** で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
+```tsx
+const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
 
-```ts
-"use server";
+return (
+  <button type="submit" disabled={isSubmitting}>
+    {isSubmitting ? "送信中..." : "送信"}
+  </button>
+);
+```
 
-import { z } from "zod";
+`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
 
-const AddTodoSchema = z.object({
-  text: z.string().min(1).max(200),
-});
+### アクセシブルなエラー表示
 
-export async function addTodo(formData: FormData) {
-  const result = AddTodoSchema.safeParse({
-    text: formData.get("text"),
-  });
-  if (!result.success) {
-    return { ok: false as const, error: result.error.issues[0].message };
+「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
+
+```tsx
+<input
+  id="email"
+  type="email"
+  aria-invalid={errors.email ? "true" : "false"}
+  aria-describedby={errors.email ? "email-error" : undefined}
+  {...register("email", { required: "メールは必須です" })}
+/>
+{errors.email && (
+  <p id="email-error" role="alert">
+    {errors.email.message}
+  </p>
+)}
+```
+
+これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
+
+### エラー表示は色だけに頼らない
+
+フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
+
+1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
+2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
+3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
+
+CSS 例:
+
+```css
+.form-error {
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .form-error {
+    color: #fca5a5;
   }
-  // 検証済みの result.data.text を使う
-  await db.insertTodo(result.data.text);
-  return { ok: true as const };
 }
 ```
-
-### よくあるパターン
-
-#### refine: 複数フィールド間のチェック
-
-```ts
-const SignupSchema = z.object({
-  password: z.string().min(8),
-  passwordConfirm: z.string(),
-}).refine((data) => data.password === data.passwordConfirm, {
-  message: "パスワードが一致しません",
-  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
-});
-```
-
-#### transform: 値を加工
-
-```ts
-const TrimmedString = z.string().transform((s) => s.trim());
-
-TrimmedString.parse("  hello  "); // "hello"
-```
-
-### 代替ライブラリ
-
-| ライブラリ | 特徴 |
-|---|---|
-| **Zod** | デファクト。エコシステム最大 |
-| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
-| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
-| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
-
-新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
 
 ## 演習
 
 ### ゴール
 
-- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
-- スキーマから型を自動導出する
-- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
+- React + TS プロジェクトに RHF を導入する
+- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
+- 必須 / メールパターン / 最大長 のバリデーションを実装
+- 送信時に「送信中...」、成功で「送信しました！」を表示
 
-### 手順 1: 依存追加
+### 途中から始める場合
+
+これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
 
 ```bash
-npm install zod @hookform/resolvers
+npm create vite@latest rhf-sample -- --template react-ts
+cd rhf-sample
+npm install
+npm install react-hook-form
 ```
 
-### 手順 2: スキーマ + 型を定義
+### `src/ContactForm.tsx`
 
-`src/contact-schema.ts`:
-
-```ts
-import { z } from "zod";
-
-export const ContactSchema = z.object({
-  name: z
-    .string()
-    .min(1, "お名前は必須です")
-    .max(50, "50 文字以内で入力してください"),
-  email: z
-    .string()
-    .min(1, "メールは必須です")
-    .email("メールアドレスの形式が正しくありません"),
-  message: z
-    .string()
-    .min(10, "10 文字以上で入力してください")
-    .max(1000, "1000 文字以内で入力してください"),
-});
-
-export type ContactFormValues = z.infer<typeof ContactSchema>;
-```
-
-### 手順 3: フォームを書き換え
-
-`src/ContactForm.tsx`:
+> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
 
 ```tsx
 import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
-import { ContactSchema, type ContactFormValues } from "./contact-schema";
+
+type FormValues = {
+  name: string;
+  email: string;
+  message: string;
+};
 
 export function ContactForm() {
   const [submitted, setSubmitted] = useState(false);
@@ -338,12 +320,11 @@ export function ContactForm() {
     handleSubmit,
     reset,
     formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
+  } = useForm<FormValues>();
 
-  async function onSubmit(data: ContactFormValues) {
-    await new Promise((r) => setTimeout(r, 500));
+  async function onSubmit(data: FormValues) {
+    // 実際は fetch で送信。ここでは 1 秒待つだけ
+    await new Promise((r) => setTimeout(r, 1000));
     console.log("送信:", data);
     setSubmitted(true);
     reset();
@@ -358,9 +339,17 @@ export function ContactForm() {
         <input
           id="name"
           aria-invalid={errors.name ? "true" : "false"}
-          {...register("name")}
+          aria-describedby={errors.name ? "name-error" : undefined}
+          {...register("name", {
+            required: "お名前は必須です",
+            maxLength: { value: 50, message: "50 文字以内で入力してください" },
+          })}
         />
-        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
+        {errors.name && (
+          <p id="name-error" role="alert" className="form-error">
+            {errors.name.message}
+          </p>
+        )}
       </div>
 
       <div>
@@ -369,9 +358,20 @@ export function ContactForm() {
           id="email"
           type="email"
           aria-invalid={errors.email ? "true" : "false"}
-          {...register("email")}
+          aria-describedby={errors.email ? "email-error" : undefined}
+          {...register("email", {
+            required: "メールは必須です",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "メールアドレスの形式が正しくありません",
+            },
+          })}
         />
-        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
+        {errors.email && (
+          <p id="email-error" role="alert" className="form-error">
+            {errors.email.message}
+          </p>
+        )}
       </div>
 
       <div>
@@ -380,9 +380,17 @@ export function ContactForm() {
           id="message"
           rows={4}
           aria-invalid={errors.message ? "true" : "false"}
-          {...register("message")}
+          aria-describedby={errors.message ? "message-error" : undefined}
+          {...register("message", {
+            required: "メッセージは必須です",
+            minLength: { value: 10, message: "10 文字以上で入力してください" },
+          })}
         />
-        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
+        {errors.message && (
+          <p id="message-error" role="alert" className="form-error">
+            {errors.message.message}
+          </p>
+        )}
       </div>
 
       <button type="submit" disabled={isSubmitting}>
@@ -395,92 +403,42 @@ export function ContactForm() {
 }
 ```
 
-### 手順 4: API レスポンス検証の例
+### `src/App.tsx`
 
-`src/api.ts`:
+```tsx
+import { ContactForm } from "./ContactForm";
 
-```ts
-import { z } from "zod";
-
-const PostSchema = z.object({
-  id: z.number().int(),
-  title: z.string(),
-  body: z.string(),
-  userId: z.number().int(),
-});
-
-export type Post = z.infer<typeof PostSchema>;
-
-const PostListSchema = z.array(PostSchema);
-
-export async function fetchPosts(): Promise<Post[]> {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return PostListSchema.parse(data);   // 不正な構造なら ZodError
+export default function App() {
+  return <ContactForm />;
 }
 ```
 
-これで API レスポンスの構造が変わってもすぐ気付けます。
-
 ### 期待出力
 
-- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
-- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
-- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
-- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
+- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
+- メールに `abc` を入れて送信 → メール形式エラー
+- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
+- DevTools の Console に送信値が出る
+
+`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
 
 ### 変える
 
-- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
-- `z.email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
-- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
+- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
+- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
+- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
 
 ### 自分で書く
 
-- `password` と `passwordConfirm` の一致チェックを `refine` で書く
-- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
-
-### 自分で書く（既存の TODO アプリを継承する）
-
-**「小さなアプリを統合する」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これまでに作った TODO アプリに **同じテーマで一段上の改善を入れる** 演習です。
-
-1. `actions.ts` の冒頭に Zod スキーマを定義:
-
-   ```ts
-   import { z } from "zod";
-
-   const AddTodoSchema = z.object({
-     text: z.string().min(1, "内容を入力してください").max(200, "200 文字以内"),
-   });
-   ```
-
-2. `addTodo` の中で `safeParse` する形に書き換える（既存の `if (!text) ...` 検証を Zod に置き換え）:
-
-   ```ts
-   export async function addTodo(prev: AddTodoResult, formData: FormData): Promise<AddTodoResult> {
-     const result = AddTodoSchema.safeParse({ text: formData.get("text") });
-     if (!result.success) {
-       return { ok: false, error: result.error.issues[0].message };
-     }
-     // result.data.text を使う
-     ...
-   }
-   ```
-
-3. `useActionState` で受けるエラー表示はそのまま動きます（型 `AddTodoResult` を変えていないため）。
-
-4. 削除 (`deleteTodo`) も同じ流れで Zod 化できます（`id: z.uuid()` などが書けます）。
-
-これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
+- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
+- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
 
 ## まとめ
 
-- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
-- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
-- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
-- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
-- `parse`（例外）/ `safeParse`（戻り値）の使い分け
-- **`z.infer<typeof schema>`** で型を自動導出
-- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
-- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
+- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
+- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
+- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
+- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
+- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
+- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
+- `isSubmitting` で送信中の UI 制御

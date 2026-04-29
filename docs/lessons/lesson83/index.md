@@ -1,231 +1,329 @@
-# lesson83: Proxy で認証前処理
+# lesson82: Route Handlers（`app/api/.../route.ts`）
 
 ## ゴール
 
-- `proxy.ts` を使ってリクエストに割り込める
-- 認証状態（Cookie）に応じてリダイレクトできる
-- Node.js ランタイムで動くことと、軽量処理に留めるべき理由を理解する
-- `matcher` で適用範囲を絞れる
+- Next.js で HTTP API エンドポイントを作れる（`GET` / `POST`）
+- Server Actions との使い分けの指針を持つ
+- 3 章 の「型ガード」の型ガードを **サーバー側の入力検証** と **クライアント側の受信検証** 両方に使える
+- Proxy との **ランタイムと役割の違い**（どちらも Node.js 既定、Route Handlers はデータ / Proxy は前処理）を理解する
 
 ## 解説
 
-### Proxy とは
+### Server Actions と Route Handlers の違い
 
-**Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
+5 章 の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
 
-> Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
+一方、もっと一般的な用途、例えば:
 
-配置ルール:
+- モバイルアプリ・別サイトから API を叩きたい
+- `fetch('/api/todos')` で JSON を取得・送信したい
+- 認証ヘッダや CORS を扱いたい
 
-- ファイル名は **`proxy.ts`**（または `.js`） 固定
-- 配置は **プロジェクトルート直下** または `src/` 直下（`app/` や `pages/` の横に置く）
-- 1 つのプロジェクトに 1 ファイルのみ
+といった場面では **Route Handlers** を使います。
 
-### 最小の proxy
+使い分け:
+
+| 用途 | Server Actions | Route Handlers |
+|---|---|---|
+| 同一 Next.js 内のフォーム送信 | こちらが基本 | 補助的 |
+| 外部クライアント（モバイル・他サイト）が叩く | 不可 | こちらが基本 |
+| 戻り値を UI に結合 | `useActionState` で楽 | 手動で `fetch` + state |
+| 認証ヘッダや CORS が必要 | 向かない | 向く |
+
+両方が使えるときは Server Actions を優先するのが楽です。**外部から叩く可能性があるなら Route Handlers** と覚えてください。
+
+### Route Handlers の書き方
+
+`app/api/xxx/route.ts` を作り、HTTP メソッド名の関数を `export` します。
 
 ```ts
-// proxy.ts
+// app/api/todos/route.ts
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
 
-export function proxy(request: NextRequest) {
-  // ここに前処理を書く
-  return NextResponse.next(); // 通常通りページを表示
+const todos = [{ id: "1", text: "牛乳を買う" }];
+
+export async function GET() {
+  return NextResponse.json({ todos });
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  // body.text を todos に追加して返す
+  return NextResponse.json({ ok: true });
 }
 ```
 
-- 引数 `request` は `NextRequest`（通常の `Request` に Next.js 独自の機能を追加したもの）
-- export は **named `proxy` 関数** または **default export** のどちらかで書けます
-- 戻り値:
-  - `NextResponse.next()` → そのままページへ
-  - `NextResponse.redirect(url)` → リダイレクトする
-  - `NextResponse.rewrite(url)` → URL はそのままで別ページを表示（中身を差し替え）
+- ファイル名は **`route.ts`** 固定（`page.tsx` とは別のファイル）
+- URL は `app/api/todos/route.ts` → `/api/todos`
+- `GET` / `POST` / `PUT` / `DELETE` / `PATCH` を同じファイルに並べられる
+- 戻り値は **`NextResponse`（`next/server` から import）を基本に統一** します。素の `Response.json(...)` でも動きますが、Cookie 操作・リダイレクト・型補完が揃っているので `NextResponse` を推奨
 
-### `matcher` で適用範囲を絞る
+### 入力検証と受信検証
 
-デフォルトでは **すべてのリクエスト** で proxy が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
+Route Handlers を作るときに **型ガード**（3 章 の「型ガード」） が活きます。
 
-```ts
-export const config = {
-  matcher: ["/todos/:path*", "/admin/:path*"],
-};
-```
+- **サーバー側**: `POST` の中で `await request.json()` した値は **型が `any`** になる（外部から何が来るか分からない）。そのまま `body.text` を使うと TS の型チェックは効くが、実行時は壊れうる
+- **クライアント側**: `fetch('/api/todos')` で受け取った JSON も **何が返るか TS からは見えない**。同じく検証が必要
 
-- `/todos/:path*` は `/todos` と `/todos/*` の全部にマッチ
-- 静的アセット（画像・CSS）など余計なものを避ける
+役割分離:
 
-### Node.js ランタイムで動く
+- サーバー側は **入力検証** → 不正なリクエストを弾く
+- クライアント側は **受信検証** → サーバーが想定と違う JSON を返してきたときに壊れないようにする
 
-Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
+両方で「型ガード」の `isTodo` のような型ガードを書きます。実務では Zod などのスキーマバリデーションライブラリが多く使われますが、本コースでは型ガードの基礎だけを押さえます。
 
-重要な指針:
+### ランタイムの話
 
-- **重い処理は proxy に書かない**。ユーザー認証の JWT 署名検証や細かい権限チェックは Server Components / Server Actions に寄せる
-- proxy は「Cookie が無ければログインへ飛ばす」のような **トラフィック制御** に絞る
+Next.js の「サーバー側で動くもの」には **2 つのランタイム** があります。
 
-「Route Handlers」と同じ Node.js ランタイム上で動きますが、**ページ本体の前に毎回走る** ぶん、オーバーヘッドが気になりやすい点に注意してください。
+- **Node.js ランタイム**: `fs` など Node API が使える
+- **Edge ランタイム**: `fs` などは使えない。起動が速く、世界中のエッジで動く
 
-### 本コースの範囲
+Next.js 16 では Route Handlers と Proxy の **どちらも既定が Node.js** になりました（以前の Middleware は Edge 既定でしたが、Proxy への改名にあわせて Node.js 既定に）。`export const runtime = "edge"` を明示すれば Edge で動かすこともできます。両者の違いは **役割** です。
 
-本レッスンでは **最小形の認証前処理** だけを扱います。
-
-- Cookie `auth` がある → 通す
-- Cookie `auth` が無い → `/login` にリダイレクト
-
-本格的な認証（NextAuth、JWT 検証、セッション管理）は扱いません。「認証のガワを書く感じ」を体験するだけです。
+- **Route Handlers**: データを返す / 受けるエンドポイント（REST / Webhook）
+- **Proxy**: リクエスト前の軽量な分岐（認証ガード / リダイレクト）
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`proxy.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/types.ts` の `isTodo` 型ガードは3 章 の「型ガード」と揃えた形なので、3 章 を先に終えていなくてもそのまま貼って使えます。既に「Server Actions の最小形」「送信状態とエラー表示」で `app/types.ts` を作っている場合は、下記の型ガードを追記する形で構いません。
 
 ### ゴール
 
-- `/todos` にアクセスしたとき、Cookie `auth` が無ければ `/login` にリダイレクトする
-- `/login` ページで「ログイン」ボタンを押すと Cookie が立って `/todos` に戻れる
+- `/api/todos` に `GET` と `POST` を実装する
+- サーバー側で `isTodoInput` 型ガードで入力検証
+- クライアント側で `isTodoArray` 型ガードで受信検証
+- DevTools Console から `fetch` を叩いて動作確認
 
 ### 手順
 
-1. これまでのプロジェクトを開く（5 章 のここまでの成果を引き継ぐ）
-2. `proxy.ts` をプロジェクトルート直下に新規作成
-3. `app/login/page.tsx` を新規作成
+1. これまでのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
+2. `app/types.ts` に `Todo` 型を置く（既にあるなら再利用）
+3. `app/api/todos/route.ts` を新規作成
+4. `app/todos/page.tsx`（Client 検証用の画面）を更新
 
-### `proxy.ts`（プロジェクトルート直下）
+### `app/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+
+// 型ガード: unknown から Todo に絞り込む
+export function isTodo(value: unknown): value is Todo {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.id === "string" && typeof obj.text === "string";
+}
+
+// 配列全体を検証
+export function isTodoArray(value: unknown): value is Todo[] {
+  return Array.isArray(value) && value.every(isTodo);
+}
+
+// 「text だけの入力」を検証するガード（id はサーバー側で作る）
+export function isTodoInput(value: unknown): value is { text: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.text === "string" && obj.text.trim().length > 0;
+}
+```
+
+3 章 の「型ガード」で `isTodo` の骨格を書きました。ここで配列用と入力用の派生を追加しています。
+
+### `app/api/todos/route.ts`
 
 ```ts
 import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+import type { Todo } from "../../types";
+import { isTodoInput } from "../../types";
 
-export function proxy(request: NextRequest) {
-  const auth = request.cookies.get("auth");
+// モジュールトップレベルでインメモリ保持（「Server Actions の最小形」と同じ割り切り）
+const todos: Todo[] = [];
 
-  if (!auth) {
-    // /login にリダイレクト
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
+export async function GET() {
+  return NextResponse.json({ todos });
 }
 
-export const config = {
-  matcher: ["/todos/:path*"],
-};
+export async function POST(request: Request) {
+  const body: unknown = await request.json();
+
+  // サーバー側の入力検証
+  if (!isTodoInput(body)) {
+    return NextResponse.json(
+      { ok: false, error: "text が必要です" },
+      { status: 400 },
+    );
+  }
+
+  const newTodo: Todo = { id: crypto.randomUUID(), text: body.text.trim() };
+  todos.push(newTodo);
+  return NextResponse.json({ ok: true, todo: newTodo });
+}
 ```
 
 ポイント:
 
-- `request.cookies.get("auth")` で Cookie を読む
-- `NextResponse.redirect(loginUrl)` でリダイレクト
-- `matcher` で `/todos` 配下だけに適用（`/` や `/about` は素通り）
+- `await request.json()` の戻り値は `unknown`（実際は `any` だが、今回は意図的に `unknown` で受けて検証を強制）
+- `isTodoInput` で検証し、失敗したら 400 を返す
+- 成功時は `ok: true` と作成した Todo を返す
 
-### `app/login/page.tsx`（新規）
+### DevTools Console からの動作確認
+
+プレビューを別タブで開き、Console で次を実行します。
+
+```js
+// GET
+const res = await fetch("/api/todos");
+const data = await res.json();
+console.log(data); // { todos: [] }
+
+// POST（正常）
+const res2 = await fetch("/api/todos", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: "本を返す" }),
+});
+console.log(await res2.json());
+// { ok: true, todo: { id: "...", text: "本を返す" } }
+
+// POST（異常: text 欠落）
+const res3 = await fetch("/api/todos", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ foo: "bar" }),
+});
+console.log(res3.status); // 400
+console.log(await res3.json());
+// { ok: false, error: "text が必要です" }
+```
+
+### Client 側の受信検証
+
+`app/todos/page.tsx`（Server Component）に、受信した JSON を型ガードで検証する Client Component を組み合わせます。
+
+`app/todos/TodoFetcher.tsx`（新規）:
 
 ```tsx
 "use client";
 
-import { useRouter } from "next/navigation";
+import { useEffect, useState } from "react";
+import type { Todo } from "../types";
+import { isTodoArray } from "../types";
 
-export default function LoginPage() {
-  const router = useRouter();
+export function TodoFetcher() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-  function handleLogin() {
-    // Cookie をその場で立てる（max-age 1 時間）
-    document.cookie = "auth=1; path=/; max-age=3600";
-    // /todos に遷移
-    router.push("/todos");
-  }
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/todos");
+        const data: unknown = await res.json();
 
+        // 受信検証: サーバーが想定と違う形を返したら拒否する
+        if (typeof data !== "object" || data === null || !("todos" in data)) {
+          setError("レスポンスの形式が不正です");
+          return;
+        }
+        const maybeTodos = (data as { todos: unknown }).todos;
+        if (!isTodoArray(maybeTodos)) {
+          setError("todos が Todo 配列ではありません");
+          return;
+        }
+
+        setTodos(maybeTodos);
+      } catch (e) {
+        setError("通信に失敗しました");
+      }
+    })();
+  }, []);
+
+  if (error) return <p className="error">エラー: {error}</p>;
   return (
-    <main>
-      <h1>ログイン</h1>
-      <p>
-        本格認証は本コースでは扱いません。下のボタンで Cookie を立てて `/todos`
-        にアクセスできるようにします。
-      </p>
-      <button type="button" onClick={handleLogin}>
-        ログイン
-      </button>
-    </main>
+    <ul>
+      {todos.map((t) => (
+        <li key={t.id}>{t.text}</li>
+      ))}
+    </ul>
   );
 }
 ```
 
 ポイント:
 
-- `"use client"` を付ける（`document.cookie` や `useRouter` を使うため）
-- ボタンクリックで `document.cookie` を直接書く
-- `useRouter().push("/todos")` で `/todos` に遷移
-
-### この演習の Cookie は「学習用」（本物のログインではない）
-
-上の `document.cookie = "auth=1; ..."` は **学習用の擬似ログイン** です。本物の認証では絶対にこの形にしません。理由は次の 3 点。
-
-1. **JavaScript から `document.cookie` で書ける Cookie は、ブラウザ側のすべての JS から読める**。XSS（任意の JS が走る攻撃）が成立すると即漏洩します。
-2. **`HttpOnly` フラグが付いていない**。本物の認証 Cookie には必ず `HttpOnly` を付けて、JS から読めないようにします。`HttpOnly` はサーバー側でしか付けられないため、`document.cookie` で立てた時点で「JS 可視」になっています。
-3. **`SameSite` / `Secure` が指定されていない**。CSRF / 中間者攻撃に対する基本防御が抜けています。
-
-実運用では、認証 Cookie はサーバー側（Server Action や Route Handler）で次のように発行します。
-
-```ts
-// Server Action / Route Handler 内で（例）
-import { cookies } from "next/headers";
-
-(await cookies()).set("session", token, {
-  httpOnly: true,        // JS から読めない
-  secure: true,          // HTTPS のみ送信
-  sameSite: "lax",       // 別オリジンからの送信を制限（CSRF 対策）
-  maxAge: 60 * 60 * 24,  // 1 日
-  path: "/",
-});
-```
-
-本コースでは認証フローには深入りしないため、この演習では学習用の擬似 Cookie を使いますが、**実装するときは「JS から `document.cookie` を書く」を絶対にしない** と覚えてください。本格的な認証は Auth.js / NextAuth など専用ライブラリに任せます。
+- `data: unknown` で受ける。これで TS は型ガードなしでは `data.todos` に触らせない
+- `isTodoArray` で検証、失敗時はエラー state にする
+- 3 章 の「型ガード」で学んだ `unknown` → `Todo` の絞り込みを **そのまま実務で使う** 形
 
 ### 期待出力
 
-1. Cookie が何もない状態で `/todos` にアクセス → `/login` にリダイレクトされる
-2. 「ログイン」ボタンを押す → `/todos` に遷移、一覧が見える
-3. DevTools → Application → Cookies で `auth=1` が登録されているのが確認できる
-4. Cookie を削除してから `/todos` にアクセスし直す → また `/login` に戻される
+- `/api/todos` に GET → `{ todos: [...] }` JSON が返る
+- POST で追加できる、正常時 200、text 欠落時 400
+- `/todos` ページで一覧が表示される。サーバーが壊れた JSON を返すとエラーメッセージが出る
 
 ### 変える
 
-- Cookie 名を `session` に変えて、`proxy.ts` と `login/page.tsx` の両方を追随する
-- `matcher` を `["/todos/:path*", "/admin/:path*"]` に増やして、`/admin/page.tsx` を作り、そちらでもリダイレクトが効くことを確認
-- `NextResponse.redirect` を `NextResponse.rewrite` に変えて挙動の違いを見る（URL が書き換わらないで表示が変わる）
-- `export function proxy(...)` を `export default function(...)` に書き換えて、どちらでも動くことを確認
+- `app/api/todos/route.ts` に `DELETE` メソッドを追加してみる（`request.url` からクエリ `?id=xxx` を取って削除）
+- `isTodoInput` で「text が 100 文字以上なら弾く」を足してみる
+- サーバー側の `NextResponse.json({ ok: false, error: "..." }, { status: 400 })` の status を他の値（422 や 500）に変えて挙動を比べる
 
 ### 自分で書く
 
-- 「ログアウト」ボタンを `/login` に追加し、Cookie を消す:
-  ```ts
-  document.cookie = "auth=; path=/; max-age=0";
-  ```
-- `/todos` のページヘッダーに「ログイン中」と表示し、Cookie が無いとリダイレクトされるので逆に常に「ログイン中」しか出ないことを確認
+- `/api/posts/route.ts` に `GET` を実装し、適当な記事 3 件を JSON で返す
+- `/posts` ページで Client 側から `fetch` して、`isPostArray` 型ガードで検証して表示する
 
-### Route Handlers との組み合わせ（発展）
+### 実務では
 
-これまでのレッスンで作った `/api/todos` も、proxy で認証必須にできます。
+本コースでは型ガードを手書きしましたが、実務では **Zod** のようなスキーマバリデーションライブラリがよく使われます。`z.object({ text: z.string().min(1) }).parse(body)` の 1 行で同じ検証が書けるため、プロジェクトが育ったら Zod の導入を検討する価値があります。
+
+### 別オリジンから叩かれる場合（CORS の最小例）
+
+Route Handlers は **Server Actions と違い、別オリジンから直接 fetch できる** 形態です。ブラウザは別オリジンへの POST など「単純でないリクエスト」を送る前に **OPTIONS（プリフライト）リクエスト** を自動で投げ、サーバーから許可ヘッダが返ったら本リクエストを送ります。
 
 ```ts
-export const config = {
-  matcher: ["/todos/:path*", "/api/todos/:path*"],
-};
+// app/api/todos/route.ts
+export async function POST(request: Request) {
+  // ... 通常の処理 ...
+  return NextResponse.json(
+    { ok: true },
+    {
+      headers: {
+        "Access-Control-Allow-Origin": "https://allowed.example.com",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    },
+  );
+}
+
+// プリフライト用の OPTIONS ハンドラ
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "https://allowed.example.com",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
 ```
 
-これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「proxy で API も守れる」ことだけ押さえます。
+ポイント:
 
-### Node.js ランタイムでの注意
-
-Next.js 16 から proxy は Node.js ランタイムで動くので、`fs` / `path` / ネイティブモジュールなどの Node API が使えます。ただし **proxy は毎リクエスト前に走る** ため、重い処理（DB 接続・大きな計算）は書かないでください。ファイル I/O や外部 API 呼び出しは Server Components / Server Actions / Route Handlers に寄せるのが原則です。
+- **同一オリジン**（自分のサイト内）から叩く場合は CORS 設定は不要（`fetch("/api/todos")` で動く）
+- **別オリジンから Cookie を送りたい** 場合は `Access-Control-Allow-Credentials: true` と、`Access-Control-Allow-Origin: *` ではなく **特定オリジンの明示** が必要
 
 ## まとめ
 
-- `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
-- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
-- `NextResponse.next` / `redirect` / `rewrite` で分岐
-- `matcher` で適用パスを絞る
-- Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
-- 本格認証は本コース外。擬似ログインで流れだけ掴む
+- Route Handlers は `app/api/.../route.ts` の HTTP API
+- 戻り値は `NextResponse.json(...)` に統一
+- Server Actions と Route Handlers は棲み分け（表を参照）
+- サーバー側は **入力検証**、クライアント側は **受信検証** の両方で型ガードを使う
+- 3 章 の「型ガード」の `isTodo` がそのまま実務で使える
+- Proxy / Route Handlers はどちらも Next.js 16 から既定 Node.js。役割（Route Handlers = データのやり取り / Proxy = 軽量な前処理）で分担する

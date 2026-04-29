@@ -1,394 +1,486 @@
-# lesson115: 状態管理の地図（TanStack Query / Zustand / Jotai）
+# lesson114: Zod でスキーマバリデーション
 
 ## ゴール
 
-- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
-- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
-- **TanStack Query** が **サーバー state** に特化していることを理解する
-- **Zustand** が **グローバルクライアント state** の現代の定番であることを知る
-- **Jotai** の atom 思想と Zustand との使い分けを 1 行で言える
-- **Redux Toolkit** の現在地（特定用途に残る）を把握する
-- 「迷ったら何を選ぶか」の判断軸を持つ
+- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
+- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
+- `parse` / `safeParse` の違いと使いどころを知る
+- `z.infer<typeof schema>` で型を自動導出できる
+- React Hook Form と組み合わせて型安全なフォームを作れる
+- API レスポンスの検証や Server Actions の入力検証にも応用できる
+- Valibot / Arktype など代替ライブラリの存在を知る
 
 ## 解説
 
-### state を 5 種類に分ける
+### TypeScript の型だけでは足りない
 
-「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
+TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
 
-| 種類 | 例 | 最適なツール |
-|---|---|---|
-| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
-| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
-| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
-| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
-| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
+```ts
+type User = { id: number; name: string };
 
-> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
-
-### 1. ローカル state: `useState` / `useReducer`
-
-特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
-
-```tsx
-const [isOpen, setIsOpen] = useState(false);
+async function getUser(): Promise<User> {
+  const res = await fetch("/api/user");
+  return res.json();   // 本当に User 型？
+}
 ```
 
-「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
+`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
 
-### 2. URL state: `useSearchParams`
+実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
 
-「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。
+### Zod とは
+
+Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+
+1. **実行時バリデーション**: 不正な値を弾く
+2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
+
+「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
+
+### インストール
+
+```bash
+npm install zod
+```
+
+### 基本のスキーマ
+
+```ts
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.email(),
+  age: z.number().int().min(0).max(150),
+  isAdmin: z.boolean(),
+});
+
+type User = z.infer<typeof UserSchema>;
+// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
+```
+
+`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
+
+> **補足: `z.infer<typeof X>` の `typeof` は型レベルの取得**: ここでの `typeof UserSchema` は、JS の値レベル `typeof`（`typeof x === "string"` のような演算子）とは別物です。TypeScript には型を扱う専用の `typeof` があり、「**変数の型を取り出す**」役割を持ちます。`UserSchema` は値（オブジェクト）として存在しますが、その値の **型** を取り出して `z.infer<...>` に渡すことで「スキーマから型を自動導出」できます。`z.infer<typeof X>` という書き方をひとつのイディオムとして覚えてしまって構いません。
+
+### 組み込み修飾メソッド
+
+```ts
+z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
+z.email("メール形式で")                                 // メール（v4 から top-level）
+z.url("URL 形式で")                                    // URL（v4 から top-level）
+z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
+z.number().int("整数で").positive("正の数で")           // 整数 + 正
+z.number().min(0).max(100)                             // 範囲
+z.string().optional()                                   // string | undefined
+z.string().nullable()                                   // string | null
+z.string().default("デフォルト")                        // デフォルト値
+```
+
+> **Zod v4（2025 リリース）の変更点**: `z.string().email()` / `.url()` / `.uuid()` / `.datetime()` は v4 で **top-level の `z.email()` / `z.url()` / `z.uuid()` / `z.iso.datetime()` に再編** されました。v3 系の書き方も互換のため動きますが、新規コードは v4 形式が推奨です。
+
+### 配列とユニオン
+
+```ts
+const TodoSchema = z.object({
+  id: z.uuid(),
+  title: z.string().min(1),
+  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
+  tags: z.array(z.string()),
+  createdAt: z.iso.datetime(),                // ISO 8601
+});
+
+type Todo = z.infer<typeof TodoSchema>;
+```
+
+### `parse` と `safeParse`
+
+スキーマで値を検証する 2 つの方法:
+
+#### `parse`: 失敗時に例外を投げる
+
+```ts
+try {
+  const user = UserSchema.parse(data);
+  console.log(user.name);  // 型は User
+} catch (err) {
+  if (err instanceof z.ZodError) {
+    console.log(err.issues);  // どこで失敗したかの詳細
+  }
+}
+```
+
+#### `safeParse`: 失敗時にも値を返す
+
+```ts
+const result = UserSchema.safeParse(data);
+if (result.success) {
+  console.log(result.data.name);
+} else {
+  console.log(result.error.issues);
+}
+```
+
+`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
+
+### React Hook Form と統合
+
+`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
+
+```bash
+npm install @hookform/resolvers
+```
 
 ```tsx
-"use client";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
 
-export function FilterBar() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const tag = searchParams.get("tag") ?? "all";
+const ContactSchema = z.object({
+  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
+  email: z.email("メールアドレスの形式が正しくありません"),
+  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
+  message: z.string().min(10, "10 文字以上で入力してください"),
+});
 
-  function setTag(newTag: string) {
-    const params = new URLSearchParams(searchParams);
-    params.set("tag", newTag);
-    router.push(`${pathname}?${params}`);
+type ContactFormValues = z.infer<typeof ContactSchema>;
+
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  function onSubmit(data: ContactFormValues) {
+    console.log("検証済みデータ:", data);
   }
 
   return (
-    <select value={tag} onChange={(e) => setTag(e.target.value)}>
-      <option value="all">すべて</option>
-      <option value="js">JavaScript</option>
-      <option value="css">CSS</option>
-    </select>
-  );
-}
-```
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <input {...register("name")} />
+      {errors.name && <p>{errors.name.message}</p>}
 
-URL に状態が入ると:
+      <input type="email" {...register("email")} />
+      {errors.email && <p>{errors.email.message}</p>}
 
-- ブラウザの戻る / 進むで遷移できる
-- URL を共有すれば同じ画面が再現できる
-- ブックマークできる
+      <input type="number" {...register("age")} />
+      {errors.age && <p>{errors.age.message}</p>}
 
-「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
+      <textarea {...register("message")} />
+      {errors.message && <p>{errors.message.message}</p>}
 
-### 3. サーバー state: TanStack Query
-
-API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
-
-- **古くなる**（他のユーザーの書き換えで上書きされる可能性がある）
-- **キャッシュしたい**（同じデータを何度も取りたくない）
-- **再取得したい**（ページに戻ってきた時など）
-- **楽観的更新したい**（UI を先に変えて、サーバー応答で確定）
-
-これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。
-
-**TanStack Query**（React Query から改名）はこの問題を **`useQuery` 1 行** で解決します。
-
-```bash
-npm install @tanstack/react-query
-```
-
-```tsx
-import { useQuery } from "@tanstack/react-query";
-
-function PostsList() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("/api/posts");
-      return res.json();
-    },
-  });
-
-  if (isLoading) return <p>読み込み中...</p>;
-  if (error) return <p>エラー</p>;
-  return <ul>{data.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
-}
-```
-
-`useQuery` がやってくれること:
-
-- **キャッシュ**: 同じ `queryKey` のデータは再利用
-- **重複排除**: 同じ key で複数コンポーネントから呼んでも 1 回だけ fetch
-- **再取得**: ウィンドウフォーカス時 / ネットワーク復帰時
-- **ステール管理**: `staleTime` を超えたら古い扱いに
-- **楽観的更新**: `useMutation` で送信中に UI を先に更新
-- **無限スクロール**: `useInfiniteQuery`
-
-2026 年の React アプリで **API 呼び出しがある** なら、TanStack Query 入れない理由はほぼないです。
-
-> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
-
-### 4. グローバルクライアント state: Zustand / Jotai / Context
-
-「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には:
-
-#### 軽量な定番: Zustand
-
-```bash
-npm install zustand
-```
-
-```tsx
-import { create } from "zustand";
-
-type AuthStore = {
-  user: { id: string; name: string } | null;
-  login: (user: { id: string; name: string }) => void;
-  logout: () => void;
-};
-
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
-  login: (user) => set({ user }),
-  logout: () => set({ user: null }),
-}));
-```
-
-```tsx
-function Header() {
-  const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
-
-  return user ? (
-    <div>
-      ようこそ、{user.name} さん
-      <button onClick={logout}>ログアウト</button>
-    </div>
-  ) : (
-    <p>未ログイン</p>
+      <button type="submit" disabled={isSubmitting}>送信</button>
+    </form>
   );
 }
 ```
 
 利点:
 
-- **Provider が要らない**: import するだけで使える
-- **boilerplate が少ない**: Redux に比べて 1/5 のコード
-- **TypeScript フレンドリー**
-- **React 外でも呼べる**: `useAuthStore.getState()` で外部からも参照可能
+- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
+- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
+- **エラーメッセージ** が日本語で出せる
 
-2026 年の **グローバルクライアント state の第一候補**。Redux Toolkit の boilerplate に疲れた人が大量に乗り換えました。
+### `z.coerce` で型変換
 
-#### atom ベース: Jotai
+`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
 
-```bash
-npm install jotai
+```ts
+z.coerce.number()       // 文字列 → 数値
+z.coerce.boolean()      // 文字列 / 数値 → boolean
+z.coerce.date()         // 文字列 → Date
 ```
 
-```tsx
-import { atom, useAtom } from "jotai";
+> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
+>
+> ```ts
+> age: z.preprocess(
+>   (v) => (v === "" || v === null ? undefined : v),
+>   z.coerce.number().int("整数で").min(18, "18 歳以上")
+> )
+> ```
+>
+> または `z.string().min(1, "必須です").transform(Number).pipe(z.number().int())` のように **string で受けてから変換** する書き方でも回避できます。
 
-const countAtom = atom(0);
+### API レスポンスの検証
 
-function Counter() {
-  const [count, setCount] = useAtom(countAtom);
-  return <button onClick={() => setCount(count + 1)}>{count}</button>;
+サーバーから返ってきたデータが想定通りかを検証します。
+
+```ts
+async function fetchUser(id: number): Promise<User> {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
 }
 ```
 
-特徴:
+これで API 仕様変更による不正レスポンスを早期に検知できます。
 
-- 状態を **小さな atom** に分割。それぞれが独立に管理される
-- 「明確な store がない、散らばった state を組み合わせる」アプリ向け
-- 派生状態（derived atom）が綺麗に書ける
+### Server Actions / Route Handlers の入力検証
 
-Zustand の **明確な store** とは対照的に、Jotai は **粒度の細かい atom** を組み合わせる思想です。React の useState を「アプリ全体に拡張した版」と考えると分かりやすい。
+**「Server Actions の最小形」「Route Handlers」** で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
 
-#### React Context（組み込み）
+```ts
+"use server";
 
-`useContext` も簡易な共有手段ですが、**頻繁に変わる state には向きません**（全消費者が再レンダリングされる）。テーマや言語設定のような「滅多に変わらない」共有値に使うのが定番です。
+import { z } from "zod";
 
-「`Context` で済むなら Context、頻繁に変わるなら Zustand or Jotai、サーバー由来なら TanStack Query」が 2026 年の使い分けです。
+const AddTodoSchema = z.object({
+  text: z.string().min(1).max(200),
+});
 
-### Redux / Redux Toolkit の現在地
+export async function addTodo(formData: FormData) {
+  const result = AddTodoSchema.safeParse({
+    text: formData.get("text"),
+  });
+  if (!result.success) {
+    return { ok: false as const, error: result.error.issues[0].message };
+  }
+  // 検証済みの result.data.text を使う
+  await db.insertTodo(result.data.text);
+  return { ok: true as const };
+}
+```
 
-Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。
+### よくあるパターン
 
-Redux が今でも残るのは:
+#### refine: 複数フィールド間のチェック
 
-- **既存プロジェクト**: 移行コストで残る
-- **大規模 + 複雑な action / reducer ロジック** が要る場合
-- **Redux DevTools の時間旅行デバッグ** が欲しい場合
-- **ミドルウェア（thunk / saga）の生態系** に依存
+```ts
+const SignupSchema = z.object({
+  password: z.string().min(8),
+  passwordConfirm: z.string(),
+}).refine((data) => data.password === data.passwordConfirm, {
+  message: "パスワードが一致しません",
+  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
+});
+```
 
-新規アプリなら **Zustand から始める** のが軽量で十分です。
+#### transform: 値を加工
 
-### SWR（TanStack Query の代替）
+```ts
+const TrimmedString = z.string().transform((s) => s.trim());
 
-Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。
+TrimmedString.parse("  hello  "); // "hello"
+```
 
-- TanStack Query: 機能豊富、エコシステム大、複雑系も得意
-- SWR: シンプル、API が小さい、学習コスト低、Next.js との親和性
+### 代替ライブラリ
 
-「シンプルさを優先」なら SWR、「全部入りで困らない」なら TanStack Query、というイメージです。
+| ライブラリ | 特徴 |
+|---|---|
+| **Zod** | デファクト。エコシステム最大 |
+| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
+| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
+| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
 
-### 「迷ったらこう選ぶ」フローチャート
-
-1. **コンポーネント内だけで完結？** → `useState`
-2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
-3. **サーバーから取るデータ？** → **TanStack Query**
-4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
-5. **散らばった派生状態が多い？** → **Jotai**
-6. **滅多に変わらない設定値？** → **Context**
-7. **フォームの入力値？** → **React Hook Form**
-
-これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
+新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
 
 ## 演習
 
 ### ゴール
 
-- 「TanStack Query で API データ取得」「Zustand でテーマ切替」「URL state でフィルタ」を 1 つのアプリで体験する
-- それぞれが **どの種類の state** を扱っているか意識する
+- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
+- スキーマから型を自動導出する
+- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
 
-### 途中から始める場合
-
-新規 Vite + React + TS プロジェクトを作成。
+### 手順 1: 依存追加
 
 ```bash
-npm create vite@latest state-sample -- --template react-ts
-cd state-sample
-npm install
-npm install @tanstack/react-query zustand
+npm install zod @hookform/resolvers
 ```
 
-### 手順 1: TanStack Query の Provider を入れる
+### 手順 2: スキーマ + 型を定義
 
-`src/main.tsx`:
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import App from "./App";
-
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
-);
-```
-
-### 手順 2: Zustand store
-
-`src/themeStore.ts`:
+`src/contact-schema.ts`:
 
 ```ts
-import { create } from "zustand";
+import { z } from "zod";
 
-type ThemeStore = {
-  theme: "light" | "dark";
-  toggle: () => void;
-};
+export const ContactSchema = z.object({
+  name: z
+    .string()
+    .min(1, "お名前は必須です")
+    .max(50, "50 文字以内で入力してください"),
+  email: z
+    .string()
+    .min(1, "メールは必須です")
+    .email("メールアドレスの形式が正しくありません"),
+  message: z
+    .string()
+    .min(10, "10 文字以上で入力してください")
+    .max(1000, "1000 文字以内で入力してください"),
+});
 
-// 初期値は OS 設定 (prefers-color-scheme) を尊重する
-const prefersDark =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: prefersDark ? "dark" : "light",
-  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-}));
+export type ContactFormValues = z.infer<typeof ContactSchema>;
 ```
 
-> **`aria-pressed` と `prefers-color-scheme`**: 切替ボタン側には `aria-pressed={theme === "dark"}` を付けて、スクリーンリーダーに「現在 ON / OFF どちらの状態か」を伝えます。初期値は `prefers-color-scheme: dark` を見て OS 設定に揃えると、ダークモード設定の利用者が **明るい画面で迎えられる事故** を防げます。
+### 手順 3: フォームを書き換え
 
-### 手順 3: 統合した App
-
-`src/App.tsx`:
+`src/ContactForm.tsx`:
 
 ```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
 import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useThemeStore } from "./themeStore";
+import { ContactSchema, type ContactFormValues } from "./contact-schema";
 
-type Post = { id: number; title: string };
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
 
-export default function App() {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggle);
-  const [filter, setFilter] = useState("all");  // 簡易版（本来は URL state）
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-      return (await res.json()) as Post[];
-    },
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
   });
 
-  const filtered = filter === "all" ? data : data?.filter((p) => p.id <= 10);
+  async function onSubmit(data: ContactFormValues) {
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
+  }
 
   return (
-    <main
-      style={{
-        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
-        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
-        padding: 16,
-        minHeight: "100vh",
-      }}
-    >
-      <h1>状態管理の地図</h1>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
 
-      <button
-        type="button"
-        aria-pressed={theme === "dark"}
-        onClick={toggleTheme}
-      >
-        テーマ: {theme}（クリックで切替 — Zustand）
-      </button>
-
-      <div style={{ marginTop: 12 }}>
-        <button onClick={() => setFilter("all")}>すべて（ローカル state）</button>
-        <button onClick={() => setFilter("first10")}>最初の 10 件</button>
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name")}
+        />
+        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
       </div>
 
-      <h2>記事一覧（TanStack Query で fetch）</h2>
-      {isLoading && <p>読み込み中...</p>}
-      {error && <p>エラー</p>}
-      <ul>
-        {filtered?.slice(0, 20).map((p) => (
-          <li key={p.id}>#{p.id} {p.title}</li>
-        ))}
-      </ul>
-    </main>
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email")}
+        />
+        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          {...register("message")}
+        />
+        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
   );
 }
 ```
 
+### 手順 4: API レスポンス検証の例
+
+`src/api.ts`:
+
+```ts
+import { z } from "zod";
+
+const PostSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  body: z.string(),
+  userId: z.number().int(),
+});
+
+export type Post = z.infer<typeof PostSchema>;
+
+const PostListSchema = z.array(PostSchema);
+
+export async function fetchPosts(): Promise<Post[]> {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return PostListSchema.parse(data);   // 不正な構造なら ZodError
+}
+```
+
+これで API レスポンスの構造が変わってもすぐ気付けます。
+
 ### 期待出力
 
-- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示
-- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
-- 「最初の 10 件」を押すと表示が絞り込まれる（ローカル state）
-- ブラウザを **リロードしても fetch は走らない**（TanStack Query のキャッシュ）→ DevTools の Network で 2 回目以降は出ない
+- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
+- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
+- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
+- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
 
 ### 変える
 
-- `useQuery` の `staleTime: 1000 * 60` を渡してみる。1 分間は再取得されないキャッシュ
-- Zustand の `theme` をブラウザリロード後も保持するために `zustand/middleware` の `persist` を使ってみる
-- `filter` を URL state に変更（`useSearchParams` で `?filter=...`）
+- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
+- `z.email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
+- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
 
 ### 自分で書く
 
-- TanStack Query の `useMutation` で「記事を作成」ボタンを足す（POST）。送信中の UI を表示
-- Jotai を入れて、`countAtom` でカウンターを実装し、Zustand 版と書き味を比較
+- `password` と `passwordConfirm` の一致チェックを `refine` で書く
+- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
+
+### 自分で書く（既存の TODO アプリを継承する）
+
+**「小さなアプリを統合する」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これまでに作った TODO アプリに **同じテーマで一段上の改善を入れる** 演習です。
+
+1. `actions.ts` の冒頭に Zod スキーマを定義:
+
+   ```ts
+   import { z } from "zod";
+
+   const AddTodoSchema = z.object({
+     text: z.string().min(1, "内容を入力してください").max(200, "200 文字以内"),
+   });
+   ```
+
+2. `addTodo` の中で `safeParse` する形に書き換える（既存の `if (!text) ...` 検証を Zod に置き換え）:
+
+   ```ts
+   export async function addTodo(prev: AddTodoResult, formData: FormData): Promise<AddTodoResult> {
+     const result = AddTodoSchema.safeParse({ text: formData.get("text") });
+     if (!result.success) {
+       return { ok: false, error: result.error.issues[0].message };
+     }
+     // result.data.text を使う
+     ...
+   }
+   ```
+
+3. `useActionState` で受けるエラー表示はそのまま動きます（型 `AddTodoResult` を変えていないため）。
+
+4. 削除 (`deleteTodo`) も同じ流れで Zod 化できます（`id: z.uuid()` などが書けます）。
+
+これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
 
 ## まとめ
 
-- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
-- 2026 年は **役割ごとに使い分ける** のが定番
-- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
-- **Jotai** は atom ベース、散らばった派生状態に向く
-- **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
-- **SWR** は TanStack Query のシンプル代替
-- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ
+- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
+- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
+- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
+- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
+- `parse`（例外）/ `safeParse`（戻り値）の使い分け
+- **`z.infer<typeof schema>`** で型を自動導出
+- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
+- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）

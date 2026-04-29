@@ -1,32 +1,72 @@
-# lesson44: `interface` と `type` の使い分け
+# lesson43: オブジェクトの型と type エイリアス
 
 ## ゴール
 
-- `interface` 宣言でオブジェクトの形に名前を付けられる。
-- `extends` で `interface` を継承して、既存の型を拡張できる。
-- `type` と `interface` の書き分けと、それぞれが得意とする場面を説明できる。
-- 本コースでは `type` を基本に使う方針を理解する。
+- オブジェクトの「形」を型で書ける（オブジェクト型リテラル）。
+- `type` エイリアスで型に名前を付けられる。
+- `export type` / `import type` で型を別ファイルから使い回せる。
 
 ## 解説
 
-### `interface` でオブジェクトの形に名前を付ける
+### オブジェクトの型を書く
 
-「オブジェクトの型と type エイリアス」では `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
+2 章 の「オブジェクト」で、オブジェクトを使って「人」や「TODO」のような複数の値をまとめました。TS ではそのオブジェクトの **形** を型で書けます。
 
 ```ts
-interface User {
-  name: string;
-  age: number;
-}
-
-const alice: User = { name: "Alice", age: 20 };
+const user: { name: string; age: number } = {
+  name: "Alice",
+  age: 20,
+};
 ```
 
-- `interface 名前 { ... }` の形。`type` と違い **末尾の `=` やセミコロンは書かない**。
-- 中身の書き方（プロパティ名と型、区切りのセミコロン）は `type` のオブジェクト型リテラルと同じ。
-- 慣習として大文字で始める（`User`、`Todo` など）。
+- `{ name: string; age: number }` が **オブジェクト型リテラル**。波括弧の中に「プロパティ名: 型」を並べる。
+- プロパティの区切りは **セミコロン `;`**（カンマでも通るが、TS では `;` が慣例）。
+- 値のオブジェクト（右辺）はプロパティの区切りが **カンマ `,`**。左と右で記号が違うので注意する。
 
-同じ型が必要な場所で呼び出せるのも `type` と同じです。
+このオブジェクトに、宣言した形と違う値を入れるとエラーになる。
+
+```ts
+const user: { name: string; age: number } = {
+  name: "Alice",
+  age: "二十", // ここで赤線
+};
+```
+
+```
+Type 'string' is not assignable to type 'number'.
+```
+
+プロパティが足りない / 余っている場合もエラーになる。
+
+```ts
+const user: { name: string; age: number } = {
+  name: "Alice",
+}; // age が足りない
+```
+
+```
+Property 'age' is missing in type '{ name: string; }' but required in type '{ name: string; age: number; }'.
+```
+
+### `type` エイリアスで名前を付ける
+
+同じオブジェクト型を何か所も書くのは大変です。`type` キーワードで型に **名前** を付けられます。
+
+```ts
+type User = {
+  name: string;
+  age: number;
+};
+
+const alice: User = { name: "Alice", age: 20 };
+const bob: User = { name: "Bob", age: 25 };
+```
+
+- `type 名前 = 型の中身;` の形。末尾のセミコロンを忘れない。
+- 慣習として、型の名前は **大文字で始める**（`User`、`Todo` など）。変数とぶつかりにくくするため。
+- `type` エイリアスは「型に別名を付けるだけ」なので、コンパイル後の JS には残らない（実行時には影響しない）。
+
+関数の引数にも使える。
 
 ```ts
 function printUser(user: User): void {
@@ -36,163 +76,129 @@ function printUser(user: User): void {
 printUser(alice);
 ```
 
-型として見たときの振る舞いは、上のようなシンプルなオブジェクトの場合はほとんど `type` と同じです。違うのは **書き方** と **拡張の仕方**、そして **書けない型の種類** です。
+### 型を別ファイルに置く（`export type` / `import type`）
 
-### `extends` で継承する
-
-`interface` は `extends` で **別の `interface` を継承** できます。継承すると、元のプロパティを全部引き継いだうえで、新しいプロパティを足せます。
+同じ型をあちこちのファイルで使う場面では、型だけをまとめたファイルを作ります。慣習的に `types.ts` という名前にすることが多いです。
 
 ```ts
-interface User {
-  id: string;
+// src/types.ts
+export type User = {
   name: string;
-}
-
-interface AdminUser extends User {
-  role: "admin";
-  permissions: string[];
-}
-
-const admin: AdminUser = {
-  id: "u001",
-  name: "Alice",
-  role: "admin",
-  permissions: ["read", "write"],
-};
-```
-
-- `AdminUser` は `User` のプロパティ（`id` と `name`）に加え、`role` と `permissions` を持つ。
-- `extends` の右にカンマで並べれば、**複数の `interface`** も継承できる。
-
-継承したプロパティを欠けさせるとエラーになります。
-
-```ts
-const admin: AdminUser = {
-  id: "u001",
-  role: "admin",
-  permissions: ["read", "write"],
-}; // name が足りない
-```
-
-```
-Property 'name' is missing in type '{ id: string; role: "admin"; permissions: string[]; }' but required in type 'AdminUser'.
-```
-
-### `type` でも同じことは書ける
-
-`type` エイリアスでも、**交差型** `&` を使えば継承に似たことが書けます。
-
-```ts
-type User = {
-  id: string;
-  name: string;
-};
-
-type AdminUser = User & {
-  role: "admin";
-  permissions: string[];
-};
-```
-
-`User & { ... }` は「`User` のプロパティ **かつ** `{ role, permissions }` のプロパティを両方持つ型」という意味。`interface extends` とほぼ同じ結果になります。
-
-### `type` だけが書けるもの
-
-次のような型は `interface` では書けません。`type` 専用です。
-
-1. **ユニオン型**（`A | B`）
-
-    ```ts
-    type Id = string | number;
-    ```
-
-    `interface Id = string | number;` のようには書けない。
-
-2. **交差型**（`A & B`）
-
-    `interface` を `extends` で合成するのとは別に、既存の型同士を `&` で組み合わせるのは `type` の役目。
-
-3. **リテラル型 / プリミティブ型のエイリアス**
-
-    ```ts
-    type Status = "open" | "done";
-    type Age = number;
-    ```
-
-4. **Utility Types の結果に名前を付ける**
-
-    「Utility Types で仕上げる」で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
-
-    ```ts
-    type TodoDraft = Partial<Todo>;
-    ```
-
-このあたりは「`interface` はオブジェクトの形の宣言専用。それ以外の型操作は `type` で」と覚えておくとよいです。
-
-### 使い分けの指針
-
-両方書けるのでどちらを使うべきか迷いますが、本コースでは次の方針で進めます。
-
-- **基本は `type`** に統一する
-  - オブジェクト型・ユニオン・交差・Utility Types を **同じ書き方（`type ...=`）で書ける** ので、読者側の認知コストが低い。
-  - 3 章 で `status: "open" | "done"` のようなユニオン・リテラル型が多用されるため、`type` で書けない場面は実質ない。
-- `interface` は「存在を知っている」状態にする
-  - 外部ライブラリの型定義（`@types/...`）では `interface` が多用される。読めるようにしておく必要がある。
-  - 将来チームで書く際に `interface` を選ぶ流儀もある。読み書きの両方できるようにしておけば困らない。
-
-要するに「どちらも書けるようになってから、本コースでは `type` で揃える」という立ち位置です。
-
-### 宣言マージについて（本編では扱わない）
-
-`interface` には「同じ名前の `interface` を複数書くとプロパティが合体する」 **宣言マージ** という挙動があります。
-
-```ts
-interface User {
-  name: string;
-}
-
-interface User {
   age: number;
-}
-
-// ここで User は { name: string; age: number; } と同等
+};
 ```
 
-便利に見えますが、読み手が「どこでマージされているか」を追わなければならず、意図しない衝突も起こりえます。本コースでは **この機能は使いません**。`type` に統一する方針と合わせて、「1 つの型は 1 つの宣言で書く」と覚えておいてください。
+`export type` と書くと、この型を他のファイルから読み込めるようになります。
+
+使う側は `import type` で読み込みます。
+
+```ts
+// src/main.ts
+import type { User } from "./types";
+
+const alice: User = { name: "Alice", age: 20 };
+console.log(alice);
+```
+
+- `import type { ... } from "./types";` と書く。`import` の後ろに `type` が付いているのがポイント。
+- `import type` で読み込んだ名前は **型の場所でしか使えない**（値としては使えない）。これは TS が「この import はコンパイル後の JS からは完全に消してよい」と判断できるようにするための書き方。
+- 普通の `import { User }` でも動くが、`import type` のほうが意図がはっきりして、ビルド後のサイズにも優しい。
+
+### 2 章 の TODO を型にする
+
+2 章 の「TODO アプリを作る」で、TODO 1 件を次のようなオブジェクトで表しました。
+
+```js
+{ id: "abc123", text: "牛乳を買う" }
+```
+
+この形を TS で書くと次のようになります。
+
+```ts
+type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+このレッスンでは、`id` と `text` の 2 プロパティだけの最小の `Todo` 型を作り、**全プロパティが必須** の形だけを書きます。「未完了 / 完了」の状態や「メモ」のようなオプショナルなプロパティは扱いません。
 
 ## 演習
 
 ### 途中から始める場合
 
-新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-<details>
-<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+### 手順 1: `User` 型を書く
+
+`src/main.ts` の中身を以下に置き換える。
 
 ```ts
+type User = {
+  name: string;
+  age: number;
+};
+
+const alice: User = { name: "Alice", age: 20 };
+const bob: User = { name: "Bob", age: 25 };
+
+function printUser(user: User): void {
+  console.log(`${user.name} (${user.age})`);
+}
+
+printUser(alice);
+printUser(bob);
+```
+
+#### 期待出力
+
+```
+Alice (20)
+Bob (25)
+```
+
+### 手順 2: わざとプロパティを欠けさせてエラーを見る
+
+次のように書き換えて、赤線が出る場所を確認する。
+
+```ts
+const charlie: User = { name: "Charlie" };
+```
+
+期待されるメッセージ:
+
+```
+Property 'age' is missing in type '{ name: string; }' but required in type 'User'.
+```
+
+続けて、余分なプロパティも試す。
+
+```ts
+const dave: User = { name: "Dave", age: 30, email: "dave@example.com" };
+```
+
+期待されるメッセージ:
+
+```
+Object literal may only specify known properties, and 'email' does not exist in type 'User'.
+```
+
+「`User` 型に `email` というプロパティは定義されていない」と教えてくれている。
+
+### 手順 3: `types.ts` を作って `Todo` 型を置く
+
+1. StackBlitz で `src/` の下に新しいファイル `types.ts` を作る。
+2. 中身を次のように書く。
+
+```ts
+// src/types.ts
 export type Todo = {
   id: string;
   text: string;
 };
 ```
 
-</details>
-
-### 手順 1: `interface Todo` で書き直す
-
-これまでのレッスンで作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
-
-`src/types.ts` を次のように書き換える。
-
-```ts
-// src/types.ts
-export interface Todo {
-  id: string;
-  text: string;
-}
-```
-
-`src/main.ts` はこれまでと同じで動くことを確認する。
+3. `src/main.ts` を次のように書き換える。
 
 ```ts
 import type { Todo } from "./types";
@@ -211,156 +217,77 @@ for (const todo of todos) {
 }
 ```
 
+`Todo[]` は「`Todo` の配列」を意味する型注釈。ここでは「配列の各要素が `Todo` 型」とだけ理解しておけばよい。
+
 #### 期待出力
+
+Console に次のように出る。
 
 ```
 - [a1] 牛乳を買う
 - [a2] 本を返す
 ```
 
-`type Todo = { ... }` を `interface Todo { ... }` に変えても、**使う側は何も書き換えずに動く** ことを確認する。`import type { Todo }` もそのまま使える。
+### 手順 4: 型に合わない値を入れてエラーを見る
 
-### 手順 2: わざとプロパティを欠けさせてエラーを見る
-
-`main.ts` に次の行を足す。
+`printTodo` に TODO ではないものを渡してみる。
 
 ```ts
-const broken: Todo = { id: "a3" };
+printTodo({ id: "a3" }); // text が足りない
 ```
 
 期待されるメッセージ:
 
 ```
-Property 'text' is missing in type '{ id: string; }' but required in type 'Todo'.
+Argument of type '{ id: string; }' is not assignable to parameter of type 'Todo'.
+  Property 'text' is missing in type '{ id: string; }' but required in type 'Todo'.
 ```
 
-エラーの文面は `type` のときと同じく「`Todo` 型に `text` が足りない」と出る。`interface` か `type` かは、エラーメッセージの見え方にほぼ影響しない。確認できたらこの行は消す。
-
-### 手順 3: `interface AdminUser extends User` を書く
-
-`src/types.ts` に `User` と `AdminUser` を追記する。
+続けて、`id` に数値を入れてみる。
 
 ```ts
-// src/types.ts
-export interface Todo {
-  id: string;
-  text: string;
-}
-
-export interface User {
-  id: string;
-  name: string;
-}
-
-export interface AdminUser extends User {
-  role: "admin";
-  permissions: string[];
-}
-```
-
-`src/main.ts` の末尾に次のコードを追加する。
-
-```ts
-import type { AdminUser } from "./types";
-
-const admin: AdminUser = {
-  id: "u001",
-  name: "Alice",
-  role: "admin",
-  permissions: ["read", "write"],
-};
-
-console.log(`${admin.name}: ${admin.role} / ${admin.permissions.join(", ")}`);
-```
-
-#### 期待出力
-
-```
-- [a1] 牛乳を買う
-- [a2] 本を返す
-Alice: admin / read, write
-```
-
-### 手順 4: 継承したプロパティを欠けさせる
-
-`admin` オブジェクトから `name` を消してみる。
-
-```ts
-const admin: AdminUser = {
-  id: "u001",
-  role: "admin",
-  permissions: ["read", "write"],
-};
+printTodo({ id: 3, text: "書類を出す" });
 ```
 
 期待されるメッセージ:
 
 ```
-Property 'name' is missing in type '{ id: string; role: "admin"; permissions: string[]; }' but required in type 'AdminUser'.
+Type 'number' is not assignable to type 'string'.
 ```
-
-`User` から継承した `name` も、`AdminUser` を使う側では必須として扱われる。確認できたら元に戻す。
-
-### 手順 5: `interface` で書けないものを試す
-
-`interface` ではユニオン型を書けないことを確かめる。`types.ts` に次を足してみる。
-
-```ts
-export interface Id = string | number;
-```
-
-赤線が出る。期待されるメッセージ（環境により文面は前後するが、いずれにせよ構文エラーになる）:
-
-```
-'=' expected.
-```
-
-`Interface name cannot be reserved word ...` のように別の文面で出ることもあります。意図は同じで、**`interface` の宣言構文は `interface 名前 { ... }` だけなので、`= 型` を書く場所がない**（= ユニオン型は `interface` では表現できない）ということです。確認できたら行ごと消して、`type` で書き直す。
-
-```ts
-export type Id = string | number;
-```
-
-こちらは通る。
 
 ### 変えてみる
 
-`AdminUser` を `type` + 交差型で書き直して、挙動が同じことを確認する。
+`types.ts` の `Todo` 型の `text` プロパティを一時的に `number` に変えてみる。
 
 ```ts
-export type AdminUser = User & {
-  role: "admin";
-  permissions: string[];
-};
-```
-
-`main.ts` の呼び出し側を書き換える必要はない。`User & { ... }` の形でも `interface extends` でも、呼び出し側から見たら区別がつかない。
-
-確認できたら、3 章 の他レッスンで使いやすいように **`Todo` を `type` に戻して** おく。
-
-```ts
-// src/types.ts
 export type Todo = {
   id: string;
-  text: string;
+  text: number; // わざと変える
 };
 ```
 
-`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。3 章 の他レッスンの演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば他のレッスンとズレない。
+`main.ts` の配列で定義した各 `{ id: ..., text: "..." }` の `text` の下に一斉に赤線が出るのを確認する。型を 1 か所変えると、その型を **import している全ファイル** で整合性のチェックが走るのが TS の強み。
+
+確認できたら `text: string` に戻す。
 
 ### 自分で書く
 
-次の型を **`type` + 交差型** と **`interface` + `extends`** の 2 通りで書き、両方が同じように使えることを確認する。
+`types.ts` に **新しい型** `User` を追記する（`Todo` はそのまま残す）。
 
-- `Animal` 型: `{ name: string; legs: number; }`
-- `Dog` 型: `Animal` に `breed: string` を足した形
+```ts
+export type User = {
+  id: string;
+  name: string;
+  age: number;
+};
+```
 
-書けたら、`Dog` 型の値を 1 件作って `name` と `breed` を Console に出す。どちらの書き方でも `main.ts` の呼び出し側が変わらないことを実感する。
+`main.ts` から `import type { User } from "./types";` で読み込み、`User` 型の配列を 3 件作って、各ユーザーの `name` と `age` を Console に出す関数を書く。`printUser(user: User): void` の形。
+
+書けたら、わざと `age` に文字列を入れるなどしてエラーメッセージを確認してから戻す。
 
 ## まとめ
 
-- `interface 名前 { ... }` でオブジェクトの形に名前を付けられる。`type` とほぼ同じ使い方ができる。
-- `interface` は `extends` で継承できる。`type` は `&`（交差型）で同じことができる。
-- ユニオン型・リテラル型・Utility Types の結果に名前を付けるのは **`type` のみ** ができる。
-- 宣言マージという機能もあるが、本コースでは使わない。
-- **本コースは `type` を基本** に使う。読者として `interface` も読める状態にしておき、書くときは `type` に揃える。3 章 の他レッスンの `types.ts` は `type Todo = { ... }` に戻しておく。
+- オブジェクト型は `{ プロパティ名: 型; ... }` で書く。区切りはセミコロン。
+- `type 名前 = ...` で型に名前を付けられる。型の名前は大文字始まりが慣習。
+- 型を別ファイルに置くときは `export type`、使う側は `import type` で読み込む。型専用の import と明示できる。

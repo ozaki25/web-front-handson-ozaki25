@@ -1,435 +1,312 @@
-# lesson51: tsconfig.json を読む
+# lesson50: Utility Types で仕上げる
 
 ## ゴール
 
-- `strict` の各オプションが何を厳しくしているか分かる
-- `target` / `module` / `moduleResolution` の 3 つの関係を説明できる
-- `paths` でパスエイリアス（`@/*`）を設定できる
-- `jsx` / `lib` / `types` の役割を理解する
-- Vite / Next.js / Node 用の tsconfig.json の差を読める
+- 既にある型から新しい型を派生させる **Utility Types** という仕組みを理解する。
+- `Partial<T>` で「全プロパティが省略可能」な型を作れる。
+- `Pick<T, K>` で「特定のプロパティだけ取り出した」型を作れる。
+- `Todo` 型から `TodoDraft`（下書き）と `TodoSummary`（一覧用）を派生させ、関数で使い分けられる。
 
 ## 解説
 
-TypeScript プロジェクトのルートに置く `tsconfig.json` は、**型チェックとコンパイル** の挙動を決める設定ファイルです。フレームワークが自動生成してくれるので普段は触る機会も少ないですが、新しいツールを入れる時 / 「なぜか型エラー」を解決する時に **読めると話が早い** です。
+### 「似ているけど少しだけ違う型」問題
 
-このレッスンでは「現場で出てくる項目」だけを取り上げます。すべてを覚える必要はありません。
-
-### 全体構造
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "jsx": "react-jsx",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "skipLibCheck": true,
-    "noEmit": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
-}
-```
-
-中心になるのは `compilerOptions`。それ以外に「どのファイルを対象にするか」を `include` / `exclude` で指定します。
-
-### `strict` ファミリー
-
-`"strict": true` は **複数の strict オプションを一気に ON** にする「バンドル」です。ON にすると以下が同時に効きます。
-
-| オプション | 何を禁じるか |
-|---|---|
-| `noImplicitAny` | 暗黙の `any`（型注釈なしの引数など） |
-| `strictNullChecks` | `null` / `undefined` を別型として扱う |
-| `strictFunctionTypes` | 関数の引数の型を厳密にチェック |
-| `strictBindCallApply` | bind / call / apply の引数チェック |
-| `strictPropertyInitialization` | クラスのプロパティが初期化されているか |
-| `noImplicitThis` | `this` が `any` になる場面を禁じる |
-| `alwaysStrict` | 出力に `"use strict"` を付ける |
-| `useUnknownInCatchVariables` | `catch (e)` の `e` を `unknown` 型に |
-
-**新規プロジェクトでは必ず `"strict": true`** を付けます。後から戻す方が大変です。
-
-#### さらに厳しくしたい時
-
-```json
-{
-  "noUncheckedIndexedAccess": true,
-  "exactOptionalPropertyTypes": true,
-  "noFallthroughCasesInSwitch": true,
-  "noImplicitOverride": true
-}
-```
-
-特に `noUncheckedIndexedAccess` は `arr[0]` の型を `T | undefined` にします。バグを防げる一方、書き味が硬くなるので **新規プロジェクトでは入れて、既存に追加するなら計画的** に。
-
-### `target` / `module` / `moduleResolution` の関係
-
-3 つはセットで覚えます。
-
-#### `target`
-
-「**出力する JavaScript の構文バージョン**」。
-
-- `ES2015` / `ES2020` / `ES2022` / `ES2023` / `ESNext`
-- 例: `target: "ES5"` だと `class` が `function` のプロトタイプ書き換えに変換される
-- **2026 年は `ES2022` 以上が無難**。古いブラウザ対応は Vite / Next.js のビルドが別途やる
-
-#### `module`
-
-「**出力するモジュール形式**」。
-
-- `CommonJS`: `require` / `module.exports`
-- `ESNext` / `ES2020`: `import` / `export`
-- `NodeNext`: Node.js の最新 ESM/CJS 共存ルールに合わせる
-
-最近のフロント / バンドラ前提なら `"module": "ESNext"`、Node.js 単体なら `"module": "NodeNext"` を選びます。
-
-#### `moduleResolution`
-
-「**`import` を書いた時にどうやってファイルを探すか**」。
-
-| 値 | 用途 |
-|---|---|
-| `bundler` | Vite / webpack / Bun などバンドラを使う場合の **推奨**（TypeScript 5.0+） |
-| `nodenext` | Node.js（ESM / CJS 切替を解釈） |
-| `node10` | 古い Node 互換（旧称 `node`、メンテナンスのみ） |
-| `classic` | 非常に古い。使わない |
-
-`bundler` は **TypeScript 5.0 で追加** された値です。「拡張子を書かなくていい」「`package.json` の `exports` を解釈する」などモダンバンドラの挙動に合わせてあります。新規 Vite / Next.js では原則 `bundler` を選びます。
-
-### `paths` でパスエイリアス
-
-```json
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  }
-}
-```
-
-これで:
+3 章 を通じて、TODO 1 件を表す `Todo` 型をここまで育ててきました。
 
 ```ts
-import Button from "../../../components/Button"; // 深い相対パス
-import Button from "@/components/Button";          // 短い別名
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
 ```
 
-注意点:
+ここで次のような場面を想像します。
 
-- TypeScript は **型チェックのためだけ** に解釈する。**実行時の解決は別**
-- バンドラ（Vite / webpack / esbuild）にも **同じエイリアスを教える** 必要がある
-- Vite なら `vite.config.ts` の `resolve.alias`、Next.js は **tsconfig.json から自動で読む**
-- `paths` に書く値は **ベースとなる位置からの相対パス**。`create-next-app` は `"@/*": ["./src/*"]` ではなく `"@/*": ["./*"]` を出力するなど、**プロジェクトに `src/` があるかどうか** で値が変わるので、自動生成された値をそのまま使うのが安全
+- **下書き**: ユーザーが「新規作成」ボタンを押した直後。まだ `id` も `text` も決まっていない。
+- **一覧用の要約**: 一覧画面では `id` と `text` だけ表示すればよい。`status` や `memo` は詳細画面でだけ使う。
 
-### `jsx`
+これらは `Todo` に似ていますが、「全部必須ではない」「一部しか使わない」という違いがあります。そのたびに別の `type` を手で書くと、`Todo` を変更したときに派生型もすべて追従させる必要があり、ズレが生まれます。
 
-JSX をどう変換するか。
+TS には「既にある型から **自動で** 新しい型を作る」道具が用意されています。それが **Utility Types**（ユーティリティ型）です。
 
-| 値 | 説明 |
-|---|---|
-| `preserve` | JSX を変換せず、そのまま出力（バンドラに任せる） |
-| `react` | `React.createElement(...)` に変換（古い形） |
-| `react-jsx` | 新しい変換（`react/jsx-runtime` を自動 import）。**2026 年の標準** |
-| `react-jsxdev` | 開発時の `react-jsx`。デバッグ情報付き |
+### `Partial<T>`: 全プロパティをオプショナルにする
 
-新規 React / Next.js プロジェクトでは `"jsx": "react-jsx"`（または Next.js が自動指定する `"preserve"`）です。
+`Partial` は「`T` のすべてのプロパティを省略可能（`?:` 付き）にした型」を作ります。
 
-### `lib`
+```ts
+type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
 
-「**型定義としてどこまで使えるか**」。
-
-```json
-{ "lib": ["ES2023", "DOM", "DOM.Iterable"] }
+type TodoDraft = Partial<Todo>;
+// 展開すると次と同じ:
+// type TodoDraft = {
+//   id?: string;
+//   text?: string;
+//   status?: "open" | "done";
+//   memo?: string;
+// }
 ```
 
-- `DOM`: ブラウザ API（`document` / `window` / `fetch` など）の型を有効化
-- `ES2023`: `Array.prototype.toSorted` などの型を有効化
-- `DOM.Iterable`: `for (const el of nodeList)` を許可
-- Node.js 用なら `DOM` を入れない
+`TodoDraft` は「下書き」にぴったりです。まだ `id` が決まっていなくても、`text` だけ入力された状態でも受け入れられる。
 
-### `types`
-
-「**自動で読み込む型パッケージ** を制限する」。
-
-```json
-{ "types": ["vite/client", "node"] }
+```ts
+const draft1: TodoDraft = {};                           // OK
+const draft2: TodoDraft = { text: "牛乳を買う" };         // OK
+const draft3: TodoDraft = { text: "本を返す", memo: "" }; // OK
 ```
 
-`@types/*` が `node_modules` に入っていると **デフォルトで全部読み込まれる**ので、テスト用と実装用の型がぶつかる事故が起きます。`types` を指定すると **明示したものだけ** に絞れます。
+オプショナル版になったので、使う側では `undefined` を意識する必要があります（「配列・ユニオン・リテラル型・オプショナル」で扱った通り）。
 
-### `include` / `exclude`
+### `Pick<T, K>`: プロパティを選んで取り出す
 
-```json
-{
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
-}
+`Pick` は「`T` の中から指定したプロパティだけを取り出した型」を作ります。
+
+```ts
+type TodoSummary = Pick<Todo, "id" | "text">;
+// 展開すると次と同じ:
+// type TodoSummary = {
+//   id: string;
+//   text: string;
+// }
 ```
 
-`include` がディレクトリを指す場合、`*.ts` / `*.tsx` / `*.d.ts` などの拡張子だけを拾います。**テストファイルだけ別の tsconfig** を使うことがよくあります。
+- 第 1 引数に元の型、第 2 引数に取り出したいプロパティ名のユニオン（`"id" | "text"`）。
+- 取り出したプロパティは、元の型の必須 / オプショナルをそのまま引き継ぐ。
+- 指定していないプロパティは含まれない。
 
-### `noEmit`
+一覧画面のコンポーネントが「`id` と `text` しか使わない」と宣言したいとき、`Todo` 全体を受け取る代わりに `TodoSummary` で受け取れば、余計な情報を意識せずに済みます。
 
-```json
-{ "noEmit": true }
+### Utility Types が嬉しいのは「追従」してくれること
+
+`Todo` 型に新しいプロパティ（例えば `dueDate: string`）が増えたとします。
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+  dueDate: string; // 追加
+};
 ```
 
-「**型チェックだけして JS を出力しない**」設定。バンドラが TS → JS の変換を担当する場合は `noEmit: true` にします。Vite / Next.js は `tsc` を使わず esbuild / SWC で変換するので、ほぼ常に `noEmit: true`。
+このとき:
 
-`tsc` を **型チェック専用ツール** として使う、というのが現代の TS の主な役割です。
+- `TodoDraft = Partial<Todo>` は自動的に `dueDate?: string` を含む型に更新される。
+- `TodoSummary = Pick<Todo, "id" | "text">` は影響を受けない（`dueDate` は含まないと指定しているから）。
 
-### `tsconfig.json` のバリエーション
+`type TodoDraft = { id?: string; text?: string; ... }` と手で書いていたら、`dueDate?` を追加し忘れる事故が起きます。Utility Types はこれを仕組みで防ぎます。
 
-#### Vite + React（`npm create vite -- --template react-ts` の生成例）
+### その他の Utility Types（コラム）
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
-  },
-  "include": ["src"]
-}
-```
+TS には他にも Utility Types があります。代表的なものを名前だけ紹介します。
 
-特徴:
+- `Readonly<T>`: すべてのプロパティを読み取り専用にする。
+- `Record<K, V>`: キーと値の型を指定したオブジェクト型を作る（`Record<string, number>` など）。
+- `Omit<T, K>`: `Pick` の逆で「指定したプロパティ **以外**」を取り出す。
+- `Required<T>`: `Partial` の逆で「全プロパティを必須にする」。
 
-- `moduleResolution: "bundler"` + `allowImportingTsExtensions: true` でバンドラ前提
-- `isolatedModules` は **ファイル単位で型情報なく変換** されることを保証する。Vite / esbuild の前提
-- `noEmit: true` で型チェック専用
-
-#### Next.js（自動生成）
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./*"] }
-  },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
-}
-```
-
-特徴:
-
-- `jsx: "preserve"`（Next.js 内部で React Compiler / SWC が JSX を変換）
-- `plugins: [{ name: "next" }]` で Next.js 用の補完が効く
-- `next-env.d.ts` を `include` に入れて、Next.js が用意するグローバル型を読む
-
-#### Node.js（CLI ツールなど）
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "outDir": "dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "types": ["node"]
-  },
-  "include": ["src"]
-}
-```
-
-特徴:
-
-- `tsc` で実際に **JS を出力する** ので `noEmit` を外し、`outDir` を指定
-- `module: "NodeNext"` + `moduleResolution: "NodeNext"` で Node の ESM / CJS ルールに従う
-
-### よくある落とし穴
-
-#### `paths` を設定したのにビルドで失敗
-
-→ TypeScript の `paths` は **型情報専用**。実行時は **バンドラ側にも** 同じエイリアスを教える必要があります。
-
-#### `strict` を ON にしたら大量のエラー
-
-→ 一度に全部直すのが大変なら、ファイル単位で `// @ts-nocheck` を一時的に置く / `noImplicitAny` だけ先に ON にする / 古い箇所だけ別の `tsconfig` で扱う、と段階的に進めます。
-
-#### `skipLibCheck: false` にしたら謎のエラー
-
-→ 依存パッケージの型が壊れていると `node_modules` の中まで型チェックして失敗します。**実用上 `true` がほぼ常識**。
-
-#### Next.js で `jsx: "react-jsx"` を上書きしたい
-
-→ 上書きせずに **Next.js の生成値（`"preserve"`）に従う**。`react-jsx` への変換は Next.js のビルドが内部で行います。
-
-### tsconfig は **継承** できる
-
-```json
-// tsconfig.base.json
-{
-  "compilerOptions": {
-    "strict": true,
-    "moduleResolution": "bundler"
-  }
-}
-```
-
-```json
-// tsconfig.json
-{
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist" },
-  "include": ["src"]
-}
-```
-
-モノレポでは **共通設定を 1 つの base** に書き、各パッケージで `extends` するのが定番です。
-
-`@tsconfig/strictest` / `@tsconfig/node20` のような **公式バンドル** も npm にあり、`extends: "@tsconfig/strictest/tsconfig"` と書くだけで強い設定一式が読み込めます。
+**このコースでは `Partial` と `Pick` の 2 つだけ** を使います。他は「必要になったときに TS の公式ドキュメントを検索すればすぐ使える」程度に覚えておけば十分です。名前と「こういう用途がある」だけ頭の片隅にあればよい、という距離感です。
 
 ## 演習
 
-### ゴール
+### 途中から始める場合
 
-- 既存の Vite + React + TS プロジェクトの `tsconfig.json` を読み解く
-- いくつかのオプションを変えて型チェックの挙動を変化させる
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
-### 手順 1: 新規プロジェクト
-
-```bash
-npm create vite@latest tsconfig-sample -- --template react-ts
-cd tsconfig-sample
-npm install
-```
-
-### 手順 2: tsconfig.json を眺める
-
-`tsconfig.json`（または `tsconfig.app.json`）を開いて、解説で出てきた項目がどう書かれているか確認します。
-
-### 手順 3: わざと「ゆるい」コードを書く
-
-`src/App.tsx` に追加:
-
-```tsx
-function add(a, b) {  // 引数の型がない
-  return a + b;
-}
-
-const value = null as null | string;
-console.log(value.length);  // null チェックなし
-```
-
-このまま `npx tsc --noEmit` を実行すると、`strict: true` のせいでエラーが出ます。
-
-```
-src/App.tsx(2,13): error TS7006: Parameter 'a' implicitly has an 'any' type.
-src/App.tsx(7,13): error TS18047: 'value' is possibly 'null'.
-```
-
-### 手順 4: strict を変えて挙動を見る
-
-`tsconfig.json` の `compilerOptions` に追加:
-
-```json
-"strict": false,
-"noImplicitAny": true
-```
-
-これで:
-
-- `noImplicitAny` は ON のまま、引数の型なしエラーは出続ける
-- `strictNullChecks` は OFF になり、`value.length` のエラーは消える
-
-`strict` は便利な「親スイッチ」ですが、個別の項目を明示することで「**何を厳しくしているか**」が読みやすくなります。
-
-### 手順 5: paths を設定する
-
-`tsconfig.json`:
-
-```json
-"baseUrl": ".",
-"paths": { "@/*": ["./src/*"] }
-```
-
-`vite.config.ts`:
+<details>
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
 
 ```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "node:path";
-
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "src") },
-  },
-});
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
 ```
 
-`src/main.tsx` で:
+</details>
 
-```tsx
-import App from "@/App";
+### 手順 1: `Todo` 型から派生型を作る
+
+「配列・ユニオン・リテラル型・オプショナル」の `src/types.ts` をそのまま使う。`src/main.ts` を次の形に書き換える。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoDraft = Partial<Todo>;
+type TodoSummary = Pick<Todo, "id" | "text">;
+
+const draft: TodoDraft = { text: "新しい TODO" };
+
+const summaries: TodoSummary[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+
+function printSummary(item: TodoSummary): void {
+  console.log(`- [${item.id}] ${item.text}`);
+}
+
+console.log("下書き:");
+console.log(draft);
+
+console.log("一覧:");
+for (const item of summaries) {
+  printSummary(item);
+}
 ```
 
-`@/App` が解決できるはずです。
+#### 期待出力
 
-### 期待出力
+```
+下書き:
+{ text: '新しい TODO' }
+一覧:
+- [a1] 牛乳を買う
+- [a2] 本を返す
+- [a3] ゴミを出す
+```
 
-- `npx tsc --noEmit` で型エラーが出る → strict を緩めると消える
-- `@/...` の import が IDE / ビルドの両方で動く
+（`draft` の表示形式は環境により `{text: "新しい TODO"}` のように表示される場合もある。プロパティの中身が同じであれば OK。）
 
-### 変える
+### 手順 2: 派生型の嬉しさを確かめる
 
-- `noUncheckedIndexedAccess: true` を追加して `const arr = [1, 2, 3]; arr[10].toString()` がエラーになることを確認
-- `target: "ES2022"` を `target: "ES5"` に変えて、`tsc` の出力（`outDir` を一時的に指定）が ES5 構文になることを観察
-- `jsx: "react-jsx"` を `jsx: "preserve"` に変えてビルドの出力差を見る
+次のように、`TodoDraft` にはどのプロパティも必須ではないことを確認する。
 
-### 自分で書く（任意）
+```ts
+const d1: TodoDraft = {};
+const d2: TodoDraft = { text: "メモだけ" };
+const d3: TodoDraft = { id: "a1", status: "open" };
+```
 
-- `tsconfig.base.json` を作って `extends` する形にリファクタする
-- モノレポ風に `apps/web/tsconfig.json` と `packages/ui/tsconfig.json` を作って共通設定を共有する
-- `@tsconfig/strictest` を入れて、最強の strict を踏んだ時に出るエラーを 1 つずつ潰す
+いずれも赤線が出なければ OK。
+
+次に、`TodoSummary` には `status` を入れられないことを確認する。
+
+```ts
+const s: TodoSummary = { id: "a1", text: "牛乳を買う", status: "open" };
+```
+
+期待されるメッセージ:
+
+```
+Object literal may only specify known properties, and 'status' does not exist in type 'TodoSummary'.
+```
+
+`TodoSummary` は `id` と `text` しか持たない型として派生させたので、`status` を入れようとすると TS が止めてくれる。
+
+### 手順 3: `Partial` で「更新関数」を書く
+
+`Partial<Todo>` は「一部のプロパティだけ変える」という更新のときにも便利。
+
+```ts
+import type { Todo } from "./types";
+
+type TodoDraft = Partial<Todo>;
+
+function updateTodo(todo: Todo, patch: TodoDraft): Todo {
+  return { ...todo, ...patch };
+}
+
+const original: Todo = {
+  id: "a1",
+  text: "牛乳を買う",
+  status: "open",
+};
+
+const updated = updateTodo(original, { status: "done", memo: "牛乳コーナー" });
+
+console.log(original);
+console.log(updated);
+```
+
+#### 期待出力
+
+```
+{ id: 'a1', text: '牛乳を買う', status: 'open' }
+{ id: 'a1', text: '牛乳を買う', status: 'done', memo: '牛乳コーナー' }
+```
+
+- 元の `original` は変わらない（イミュータブル更新。4 章 で React と組み合わせて再登場）。
+- `patch` に `id` や `text` を含めてもよいし、含めなくてもよい。`Partial<Todo>` だから。
+
+### 手順 4: 元の型を変えて追従を体験する
+
+`src/types.ts` に `dueDate` プロパティを **一時的に** 追加してみる。
+
+```ts
+// src/types.ts（一時的な変更）
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+  dueDate: string;
+};
+```
+
+`src/main.ts` を見ると、`const original: Todo = { ... }` のところで赤線が出るはず。
+
+期待されるメッセージ:
+
+```
+Property 'dueDate' is missing in type '{ id: string; text: string; status: "open"; }' but required in type 'Todo'.
+```
+
+一方、`TodoSummary`（`Pick<Todo, "id" | "text">`）で作っていた `summaries` のほうは何も言われない。`dueDate` は `TodoSummary` の範囲外だから。
+
+これが **派生型が自動で追従する** 効果。確認できたら `dueDate` の追加は取り消して元に戻す。
+
+### 変えてみる
+
+`TodoSummary` に `status` も含めた新しい型 `TodoListItem` を派生させてみる。
+
+```ts
+type TodoListItem = Pick<Todo, "id" | "text" | "status">;
+
+const items: TodoListItem[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done" },
+];
+
+for (const item of items) {
+  const mark = item.status === "done" ? "x" : " ";
+  console.log(`[${mark}] ${item.text}`);
+}
+```
+
+期待出力:
+
+```
+[ ] 牛乳を買う
+[x] 本を返す
+```
+
+### 自分で書く
+
+`Todo` 型から、次の 2 つの派生型を自分で書く。
+
+1. `TodoWithoutMemo` — `memo` を含まない型。ヒント: `Pick` で `"id" | "text" | "status"` を選ぶ。
+2. `TodoPatch` — すべて省略可能な型（`TodoDraft` と同じ中身でよいので、`Partial<Todo>` を使う）。
+
+それぞれの型で変数を 1 つずつ作り、`console.log` する。エディタでマウスオーバーして、プロパティの中身が期待通りかを確認する。
+
+### コラム: その他の Utility Types
+
+`Readonly<T>` / `Record<K, V>` / `Omit<T, K>` / `Required<T>` などは本コースでは扱いません。必要な場面に出会ったら TS 公式ドキュメント（<https://www.typescriptlang.org/docs/handbook/utility-types.html>）の該当項目を読めば、基本の使い方はすぐ身につきます。Utility Types はどれも「既にある型から別の型を作る」という同じ考え方の延長線上にあります。
 
 ## まとめ
 
-- `tsconfig.json` の中心は `compilerOptions`。`include` / `exclude` で対象ファイルを絞る
-- `strict` は複数の strict オプションをまとめる **親スイッチ**。新規プロジェクトでは必須
-- `target` / `module` / `moduleResolution` の 3 点セットで「出力 JS / モジュール形式 / 探索方法」が決まる
-- `moduleResolution: "bundler"` が **2026 年のフロント標準**
-- `paths` でパスエイリアスを定義。**実行時はバンドラにも教える**
-- `jsx: "react-jsx"` が React 17 以降のデファクト
-- `lib` で使える型、`types` で読み込む型パッケージを制御
-- `noEmit: true` にして **型チェック専用** にし、変換はバンドラに任せるのが現代流
-- `extends` でベース設定を継承できる。`@tsconfig/strictest` などの公式バンドルもある
+- Utility Types は「既にある型から新しい型を派生させる道具」。手で別の `type` を書く代わりに、仕組みで自動追従させる。
+- `Partial<T>`: すべて省略可能にする。下書きや更新の差分に使える。
+- `Pick<T, K>`: 特定のプロパティだけ取り出す。一覧用の軽い型に使える。
+- 他の Utility Types（`Readonly` / `Record` / `Omit` / `Required` など）は本コースでは扱わない。必要になったら公式ドキュメントを参照する。

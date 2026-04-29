@@ -1,334 +1,400 @@
-# lesson106: Vite の仕組みを軽く
+# lesson105: package.json と npm スクリプト
 
 ## ゴール
 
-- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown を中核** に据えて esbuild が担っていた領域を順次置き換えていく方向に進んだ経緯が分かる
-- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
-- 本番ビルドでチャンク分割が起きる理由が言える
-- `import.meta.env` で環境変数を読み込める
-- Vite プラグインの位置付けを把握する
+- `dependencies` / `devDependencies` / `peerDependencies` の違いを言える
+- セマンティックバージョニング（`^` / `~` / 固定）の意味を読める
+- `package-lock.json` がなぜ必要か説明できる
+- npm / pnpm / yarn / Bun の違いを把握する
+- `scripts` の書き方と `npm run` の仕組みを理解する
 
 ## 解説
 
-### Vite の立ち位置
+### `package.json` はプロジェクトの「目次」
 
-Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
+Node.js / フロントのプロジェクトには必ず `package.json` があります。役割は次の 4 つ。
 
-特徴:
+1. **メタ情報**（プロジェクト名 / バージョン / 作者など）
+2. **依存パッケージ** の宣言
+3. **スクリプト** の登録（`npm run dev` など）
+4. **ツール設定** の置き場（lint-staged / browserslist / 各種 CLI の設定）
 
-- **開発サーバーが速い**（数百 ms で起動）
-- **HMR が一瞬**（保存と同時にブラウザが追随）
-- **本番ビルドはツリーシェイク + 最適化** までやる
-- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
+最小例:
 
-### 2 段構成の歴史と Rolldown 統一
-
-Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
-
-| 局面 | 使うツール | 役割 |
-|---|---|---|
-| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
-| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
-
-開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
-
-#### Vite 8（2026 年 3 月）で Rolldown を中核に
-
-[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを **中核に据え**、Rollup ベースの本番ビルド経路を Rolldown ベース（`rolldown-vite`）に切り替える方向に進みました。esbuild が担当していた依存事前バンドルや TS/JSX 変換も段階的に Rolldown / Oxc に置き換わっていきますが、移行期では **既定として採用** されつつも esbuild が一部経路に残っており、将来の小バージョンで完全に 1 段化する見込みです。
-
-- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
-- **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
-- 結果として Vite はビルドが **最大 10〜30 倍速** になった
-- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
-
-「esbuild + Rollup の 2 段構成」から「Rolldown 中心」へ移っていく流れ、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
-
-### 開発サーバーの仕組み
-
-Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
-
-#### 古典的 webpack の流れ
-
-1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
-2. ブラウザに 1 つの大きな JS を渡す
-3. 一部修正されると **再バンドル**
-
-→ ファイル数が増えると線形に遅くなる。
-
-#### Vite の流れ
-
-1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
-2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
-3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
-
-→ ファイル数が増えても初回の起動が速い。
-
-#### 例: 何が起きているか
-
-ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
-
-ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
-
-### HMR（Hot Module Replacement）
-
-開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
-
-普通のブラウザリロードと違って:
-
-- フォームに入力した値が **保持** される
-- スクロール位置が保たれる
-- 状態（state）も保たれる（フレームワーク側が対応していれば）
-
-#### 仕組みを大づかみに
-
-1. Vite はファイル変更を **fs.watch** で監視
-2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
-3. **影響モジュールだけ** ブラウザに WebSocket で送る
-4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
-
-React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
-
-### 本番ビルドの仕組み
-
-`vite build` で行われること:
-
-1. **エントリポイント** から依存関係を辿る
-2. **ツリーシェイク** で使われない export を削除
-3. **チャンク分割** で複数ファイルに分ける
-4. **minify** でファイルサイズを削減
-5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
-
-#### チャンク分割（コード分割）
-
-すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
-
-- **ベンダー**（`node_modules`）を別チャンクに
-- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
-
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson103 のバンドルサイズ最適化と繋がる話）。
-
-```ts
-// クリック時に初めて読み込む
-const handleClick = async () => {
-  const { showModal } = await import("./modal");
-  showModal();
-};
+```json
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0"
+  }
+}
 ```
 
-#### ハッシュ付きファイル名
+### 依存の 3 つの種類
 
-`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
+#### `dependencies`
 
-### `import.meta.env` で環境変数
+「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要がある。
 
-Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
+#### `devDependencies`
 
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_KEY=do_not_expose
+「**開発時だけ必要** な依存」。`typescript` / `vite` / `eslint` / `vitest` など、ビルド済みコードを動かすには不要なもの。本番のサーバーで `npm install --omit=dev` すると **dev は入らず、容量が減る** メリットがあります。
+
+#### `peerDependencies`
+
+「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言する。
+
+例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示。
+
+普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
+
+#### `optionalDependencies` / `bundledDependencies`
+
+たまに見かけますが、めったに使いません。`optionalDependencies` は「入らなくても続行」、`bundledDependencies` は「自分のパッケージに同梱」。
+
+### セマンティックバージョニング（semver）
+
+`react: ^19.2.0` の数字は **3 つに区切られた意味** を持ちます。
+
 ```
-
-```ts
-console.log(import.meta.env.VITE_API_URL); // OK
-console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
+19.2.0
+│ │ │
+│ │ └── PATCH（バグ修正）
+│ └──── MINOR（後方互換のある機能追加）
+└────── MAJOR（破壊的変更）
 ```
 
 ルール:
 
-- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
-- それ以外は Vite が **読み捨てる**（漏洩対策）
-- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
+- **PATCH を上げる** → 既存のコードは動き続けるはず
+- **MINOR を上げる** → 既存のコードは動き、新機能が増える
+- **MAJOR を上げる** → 既存のコードが動かなくなる可能性あり
 
-組み込みで使える環境情報:
+#### 範囲指定の記号
 
-```ts
-import.meta.env.MODE        // "development" / "production"
-import.meta.env.DEV         // true / false
-import.meta.env.PROD        // true / false
-import.meta.env.BASE_URL    // "/" など
+| 書き方 | 意味 | 例: `^1.2.3` の許容範囲 |
+|---|---|---|
+| `^1.2.3` | MAJOR は固定。MINOR / PATCH は上げて OK | `>= 1.2.3 < 2.0.0` |
+| `~1.2.3` | MINOR も固定。PATCH のみ上げて OK | `>= 1.2.3 < 1.3.0` |
+| `1.2.3` | 完全固定 | `1.2.3` のみ |
+| `>=1.2.3` | これ以上 | `1.2.3` 以降すべて |
+| `1.x` / `1.*` | MAJOR だけ固定 | `>= 1.0.0 < 2.0.0` |
+
+**新規プロジェクトのデフォルトは `^`**。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
+
+ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用も。
+
+### `package-lock.json` の役割
+
+`package.json` に `^19.2.0` と書いてあっても、**実際にインストールされる版は `npm install` 実行時の最新** です。チームで開発していると「**人によって入る版が違う**」事態が起きます。
+
+`package-lock.json` は「**実際に入った全パッケージの正確なバージョン**」を記録するファイル。
+
+```json
+// package-lock.json の中身（抜粋）
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz",
+    "integrity": "sha512-..."
+  }
+}
 ```
 
-### プラグイン
+これにより:
 
-Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
+- **再現可能なインストール** が保証される
+- 直接の依存だけでなく、**間接の依存**（dependency の dependency） まで固定される
+- セキュリティ的にも `integrity` でファイルの完全性が確認される
 
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import svgr from "vite-plugin-svgr";
-import { VitePWA } from "vite-plugin-pwa";
+ルール:
 
-export default defineConfig({
-  plugins: [
-    react(),
-    svgr(),
-    VitePWA({ registerType: "autoUpdate" }),
-  ],
-});
+- **`package-lock.json` は必ず Git にコミット** する
+- 競合が起きたら片側を採用して `npm install` を再実行する（手動マージはしない）
+- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lock`（旧 `bun.lockb`）が同じ役割
+
+### npm / pnpm / yarn / Bun
+
+2026 年の選択肢は 4 つ。それぞれ「**仕事は同じだが内部の効率と機能が違う**」と理解します。
+
+| | 速度 | ディスク効率 | 安定性 | モノレポ |
+|---|---|---|---|---|
+| npm | 標準 | 普通 | 抜群 | workspaces 対応 |
+| pnpm | 速い | **抜群**（ハードリンク共有） | 抜群 | workspaces 対応 |
+| yarn (v4 / Berry) | 速い | 普通〜良 | 良 | workspaces 対応 |
+| Bun | **最速** | 良 | 改善中 | workspaces 対応 |
+
+#### pnpm の利点
+
+- 同じパッケージを複数プロジェクトで使う場合、**1 回しかディスクに置かない**（`~/.pnpm-store` に集約）
+- 厳密な依存解決（**書いていない依存は import できない**）でバグを防げる
+- `pnpm-workspace.yaml` でモノレポ管理
+
+2026 年現在、**新規プロジェクトで pnpm を選ぶ現場が増えています**。Vue / Vite / Vitest など主要 OSS の公式推奨も pnpm。
+
+#### Bun の利点
+
+- インストールが **桁違いに速い**（並列ダウンロード + 効率的な書き込み）
+- ランタイムも兼ねる（`bun run script.ts` で `tsx` 不要）
+- 仕様が安定してきた 2026 年は、**新規 CLI / バックエンドで採用** が増えている
+
+#### Yarn の現在地
+
+- v1（Classic）は古い。新規には選ばない
+- v4（Berry）は機能豊富だが、PnP モードは **採用が頭打ち**
+
+#### 使い分けの目安
+
+- **学習中 / Next.js 公式チュートリアル** → npm（公式が npm 前提のため）
+- **業務で長く付き合う** → pnpm
+- **試してみたい / インストールの速さ重視** → Bun
+
+このコースの演習では基本 `npm` を使います。これは普及度の問題で、pnpm に置き換えても何も変わりません（コマンド名だけ違う）。
+
+### `scripts` と `npm run`
+
+`package.json` の `scripts` に書いたコマンドを `npm run xxx` で実行できます。
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "test": "vitest",
+    "format": "prettier --write ."
+  }
+}
 ```
 
-代表的なプラグイン:
+ルール:
 
-- `@vitejs/plugin-react`: React の HMR + JSX 変換
-- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
-- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
-- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（lesson98）
+- `npm run dev` で `vite` が走る
+- `npm run` だけで使えるスクリプト一覧が表示される
+- 環境変数 `npm run` 内では `node_modules/.bin` が PATH に追加される（`vite` のパスを書く必要がない）
+- `dev` / `start` / `test` / `restart` / `stop` は `npm run` を省略できる（`npm test` だけで動く）
 
-Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
+#### スクリプトを連結する
 
-### Vite と他ツールの関係
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck && npm run test"
+  }
+}
+```
 
-Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
+`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利。
 
-- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
-- **Remix v3 / React Router v7+**: 内部で Vite を採用
-- **Nuxt 3+**: 内部で Vite を採用
-- **Astro**: 内部で Vite を採用
-- **SvelteKit**: 内部で Vite を採用
+並列実行は `&` ではなく `npm-run-all` / `concurrently` を使うのが安全です。
 
-つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
+```json
+{
+  "scripts": {
+    "dev": "concurrently \"npm:dev:*\"",
+    "dev:client": "vite",
+    "dev:server": "node server.js"
+  }
+}
+```
 
-### 「ハマる」パターン
+#### pre / post スクリプト
 
-#### `process.env` が `undefined`
+`scripts` に `prebuild` / `postbuild` を書くと **`npm run build` の前後で自動実行** されます。
 
-→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
+```json
+{
+  "scripts": {
+    "prebuild": "npm run lint",
+    "build": "vite build",
+    "postbuild": "echo 'done'"
+  }
+}
+```
 
-#### 環境変数がクライアントに出てこない
+便利ですが、**チームで把握しづらい** ので連鎖を多用しないほうが無難。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
 
-→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
+#### `npx` と `pnpm dlx` / `bunx`
 
-#### CommonJS のパッケージで失敗
+「**一度だけ** コマンドを実行したい」場合の使い捨て実行。
 
-→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
+```bash
+npx create-next-app my-app    # one-shot で create-next-app を取得して実行
+pnpm dlx create-next-app my-app
+bunx create-next-app my-app
+```
 
-#### `node:fs` を import してエラー
+`npm install -g` でグローバルに入れずに済むのが利点。**最新版を使える** という意味でも安全。
 
-→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
+### `engines` で Node.js のバージョンを縛る
+
+```json
+{
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
+```
+
+`engines` で要求するバージョンを書き、環境が満たさない時に警告 / 失敗させられます。`.nvmrc` / `.node-version` と組み合わせて、**チーム全員が同じ Node を使う** よう揃えます。
+
+### `.npmrc` と `.nvmrc`
+
+| ファイル | 役割 |
+|---|---|
+| `.npmrc` | npm 自身の設定（registry / cache / strict-peer-deps など） |
+| `.nvmrc` | nvm が読む。プロジェクトで使う Node のバージョン |
+| `.node-version` | nvm 以外（asdf / fnm / volta）が読む |
+
+`.npmrc` の代表例:
+
+```
+strict-peer-deps=true
+save-exact=true
+registry=https://registry.npmjs.org/
+```
+
+### よくある事故
+
+#### `npm install` の度に lock が更新される
+
+→ `^` で書いてあると、新しい patch / minor が出ているとロックが更新される。意図しない更新を防ぐには **CI では `npm ci`** を使う。
+
+#### `npm ci` と `npm install` の違い
+
+- `npm install`: 必要に応じて `package-lock.json` を更新
+- `npm ci`: lock の通りに **そのまま** 入れる（CI で **再現性が高く速い**）
+
+#### グローバルインストールに頼らない
+
+`npm install -g` で入れた CLI は **マシン全体に影響**。プロジェクトごとに違う版が必要な時に困る。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本。
 
 ## 演習
 
 ### ゴール
 
-- Vite の開発サーバーで **HMR を体感** する
-- ビルド出力のチャンク分割を眺める
-- `import.meta.env` で環境変数を読む
+- `package.json` の依存とスクリプトを実際に編集する
+- `npm ci` と `npm install` の差を体験する
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest vite-internals -- --template react-ts
-cd vite-internals
+npm create vite@latest pkg-sample -- --template react-ts
+cd pkg-sample
 npm install
 ```
 
-### 手順 2: HMR を試す
+### 手順 2: dependencies / devDependencies を区別する
 
 ```bash
-npm run dev
+npm install dayjs              # dependencies に入る
+npm install -D vitest          # devDependencies に入る
 ```
 
-ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
+`package.json` を開いて、それぞれが正しく入っていることを確認します。
 
-### 手順 3: ネットワークタブで個別配信を観察
-
-DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
-
-### 手順 4: 環境変数
-
-`.env` を作成:
-
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_TOKEN=xxxxx
-```
-
-`src/App.tsx` に追加:
-
-```tsx
-console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
-console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
-console.log("MODE:", import.meta.env.MODE);
-```
-
-ブラウザのコンソールで:
-
-- `VITE_API_URL` は表示される
-- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
-- `MODE` は `"development"`
-
-### 手順 5: 本番ビルド
-
-```bash
-npm run build
-ls -la dist/assets
-npm run preview
-```
-
-`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
-
-### 手順 6: 動的 import でチャンクを分割
-
-`src/App.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [text, setText] = useState("");
-
-  const handleClick = async () => {
-    const mod = await import("./heavy");
-    setText(mod.heavyFunction());
-  };
-
-  return (
-    <div>
-      <button onClick={handleClick}>重い処理</button>
-      <p>{text}</p>
-    </div>
-  );
+```json
+{
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
 }
 ```
 
-`src/heavy.ts`:
+### 手順 3: scripts を増やす
 
-```ts
-export function heavyFunction() {
-  return "計算結果です";
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "echo 'lint placeholder'",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "ci": "npm run lint && npm run typecheck && npm run test"
+  }
 }
 ```
 
-`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
+`npm run ci` を実行して、3 つのスクリプトが順に走ることを確認します。
+
+### 手順 4: lock の挙動を観察する
+
+```bash
+git init
+git add .
+git commit -m "init"
+
+# package-lock.json を消して install
+rm package-lock.json
+npm install
+git diff --stat package-lock.json
+```
+
+ハッシュや解決バージョンが微妙に変わっていることがあります（依存ツリー全体で再解決される）。これが「lock を Git に入れる理由」です。
+
+### 手順 5: npm ci を試す
+
+```bash
+rm -rf node_modules
+npm ci
+```
+
+`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石。
 
 ### 期待出力
 
-- HMR でファイル保存と同時に画面が更新（リロードなし）
-- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
-- `VITE_` プレフィックスの環境変数のみクライアントから読める
-- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
+- `npm install dayjs` 後、`dependencies` に `dayjs` が追加される
+- `npm install -D vitest` 後、`devDependencies` に `vitest` が追加される
+- `npm run ci` で 3 ステップが順に走る
+- `package-lock.json` を消して install すると差分が出る場合がある
+- `npm ci` は lock 通りに高速に入る
 
 ### 変える
 
-- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
-- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
-- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
+- `dayjs: "^1.11.10"` を `dayjs: "~1.11.10"` に変えて、`npm update` で何が更新されるか観察する
+- `engines: { "node": ">=20" }` を加えて、古い Node で `npm install` が警告を出すことを確認する
+- `prebuild` / `postbuild` を追加して連鎖実行を体験する
 
 ### 自分で書く（任意）
 
-- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
-- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
+- pnpm / Bun を入れて、同じプロジェクトの `install` 速度を比べる
+- モノレポ（`workspaces`）の最小構成を作って、共通の utility パッケージを 2 つのアプリから使う
+- `.npmrc` で `save-exact=true` を設定し、`npm install dayjs` した時に `^` が付かなくなることを確認
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
-- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
-- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
-- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
-- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
-- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
-- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
+- `package.json` は **メタ情報 / 依存 / スクリプト / ツール設定** の 4 つを担う
+- `dependencies` / `devDependencies` / `peerDependencies` の使い分け
+- semver の `^` は **MAJOR 固定 / MINOR・PATCH 自動更新**、`~` は MINOR まで固定
+- `package-lock.json` を **必ず Git に入れる**。CI では `npm ci` で再現性を保つ
+- パッケージマネージャは **npm / pnpm / yarn / Bun** の 4 択。新規業務開発は pnpm が増加傾向、最速重視なら Bun
+- `scripts` は `npm run xxx` で起動。`&&` で連結、`pre` / `post` で連鎖
+- `npx` / `pnpm dlx` / `bunx` で **一度だけ実行** できる
+- `engines` と `.nvmrc` でチーム間の Node のバージョンを揃える

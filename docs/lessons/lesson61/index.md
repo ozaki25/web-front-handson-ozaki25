@@ -1,241 +1,241 @@
-# lesson61: 親子コンポーネントの連携
+# lesson60: 条件で出し分ける
+
+<script setup>
+const closeScript = '<' + '/script>'
+const demoHtml =
+  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
+  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
+  '<div id="root"></div>'
+
+const demoJs = `
+// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
+// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
+const h = React.createElement;
+const { useState } = React;
+
+function App() {
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [unread, setUnread] = useState(0);
+
+  return h(
+    'div',
+    null,
+    // (1) 三項演算子: 2 択の切り替え
+    isLoggedIn
+      ? h('p', null, 'ようこそ、Alice さん')
+      : h('p', null, 'ゲストさん、こんにちは'),
+    h(
+      'button',
+      { onClick: () => setIsLoggedIn(v => !v), style: { marginRight: '8px' } },
+      isLoggedIn ? 'ログアウト' : 'ログイン'
+    ),
+    h('hr'),
+    // (2) && で「あるときだけ出す」
+    h('p', null, '未読: ' + unread),
+    unread > 0 &&
+      h('p', { style: { color: '#b91c1c', fontWeight: 'bold' } }, unread + ' 件の未読があります'),
+    h('button', { onClick: () => setUnread(c => c + 1), style: { marginRight: '8px' } }, '+1'),
+    h('button', { onClick: () => setUnread(0) }, '既読にする')
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(h(App));
+`
+</script>
 
 ## ゴール
 
-- 親から子へ、子から親へ値を受け渡す関係を整理できる
-- コールバック props を使って、子で起きたイベントを親の state に反映できる
-- 「state を親に持たせる（state lifting）」という考え方を説明できる
+- `&&` / 三項演算子 / 早期 return の 3 パターンを使い分けて、状態に応じた表示切り替えができる
+- それぞれの使いどころを説明できる
 
 ## 解説
 
-### props は「親 → 子」の一方通行
+### JSX は式だから、分岐も式で書く
 
-props はコンポーネント間で値を渡す仕組みですが、**基本は上から下**に流れます。
+「JSX を書く」で触れたとおり、JSX の `{ ... }` に書けるのは **式** だけです。`if` 文は書けません。なので、条件で出し分けるときも**式の形**を使います。
 
-```
-親 (App)  --- todos ---> 子 (TodoList)
-```
+よく使うのは次の 3 つです。
 
-では、子から親に何かを伝えたいときはどうするか。例えば「子のフォームに文字を入力して追加ボタンを押したら、親が持っている配列に追加したい」場合です。
+1. `条件 && <JSX />`
+2. `条件 ? <A /> : <B />`
+3. 関数の先頭で `if` を使って早期 return
 
-### コールバック props
+### (1) `&&` で「あるときだけ出す」
 
-答えは「親から子に **関数を渡し**、子はその関数を呼ぶ」です。親が渡した関数を子がコールバックする、という形で、**関数が値として props を流れる**点がポイントです。
-
-```
-親 (App)  --- onAdd (関数) ---> 子 (TodoInput)
-            <-- 関数呼び出し ---
-```
-
-親側:
+「条件が真のときだけ表示する / 偽なら何も出さない」は `&&` が定番です。
 
 ```tsx
-function App() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  return (
-    <>
-      <TodoInput onAdd={handleAdd} />
-      <ul>{/* ... */}</ul>
-    </>
-  );
+{
+  isLoggedIn && <p>ログイン中</p>;
 }
 ```
 
-子側:
+- `isLoggedIn` が `true` なら `<p>ログイン中</p>` が評価されて表示される
+- `isLoggedIn` が `false` なら `false` が評価結果になり、JSX としては何も描画されない
+
+#### `&&` の落とし穴（数値 0）
+
+`&&` の左側には **本当に真偽値** を置くようにしてください。数値の `0` を書くと、そのまま `0` が画面に表示されてしまいます。
 
 ```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
+{
+  count && <p>{count} 件あります</p>;
+}
+// count が 0 だと、画面に「0」という数字が出てしまう
+```
 
-type TodoInputProps = {
-  onAdd: (text: string) => void;
+件数のような**数値**で判定したいときは、明示的に真偽値に変換します。
+
+```tsx
+{
+  count > 0 && <p>{count} 件あります</p>;
+}
+```
+
+`string` や `Todo[]` は `length === 0` を意識しつつ、迷ったら三項演算子を使うとより安全です。
+
+### (2) 三項演算子で「A か B か」
+
+「ログイン中なら A、ログアウト中なら B を表示」のように **2 択** で切り替えたいときは三項演算子が素直です。
+
+```tsx
+{
+  isLoggedIn ? <p>ログイン中</p> : <a href="/login">ログインへ</a>;
+}
+```
+
+- `isLoggedIn` が `true` なら左側、`false` なら右側が表示される
+
+3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次の 3 番目の方が読みやすいです。
+
+### (3) 早期 return
+
+関数の**一番上**で条件判定して、不要な場合は `return` してしまう書き方です。
+
+```tsx
+type MessageProps = {
+  text: string;
 };
 
-function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    onAdd(trimmed); // 親の関数を呼ぶ
-    setText(""); // 入力欄をクリア
+function Message({ text }: MessageProps) {
+  if (text.length === 0) {
+    return null; // null を返すと「何も描画しない」
   }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input value={text} onChange={(e) => setText(e.target.value)} />
-      <button type="submit">追加</button>
-    </form>
-  );
+  return <p>{text}</p>;
 }
 ```
 
-- 親は `onAdd` という関数を子に渡す
-- 子は入力欄の state（`text`）を自分で持つ
-- 送信時に `onAdd(text)` を呼ぶ → 親が state を更新 → 画面再レンダリング
+- `null` を `return` すると、そのコンポーネントは **何も描画しない**
+- 条件が多い場合は、三項や `&&` を重ねるより圧倒的に読みやすい
 
-「関数を props として渡す」という発想に慣れるのがこのレッスンのコアです。
+ローディング中専用のスピナー、エラー時専用のメッセージ、3 択以上の状態分岐など、分岐ごとに違う大きな JSX を返したい場合に使うとスッキリします。
 
-### state lifting（状態の持ち上げ）
+### 小さなコンポーネントに分ける発想
 
-上の例で、なぜ `todos`（一覧）の state を **親**（App） に置いたのでしょうか。一覧を描画するのは `TodoList` コンポーネントです。一見 `TodoList` に state を置いてもよさそうです。
+条件が重なってきたら、「サブコンポーネントに切り出す」ことも考えます。
 
-理由: **`todos` は「子の TodoInput」と「子の TodoList」の両方が関わる** からです。TodoInput は追加する側、TodoList は表示する側。2 つが同じ state を共有する必要があります。
+```tsx
+function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
+  if (isLoggedIn) {
+    return <p>ようこそ！</p>;
+  }
+  return <a href="/login">ログイン</a>;
+}
 
-兄弟どうしの子コンポーネントは、直接 props で値を送れません。`App → TodoInput → App → TodoList` のように、**共通の親** を経由する必要があります。そのため、共通の親（App）に state を持たせます。
-
-これが「state lifting（共通の親に state を持ち上げる）」です。
-
-```
-        App (todos を持つ)
-       /              \
-  TodoInput        TodoList
-  (追加用)        (表示用)
+// 呼び出し側
+<UserStatus isLoggedIn={isLoggedIn} />;
 ```
 
-### props のおさらい
+1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは以降のレッスンで使っていきます。
 
-props を関数にすると、慣習的に名前は `onXxx` の形にします（HTML のイベントと同じ感覚）。
+### 動きを見てみる
 
-| 親が子に渡すもの | 命名例 |
-| --- | --- |
-| 値（state） | `todos`、`user`、`count` |
-| 状態変更を依頼する関数 | `onAdd`、`onDelete`、`onToggle` |
+下のデモでボタンを押すと、三項演算子と `&&` の 2 パターンで表示が切り替わる様子を確認できます。「ログイン」を押すと挨拶文が差し替わり、`+1` を押して未読が 1 以上になったときだけ赤字の警告が現れます。
 
-この命名で統一すると、「この props は関数か値か」が読み解きやすくなります。
+<LiveDemo
+  height="320px"
+  :html="demoHtml"
+  :js="demoJs"
+/>
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した TODO 例として完結しています。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。過去のレッスンのファイルは不要で、下の手順に従って `src/types.ts` / `src/TodoInput.tsx` / `src/TodoList.tsx` / `src/App.tsx` を新しく作成していきます。
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
 
 ### ゴール
 
-- `TodoInput`（子）と `TodoList`（子）を、`App`（親）が `todos` state を持って束ねる
-- 入力 → 追加ボタンで一覧末尾に追加
-- 各項目の削除ボタンで 1 件削除
+- ログイン / ログアウトの状態で表示を切り替える画面を作る
+- `&&` / 三項 / 早期 return の 3 パターンそれぞれを、別の箇所で 1 回ずつ書く
 
 ### 手順
 
 1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/types.ts` を作成
-3. `src/TodoInput.tsx` を作成
-4. `src/TodoList.tsx` を作成
-5. `src/App.tsx` を書き換える
+2. `src/App.tsx` と `src/Message.tsx` を書く
 
-### `src/types.ts`
+### `src/Message.tsx`
 
-```ts
-export type Todo = {
-  id: string;
+```tsx
+type MessageProps = {
   text: string;
 };
-```
 
-### `src/TodoInput.tsx`
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    onAdd(trimmed);
-    setText("");
+export function Message({ text }: MessageProps) {
+  // 早期 return: 空文字なら何も描画しない
+  if (text.length === 0) {
+    return null;
   }
-
-  return (
-    <form onSubmit={handleSubmit} className="todo-input">
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="やることを入力"
-      />
-      <button type="submit">追加</button>
-    </form>
-  );
+  return <p className="message">{text}</p>;
 }
 ```
-
-### `src/TodoList.tsx`
-
-```tsx
-import type { Todo } from "./types";
-
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-};
-
-export function TodoList({ todos, onDelete }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p className="empty">まだタスクがありません</p>;
-  }
-
-  return (
-    <ul className="todo-list">
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          {todo.text}
-          <button
-            type="button"
-            aria-label={`${todo.text} を削除`}
-            onClick={() => onDelete(todo.id)}
-          >
-            削除
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-```
-
-`aria-label={`${todo.text} を削除`}` を付けるのは、スクリーンリーダーで「削除ボタン」が連続して読み上げられたときに **どの TODO の削除か区別できる** ようにするためです。視覚的には「削除」のままで、読み上げ時だけ別の文字列が使われます。
 
 ### `src/App.tsx`
 
 ```tsx
 import { useState } from "react";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-import type { Todo } from "./types";
+import { Message } from "./Message";
 import "./App.css";
 
 function App() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  }
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [unread, setUnread] = useState(0);
+  const [memo, setMemo] = useState("");
 
   return (
     <>
-      <h1>TODO（親子連携版）</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
+      <h1>条件表示のデモ</h1>
+
+      <section className="box">
+        <h2>(A) 三項演算子: ログイン状態で切り替え</h2>
+        {isLoggedIn ? (
+          <p>ようこそ、Alice さん</p>
+        ) : (
+          <p>ゲストさん、こんにちは</p>
+        )}
+        <button onClick={() => setIsLoggedIn((v) => !v)}>
+          {isLoggedIn ? "ログアウト" : "ログイン"}
+        </button>
+      </section>
+
+      <section className="box">
+        <h2>(B) && で「あるときだけ出す」</h2>
+        <p>未読: {unread}</p>
+        {unread > 0 && <p className="alert">{unread} 件の未読があります</p>}
+        <button onClick={() => setUnread((c) => c + 1)}>+1</button>
+        <button onClick={() => setUnread(0)}>既読にする</button>
+      </section>
+
+      <section className="box">
+        <h2>(C) 早期 return: Message コンポーネント</h2>
+        <input
+          value={memo}
+          onChange={(e) => setMemo(e.target.value)}
+          placeholder="空のままだと表示されない"
+        />
+        <Message text={memo} />
+      </section>
     </>
   );
 }
@@ -246,80 +246,71 @@ export default App;
 ### `src/App.css`
 
 ```css
-.todo-input {
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
   margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
 }
 
-.todo-input input {
-  padding: 6px;
+.box button {
   margin-right: 8px;
-}
-
-.todo-input button,
-.todo-list button {
   padding: 4px 10px;
   cursor: pointer;
 }
 
-.todo-list {
-  list-style: disc;
-  padding-left: 20px;
-  color: #222;
+.alert {
+  color: #b3261e;
+  font-weight: bold;
 }
 
-.todo-list li {
-  padding: 4px 0;
-}
-
-.todo-list li button {
-  margin-left: 8px;
-}
-
-.empty {
-  color: #666;
+.message {
+  background-color: #eaf6ff;
+  padding: 6px 10px;
+  border-radius: 4px;
 }
 
 @media (prefers-color-scheme: dark) {
-  .todo-list {
+  .box {
     color: #eee;
+    background-color: #202020;
+    border-color: #555;
   }
-  .empty {
-    color: #aaa;
+  .alert {
+    color: #ff7a6d;
+  }
+  .message {
+    background-color: #13344d;
+    color: #eee;
   }
 }
 ```
 
 ### 期待出力
 
-- 画面上部に入力欄と「追加」ボタン
-- 最初は「まだタスクがありません」と薄い色で表示される
-- 入力して「追加」を押すと一覧に行が増え、各行に「削除」ボタンが付く
-- 「削除」ボタンを押すと、その行だけが消える
-- すべて消すと再び「まだタスクがありません」が現れる
-- 空欄のまま「追加」を押しても、一覧に何も増えない（`trim()` で空文字は弾いている）
+- (A) ボタン「ログイン」を押すと、見出し下のメッセージが `ゲストさん、こんにちは` → `ようこそ、Alice さん` に変わる。ボタンの文言も `ログアウト` に変わる
+- (B) `+1` ボタンを押すと「未読」の数字が増え、**1 以上になると初めて** 「N 件の未読があります」が赤文字で現れる。`既読にする` を押すと数字が 0 になり、警告文も消える
+- (C) 入力欄に文字を入れると、下に水色背景の `<p>` が現れる。空にすると `<p>` ごと消える（`null` を返している）
 
 ### 変える
 
-- `TodoList` の中で、一覧の上に「現在 N 件」という `<p>` を追加してみる（ヒント: `<p>現在 {todos.length} 件</p>`）
-- `handleAdd` を `setTodos((prev) => [newTodo, ...prev])` に変えると、新規が **先頭** に入るようになる
-- `TodoInput` 内の `if (trimmed.length === 0) return;` を消すと、空文字で追加されて一覧に空の行ができる。確認したら戻す
+- (B) の条件を `unread > 0 &&` から `unread &&` に書き換えて、未読 0 のときに **画面に `0` が表示される** 現象を再現する。**確認したら必ず `unread > 0 &&` に戻す**。`&&` の左辺は **常に真偽値**（`x > 0`、`x.length > 0`、`Boolean(x)` など）にするのが原則
+- (A) の三項を `&&` と `||` の組み合わせに書き換えてみる（余裕があれば）
+- (C) の `if (text.length === 0)` を `if (text === "")` に変えても同じ動きになることを確認
 
 ### 自分で書く
 
-- `TodoItem` コンポーネントを新たに作り、`<li>{text}<button>削除</button></li>` の部分を切り出す
-- `TodoList` は `TodoItem` を `map` で並べるだけにする
-- `TodoItem` が受け取る props の型:
-  ```ts
-  type TodoItemProps = {
-    todo: Todo;
-    onDelete: (id: string) => void;
-  };
-  ```
-- これは「TODO アプリを React で作る」でそのまま使う形です
+- 「ステータス」の state を `"offline" | "loading" | "online"` のユニオン型で作る
+- 値に応じて、`offline → 灰色の丸`、`loading → 黄色の丸 + "接続中..."`、`online → 緑の丸 + "接続済み"` を表示する
+- 3 択なので、早期 return か、または `switch` で `if ... return` を 3 本重ねる形がおすすめ
+- ヒント: `const [status, setStatus] = useState<"offline" | "loading" | "online">("offline");`
 
 ## まとめ
 
-- props は基本「親 → 子」の一方通行
-- 子から親に伝えたいときは、親が渡した **関数を子が呼ぶ**（コールバック props）
-- 複数の子が関わる state は、**共通の親** に持たせる（state lifting）
-- 関数の props は `onXxx` という命名にするのが慣習
+- JSX の中に書けるのは式だけ。条件分岐も **式の形** で書く
+- `&&`: あるときだけ出す（ただし数値 0 に注意）
+- 三項演算子: 2 択の切り替え
+- 早期 return（`return null` を含む）: 3 択以上 / それぞれが大きいとき
+- 条件が増えてきたら **コンポーネント分割** も選択肢
