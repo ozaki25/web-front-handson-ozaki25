@@ -199,23 +199,6 @@ console.log(summary);
 1. `script.js` を以下に書き換える
 2. Console で結果を確認する
 
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson20</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson20: 条件で分岐する</h1>
-  </body>
-</html>
-```
-
 ### `script.js`
 
 ```js

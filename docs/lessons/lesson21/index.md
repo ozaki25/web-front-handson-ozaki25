@@ -159,23 +159,6 @@ if (!isStudent) {
 1. `script.js` を以下に書き換える
 2. Console を確認する
 
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson21</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson21: 配列を扱う</h1>
-  </body>
-</html>
-```
-
 ### `script.js`
 
 ```js
