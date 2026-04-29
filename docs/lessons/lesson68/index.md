@@ -64,6 +64,55 @@ export class ErrorBoundary extends Component<Props, State> {
 - **`componentDidCatch`**: 副作用（ロギング / 通報）を走らせる場所です。ログ送信が要らなければ省略できます。
 - `fallback` と `children` は props で受け取る、シンプルなコンテナです。
 
+::: details コラム: React コンポーネントの書き方の歴史
+
+React のコンポーネントは、登場以来 3 段階の変遷をたどっています。
+
+**1. `React.createClass`（2013 〜 React 15）**
+
+React が最初に提供した API です。ES6 以前の時代に JavaScript でクラスのような構造を表現するための独自メソッドでした。
+
+```js
+var Greeting = React.createClass({
+  render: function () {
+    return React.createElement("p", null, "こんにちは");
+  },
+});
+```
+
+React 16 で削除され、現在は使えません。
+
+**2. クラスコンポーネント（2015 〜 現在も存続）**
+
+ES6 の `class` 構文が広まると、`React.Component` を継承する形に移行しました。`state` の管理、ライフサイクルメソッド（`componentDidMount` / `componentDidUpdate` など）を持つことができ、長い間 React の主流でした。
+
+```tsx
+class Counter extends React.Component {
+  state = { count: 0 };
+  render() {
+    return (
+      <button onClick={() => this.setState({ count: this.state.count + 1 })}>
+        {this.state.count}
+      </button>
+    );
+  }
+}
+```
+
+**3. 関数コンポーネント + Hooks（React 16.8 / 2019 〜 現在の標準）**
+
+2019 年に `useState` / `useEffect` などの Hooks が追加され、関数コンポーネントでも state やライフサイクルに相当する処理が書けるようになりました。クラスよりコードが短く、ロジックを分離・再利用しやすいことから、現在は **関数コンポーネントが唯一の標準** です。
+
+```tsx
+function Counter() {
+  const [count, setCount] = useState(0);
+  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
+}
+```
+
+クラスコンポーネント自体は React から削除されておらず、今回の `ErrorBoundary` のように **フックで代替できない一部の機能** には今でも必要です。新規コードで意図的にクラスを選ぶことはほぼありませんが、古いコードベースでは見かけることがあります。
+:::
+
 ### 使い方
 
 守りたい範囲を囲むだけです。
