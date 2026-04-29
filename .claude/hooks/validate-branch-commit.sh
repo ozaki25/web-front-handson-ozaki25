@@ -127,6 +127,45 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
   fi
 
+  # --- 位置依存参照の検出（コードブロック / フェンスドコード除外）---
+  # 「次のレッスン」「前のレッスン」「先ほど」は読者の現在地に依存する表現。
+  # topic-name 参照（「○○のレッスン」）に置き換える。
+  if [ -n "$staged_md" ]; then
+    pos_dep_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /^```/ { in_code = !in_code; next }
+        in_code { next }
+        /次のレッスン|前のレッスン|先ほど/ { print NR ": " $0 }
+      ')
+      if [ -n "$issues" ]; then
+        pos_dep_hits="${pos_dep_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$pos_dep_hits" ]; then
+      block "位置依存の参照: 「次のレッスン」「前のレッスン」「先ほど」は読者の現在地に依存する表現です。topic-name 参照（「○○のレッスン」）に置き換えてください。\n${pos_dep_hits}"
+    fi
+  fi
+
+  # --- 「章 N」表記の検出（コードブロック除外）---
+  # 日本語として正しいのは「N 章」。「章 N」は NG。
+  if [ -n "$staged_md" ]; then
+    chapter_n_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /^```/ { in_code = !in_code; next }
+        in_code { next }
+        /章 [0-9]/ { print NR ": " $0 }
+      ')
+      if [ -n "$issues" ]; then
+        chapter_n_hits="${chapter_n_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$chapter_n_hits" ]; then
+      block "「章 N」NG パターン: 日本語として正しいのは「N 章」です（例: 「章 1」→「1 章」）。\n${chapter_n_hits}"
+    fi
+  fi
+
   # --- 素の <script> / <style> の検出 ---
   if [ -n "$staged_md" ]; then
     raw_tag_hits=""
