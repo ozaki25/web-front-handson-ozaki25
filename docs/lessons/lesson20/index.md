@@ -196,9 +196,8 @@ console.log(summary);
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson20` に変える
-2. `script.js` を以下に書き換える
-3. Console で結果を確認する
+1. `script.js` を以下に書き換える
+2. Console で結果を確認する
 
 ### `index.html`
 

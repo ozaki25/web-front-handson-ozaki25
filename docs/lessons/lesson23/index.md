@@ -175,8 +175,7 @@ console.log(total);
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson23` に変える
-2. `script.js` を以下に書き換える
+1. `script.js` を以下に書き換える
 
 ### `index.html`
 

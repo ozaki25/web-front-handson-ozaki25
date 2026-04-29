@@ -196,8 +196,7 @@ for (const u of users) {
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson26` に変える
-2. `script.js` を以下に書き換える
+1. `script.js` を以下に書き換える
 
 ### `index.html`
 

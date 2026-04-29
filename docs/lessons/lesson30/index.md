@@ -207,8 +207,7 @@ renderTodos(list, todos);
 
 ### 手順
 
-1. `index.html` のタイトルを `lesson30` に変える
-2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
+1. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
 
 ### `index.html`
 
