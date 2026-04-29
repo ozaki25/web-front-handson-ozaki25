@@ -311,4 +311,4 @@ export default function AboutPage() {
 - `import Image from "next/image"` で `<Image>` コンポーネントを使えます。素の `<img>` より賢い画像表示ができます。
 - `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
 - 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
-- 「ページを増やしてリンクで移動する」の `<img>` を `<Image>` に差し替えたことで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられるようになりました。
+- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられます。

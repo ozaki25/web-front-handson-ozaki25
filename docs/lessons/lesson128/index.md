@@ -9,7 +9,7 @@
 - 自分の Next.js プロジェクトで Server / Client の境界設計を整理できる
 
 ::: tip 前提
-このレッスンは lesson74「Server Component と Client Component」、lesson75「Server Component でデータ取得」、lesson80「Server Actions の最小形」の発展編です。基本概念は先のレッスンで確認してください。
+このレッスンは「Server Component と Client Component」「Server Component でデータ取得」「Server Actions の最小形」の発展編です。基本概念はそれぞれのレッスンで確認してください。
 :::
 
 ## 解説

@@ -106,6 +106,11 @@ body { padding: 16px; font-family: system-ui; color: #111; background: #fff; }
 .card { border: 1px solid #d1d5db; padding: 16px; }
 .card p { color: #555; }
 .card > p { font-weight: bold; }
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  .card { border-color: #555; }
+  .card p { color: #bbb; }
+}
   `"
   :js="``"
 />
@@ -164,6 +169,9 @@ p { color: gray; }
 .note { color: blue; }
 /* (1, 0, 1)  ← これが勝つ */
 #main p { color: crimson; font-weight: bold; }
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+}
   `"
   :js="``"
 />
@@ -341,7 +349,7 @@ DevTools の Elements パネルで `.body` の中の `<p>` をクリックしま
 
 ### 自分で書く
 
-- ナビのリンク（`.nav-link`）の **直接の子の `<a>`** だけに `text-decoration: underline` を当てる（実際は `<li>` の中の `<a>` なので、子セレクタを使うと当たらない。これは「子セレクタが直下にしか当たらない」を体感する課題）。
+- `.nav-list > a` というセレクタで `<a>` に下線を付けようとして、**当たらない** ことを確認する（HTML は `.nav-list` → `<li>` → `<a>` の構造なので、`<a>` は `.nav-list` の **直接の子ではない** のが理由）。次に `.nav-list a`（子孫セレクタ）にすれば下線が付くことを確認する。「子セレクタは 1 段だけ」を体感する課題。
 - `<a>` の中で **`href` が `https://` で始まる外部リンクだけ** 色を `#16a34a` にするルールを書く（属性セレクタ + 前方一致 `^=`）。
 
 ### よくあるつまずき
