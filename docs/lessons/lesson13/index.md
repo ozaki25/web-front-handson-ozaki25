@@ -129,6 +129,44 @@ body { padding: 16px; }
 
 親が何であっても **ビューポート**（ブラウザの表示領域） を基準に固定されます。ページをスクロールしても、画面内の同じ位置に居続けます。「ページトップに戻る」ボタン、チャットの吹き出し、Cookie バナーなどの定番の使い方です。
 
+下のデモは長めの本文と、画面右下に `position: fixed` で配置した「↑ Top」ボタンの組み合わせです。プレビュー内をスクロールしても、ボタンが画面右下にとどまり続けるのを確認できます。
+
+<LiveDemo
+  height="280px"
+  :html="`
+<h3>長い本文のサンプル</h3>
+<p>1 段落目のテキスト。スクロールしてみてください。</p>
+<p>2 段落目のテキスト。</p>
+<p>3 段落目のテキスト。</p>
+<p>4 段落目のテキスト。</p>
+<p>5 段落目のテキスト。</p>
+<p>6 段落目のテキスト。</p>
+<p>7 段落目のテキスト。</p>
+<p>8 段落目のテキスト。</p>
+<p>9 段落目のテキスト。</p>
+<p>10 段落目のテキスト。ここまで来てもボタンは右下に居続けます。</p>
+<button class='to-top'>↑ Top</button>
+  `"
+  :css="`
+body { margin: 0; padding: 16px; font-family: system-ui; }
+p { margin: 0 0 12px; }
+.to-top {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  padding: 8px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+  `"
+  :js="``"
+/>
+
 ### `sticky`: 途中までは普通、そこから固定
 
 ```css
@@ -157,6 +195,49 @@ body { padding: 16px; }
 - `z-index` は **数字が大きいほど前** に出る。
 - `z-index` が効くのは **`position` が `static` 以外の要素だけ**。
 - 負の値（`-1` など）も使えるが、思わぬ要素の裏に回るので最初は正の値だけでよい。
+
+下のデモは 3 枚のカードが重なった状態です。ボタンを押すと青いカードの `z-index` が `1` ↔ `5` で切り替わり、最前面に出たり隠れたりするのを確認できます。
+
+<LiveDemo
+  height="220px"
+  :html="`
+<div class='stack'>
+  <div class='card red'>red (z-index: 3)</div>
+  <div class='card blue' id='blue'>blue (z-index: 1)</div>
+  <div class='card green'>green (z-index: 2)</div>
+</div>
+<button id='toggle'>blue を最前面に切り替え</button>
+  `"
+  :css="`
+body { padding: 16px; font-family: system-ui; }
+.stack { position: relative; height: 120px; margin-bottom: 16px; }
+.card {
+  position: absolute;
+  width: 130px;
+  height: 80px;
+  padding: 10px;
+  color: white;
+  font-weight: bold;
+  border-radius: 6px;
+}
+.red   { background: crimson;     top: 0;    left: 0;   z-index: 3; }
+.blue  { background: dodgerblue;  top: 24px; left: 60px; z-index: 1; }
+.green { background: seagreen;    top: 48px; left: 120px; z-index: 2; }
+button { padding: 6px 12px; cursor: pointer; }
+  `"
+  :js="`
+const blue = document.getElementById('blue');
+const btn = document.getElementById('toggle');
+let high = false;
+btn.onclick = () => {
+  high = !high;
+  blue.style.zIndex = high ? '5' : '1';
+  btn.textContent = high
+    ? 'blue を z-index: 1 に戻す'
+    : 'blue を最前面に切り替え';
+};
+  `"
+/>
 
 ### stacking context（重なりの文脈）の最小知識
 

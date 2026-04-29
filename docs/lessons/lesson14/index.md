@@ -29,6 +29,41 @@
 
 この例では「`background-color` が変化するときだけ、200ms（= 0.2 秒）かけて `ease`（ゆっくり始まってゆっくり終わる）でつなぐ」という意味になります。
 
+下のデモは、左のボタンに `transition` を付けず、右のボタンに付けた比較です。両方にホバーしてみると、左は **一瞬で** 切り替わり、右は **ふわっと** 切り替わるのが分かります。
+
+<LiveDemo
+  height="160px"
+  :html="`
+<button class='no-trans'>transition なし</button>
+<button class='with-trans'>transition あり</button>
+  `"
+  :css="`
+body { padding: 16px; background: #f5f7fa; }
+button {
+  padding: 10px 18px;
+  margin: 4px 8px 4px 0;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.no-trans:hover {
+  background: #dc2626;
+  transform: translateY(-4px);
+}
+.with-trans {
+  transition: all 250ms ease;
+}
+.with-trans:hover {
+  background: #dc2626;
+  transform: translateY(-4px);
+}
+  `"
+  :js="``"
+/>
+
 ### `transition` の 4 つのパーツ
 
 `transition` は 4 つのサブプロパティをまとめたショートハンドです。
