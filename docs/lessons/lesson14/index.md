@@ -1,175 +1,249 @@
-# lesson14: Transition と hover アニメーション
+# lesson14: Position と z-index
+
+ここまでは要素を「通常の流れ」の中で並べてきました。上から順に積まれたり、Flexbox や Grid で行・列に整列したりする並びです。今回は、**通常の流れから要素を切り離して、画面の好きな位置に配置する** ための `position` プロパティを学びます。
 
 ## ゴール
 
-- `transition` プロパティで、CSS の値の変化をなめらかに補間できる。
-- `transition-property` / `transition-duration` / `transition-timing-function` の役割を説明できる。
-- `transform: translate` で要素を動かし、`transform: scale` で拡大縮小できる。
-- `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。
-- DevTools の Rendering タブで `prefers-reduced-motion: reduce` をエミュレートして動作確認できる。
+- `position: static` / `relative` / `absolute` / `fixed` / `sticky` の違いを説明できる。
+- `top` / `right` / `bottom` / `left` で位置を指定できる。
+- `z-index` で要素の前後の重なりを制御できる。
+- 「ページトップに戻る」ボタンを画面右下に固定表示できる。
+- カードの右上に「NEW」バッジを重ねて表示できる。
 
 ## 解説
 
-### `transition` は「値の変化をなめらかにつなぐ」
+### `position` とは何か
 
-通常、CSS の値が変わると **一瞬で** 切り替わります。たとえば `:hover` で色を変えると、マウスを乗せた瞬間にパッと色が変わります。
+要素の配置方法を決めるプロパティです。値は 5 つ覚えれば十分です。
 
-`transition` プロパティを付けると、**値の変化に時間をかけて** くれます。結果として「ふわっと色が変わる」「じわっと位置が動く」ような演出ができます。
+| 値 | 意味 |
+|---|---|
+| `static` | 初期値。通常の流れで配置される（`top` などは効かない） |
+| `relative` | 通常の位置を基準にズラせる。子の `absolute` の基準にもなる |
+| `absolute` | **親で最も近い `relative` / `absolute` / `fixed`** を基準に浮く |
+| `fixed` | **画面**（ビューポート） を基準に固定。スクロールしても動かない |
+| `sticky` | 親の中で、スクロール位置に応じて `relative` ↔ 固定を切り替わる |
+
+### 位置指定の 4 つ: `top` / `right` / `bottom` / `left`
+
+`position` を `static` 以外にすると、`top` / `right` / `bottom` / `left` で **基準からの距離** を指定できます。
 
 ```css
-.button {
-  background-color: #2563eb;
-  transition: background-color 200ms ease;
-}
-
-.button:hover {
-  background-color: #1d4ed8;
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
 }
 ```
 
-この例では「`background-color` が変化するときだけ、200ms（= 0.2 秒）かけて `ease`（ゆっくり始まってゆっくり終わる）でつなぐ」という意味になります。
+「基準の上端から 8px、右端から 8px」の位置に配置されます。値は負の数も OK です（`top: -10px` で基準の外にはみ出す）。
 
-下のデモは、左のボタンに `transition` を付けず、右のボタンに付けた比較です。両方にホバーしてみると、左は **一瞬で** 切り替わり、右は **ふわっと** 切り替わるのが分かります。
+### `relative`: 通常の位置を基準にズラす
+
+```css
+.note {
+  position: relative;
+  top: 10px;
+  left: 20px;
+}
+```
+
+通常の位置から下に 10px、右に 20px ズレて表示されます。周囲のレイアウトには影響を与えず（元の場所は空けたまま）、見た目だけズレるのが特徴です。
+
+**より重要な使い方**: 子要素の `absolute` の基準点になる、という役割です。次の `absolute` で解説します。
+
+### `absolute`: 親を基準に浮かせる
+
+```html
+<div class="card">
+  <span class="badge">NEW</span>
+  <h3>カードのタイトル</h3>
+</div>
+```
+
+```css
+.card {
+  position: relative;
+}
+
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+}
+```
+
+`.badge` は通常の流れから抜けて、**最も近い `position: relative` / `absolute` / `fixed` の祖先を基準に** 浮きます。この例では親の `.card` が基準なので、カードの右上に重なります。
+
+ここで **親に `position: relative` を書き忘れると**、`.badge` は更に上の祖先（もしくは `<body>`）を基準にしてしまい、カードの右上ではなくページ全体の右上に飛んでしまいます。これは非常によく起きる事故なので、「絶対配置の子がいる親には `position: relative`」と覚えます。
+
+また、`absolute` の要素は通常の流れから抜けるため、**元の場所は詰められる**（他の兄弟要素が詰めて配置される）点が `relative` と違います。
+
+下のデモは、カードの右上に「NEW」バッジを `absolute` で重ねた例です。親に `position: relative` を入れてあるので、バッジはカードの角を基準にきれいに配置されます。CSS から `.card` の `position: relative` を外すと、バッジがページの角へ飛んでいく挙動も確認できます。
 
 <LiveDemo
-  height="160px"
+  height="200px"
   :html="`
-<button class='no-trans'>transition なし</button>
-<button class='with-trans'>transition あり</button>
+<div class='card'>
+  <span class='badge'>NEW</span>
+  <h3>カードのタイトル</h3>
+  <p>本文のテキスト</p>
+</div>
   `"
   :css="`
-body { padding: 16px; background: #f5f7fa; }
-button {
-  padding: 10px 18px;
-  margin: 4px 8px 4px 0;
-  background: #2563eb;
+body { padding: 16px; }
+.card {
+  position: relative;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  background: white;
+  max-width: 320px;
+}
+.card h3 { margin: 0 0 8px; }
+.card p { margin: 0; color: #555; }
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  background: crimson;
   color: white;
-  border: none;
+  padding: 2px 8px;
   border-radius: 4px;
-  font: inherit;
-  cursor: pointer;
-}
-.no-trans:hover {
-  background: #dc2626;
-  transform: translateY(-4px);
-}
-.with-trans {
-  transition: all 250ms ease;
-}
-.with-trans:hover {
-  background: #dc2626;
-  transform: translateY(-4px);
+  font-size: 12px;
+  font-weight: bold;
 }
   `"
   :js="``"
 />
 
-### `transition` の 4 つのパーツ
-
-`transition` は 4 つのサブプロパティをまとめたショートハンドです。
-
-| プロパティ | 意味 | 例 |
-|---|---|---|
-| `transition-property` | どのプロパティに掛けるか | `background-color`、`all`（全部） |
-| `transition-duration` | 何 ms / 何 s かけるか | `200ms`、`0.3s` |
-| `transition-timing-function` | 変化の緩急 | `ease`、`linear`、`ease-in-out` |
-| `transition-delay` | 変化が始まるまでの待ち時間 | `0s`、`100ms` |
-
-ショートハンドで書くと次のようになります（`delay` は省略可）。
+### `fixed`: 画面に固定
 
 ```css
-.button {
-  transition: background-color 200ms ease;
+.to-top {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
 }
 ```
 
-複数のプロパティに別々の時間を掛けたいときはカンマ区切りで並べられます。
+親が何であっても **ビューポート**（ブラウザの表示領域） を基準に固定されます。ページをスクロールしても、画面内の同じ位置に居続けます。「ページトップに戻る」ボタン、チャットの吹き出し、Cookie バナーなどの定番の使い方です。
+
+下のデモは長めの本文と、画面右下に `position: fixed` で配置した「↑ Top」ボタンの組み合わせです。プレビュー内をスクロールしても、ボタンが画面右下にとどまり続けるのを確認できます。
+
+<LiveDemo
+  height="280px"
+  :html="`
+<h3>長い本文のサンプル</h3>
+<p>1 段落目のテキスト。スクロールしてみてください。</p>
+<p>2 段落目のテキスト。</p>
+<p>3 段落目のテキスト。</p>
+<p>4 段落目のテキスト。</p>
+<p>5 段落目のテキスト。</p>
+<p>6 段落目のテキスト。</p>
+<p>7 段落目のテキスト。</p>
+<p>8 段落目のテキスト。</p>
+<p>9 段落目のテキスト。</p>
+<p>10 段落目のテキスト。ここまで来てもボタンは右下に居続けます。</p>
+<button class='to-top'>↑ Top</button>
+  `"
+  :css="`
+body { margin: 0; padding: 16px; font-family: system-ui; }
+p { margin: 0 0 12px; }
+.to-top {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  padding: 8px 14px;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 999px;
+  font: inherit;
+  cursor: pointer;
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
+}
+  `"
+  :js="``"
+/>
+
+### `sticky`: 途中までは普通、そこから固定
 
 ```css
-.card {
-  transition:
-    transform 200ms ease,
-    box-shadow 200ms ease;
+.section-title {
+  position: sticky;
+  top: 0;
+  background-color: #ffffff;
 }
 ```
 
-最初のうちは、**`all 200ms ease`** と書いて「変化する全プロパティに同じ時間をかける」くらいで十分実用になります。
+最初は通常の流れで配置されますが、スクロールして指定位置（`top: 0`）に達すると、そこから固定されます。親要素をはみ出ると、また元の流れに戻ります。本のインデックスや表のヘッダーで使われます。今回の演習では使いませんが、存在だけ覚えます。
+
+### `z-index` で重なりを制御
+
+要素同士が重なったとき、**どちらが前か** を `z-index` で決めます。
 
 ```css
-.card {
-  transition: all 200ms ease;
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
 }
 ```
 
-### `transform` で位置・拡大を変える
+- `z-index` は **数字が大きいほど前** に出る。
+- `z-index` が効くのは **`position` が `static` 以外の要素だけ**。
+- 負の値（`-1` など）も使えるが、思わぬ要素の裏に回るので最初は正の値だけでよい。
 
-`transition` と組み合わせるとよく使うのが `transform` です。
-
-- `transform: translateY(-4px)` → 要素を 4px 上に動かす。
-- `transform: scale(1.05)` → 要素を 1.05 倍（5% 大きく）に拡大する。
-- `transform: translateY(-4px) scale(1.05)` → 両方同時。
-
-`transform` の利点は、**レイアウトを壊さない** ことです。`margin-top: -4px` でも似た動きに見えますが、こちらは周囲の要素の位置計算に影響を与えます。`transform` は描画だけをズラすのでパフォーマンスもよく、アニメーションに向いています。
-
-下のデモで、カードにマウスを乗せると `transform` と `box-shadow` が `transition` でなめらかに変化します。ホバーを外すと元の状態に戻るところまで、目で追えます。
+下のデモは 3 枚のカードが重なった状態です。ボタンを押すと青いカードの `z-index` が `1` ↔ `5` で切り替わり、最前面に出たり隠れたりするのを確認できます。
 
 <LiveDemo
   height="220px"
   :html="`
-<div class='card'>
-  <h3>ホバーしてみて</h3>
-  <p>transform と box-shadow が 250ms でなめらかに動きます。</p>
+<div class='stack'>
+  <div class='card red'>red (z-index: 3)</div>
+  <div class='card blue' id='blue'>blue (z-index: 1)</div>
+  <div class='card green'>green (z-index: 2)</div>
 </div>
+<button id='toggle'>blue を最前面に切り替え</button>
   `"
   :css="`
-body { padding: 24px; background: #f5f7fa; }
+body { padding: 16px; font-family: system-ui; }
+.stack { position: relative; height: 120px; margin-bottom: 16px; }
 .card {
-  max-width: 320px;
-  padding: 24px;
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
-  cursor: pointer;
-  transition: transform 250ms ease, box-shadow 250ms ease;
+  position: absolute;
+  width: 130px;
+  height: 80px;
+  padding: 10px;
+  color: white;
+  font-weight: bold;
+  border-radius: 6px;
 }
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-}
-.card h3 { margin: 0 0 8px; }
-.card p { margin: 0; color: #555; }
+.red   { background: crimson;     top: 0;    left: 0;   z-index: 3; }
+.blue  { background: dodgerblue;  top: 24px; left: 60px; z-index: 1; }
+.green { background: seagreen;    top: 48px; left: 120px; z-index: 2; }
+button { padding: 6px 12px; cursor: pointer; }
   `"
-  :js="``"
+  :js="`
+const blue = document.getElementById('blue');
+const btn = document.getElementById('toggle');
+let high = false;
+btn.onclick = () => {
+  high = !high;
+  blue.style.zIndex = high ? '5' : '1';
+  btn.textContent = high
+    ? 'blue を z-index: 1 に戻す'
+    : 'blue を最前面に切り替え';
+};
+  `"
 />
 
-### `prefers-reduced-motion` で動きを抑える
+### stacking context（重なりの文脈）の最小知識
 
-動きのあるアニメーションは楽しい一方で、**乗り物酔い** のように画面の動きで気分が悪くなる人がいます。OS 側に「動きを減らす」設定があり（macOS の「視差効果を減らす」、Windows の「アニメーションを表示」OFF など）、この設定は CSS から **`@media (prefers-reduced-motion: reduce)`** で検出できます。
+「`z-index: 9999` を付けたのに何故か前に出ない」場面に将来出会います。原因は **stacking context** という仕組みです。ざっくり言うと、**ある要素に `position` + `z-index` を指定すると、その要素の内部で「独立した重なりの世界」が作られ、外側の `z-index` と直接比較できなくなる** というものです。
 
-```css
-.card {
-  transition: all 200ms ease;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .card {
-    transition: none;
-  }
-}
-```
-
-この書き方で「動きを減らす設定の人にはアニメーションを OFF」にできます。CSS だけで配慮できるので、足しておく価値が十分にあります。
-
-### DevTools で `prefers-reduced-motion` をエミュレート
-
-自分の OS 設定を変えなくても、ブラウザの DevTools 側で「動きを減らす」状態を一時的に再現できます。Chrome の手順:
-
-1. DevTools を開く（`F12` / `Ctrl+Shift+I` / `Cmd+Option+I`）。
-2. DevTools の右上の **3 点メニュー**（縦の `⋮`）→ **More tools** → **Rendering** を選ぶ。
-3. 出てきた Rendering パネル（下部か横に並ぶ）をスクロールして **Emulate CSS media feature prefers-reduced-motion** を探す。
-4. ドロップダウンで `reduce` を選ぶ。
-
-以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
+今回の演習では起きないので、「いつか `z-index` が効かないことがあるらしい」とだけ頭の隅に置いておきます。
 
 ## 演習
 
@@ -210,8 +284,7 @@ body { padding: 24px; background: #f5f7fa; }
       <section id="likes">
         <h2>好きなもの</h2>
         <div class="cards">
-          <article class="card card-new">
-            <span class="badge">NEW</span>
+          <article class="card">
             <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
@@ -273,8 +346,6 @@ body { padding: 24px; background: #f5f7fa; }
         </div>
       </section>
     </main>
-
-    <a class="to-top" href="#">ページトップへ</a>
 
     <footer class="site-footer">
       <p>&copy; 私の名前</p>
@@ -350,7 +421,6 @@ main {
   border: 1px solid #d1d5db;
   border-radius: 8px;
   padding: 16px;
-  position: relative;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -444,7 +514,30 @@ form button:focus {
   outline: 3px solid #60a5fa;
   outline-offset: 2px;
 }
+```
 
+</details>
+
+### やること
+
+これまでのレッスンで作った自己紹介ページに、次の 2 つを追加します。
+
+1. 画面右下に **「ページトップに戻る」ボタン** を `position: fixed` で常時表示する。
+2. 「好きなもの」の最初のカードの右上に **「NEW」バッジ** を `position: absolute` で重ねる。
+
+### ステップ 1: 「ページトップに戻る」ボタンを追加
+
+`index.html` の `</main>` の直後、`<footer>` の直前に、次のリンクを追加します。
+
+```html
+<a class="to-top" href="#">ページトップへ</a>
+```
+
+`href="#"` はページの先頭へのアンカーです。これで、クリックするとページ先頭にジャンプします。
+
+次に、ボタンの位置を `style.css` の末尾に追加します。
+
+```css
 .to-top {
   position: fixed;
   right: 16px;
@@ -470,6 +563,36 @@ form button:focus {
     color: #ffffff;
   }
 }
+```
+
+### 期待出力（ステップ 1）
+
+- プレビュー画面の **右下** に青い丸いボタンが常に見える。
+- ページをスクロールしても、ボタンはその場に留まる。
+- ボタンをクリックすると、ページの一番上に戻る。
+- Tab キーでフォーカスを当てると、青い太いアウトライン（フォーカスリング）が出る。
+
+### ステップ 2: 「NEW」バッジを重ねる
+
+`index.html` の「好きなもの」セクションの **最初のカード**（コーヒー）に、`<span class="badge">` を追加します。
+
+```html
+<article class="card card-new">
+  <span class="badge">NEW</span>
+  <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+  <h3>コーヒー</h3>
+  <p>朝の 1 杯が欠かせない。</p>
+</article>
+```
+
+`<article>` に `card-new` クラスを追加しているのは、後で「親に `position: relative` が効く目印」として使うためです。ただし `.card` 自体に `position: relative` を付けても同じ効果になります（今回はシンプルにカード全体に付ける書き方にします）。
+
+`style.css` の末尾に以下を追加します。
+
+```css
+.card {
+  position: relative;
+}
 
 .badge {
   position: absolute;
@@ -493,118 +616,47 @@ form button:focus {
 }
 ```
 
-</details>
+`.card` に `position: relative` を付けるのがポイントです。これで、子の `.badge` の `absolute` が **親カードを基準に** 浮くようになります。
 
-### やること
+### 期待出力（ステップ 2）
 
-自己紹介ページの「好きなもの」カードに、以下のアニメーションを付けます。
+- 最初のカード（コーヒー）の **右上** に赤い「NEW」バッジが乗っている。
+- バッジの位置は、カードの上端から 8px、右端から 8px。
+- カードの幅を変えてもバッジは常にカードの右上に追従する。
+- DevTools の Elements パネルで `.badge` をクリックすると、カード右上の小さな領域がハイライトされる。
 
-1. `:hover` で **カードが少し上に浮く**（`translateY(-4px)`）。
-2. 同時に **影が少し濃くなる**（`box-shadow` の変化）。
-3. `transition: all 200ms ease` で滑らかに補間する。
-4. `prefers-reduced-motion: reduce` の環境では `transition: none` に切り替え、動きを OFF にする。
+### 失敗を体験する（重要）
 
-### ステップ 1: カードにデフォルトの影を付ける
-
-`style.css` の `.card` を次のように書き換えます（これまでのレッスンで既に背景色や padding は指定済みの前提）。
-
-```css
-.card {
-  background-color: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-  position: relative;
-
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
-  transition: all 200ms ease;
-}
-
-@media (prefers-color-scheme: dark) {
-  .card {
-    background-color: #111827;
-    border-color: #374151;
-    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
-  }
-}
-```
-
-ポイント:
-
-- 先ほど追加した `position: relative`（バッジの基準用）はそのまま残す。
-- `box-shadow` で薄い影を付ける（ダークモードでは影を濃く）。
-- `transition: all 200ms ease` を書いておく。`all` にしておけば、`:hover` で変わる全プロパティに同じ補間が掛かる。
-
-### ステップ 2: `:hover` で浮き上がらせる
-
-`style.css` に次を追加します。
-
-```css
-.card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
-}
-
-@media (prefers-color-scheme: dark) {
-  .card:hover {
-    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
-  }
-}
-```
-
-`translateY(-4px)` で 4px 上に、`box-shadow` を濃く大きくして「浮いている」印象を強めます。
-
-### ステップ 3: `prefers-reduced-motion` で動きを OFF
-
-`style.css` の末尾に次を追加します。
-
-```css
-@media (prefers-reduced-motion: reduce) {
-  .card {
-    transition: none;
-  }
-
-  .card:hover {
-    transform: none;
-  }
-}
-```
-
-これで、OS やブラウザが「動きを減らす」設定のときは、カードはパッと切り替わるだけで、浮き上がるアニメーションは発生しません。影の変化も瞬時になるので気分を悪くしにくくなります。
-
-### 期待出力
-
-- プレビューのカードにマウスを乗せると、**約 200ms かけてカードが 4px 上に浮き**、同時に **影が濃く大きく** なる。
-- マウスを外すと、また約 200ms かけて元の位置と影に戻る。
-- DevTools の **Rendering タブで `prefers-reduced-motion: reduce` をエミュレート** した状態にすると、マウスを乗せた瞬間にパッと位置と影が変わり、動きが無くなる。戻すと（`no-preference`）また滑らかに動く。
-- Chrome で `Ctrl+Shift+P`（macOS は `Cmd+Shift+P`）でコマンドパレットを開き、「Show Rendering」と入力しても Rendering タブを呼び出せる。
+`.card { position: relative; }` の 1 行を **一時的に削除** してみてください。`.badge` はカードを基準にできなくなり、**ページ全体の右上**（ビューポートではなく `<body>` の端）に飛びます。これが `absolute` の親基準ルールです。確認できたら、`position: relative` を戻します。
 
 ### 変えてみる
 
-1. `transition: all 200ms ease` の `200ms` を `500ms` や `1000ms` に変えてみる。動きが「ゆっくり」になることを確認する。
-2. `ease` を `linear` に変えてみる。緩急が無くなり機械的な動きになる。`ease-in-out` にすると、始まりと終わりが特にゆっくりになる。
-3. `transform: translateY(-4px)` に `scale(1.03)` を足す（`transform: translateY(-4px) scale(1.03);`）。浮きながら少し拡大される効果になる。
+1. `.to-top` の `bottom: 16px` を `bottom: 100px` に変えて、ボタンの位置が上に動くことを確認する。
+2. `.badge` の `top: 8px; right: 8px;` を `top: -8px; right: -8px;` に変えて、バッジがカードから「はみ出す」位置に重なることを確認する（負の値が使えるのが `position` の強み）。
+3. `z-index: 10` と `z-index: 1` を入れ替えてみる。`.to-top` が `.badge` より後ろに行ってもページ上では重ならないが、スクロールして重なる瞬間があれば前後関係の違いが分かる。
 
 ### 自分で書く
 
-「ページトップに戻る」ボタン（先ほど追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
+自己紹介ページの `<header>` を **画面上部に固定**（`position: fixed`）して、スクロールしても常にヘッダーが見える状態にしてみます。
 
-- hover で背景色が濃い青（`#1d4ed8`）に変わる
-- hover で 1.05 倍に拡大する（`transform: scale(1.05)`）
-- `transition: all 200ms ease` で補間
-- `prefers-reduced-motion: reduce` のときは `transition: none` と `transform: none`
+ヒント:
 
-ヒントは `.card` のコードを真似すること。完成したら、DevTools の Rendering タブで `prefers-reduced-motion` を切り替え、動きの有無を確認します。
+- `.site-header` に `position: fixed; top: 0; left: 0; right: 0;` を足す
+- ヘッダーが固定されると `<main>` の一部が裏に隠れるので、`main` に `padding-top: 80px` などを足して、ヘッダーぶんの隙間を作る
+- `.site-header` には `z-index: 20`（`.to-top` より前）を足して、スクロール中に他の要素の前に出るようにする
+
+やってみて、動作を確認できたら、ヘッダー固定は **本コース内では以後使わない** ので元に戻しておきます（`.site-header` から `position: fixed` 系の指定を削除、`main` の `padding-top` も元に戻す）。練習のため一度試すだけです。
 
 ### よくあるつまずき
 
-- `transition` を `:hover` の側に書いてしまう。`transition` は **通常状態** に書きます。そうしないと「マウスを離すとき」の戻りが補間されません（厳密には `:hover` 側にも書く書き方もありますが、最初は通常状態に付けるのが素直です）。
-- `transform` を使わず `margin-top: -4px` で浮かせる → 周囲のレイアウトがガタつく。`transform` を使う。
-- `transition: all` が効かない → そもそも変化するプロパティが書かれていない（`:hover` で色も位置も変わっていないなど）。まず何を変えたいかを決めて、`:hover` 側に書く。
+- 子要素を `absolute` で浮かせたのに、親ではなく `<body>` 基準になる → 親に `position: relative` を付け忘れている。
+- `z-index` が効かない → そもそも `position` が `static`（初期値）のまま。`z-index` は `position` が `static` 以外でないと効かない。
+- `fixed` したボタンがスクロールすると動いてしまう → 祖先要素のどこかに `transform` や `filter` が指定されていると、`fixed` の **基準** （containing block）がその祖先に変わる仕様がある。**containing block** とは「位置決めの基準になる箱」のことで、通常 `fixed` ではビューポート（画面）が基準になるが、上記の場合は祖先に切り替わる。今回の演習では起きないが、将来遭遇したら思い出す。
 
 ## まとめ
 
-- `transition` で値の変化をなめらかに補間できる。最初は `transition: all 200ms ease` で十分。
-- `transform: translateY()` / `scale()` はレイアウトを壊さずに位置・大きさを変えられる。
-- `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。動きが苦手な人への最低限の配慮として覚えておく。
-- DevTools の Rendering タブで `prefers-reduced-motion` をエミュレートして動作確認できる。
+- `position` は要素を「通常の流れ」から切り離して配置するプロパティ。
+- `relative` は通常の位置を基準にズラし、子の `absolute` の基準点にもなる。
+- `absolute` は最も近い `relative` / `absolute` / `fixed` の祖先を基準に浮く。
+- `fixed` は画面（ビューポート）を基準に固定。スクロールしても動かない。
+- `z-index` で前後の重なりを制御できる（`position` が `static` 以外のときだけ効く）。

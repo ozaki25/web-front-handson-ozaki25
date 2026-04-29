@@ -1,172 +1,414 @@
-# lesson17: 最初の JavaScript
-
-<script setup>
-const demoJs = `
-console.log('Hello, JavaScript');
-console.log('2 + 3 は', 2 + 3);
-`
-</script>
+# lesson17: ネイティブ UI（details / dialog / popover）
 
 ## ゴール
 
-- HTML に外部 JavaScript ファイルを読み込める
-- `console.log` で値を出力できる
-- `let` と `const` で変数を宣言できる
-- DevTools の Console パネルでログを確認できる
-- `<script defer>` を「外部 JS を読み込む標準の書き方」として身につける
+- `<details>` / `<summary>` で JS なしに折りたたみを作れる
+- `<dialog>` でモーダルを作り、`showModal()` / `close()` を使える
+- Popover API（`popover` 属性）で非モーダルなポップアップが書ける
+- ネイティブ UI が **アクセシビリティを自動で付けてくれる** ことを理解する
+- 「なぜライブラリより HTML 単独を試すべきか」を説明できる
 
 ## 解説
 
-### JavaScript はブラウザの中で動く
+### なぜ「ネイティブ UI」なのか
 
-1 章 で書いてきた HTML と CSS は「何を置くか」と「どう見せるか」を担当します。ここから学ぶ JavaScript（以降 JS）は「動きをつける」担当です。ボタンを押したら何かが起きる、入力した内容に応じて画面が変わる、といった処理はすべて JS が担当します。
+モーダルや折りたたみを作りたい時、いまは **HTML 単独で同じことができる** 要素が揃っています。JS を書かなくても、Tab キーや Escape キーが効き、スクリーンリーダーも正しく読み上げてくれます。
 
-JS は基本的にブラウザの中で動くプログラミング言語です。HTML に JS を読み込ませると、ページを開いたときにブラウザが JS を実行してくれます。
+HTML 単独でできると嬉しいこと:
 
-### JS を HTML に読み込む方法
+- **バンドルサイズが減る**（外部ライブラリを 1 つ削れる）
+- **アクセシビリティが自動**（フォーカストラップ / Escape 閉じ / `role` / `aria-*` が組み込み）
+- **学習コストが減る**（HTML の常識だけで読める）
 
-今回から、JS は `script.js` という別ファイルに書いて、HTML から読み込む形にします。HTML に直接書くより読みやすく、後で管理しやすくなります。
+> コラム: 同じ用途で HeadlessUI / Radix UI のような React 用ライブラリを使う流派もあります。複雑な UI（コンボボックスやスライダー等）はライブラリの方が手が早いですが、本レッスンで扱う「折りたたみ / モーダル / ポップアップ」程度なら **HTML 単独で十分** に書けるようになっているのが現代の前提です。
 
-読み込むタグは `<script>` です。本コースでは以下の形に固定します。
+このレッスンでは代表的な 3 つを扱います。
+
+| 要素 / 属性 | 用途 |
+|---|---|
+| `<details>` / `<summary>` | 折りたたみ |
+| `<dialog>` | モーダル（裏側を操作不能に） |
+| `popover` 属性 | 非モーダルなポップアップ（アクションメニュー / toast） |
+
+### `<details>` と `<summary>` — 折りたたみ
+
+FAQ / スポイラー / アコーディオンを **JS なし** で書けます。
 
 ```html
-<script defer src="./script.js"></script>
+<details>
+  <summary>答えを見る</summary>
+  <p>正解は 42 です。</p>
+</details>
 ```
-
-`defer` 属性を付けると、ブラウザは「HTML をすべて読み終えてから JS を実行する」という順序で動いてくれます。これを徹底しておくと、「DOM を操作する」レッスンで `document.querySelector(...)` が `null` を返す事故（HTML より先に JS が走り、まだ存在しない要素を探してしまう）を防げます。
-
-### なぜ `defer` か（コラム）
-
-`<script>` の書き方には昔からいくつかの流派があります。
-
-- `<head>` の中に `<script src="...">` だけ書く → HTML の解析が止まって遅くなる
-- `<body>` の末尾に `<script src="...">` を書く → 動くが、書く場所が散らばる
-- `<head>` の中に `<script defer src="...">` を書く → HTML の解析を止めず、解析完了後に実行される
-
-3 つ目の書き方が現在の推奨です。HTML が完成してから JS が動くため、DOM を探しに行く処理（「DOM を操作する」以降）でも安心して使えます。本コースではこの形だけを使います。
-
-### `console.log` と DevTools の Console
-
-`console.log(...)` は「この値をログに出す」命令です。ブラウザの DevTools にある「Console」パネルを開くと、そこにログが表示されます。画面には出ませんが、開発中の確認に最も使う命令です。
-
-DevTools の開き方は1 章 で学んだ Elements パネルと同じで、右クリック → 「検証」、または `F12` キーです。Elements の隣に Console タブがあります。
-
-下のデモは JS が実際に動いている最小例です。`console.log` の結果がページ下部の黒い領域に表示されます（本物の DevTools Console と同じ内容）。
 
 <LiveDemo
-  height="200px"
-  :html="`<p>JS からの出力は下の黒い領域に出ます。</p>`"
-  :css="``"
-  :js="demoJs"
+  height="160px"
+  :html="`
+<details>
+  <summary>答えを見る</summary>
+  <p>正解は 42 です。</p>
+</details>
+
+<details open>
+  <summary>最初から開いている例</summary>
+  <p>open 属性で初期展開できます。</p>
+</details>
+  `"
+  :css="`
+body { font-family: sans-serif; }
+details { border: 1px solid #ccc; border-radius: 8px; padding: 12px; margin-bottom: 12px; }
+summary { cursor: pointer; font-weight: bold; }
+  `"
+  :js="``"
 />
 
-### `let` と `const`
+ポイント:
 
-値に名前をつけておくしくみを変数と呼びます。JS では 2 つのキーワードを使い分けます。
-
-- `const`: 後から値を書き換えない変数。迷ったらまずこちら
-- `let`: 後から値を書き換える可能性がある変数
-
-古い教材では `var` も出てきますが、本コースでは使いません。
+- `open` 属性で初期状態を制御（`<details open>`）
+- クリックで開閉、Enter / Space でも動作する（キーボード対応は自動）
+- `toggle` イベントで開閉を検知できる
 
 ```js
-const userName = "Alice";
-let count = 0;
-count = count + 1;
+details.addEventListener("toggle", (e) => {
+  console.log(details.open ? "開いた" : "閉じた");
+});
 ```
 
-`const` で宣言した変数に別の値を代入しようとすると、エラーになります。これは「うっかり書き換え」を防いでくれる仕組みです。
+::: details 発展（任意）: `::details-content` で中身をアニメーション
 
-### デバッグが終わったら `console.log` は消す
+2024 年以降、`::details-content` 疑似要素と `interpolate-size` 機能で、高さ 0 → auto の **スムーズな開閉アニメーション** が CSS だけで書けるようになりました。本レッスンの本筋ではありませんが、興味があれば確認してみてください。
 
-`console.log` は「動かない原因を絞り込む」ためのデバッグ手段です。本来の機能ではないので、**確認が終わったら必ず削除** します。残し続けると次のような実害があります。
+```css
+details::details-content {
+  opacity: 0;
+  height: 0;
+  overflow: hidden;
+  transition: opacity 0.3s, height 0.3s, content-visibility 0.3s allow-discrete;
+  content-visibility: hidden;
+}
+details[open]::details-content {
+  opacity: 1;
+  height: calc-size(auto);
+  content-visibility: visible;
+}
+```
 
-- **情報漏洩**: 個人情報や API の戻り値をそのまま `console.log` に出すクセが付くと、本番で意図せずユーザーのトークン / メール / id を Console に晒す事故になる
-- **パフォーマンス低下**: 大きなオブジェクトを `console.log` に渡すとブラウザがその参照を保持し、ガベージコレクション対象から外れて **メモリリーク** に繋がる
-- **読みづらいコード**: 残骸の `console.log("aaa")` が散らばると、本物のログとデバッグ残骸が見分けられなくなる
+:::
 
-実務では「コミット前に `git diff` で `console.log` を grep する」「`debugger` 文や DevTools のブレークポイントで止める方が確実」を覚えておきます。本コースでも、演習が動いたら `console.log` を消す癖を付けてください。
+### `<dialog>` — モーダル
+
+以前は `position: fixed` の `<div>` に ARIA を付けてフォーカス管理を書いていました。`<dialog>` はそれを **1 つの要素** に置き換えます。
+
+```html
+<button id="open-btn">開く</button>
+
+<dialog id="my-dialog">
+  <form method="dialog">
+    <p>本当に削除しますか？</p>
+    <button value="cancel">キャンセル</button>
+    <button value="confirm">削除</button>
+  </form>
+</dialog>
+
+<script>
+  const dialog = document.getElementById("my-dialog");
+  document.getElementById("open-btn").addEventListener("click", () => {
+    dialog.showModal();
+  });
+  dialog.addEventListener("close", () => {
+    console.log("戻り値:", dialog.returnValue);
+  });
+</script>
+```
+
+#### 2 つの開き方
+
+| メソッド | 挙動 |
+|---|---|
+| `dialog.showModal()` | **モーダル**。裏側の要素が `inert`（操作不能）になり、Escape で閉じる |
+| `dialog.show()` | **非モーダル**。裏側も操作できる。Escape で閉じない |
+
+普通の「確認ダイアログ」は `showModal()` を使います。
+
+#### `<form method="dialog">` の便利さ
+
+`<form method="dialog">` 内の送信ボタンを押すと、dialog が閉じて、押したボタンの `value` が `dialog.returnValue` に入ります。「キャンセル / 確定」の戻り値が **HTML だけで** 取れます。
+
+#### CSS でスタイル
+
+`<dialog>` がモーダル時に自動で出てくる背景（黒い覆い）は `::backdrop` 疑似要素で装飾できます。
+
+```css
+dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+```
+
+#### 自動で付いてくるアクセシビリティ
+
+- `role="dialog"` が自動
+- `aria-modal="true"` が `showModal()` 時に自動
+- フォーカストラップ（Tab で外に出られない）が自動
+- Escape で閉じる
+- 開いた時にダイアログにフォーカスが入る
+
+これを自前で書くと 100 行は超えます。
+
+### Popover API — 非モーダルなポップアップ
+
+アクションメニュー / ツールチップ / 通知トースト / 設定パネルのような「**モーダルじゃない** けれど出し入れしたい UI」のための API です。**2024 年に Baseline 入り**、2026 年現在は全主要ブラウザで使えます。
+
+#### 最小形
+
+```html
+<button popovertarget="menu">メニュー</button>
+
+<div id="menu" popover>
+  <p>項目 1</p>
+  <p>項目 2</p>
+  <p>項目 3</p>
+</div>
+```
+
+`popover` 属性が付いた要素は、**デフォルトで非表示**。`popovertarget` 属性を持つボタンを押すと開きます。**JS は一行も書きません**。
+
+<LiveDemo
+  height="280px"
+  :html="`
+<button popovertarget='menu'>メニューを開く</button>
+
+<div id='menu' popover>
+  <p><a href='#'>プロフィール</a></p>
+  <p><a href='#'>設定</a></p>
+  <p><a href='#'>ログアウト</a></p>
+</div>
+  `"
+  :css="`
+body { font-family: sans-serif; padding: 16px; }
+button { padding: 8px 16px; }
+[popover] { padding: 16px; border: 1px solid #ccc; border-radius: 8px; box-shadow: 0 8px 24px rgba(0,0,0,0.15); }
+[popover] p { margin: 4px 0; }
+  `"
+  :js="``"
+/>
+
+#### 3 種類の popover 値
+
+| 値 | 閉じる条件 |
+|---|---|
+| `popover` or `popover=\"auto\"` | **外側をクリック**、Escape、他の auto popover が開いた時に閉じる |
+| `popover=\"manual\"` | **自分で close を呼ばない限り閉じない**。toast 向き |
+| `popover=\"hint\"` | tooltip 用。ライトディスミスだが manual と auto の中間 |
+
+#### JS から制御
+
+```js
+const menu = document.getElementById("menu");
+menu.showPopover();  // 開く
+menu.hidePopover();  // 閉じる
+menu.togglePopover(); // トグル
+```
+
+#### `<dialog>` との違い
+
+| | `<dialog>` | Popover |
+|---|---|---|
+| モーダル化 | `showModal()` でできる | できない（常に非モーダル） |
+| 裏側の操作 | モーダル時は `inert` | 常に可能 |
+| 外側クリックで閉じる | 自前実装が必要 | auto popover なら自動 |
+| 用途 | 確認ダイアログ / フォーム | メニュー / tooltip / toast |
+
+**「モーダル = `<dialog>`、非モーダル = popover」** と覚えると迷いません。両方を組み合わせることも可能で、`<dialog popover>` のように書けば「popover として動く dialog」になります。
+
+::: details 発展（任意）: Anchor Positioning との組み合わせ
+
+Popover API と相性が良いのが [Anchor Positioning](https://developer.mozilla.org/en-US/docs/Web/CSS/CSS_anchor_positioning)（2024 年以降 Chrome 系で対応）です。本レッスンの本筋ではありませんが、興味があれば確認してみてください。
+
+```css
+button { anchor-name: --menu-btn; }
+
+#menu {
+  position: absolute;
+  position-anchor: --menu-btn;
+  top: anchor(bottom);
+  left: anchor(left);
+}
+```
+
+「ボタンの真下に menu を自動配置」が **JS なし** で書けます。Safari / Firefox の対応はまだ進行中なので、フォールバックを用意するか polyfill を使います。
+
+:::
 
 ## 演習
 
-### 途中から始める場合
-
-このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）から始められます。これまでのレッスンのコードは引き継ぎません。
-
 ### ゴール
 
-- `script.js` を作り、自分の名前を変数に入れてコンソールに表示する
+- `<details>` でアコーディオンを作る
+- `<dialog>` で確認モーダルを作り、戻り値を取る
+- Popover API でアクションメニューを作る
 
-### 手順
+### 手順 1: StackBlitz の Vanilla テンプレートを開く
 
-1. StackBlitz の Vanilla（HTML + CSS + JS）テンプレートを開く
-2. `index.html` を以下の内容にする
-3. `script.js` を以下の内容にする
-4. プレビューを開き、DevTools の Console を開く
+新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開きます。`index.html` / `style.css` / `script.js` の 3 ファイルが用意されています。
 
-### `index.html`
+> このコースでは TypeScript はまだ導入していません（3 章 で扱います）。本レッスンは HTML + JS の素のブラウザ機能だけで完結させます。
+
+### 手順 2: index.html
 
 ```html
-<!DOCTYPE html>
+<!doctype html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson17</title>
-    <script defer src="./script.js"></script>
+    <title>Native UI Demo</title>
+    <link rel="stylesheet" href="./style.css" />
   </head>
   <body>
-    <h1>lesson17: 最初の JavaScript</h1>
-    <p>DevTools の Console を開いてください。</p>
+    <main>
+      <h1>ネイティブ UI のショーケース</h1>
+
+      <section>
+        <h2>1. details / summary</h2>
+        <details>
+          <summary>よくある質問 1</summary>
+          <p>答えをここに書きます。</p>
+        </details>
+        <details>
+          <summary>よくある質問 2</summary>
+          <p>複数あっても OK。</p>
+        </details>
+      </section>
+
+      <section>
+        <h2>2. dialog</h2>
+        <button id="open-dialog">削除する</button>
+        <p id="dialog-result">結果: -</p>
+
+        <dialog id="confirm">
+          <form method="dialog">
+            <p>本当に削除しますか？</p>
+            <menu>
+              <button value="cancel">キャンセル</button>
+              <button value="confirm" autofocus>削除</button>
+            </menu>
+          </form>
+        </dialog>
+      </section>
+
+      <section>
+        <h2>3. Popover</h2>
+        <button popovertarget="menu">メニュー</button>
+        <div id="menu" popover>
+          <button>アイテム 1</button>
+          <button>アイテム 2</button>
+          <button>アイテム 3</button>
+        </div>
+      </section>
+    </main>
+    <script defer src="./script.js"></script>
   </body>
 </html>
 ```
 
-### `script.js`
+### 手順 3: style.css
+
+```css
+body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+main { max-width: 700px; margin: 0 auto; }
+section { margin-block: 32px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+
+details {
+  padding: 12px;
+  border: 1px solid #eee;
+  border-radius: 8px;
+  margin-bottom: 8px;
+}
+summary { cursor: pointer; font-weight: bold; }
+
+button { padding: 8px 16px; cursor: pointer; }
+
+dialog {
+  border: none;
+  border-radius: 8px;
+  padding: 24px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  min-width: 300px;
+}
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(2px);
+}
+menu { display: flex; gap: 8px; justify-content: flex-end; padding: 0; margin: 12px 0 0; }
+
+[popover] {
+  padding: 8px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.15);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+[popover] button { text-align: left; background: none; border: none; padding: 8px; border-radius: 4px; }
+[popover] button:hover { background: #f3f4f6; }
+```
+
+### 手順 4: script.js
 
 ```js
-const userName = "Alice";
-let count = 0;
+const openBtn = document.getElementById("open-dialog");
+const dialog = document.getElementById("confirm");
+const result = document.getElementById("dialog-result");
 
-console.log("Hello, JavaScript");
-console.log(userName);
-console.log(count);
+openBtn.addEventListener("click", () => {
+  dialog.showModal();
+});
 
-count = count + 1;
-console.log(count);
+dialog.addEventListener("close", () => {
+  result.textContent = `結果: ${dialog.returnValue}`;
+});
 ```
+
+### 手順 5: 起動して確認
+
+StackBlitz は保存と同時にプレビューが更新されます。プレビューを「Open in New Tab」で別タブに開き、ブラウザで以下を確認します。
+
+1. **details**: タイトルをクリックで開閉。Tab でフォーカスが当たり Enter でも開閉する
+2. **dialog**: 「削除する」→ モーダルが出る。Escape で閉じる。「キャンセル / 削除」で `結果: cancel` or `結果: confirm` が下に表示される
+3. **popover**: 「メニュー」→ メニューが開く。**外側をクリック** で自動で閉じる（light dismiss）
 
 ### 期待出力
 
-DevTools の Console に、上から順に次のように表示されます。
-
-```
-Hello, JavaScript
-Alice
-0
-1
-```
-
-画面には何も追加で表示されません（JS は Console にだけ書き出しています）。
+- details を開くとアイコンが回転しつつ中身が見える
+- dialog 表示時に裏側がグレーアウトし、Escape で閉じられる
+- dialog を「削除」で閉じると `結果: confirm` と表示
+- popover は JS ゼロで開閉する（`popovertarget` 属性だけで動く）
 
 ### 変える
 
-- `userName` の中身を自分の名前に書き換える → Console の 2 行目が変わる
-- `count = count + 1;` の下にもう 1 行 `count = count + 1;` を足して `console.log(count);` を追加 → `2` が表示される
-- `const` で宣言した `userName` に別の値を代入する行を追加（例: `userName = "Bob";`）→ Console に赤字でエラーが出ることを確認（下記の注意を参照）
+- `<dialog>` の中で `autofocus` を外すと、最初にフォーカスが当たる位置が変わる
+- `popover` を `popover="manual"` に変えると、外側クリックでは閉じなくなる
+- `details[open]` を CSS でデフォルト値にしたり、`::details-content` でアニメーションを付ける
+- dialog の `::backdrop` の背景色 / blur を変える
 
-**`const` への再代入を試したときの挙動について**: 再代入の行を加えると、スクリプト全体の実行が **途中で止まる** ことがある。最初の `console.log("Hello, JavaScript")` までしか出ず、その下の `console.log(userName)` などが出ないケースもある。これは環境によって「実行中のエラー」ではなく「パース段階でのエラー」扱いになるため。動作が変だと感じたら、足した 1 行を削除して元に戻せばよい。
+### 自分で書く（任意）
 
-**変数名に `name` を使わない理由**: 今回は `userName` を使っている。ブラウザの `window` には組み込みで `window.name` というプロパティがあり、`const name = ...` を書くと環境によって衝突して予想外の挙動になる。他人のコードで `name` を見たときはこの落とし穴を思い出すとよい。
-
-### 自分で書く
-
-- `const age = 20;` のような行を追加し、`console.log(age);` で値を表示する
-- `let message = "こんにちは";` と書き、後から `message = "さようなら";` に書き換えて 2 回 `console.log(message)` する
+- Todo アプリの「削除確認」を `<dialog>` で作る
+- プロフィールメニュー（アバターをクリックでメニュー）を Popover API で作る
+- FAQ ページを `<details>` で組み立てる
 
 ## まとめ
 
-- 外部 JS は `<head>` に `<script defer src="...">` で読み込む
-- `console.log(...)` は DevTools の Console にログを出す
-- 変数は `const`（書き換え不可）を基本にし、必要なときだけ `let` を使う
-- `<script defer>` は以降すべてのレッスンで標準形として使い続ける
+- `<details>` / `<summary>` は JS ゼロの折りたたみ。`toggle` イベントで検知、`::details-content` でアニメーション可能
+- `<dialog>` はモーダル。`showModal()` / `close()` / `returnValue` の 3 点セットと `<form method="dialog">` で戻り値まで取れる
+- **フォーカストラップ / Escape / ARIA** が自動で付く
+- **Popover API** は非モーダル。アクションメニュー / tooltip / toast に使う
+- 「モーダル = dialog、非モーダル = popover」の役割分担
+- ネイティブ UI を使うと **バンドルが減り、アクセシビリティが自動** になる

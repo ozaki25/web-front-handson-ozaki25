@@ -1,160 +1,315 @@
-# lesson69: Next.js ってなに？
+# lesson69: Error Boundary と Suspense
 
 ## ゴール
 
-- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できます。
-- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解します。
-- 画面に出る部品がデフォルトで **Server Component** として動くことを知ります。
-- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できます。
+- コンポーネントツリーの中で起きた例外が、親の境界で受け止められる仕組みを説明できる
+- `ErrorBoundary` をクラスコンポーネントで最小実装できる（React 19 でも現状クラスが必要）
+- `<Suspense fallback={...}>` の役割を説明でき、最小の使い方を書ける
+- `<ErrorBoundary>` と `<Suspense>` を組み合わせるパターンを書ける
+- Next.js App Router の `error.tsx` / `loading.tsx` がこれを Route レベルで統合したものだと理解する
 
 ## 解説
 
-### React と Next.js の関係
+### なぜ必要か: 1 箇所のエラーで全画面真っ白
 
-4 章 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
+React は、レンダリング中にどこかで例外が飛ぶと **そのコンポーネントのツリー全体をアンマウント** します。本来関係ないヘッダーやフッターまで消えて、画面が真っ白になってしまいます。
 
-一方で、実際に Web アプリを作ろうとすると、React 単体では足りないものが出てきます。
+たとえば「記事一覧」「記事本文」「関連記事」の 3 つを並べていて、本文取得に失敗しただけで全部消える、という状況は避けたいわけです。
 
-- URL に応じてページを切り替える仕組み（ルーティング）
-- SEO やシェア用にページごとのタイトルや OG 画像を設定する仕組み
-- 一部の処理をサーバーで先に走らせ、初期表示を速くする仕組み
-- データ取得やフォーム送信をサーバーに任せる仕組み
+ここで登場するのが **ErrorBoundary**。境界より内側で起きた例外を受け止めて、フォールバック UI（エラー表示）に差し替えます。境界の外側は無事なままです。
 
-こうした「React の周りに必要な土台」を一式まとめて提供するのが **Next.js** です。Next.js は React を内部で使っているので、React のコンポーネントの書き方はそのまま使えます。React の上に乗る大きめの枠組み、と考えてください。
+### `ErrorBoundary` は現状クラスコンポーネントが必要
 
-このコースで使うバージョンは **Next.js 16** / **React 19.2** です。
+React 19 でも、ErrorBoundary を **自分で書く** ときはクラスコンポーネントを使います。関数コンポーネントのフックだけでは用意できません。
 
-### App Router とは
+ただし日常的にクラスを書く必要はなく、「この 1 ファイルだけクラスで書いて、以後は `<ErrorBoundary>` として JSX で使う」という運用でほぼ間に合います。
 
-Next.js には現在 2 つのルーター（URL の担当部分）があります。
-
-- 古い方: `pages/` ディレクトリを使う Pages Router
-- 新しい方: `app/` ディレクトリを使う **App Router**
-
-本コースでは新しい **App Router** のみを扱います。古い `pages/` ルーターは使いません。
-
-App Router は **ファイルベースルーティング** です。つまり、`app/` 以下のディレクトリ構造がそのまま URL になります。
-
-```
-app/
-├── page.tsx           → /
-├── about/
-│   └── page.tsx       → /about
-└── todos/
-    └── page.tsx       → /todos
-```
-
-`page.tsx` という名前のファイルが、その URL で表示される中身を書く場所です。ディレクトリ名がそのまま URL のパスになります。
-
-### Server Component がデフォルト
-
-App Router のもう 1 つの大きな特徴は、**コンポーネントが既定でサーバー側で実行される** ことです。これを **Server Component** と呼びます。
-
-今までの React（4 章）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
-
-- Server Component: サーバーで動きます。データベース接続やファイル読み込みなど、秘密情報を扱えます。`useState` や `onClick` は使えません。
-- Client Component: ブラウザで動きます。`useState` / イベント / ブラウザ API が使えます。先頭に `"use client"` と書いて明示します。
-
-最初は「書いたコンポーネントは何もしなければサーバー側で動く」とだけ覚えておけば十分です。
-
-### `app/page.tsx` の最小形
-
-App Router で最初に書くトップページは、こんな形です。
+最小の実装は次のとおりです。
 
 ```tsx
-export default function Page() {
-  return (
-    <main>
-      <h1>Hello, Next.js</h1>
-      <p>最初のページ。</p>
-    </main>
-  );
+import { Component, type ReactNode } from "react";
+
+type Props = {
+  fallback: ReactNode;
+  children: ReactNode;
+};
+
+type State = {
+  hasError: boolean;
+};
+
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false };
+
+  static getDerivedStateFromError(_error: Error): State {
+    // レンダリング中に例外が飛んだら、この戻り値で state を差し替える
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: React.ErrorInfo) {
+    // ログ送信など副作用を行いたい場合に使う
+    console.log("ErrorBoundary がキャッチ:", error.message, info);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
 }
 ```
 
-- ファイル名は `page.tsx` 固定です。
-- `export default` で関数コンポーネントを 1 つ返します。
-- 関数名は何でも構いません（慣例で `Page` とすることが多いです）。
+- **`getDerivedStateFromError`**: 例外を受け取って、エラー状態に切り替えるための **純粋な** メソッドです。ここで state を `{ hasError: true }` に差し替えます。
+- **`componentDidCatch`**: 副作用（ロギング / 通報）を走らせる場所です。ログ送信が要らなければ省略できます。
+- `fallback` と `children` は props で受け取る、シンプルなコンテナです。
 
-これだけで、`/`（トップページ）にアクセスしたときにこの JSX が表示されます。
+### 使い方
+
+守りたい範囲を囲むだけです。
+
+```tsx
+<ErrorBoundary fallback={<p>関連記事の読み込みに失敗しました</p>}>
+  <RelatedPosts />
+</ErrorBoundary>
+```
+
+`<RelatedPosts />` でどれだけ例外が飛んでも、境界の外にあるヘッダー / ナビ / 他セクションは生きたままです。
+
+### 拾える例外と拾えない例外
+
+ErrorBoundary が捕まえるのは「**レンダリング中** の例外」です。次は拾えません。
+
+- イベントハンドラの中で投げた例外（`onClick={() => { throw ... }}`）
+- 非同期処理（`setTimeout` / `Promise` の `.then` の中）
+- サーバーサイドで起きる例外（Next.js の Server Component は別の仕組みで拾う）
+
+イベントハンドラの例外は、普通の `try` / `catch`（「try / catch でエラー処理」）か、state を使って自分でフォールバックを出すのが基本です。
+
+### `<Suspense>`: ローディングの境界
+
+`<Suspense>` はエラーの兄弟です。**非同期なデータ / コンポーネントを待つ間、フォールバック UI を見せる** 仕組みです。
+
+```tsx
+<Suspense fallback={<p>読み込み中...</p>}>
+  <SlowComponent />
+</Suspense>
+```
+
+- 中のコンポーネントが読み込み待ち状態（Promise を投げている / lazy ロードの途中）になると、`fallback` が代わりに表示される
+- 待ちが終わると中身に切り替わる
+- `<Suspense>` は React 本体の機能で、ライブラリ（Next.js / Remix / lazy など）と組み合わせて使う
+
+日常的には、Next.js の App Router で Server Component と組み合わせて使うのが主戦場です。
+
+### 組み合わせパターン
+
+エラーとローディングは同時に起こりえます。両方を囲むのが基本形です。
+
+```tsx
+<ErrorBoundary fallback={<p>読み込みに失敗しました</p>}>
+  <Suspense fallback={<p>読み込み中...</p>}>
+    <RemoteContent />
+  </Suspense>
+</ErrorBoundary>
+```
+
+- **外側** が ErrorBoundary、**内側** が Suspense の順が定番です
+- 途中で Promise が投げられれば Suspense が受け取り、途中で例外が投げられれば ErrorBoundary が受け取ります
+
+### Next.js App Router での発展
+
+Next.js App Router では、**ルートごと** にこの 2 つを書けるようになっています。
+
+- `app/posts/[id]/error.tsx` → そのルート配下の ErrorBoundary
+- `app/posts/[id]/loading.tsx` → そのルート配下の Suspense
+
+ファイルを置くだけで境界が自動で入るので、毎回コンポーネントを囲む必要がなくなります。今回学ぶ「境界で区切って、フォールバックに差し替える」発想は、Next.js でそのまま生きます。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。
+「TODO アプリを React で作る」で作ったプロジェクトを使い回しても構いませんし、新しいプロジェクトで始めても構いません。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは **新規の小さな演習** として分離して進めるのが楽です。
 
-### 使う環境
+<details>
+<summary>出発点のファイル</summary>
 
-本コース5 章 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。4 章 の React + Vite テンプレートとは別物なので、新しく作り直してください。
+**`src/main.tsx`**
+
+```tsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
+```
+
+**`src/App.tsx`**
+
+```tsx
+export default function App() {
+  return (
+    <div>
+      <h1>lesson69</h1>
+    </div>
+  );
+}
+```
+
+</details>
+
+### ゴール
+
+- わざと例外を投げる子コンポーネント `Bomb` を `ErrorBoundary` で囲み、画面全体が死なずにフォールバックに切り替わる
+- `Suspense` で `lazy` 読み込みのコンポーネントを囲み、ロード中のフォールバックを確認する
+- 「爆発するボタンを押す前」は通常表示、「押した後」は ErrorBoundary のフォールバックが出ることを確認する
 
 ### 手順
 
-1. 直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます（Next.js の hello-world テンプレートが Node を内部で動かす WebContainers 上で立ち上がります。初回は依存インストールに数十秒〜 1 分ほどかかります）。
-2. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
-3. 中身をすべて消し、次のコードに置き換えます。
+1. `src/ErrorBoundary.tsx` を新規作成して、クラスコンポーネントの ErrorBoundary を用意する
+2. `src/Bomb.tsx` を新規作成する。props で `shouldExplode` を受け取り、`true` のときは `throw new Error(...)` する
+3. `src/LazyGreeting.tsx` を作り、`App.tsx` から `lazy(() => import("./LazyGreeting"))` で読み込む
+4. `App.tsx` に 2 つのセクションを並べる。それぞれ境界で囲む
+
+### 主要ファイルの完成形
+
+**`src/ErrorBoundary.tsx`**
 
 ```tsx
-export default function Page() {
-  return (
-    <main>
-      <h1>Hello, Next.js</h1>
-      <p>最初のページ。</p>
-    </main>
-  );
+import { Component, type ReactNode, type ErrorInfo } from "react";
+
+type Props = {
+  fallback: ReactNode;
+  children: ReactNode;
+};
+
+type State = {
+  hasError: boolean;
+};
+
+export class ErrorBoundary extends Component<Props, State> {
+  state: State = { hasError: false };
+
+  static getDerivedStateFromError(_error: Error): State {
+    return { hasError: true };
+  }
+
+  componentDidCatch(error: Error, info: ErrorInfo) {
+    console.log("ErrorBoundary がキャッチ:", error.message);
+    console.log("発生場所:", info.componentStack);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return this.props.fallback;
+    }
+    return this.props.children;
+  }
 }
 ```
 
-保存すると、右側のプレビューに **「Hello, Next.js」と「最初のページ。」** が表示されます。
+**`src/Bomb.tsx`**
+
+```tsx
+type Props = {
+  shouldExplode: boolean;
+};
+
+export function Bomb({ shouldExplode }: Props) {
+  if (shouldExplode) {
+    throw new Error("Bomb が爆発しました");
+  }
+  return <p>Bomb はまだ安全です</p>;
+}
+```
+
+**`src/LazyGreeting.tsx`**
+
+```tsx
+export default function LazyGreeting() {
+  return <p>こんにちは！（遅れて読み込まれたコンポーネント）</p>;
+}
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { lazy, Suspense, useState } from "react";
+import { ErrorBoundary } from "./ErrorBoundary";
+import { Bomb } from "./Bomb";
+
+const LazyGreeting = lazy(() => import("./LazyGreeting"));
+
+export default function App() {
+  const [exploded, setExploded] = useState(false);
+
+  return (
+    <div style={{ fontFamily: "system-ui", padding: 16 }}>
+      <h1>lesson69: ErrorBoundary と Suspense</h1>
+
+      <section>
+        <h2>1. ErrorBoundary</h2>
+        <button onClick={() => setExploded(true)}>爆発させる</button>
+        <ErrorBoundary
+          fallback={
+            <div style={{ color: "red" }}>
+              ここだけエラーになりました（他のセクションは生きています）
+            </div>
+          }
+        >
+          <Bomb shouldExplode={exploded} />
+        </ErrorBoundary>
+      </section>
+
+      <section>
+        <h2>2. Suspense</h2>
+        <Suspense fallback={<p>読み込み中...</p>}>
+          <LazyGreeting />
+        </Suspense>
+      </section>
+
+      <section>
+        <h2>3. 組み合わせ</h2>
+        <ErrorBoundary fallback={<p>組み合わせでも守られています</p>}>
+          <Suspense fallback={<p>読み込み中 (組み合わせ)...</p>}>
+            <LazyGreeting />
+          </Suspense>
+        </ErrorBoundary>
+      </section>
+    </div>
+  );
+}
+```
 
 ### 期待出力
 
-- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並びます。
-- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示されます。
-- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ています。
+1. 最初の画面には 3 つのセクションが並び、Suspense セクションは一瞬「読み込み中...」が見えた後、グリーティングに置き換わる
+2. 「爆発させる」ボタンを押す → 1 番目のセクションだけ赤字のフォールバックに切り替わる。ページ全体は生きたまま、ヘッダー（`h1`）も他のセクションも残っている
+3. Console に `ErrorBoundary がキャッチ: Bomb が爆発しました` のログが出る
+4. **StrictMode の開発ビルドでは、キャッチされた後もブラウザ Console に赤字のエラーが表示されます**。これは開発時の二重警告で、本番ビルドでは出ません（ErrorBoundary のキャッチ自体は機能しています）。気にせず進めて大丈夫です。
 
-### 変えてみる
+### 変える
 
-1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存します。プレビューが更新されることを確認しましょう。
-2. `<p>` を 2 行に増やします。
-
-```tsx
-export default function Page() {
-  return (
-    <main>
-      <h1>自己紹介アプリの入り口</h1>
-      <p>最初のページ。</p>
-      <p>これから少しずつページを増やす。</p>
-    </main>
-  );
-}
-```
-
-### ファイル構造を眺める
-
-左側のツリーから以下を開いて中身を確認しましょう。書き換えは不要です。
-
-- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。「共通レイアウトを作る」で触ります。
-- `app/page.tsx`: 今書き換えたトップページ。
-- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいます。
-
-`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になります。
+- `fallback` の中身を絵文字なしの自由な HTML に差し替えて、見た目を変える（例: `<div><h3>読み込みエラー</h3><p>あとで試してください</p></div>`）
+- `Bomb` を 2 つ並べ、それぞれ別の ErrorBoundary で囲む → 片方だけ爆発させたときに、もう片方は生きたままになる
+- ErrorBoundary の外側に `Bomb` を置くと画面全体が落ちることを確認する（確認後、内側に戻す）
 
 ### 自分で書く
 
-`app/page.tsx` を何も見ずに書き直してみましょう。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格です。
+- ErrorBoundary に **「再試行」ボタン** を付ける。`state` に `hasError` を持っているので、押したら `setState({ hasError: false })` 相当の処理でリセットできる（クラスの `this.setState({ hasError: false })` を使う）
+- `LazyGreeting` の読み込みをわざと遅らせる。トップに `await new Promise(r => setTimeout(r, 2000))` 相当の処理を入れるダミーを作り、Suspense のフォールバックが長く見えることを確認する
+- 複数の ErrorBoundary を入れ子にする。内側でキャッチしたエラーは外側に届かないことを確認する
 
 ## まとめ
 
-- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワークです。
-- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
-- `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
-- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
-
-### コラム: RSC ペイロードって何？
-
-Server Component の結果は、実は **HTML そのもの** としてブラウザに届くわけではありません。Next.js はサーバー側で React をレンダリングし、その結果を **React が読める特殊な形式**（RSC ペイロードと呼ばれる）に変換してブラウザに送ります。ブラウザ側の React はそれを受け取って、ページのツリーに差し込みます。
-
-ブラウザの「ソースを表示」で見える HTML は、初回表示用に別で生成された HTML です。ページ遷移（「ページを増やしてリンクで移動する」の `<Link>`）では、RSC ペイロードだけが追加で送られてきて、必要な部分だけがツリーに差し替わります。
-
-本コースでは RSC ペイロードの詳細までは踏み込みませんが、「Server Component は HTML を直接返すのとは違う仕組みで動いている」とだけ覚えておけば、後の章で困りません。
+- ErrorBoundary は「レンダリング中の例外」を境界で受け止め、画面全体の崩壊を防ぐ
+- React 19 でも、ErrorBoundary を書くにはクラスコンポーネントが必要。ただし 1 回書いたら以降は JSX で使うだけ
+- `getDerivedStateFromError` で state を切り替え、`componentDidCatch` でログを残す
+- `<Suspense fallback={...}>` は非同期な待ちの間にフォールバック UI を出す
+- 外側に ErrorBoundary、内側に Suspense、が定番の組み合わせ
+- Next.js App Router では、この 2 つが `error.tsx` / `loading.tsx` としてルート単位で使えるようになる

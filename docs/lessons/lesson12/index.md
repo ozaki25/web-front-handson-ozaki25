@@ -1,136 +1,67 @@
-# lesson12: CSS Grid で二次元レイアウト
-
-「Flexbox とレスポンシブ」で Flexbox を使って要素を横並びにしました。Flexbox は「一方向」に並べるのが得意な仕組みです。今回は、**行と列を同時に扱う「二次元レイアウト」** を書くための **CSS Grid** を学びます。
+# lesson12: Flexbox とレスポンシブ
 
 ## ゴール
 
-- Flexbox（一次元）と Grid（二次元）の使い分けを説明できる。
-- `display: grid` と `grid-template-columns` / `grid-template-rows` で列と行を定義できる。
-- `fr` 単位と `repeat()` で列の並びを簡潔に書ける。
-- `minmax()` と `auto-fit` を組み合わせて、画面幅に応じてカード数が自動で折り返すレイアウトを作れる。
+- Flexbox（`display: flex`）で要素を横並びにできる。
+- `gap` / `justify-content` / `align-items` で間隔や揃え方を指定できる。
+- `@media` メディアクエリで「画面幅が狭いときだけ別のスタイルを当てる」ができる。
 
 ## 解説
 
-### Flexbox と Grid の使い分け
+### Flexbox とは何か
 
-どちらも「子要素を並べる」ための仕組みですが、得意分野が違います。
+ブロック要素は上から下に縦に積まれます。横に並べたいときには、昔はいろいろな技（`float`、`display: inline-block`）が使われていましたが、現代の CSS では **Flexbox**（フレックスボックス）が標準です。
 
-| 仕組み | 得意な形 | 典型例 |
-|---|---|---|
-| Flexbox | 一次元（横 **または** 縦） | ヘッダーの左右配置、ナビのリンク並び |
-| Grid | 二次元（横 **かつ** 縦） | カードを N 列 × M 行に敷き詰める、ページ全体のレイアウト |
-
-「行と列の両方を同時に考えたい」ときは Grid が向きます。「Flexbox とレスポンシブ」でカード 3 枚を横並びにしたのは一次元なので Flexbox で十分でしたが、**画面幅が狭くなったら 2 列、もっと狭くなったら 1 列に自動で折り返したい**、というのは Grid の方が自然に書けます。
-
-### 今どきの使い分けの目安
-
-現代の CSS の実務では、ざっくり次のような役割分担が主流です。
-
-- **レイアウト（ページ骨格、カード一覧、ギャラリー、ダッシュボード）は Grid**
-- **コンポーネント内の整列（ロゴとナビの左右、ボタン列、アイコン+テキスト、中央寄せ 1 つ）は Flex**
-
-カードを画面幅に応じて綺麗に敷き詰めたいような「行と列の両方」を扱う場面では、Flex を無理に使うより Grid の `repeat(auto-fit, minmax(...))` の方が記述も挙動も素直です。迷ったら **レイアウト → Grid、部品内の整列 → Flex** を最初の選択肢にしてください。
-
-### Grid の最小形
-
-並べたい要素たちを包む親要素に `display: grid` を付け、`grid-template-columns` で列の並びを定義します。
+Flexbox の使い方は、**並べたい要素たちを包む親要素に `display: flex` を付ける** だけです。これだけで子要素が自動で横並びになります。
 
 ```html
-<div class="grid">
-  <div class="cell">A</div>
-  <div class="cell">B</div>
-  <div class="cell">C</div>
+<div class="row">
+  <div class="card">A</div>
+  <div class="card">B</div>
+  <div class="card">C</div>
 </div>
 ```
 
 ```css
-.grid {
-  display: grid;
-  grid-template-columns: 100px 100px 100px;
+.row {
+  display: flex;
+}
+```
+
+`.row` に `display: flex` を付けると、`.card` 3 つが横に並びます。並びの主軸（デフォルトは左から右）と、主軸に直交する方向（交差軸、デフォルトは上から下）があります。
+
+### 間隔を空ける: `gap`
+
+子要素同士に間隔を空けたいときは、親に `gap` を指定します。
+
+```css
+.row {
+  display: flex;
   gap: 16px;
 }
 ```
 
-`grid-template-columns: 100px 100px 100px` は「100px の列を 3 つ並べる」という意味です。`gap` で子要素同士の間隔を指定できます（Flexbox と同じ `gap` が使えます）。
+これで `.card` 同士の間に 16px の空間が入ります。`margin` でも同じことはできますが、端に余分な余白ができないので Flexbox では `gap` が基本です。
 
-### `fr` 単位
-
-ピクセルで固定すると画面幅に合いません。Grid では **`fr`**（fraction、利用可能な幅を何分の何で分け合うか） という便利な単位が使えます。
-
-```css
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 16px;
-}
-```
-
-これは「親の幅を 3 等分する 3 列」という意味です。`1fr 2fr 1fr` と書けば「左:中央:右 = 1:2:1 の比率で分ける」になります。
-
-### `repeat()` で繰り返し
-
-同じ幅の列を何個も並べたいとき、毎回書くのは面倒です。`repeat()` を使うとまとめられます。
-
-```css
-.grid {
-  grid-template-columns: repeat(3, 1fr);
-}
-```
-
-`repeat(3, 1fr)` は `1fr 1fr 1fr` と同じ意味です。
-
-### `minmax()` で最小幅と最大幅を指定
-
-`minmax(最小, 最大)` は「この範囲の中で幅を決める」という関数です。
-
-```css
-.grid {
-  grid-template-columns: repeat(3, minmax(200px, 1fr));
-}
-```
-
-これは「200px を下回らないようにしつつ、余った幅は均等に伸ばす 3 列」です。親が狭すぎて 200px × 3 に収まらないときは、子要素が親からはみ出すこともあります。
-
-### `auto-fit` でカード数を自動調整
-
-ここまで「3 列」「4 列」と数を決めていましたが、画面幅に応じて列数そのものを自動で増減させたい場合があります。その用途に作られたのが **`auto-fit`** です。
-
-```css
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-}
-```
-
-意味を分解します。
-
-- `auto-fit`: 列数をブラウザに任せる。
-- `minmax(250px, 1fr)`: 1 列の幅は最低 250px、余った幅は均等配分。
-
-これで画面が広ければ多くの列、狭ければ少ない列に自動で切り替わります。**`@media` を書かなくてもレスポンシブになる** のが強みです。
-
-下のデモは `repeat(auto-fit, minmax(120px, 1fr))` の典型です。プレビューの幅を広げ狭めする（右上の Open in New Tab で試すと変化が分かりやすい）と、列数が自動で変わります。
+下のデモで、親の `display: flex` と `gap` の効果を確認できます。`display: flex` を外すと子要素が縦積みに戻り、`gap` を増減すると隙間が変わります。
 
 <LiveDemo
-  height="220px"
+  height="180px"
   :html="`
-<div class='grid'>
-  <div>1</div><div>2</div><div>3</div>
-  <div>4</div><div>5</div><div>6</div>
+<div class='row'>
+  <div class='item'>A</div>
+  <div class='item'>B</div>
+  <div class='item'>C</div>
 </div>
   `"
   :css="`
 body { padding: 16px; }
-.grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
-}
-.grid > div {
+.row { display: flex; gap: 16px; }
+.item {
+  flex: 1;
+  padding: 24px;
   background: #1f4e79;
   color: white;
-  padding: 24px 0;
   text-align: center;
   border-radius: 4px;
 }
@@ -138,35 +69,389 @@ body { padding: 16px; }
   :js="``"
 />
 
-### `grid-template-rows` と行の指定
-
-行を明示したい場合は `grid-template-rows` を使います。
+### 主軸の揃え方: `justify-content`
 
 ```css
-.grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  grid-template-rows: 100px 200px;
-  gap: 16px;
+.row {
+  display: flex;
+  justify-content: center;
 }
 ```
 
-ただし、今回の演習のように「カードを敷き詰める」ときは、行の高さは中身に任せるのが普通なので `grid-template-rows` を省くことが多いです。
+主な値:
 
-### 特定のセルをまたぐ（発展、今回は使わない）
+| 値 | 意味 |
+|---|---|
+| `flex-start` | 左寄せ（デフォルト） |
+| `center` | 中央寄せ |
+| `flex-end` | 右寄せ |
+| `space-between` | 両端ぴったり、間を均等 |
+| `space-around` | 両端にも半分の余白、間は均等 |
 
-`grid-column: span 2` で「このセルは 2 列ぶんの幅を取る」のように、個別のセルを大きくもできます。ページ全体のレイアウトで「サイドバーは 1 列、メインは 3 列ぶん」のような指定に便利ですが、今回の演習では使いません。
+### 交差軸の揃え方: `align-items`
+
+子要素の高さが違うとき、縦方向の揃え方を指定します。
+
+```css
+.row {
+  display: flex;
+  align-items: center;
+}
+```
+
+主な値:
+
+| 値 | 意味 |
+|---|---|
+| `stretch` | 親の高さまで引き伸ばす（デフォルト） |
+| `flex-start` | 上揃え |
+| `center` | 中央揃え |
+| `flex-end` | 下揃え |
+
+### メディアクエリで画面幅に応じて変える
+
+スマホでも PC でも同じ HTML を使いますが、見た目は画面幅によって変えたい場合があります。例えば **「PC では横並び、スマホでは縦並び」** と切り替えたい、といったケースです。これを実現するのが **メディアクエリ**（`@media`）です。
+
+```css
+/* 画面幅 600px 以下のときだけ適用される */
+@media (max-width: 600px) {
+  .row {
+    flex-direction: column;
+  }
+}
+```
+
+`flex-direction: column` は「主軸を縦方向にする」という指定です。これで子要素が縦に積まれます。
+
+メディアクエリは CSS ファイルのどこにでも書けますが、**同じ要素のスタイルは `@media` より前（= PC 用）に書き、`@media` 内に上書きを書く**（= スマホ用）の順にすると読みやすくなります。
+
+### 配置をうまくやる 3 つの質問
+
+Flexbox で迷ったら自分に 3 つ聞いてみましょう。
+
+1. **何を並べたい？** → 親要素をどれにするか決める（例: カードを包む `.cards`）
+2. **横並び？ 縦並び？** → `flex-direction: row`（デフォルト）か `column` か
+3. **主軸のどの位置に寄せる？** → `justify-content`
+4. **交差軸のどの位置に寄せる？** → `align-items`
+
+最初は `display: flex` と `gap` だけで十分です。`justify-content` / `align-items` は必要になったときに足してください。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスンから1 章 統合版では `style.css` というファイル名を使います）。
+これまでのレッスンで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。なお、このレッスンでは HTML と CSS を大きく書き直すため、ステップ 1 以降で示す新しいコードで上書きして進めます。手元が無い場合はこの出発点を貼った上でステップ 1 に進んでください。
 
 <details>
 <summary>出発点のコード</summary>
 
 **`index.html`**
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>自己紹介</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <header>
+      <h1>オザキの自己紹介</h1>
+      <nav>
+        <ul class="nav-list">
+          <li><a class="nav-link" href="#profile">プロフィール</a></li>
+          <li><a class="nav-link" href="#likes">好きなもの</a></li>
+          <li><a class="nav-link" href="#goals">今年やりたいこと</a></li>
+          <li><a class="nav-link" href="#links">お気に入りサイト</a></li>
+          <li><a class="nav-link" href="#contact">お問い合わせ</a></li>
+        </ul>
+      </nav>
+    </header>
+
+    <main class="main">
+      <section id="profile" class="card">
+        <h2>プロフィール</h2>
+        <img
+          src="https://placehold.co/200x200.png"
+          alt="オザキのプロフィール画像(仮)"
+          width="200"
+          height="200"
+        />
+        <p>はじめまして。Web フロントエンドを勉強中です。</p>
+        <p>
+          いまは <strong>HTML の基礎</strong> を学んでいます。読むだけでなく、<em>自分でも手を動かして</em> 覚えていきたいです。
+        </p>
+      </section>
+
+      <section id="likes" class="card">
+        <h2>好きなもの</h2>
+        <ul>
+          <li>コーヒー</li>
+          <li>散歩</li>
+          <li>本</li>
+        </ul>
+      </section>
+
+      <section id="goals" class="card">
+        <h2>今年やりたいこと</h2>
+        <ol>
+          <li>Next.js で小さなアプリを作る</li>
+          <li>毎週 1 本ブログを書く</li>
+          <li>早起きする</li>
+        </ol>
+      </section>
+
+      <section id="links" class="card">
+        <h2>お気に入りサイト</h2>
+        <ul>
+          <li>
+            <a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs（日本語）</a>
+          </li>
+          <li>
+            <a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式（日本語）</a>
+          </li>
+          <li>
+            <a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js 公式</a>
+          </li>
+        </ul>
+      </section>
+
+      <section id="contact" class="card">
+        <h2>お問い合わせ</h2>
+        <p>ご連絡はこちらのフォームから。</p>
+        <form>
+          <p>
+            <label for="name">お名前</label>
+            <input type="text" id="name" name="name" required />
+          </p>
+          <p>
+            <label for="email">メールアドレス</label>
+            <input type="email" id="email" name="email" required />
+          </p>
+          <p>
+            <label for="message">メッセージ</label>
+            <textarea id="message" name="message" rows="5" required></textarea>
+          </p>
+          <p>
+            <button class="btn primary" type="submit">送信</button>
+          </p>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 オザキ</p>
+    </footer>
+  </body>
+</html>
+```
+
+**`styles.css`**
+
+```css
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  padding: 24px;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Hiragino Sans",
+    "Yu Gothic",
+    sans-serif;
+  color: #333333;
+  line-height: 1.7;
+}
+
+h1 {
+  font-size: 2.25rem;
+  color: #0d47a1;
+}
+
+h2 {
+  font-size: 1.5rem;
+  color: #333333;
+  border-bottom: 2px solid #e0e0e0;
+  padding-bottom: 4px;
+}
+
+p {
+  font-size: 1rem;
+}
+
+a {
+  color: #1a73e8;
+}
+
+li {
+  color: #555555;
+}
+
+.nav-list {
+  list-style: none;
+  padding: 0;
+}
+
+.nav-link {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  text-decoration: underline;
+  color: #0d47a1;
+}
+
+.nav-link:focus {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.nav-link.active {
+  font-weight: bold;
+  color: #0d47a1;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 1rem;
+}
+
+.primary {
+  color: #ffffff;
+  background-color: #0d47a1;
+}
+
+.primary:hover {
+  background-color: #3a6ea5;
+}
+
+.btn:focus {
+  outline: 2px solid #ffa726;
+  outline-offset: 2px;
+}
+
+footer {
+  color: #666666;
+  font-size: 0.875rem;
+}
+
+.main {
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.card {
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
+  margin-bottom: 16px;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+header {
+  max-width: 800px;
+  margin: 0 auto 24px;
+}
+
+footer {
+  max-width: 800px;
+  margin: 24px auto 0;
+  color: #666666;
+  font-size: 0.875rem;
+  text-align: center;
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #dddddd;
+    background-color: #1a1a1a;
+  }
+  h1 {
+    color: #e0e0e0;
+  }
+  h2 {
+    color: #c0c0c0;
+  }
+  p {
+    color: #d0d0d0;
+  }
+  a {
+    color: #8ab4f8;
+  }
+  footer {
+    color: #999999;
+  }
+  .card {
+    background-color: #202020;
+    border-color: #3a3a3a;
+    color: #e0e0e0;
+  }
+}
+```
+
+</details>
+
+### 到達する完成形のイメージ
+
+PC 幅（600px より広い）:
+
+<div style="font-family:system-ui, sans-serif; max-width:520px; margin:8px 0;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937; display:flex; justify-content:space-between;">
+    <span>ヘッダー: 私の名前</span>
+    <span>ナビゲーション</span>
+  </div>
+  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0;">
+    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
+      <div style="font-size:0.85em; color:#475569;">カード 1</div>
+      <div>画像 / 見出し / 本文</div>
+    </div>
+    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
+      <div style="font-size:0.85em; color:#475569;">カード 2</div>
+      <div>画像 / 見出し / 本文</div>
+    </div>
+    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
+      <div style="font-size:0.85em; color:#475569;">カード 3</div>
+      <div>画像 / 見出し / 本文</div>
+    </div>
+  </div>
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937;">
+    フッター: © 私の名前
+  </div>
+</div>
+
+スマホ幅（600px 以下）:
+
+<div style="font-family:system-ui, sans-serif; max-width:220px; margin:8px 0;">
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937;">
+    <div>私の名前</div>
+    <div>ナビゲーション</div>
+  </div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 1</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 2</div>
+  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 3</div>
+  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937; margin-top:8px;">© 私の名前</div>
+</div>
+
+### ステップ 1: HTML の骨格を作る
+
+StackBlitz で新しい Vanilla プロジェクトを作ります（これまでのプロジェクトの続きでも構いません）。`index.html` を以下の内容にしてください。
 
 ```html
 <!DOCTYPE html>
@@ -241,9 +526,19 @@ body { padding: 16px; }
 </html>
 ```
 
-**`style.css`**
+ポイント:
+
+- `<section>` を `<main>` の中に 3 つ並べています（`about` / `likes` / `contact`）。
+- `<nav>` にはアンカー `#about` などで同一ページ内移動を入れています。
+- カード 3 枚は `<div class="cards">` で包み、各カードは `<article class="card">` にしています（意味的に「独立した記事のかたまり」なので `<article>` が向いています）。
+- 画像は [placehold.co](https://placehold.co) のプレースホルダを使っています。自分の好きな画像に差し替えても構いません。
+
+### ステップ 2: ベースの CSS を書く
+
+`style.css` を新規作成し、次の内容を書きます。Flexbox はまだ使わず、文字色・背景色・余白だけを整えます。
 
 ```css
+/* リセットに近い最低限の初期化 */
 * {
   box-sizing: border-box;
 }
@@ -252,14 +547,14 @@ body {
   margin: 0;
   font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
   line-height: 1.6;
-  color: #1f2937;
+  color: #1f2937; /* ダークグレー、白背景との対比で読みやすい */
   background-color: #f9fafb;
 }
 
 @media (prefers-color-scheme: dark) {
   body {
-    color: #e5e7eb;
-    background-color: #0b1220;
+    color: #e5e7eb; /* ライトグレー */
+    background-color: #0b1220; /* ダークネイビー */
   }
 }
 
@@ -268,7 +563,7 @@ a {
 }
 
 a:focus {
-  outline: 3px solid #60a5fa;
+  outline: 3px solid #60a5fa; /* フォーカスリングは消さない */
   outline-offset: 2px;
 }
 
@@ -288,10 +583,6 @@ main {
   padding: 16px 24px;
   background-color: #1e3a8a;
   color: #f9fafb;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
 }
 
 .site-header h1 {
@@ -323,6 +614,39 @@ main {
   border-radius: 4px;
 }
 
+.site-footer {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  text-align: center;
+}
+```
+
+ここまでの **期待出力**: 自己紹介ページが、カードも含めて「縦に積まれた」状態で表示されます。ヘッダーとフッターはダークブルー背景、本文は薄いグレー背景です。ダークモードでも読めることを DevTools の「デバイスツールバー」→「メディアを確認」で確認できます。
+
+### ステップ 3: ヘッダーを Flexbox で左右に分ける
+
+`.site-header` に `display: flex` を付け、`<h1>` を左、`<nav>` を右に配置します。`style.css` の `.site-header` のブロックを次のように書き換えます。
+
+```css
+.site-header {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+```
+
+**期待出力**: ヘッダーの `<h1>` が左端、`<nav>` の 3 リンクが右端に寄ります。中央は空きます。`align-items: center` のおかげで縦中央で揃います。
+
+### ステップ 4: カード 3 枚を Flexbox で横並びにする
+
+`.cards` に `display: flex` と `gap` を付けます。
+
+```css
 .cards {
   display: flex;
   gap: 16px;
@@ -331,14 +655,21 @@ main {
 .cards .card {
   flex: 1;
 }
+```
 
-.site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  text-align: center;
-}
+`flex: 1` は「利用可能な幅を子要素で等分する」という指定です。これで 3 枚のカードが同じ幅で並びます。
 
+**期待出力**: カード 3 枚が横並び、間に 16px の隙間、幅は均等になります。
+
+::: tip 補足: 「カードを敷き詰める」レイアウトは本来 Grid が自然
+本レッスンではまず Flexbox の使い方を体験するために、カードも Flex で横並びにしています。ただし「カードを画面幅に応じて折り返しながら敷き詰める」のは **2 次元レイアウト** なので、実務では CSS Grid を使うのが自然です。「CSS Grid で二次元レイアウト」で、この `.cards` 部分を Grid に書き換え、`@media` を書かなくても自動で折り返す形に育てます。
+:::
+
+### ステップ 5: スマホ幅で縦並びに切り替える
+
+`style.css` の末尾に次を追加します。
+
+```css
 @media (max-width: 600px) {
   .site-header {
     flex-direction: column;
@@ -356,7 +687,18 @@ main {
     flex-direction: column;
   }
 }
+```
 
+- ヘッダーも `flex-direction: column` で縦並びにします（`<h1>` の下にナビが並びます）。
+- カードも縦並びにします。
+
+StackBlitz のプレビュー画面を左右に縮めて、幅が 600px を切った瞬間にレイアウトが切り替わることを確認してください。DevTools の「デバイスツールバー」（Chrome では `Ctrl+Shift+M` / `Cmd+Shift+M`）でスマホサイズに切り替えても同じ挙動になります。
+
+### ステップ 6: フォーム欄を少し整える
+
+最後に、`<form>` の入力欄を見やすく整えます。`style.css` に次を足してください。
+
+```css
 form div {
   margin-bottom: 12px;
 }
@@ -398,124 +740,8 @@ form button:focus {
 }
 ```
 
-</details>
-
-### やること
-
-これまでのレッスンで作った自己紹介ページの「好きなもの」カード部分を、**Flexbox から Grid に書き換え**、画面幅に応じて 3 列 → 2 列 → 1 列と **自動で折り返す** ようにします。`@media` を自分で書く必要はありません。
-
-### ステップ 1: これまでのプロジェクトを開く
-
-StackBlitz でこれまでのプロジェクトを開きます。`index.html` と `style.css` があり、カード 3 枚が Flexbox で横並びに表示されている状態です。
-
-### ステップ 2: HTML を少し増やす
-
-Grid の効果が分かりやすいよう、カードを 3 枚から 6 枚に増やします。`index.html` の `<section id="likes">` を次のように書き換えます。
-
-```html
-<section id="likes">
-  <h2>好きなもの</h2>
-  <div class="cards">
-    <article class="card">
-      <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-      <h3>コーヒー</h3>
-      <p>朝の 1 杯が欠かせない。</p>
-    </article>
-    <article class="card">
-      <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-      <h3>本</h3>
-      <p>技術書からエッセイまで。</p>
-    </article>
-    <article class="card">
-      <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-      <h3>散歩</h3>
-      <p>行き先を決めずに歩く。</p>
-    </article>
-    <article class="card">
-      <img src="https://placehold.co/300x200.png" alt="音楽のプレースホルダ画像" />
-      <h3>音楽</h3>
-      <p>作業中はインストゥルメンタル。</p>
-    </article>
-    <article class="card">
-      <img src="https://placehold.co/300x200.png" alt="写真のプレースホルダ画像" />
-      <h3>写真</h3>
-      <p>スマホで散歩の途中に。</p>
-    </article>
-    <article class="card">
-      <img src="https://placehold.co/300x200.png" alt="料理のプレースホルダ画像" />
-      <h3>料理</h3>
-      <p>凝らない、続ける。</p>
-    </article>
-  </div>
-</section>
-```
-
-### ステップ 3: `.cards` を Grid に書き換える
-
-`style.css` の `.cards` と `.cards .card` の 2 つのブロックを、次のように書き換えます。「Flexbox とレスポンシブ」で追加した `@media (max-width: 600px)` 内の `.cards { flex-direction: column; }` は **削除** してください（Grid 側で自動折り返しを扱うため不要になります）。
-
-```css
-.cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-}
-```
-
-`.cards .card` の `flex: 1` は **削除** します。Grid では列幅を `grid-template-columns` 側で決めるので、子要素に個別の幅指定は不要です。
-
-### 期待出力
-
-- プレビューを広く表示: カード 6 枚が **3 列 × 2 行** に並ぶ。
-- プレビューを中くらいに縮める: カードが **2 列 × 3 行** になる。
-- プレビューをスマホ幅まで縮める: カードが **1 列 × 6 行** になる。
-- DevTools の「デバイスツールバー」（Chrome では `Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE（375px）などに切り替えても、カードが 1 列に並ぶことを確認できる。
-- `@media` を書いていないのにレスポンシブになっていることに注目する。
-
-### Flexbox 版と見比べる
-
-「Flexbox とレスポンシブ」では Flexbox で 3 枚を `flex: 1` で等分していました。あのやり方だと、**カードを 10 枚に増やしても 1 行に 10 枚並んでしまい**（それぞれが細くなる）、手動で `flex-wrap: wrap` と個々の `flex-basis` を調整する必要がありました。
-
-Grid の `auto-fit + minmax()` は、この「折り返しと列幅の調整」をまとめて面倒見てくれるので、**カードが増えても減ってもコードを変える必要がありません**。
-
-### 変えてみる
-
-1. `minmax(250px, 1fr)` の `250px` を `180px` や `320px` に変えてみる。それぞれ「1 列の最小幅」が変わり、結果として折り返すタイミングが変わることを確認する。
-2. `repeat(auto-fit, ...)` を `repeat(3, 1fr)` に変えてみる。これだとカード 6 枚が **常に 3 列** になり、スマホ幅に縮めるとはみ出してしまう（自動折り返ししない）ことを確認する。その後、元の `auto-fit` に戻す。
-3. `gap: 16px` を `gap: 4px` / `gap: 32px` に変えて、見た目の印象の変化を確認する。
-
-### 自分で書く
-
-手元の `<section id="contact">` の下に、新しい `<section id="gallery">` を追加します。
-
-```html
-<section id="gallery">
-  <h2>ギャラリー</h2>
-  <div class="gallery">
-    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 1" />
-    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 2" />
-    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 3" />
-    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 4" />
-  </div>
-</section>
-```
-
-そして `style.css` に、`.gallery` を Grid で組むスタイルを **自分で書いて** みます。条件:
-
-- 画像が幅 200px を下回らないようにする
-- `gap` は 12px
-- `auto-fit` で列数は自動
-
-ヒントは `.cards` のコードをなぞること。完成したら、`.gallery` 内の画像が画面幅に応じて 4 列 → 3 列 → 2 列 → 1 列と折り返されることを確認します。
-
-### よくあるつまずき
-
-- `grid-template-columns` を親ではなく子要素に書いてしまう。Grid の指定は **並べたい要素を包む親** に付けます。
-- `auto-fit` と `auto-fill` を混同する。今回は `auto-fit`（余った幅を既存の列で分け合う）を使います。`auto-fill` だと「空の列を作って詰める」挙動になり、1〜2 個しかカードがないときに妙に細く見えることがあります。
-- `gap` が効かない → 親に `display: grid` が付いていない。まず親のセレクタに `display: grid` があるか確認する。
-
 ## まとめ
 
-- Flexbox は一次元、Grid は二次元のレイアウトに向く。**レイアウトは Grid、コンポーネント内の整列は Flex** が現代の目安。
-- `display: grid` と `grid-template-columns` で列を定義する。`fr` 単位で比率、`repeat()` で繰り返し、`minmax()` で最小幅を指定できる。
-- `repeat(auto-fit, minmax(250px, 1fr))` は「画面幅に応じて列数が自動で切り替わる」定番パターン。`@media` なしでレスポンシブになる。
+- Flexbox（`display: flex`）で要素を横並びにできる
+- `gap` / `justify-content` / `align-items` で間隔や揃え方を指定できる
+- `@media (max-width)` で画面幅に応じて Flex 方向を切り替えられる

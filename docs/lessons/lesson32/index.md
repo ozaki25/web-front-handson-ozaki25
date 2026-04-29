@@ -1,192 +1,98 @@
-# lesson32: JSON を読み書きする
-
-<script setup>
-const demoJs = `
-const output = document.getElementById('output');
-
-const user = {
-  name: 'Alice',
-  age: 20,
-  hobbies: ['読書', 'ランニング'],
-};
-
-const compact = JSON.stringify(user);
-const pretty = JSON.stringify(user, null, 2);
-
-const parsed = JSON.parse(compact);
-
-output.textContent =
-  '--- compact ---\\n' + compact +
-  '\\n\\n--- pretty ---\\n' + pretty +
-  '\\n\\n--- parse 結果 (name だけ取り出す) ---\\n' + parsed.name;
-`
-</script>
+# lesson32: fetch で API から取得する
 
 ## ゴール
 
-- JSON がどんな形式か（object / array / string / number / boolean / null）を説明できる
-- `JSON.stringify` でオブジェクトを文字列にできる。インデントも付けられる
-- `JSON.parse` で文字列をオブジェクトに戻せる
-- 壊れた JSON を `try` / `catch` で安全に扱える（「try / catch でエラー処理」の応用）
-- `replacer` / `reviver` という仕組みが存在することを知っている
+- `fetch` で外部 API からデータを取得できる
+- `response.json()` でレスポンスを JS のデータに変換できる
+- `try` / `catch` でエラーを捕まえられる
+- 「`fetch` も `response.json()` も Promise を返すので **両方 `await` が必要**」を覚える
 
 ## 解説
 
-### JSON って何？
+### fetch で取得する流れ
 
-**JSON**（JavaScript Object Notation） は、オブジェクトや配列を **文字列として表現する** フォーマットです。ファイル保存 / `localStorage` / API との通信 / 設定ファイル、あらゆる場面で使います。
-
-JSON で表現できる **値の種類は次の 6 種だけ** です（プリミティブが 4 つ + 構造が 2 つ）。
-
-プリミティブ（単一の値）:
-
-- 文字列: `"hello"`（**ダブルクォート必須**）
-- 数値: `12` / `3.14` / `-5`
-- 真偽値: `true` / `false`
-- `null`
-
-構造（プリミティブを組み合わせた箱）:
-
-- 配列: `[1, 2, 3]`
-- オブジェクト: `{ "key": "value" }`（キーも **ダブルクォートで囲む**）
-
-JSON の **できないこと** も押さえておきます。
-
-- コメントは書けない
-- `undefined` / 関数 / `Date` オブジェクトはそのまま表現できない（`stringify` 時に消えるか文字列化される）
-- キーをシングルクォートで囲めない
-- 末尾カンマ（trailing comma）は許されない
-
-### `JSON.stringify` でオブジェクト → 文字列
-
-オブジェクトや配列を文字列化します。
+ネット越しにデータを取得する標準の関数が `fetch` です。URL を渡すと、レスポンス（応答）を Promise で返します。
 
 ```js
-const user = { name: "Alice", age: 20 };
-const text = JSON.stringify(user);
-console.log(text); // '{"name":"Alice","age":20}'
+async function main() {
+  const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const data = await response.json();
+  console.log(data);
+}
+
+main();
 ```
 
-#### インデント付きで整形する（第 3 引数）
+手順を分解すると:
 
-第 3 引数にスペースの数（または文字列）を渡すと、改行とインデントが入った読みやすい形になります。
+1. `fetch(url)` を呼ぶ → **Promise** が返る
+2. `await` して完了を待つ → `response` オブジェクトが得られる
+3. `response.json()` を呼ぶ → これも **Promise** が返る（ここで `await` を忘れやすい）
+4. `await` して完了を待つ → 実際のデータ（配列やオブジェクト）が得られる
 
-```js
-const pretty = JSON.stringify(user, null, 2);
-console.log(pretty);
-// {
-//   "name": "Alice",
-//   "age": 20
-// }
-```
+### `await` を 2 回書く理由
 
-- 第 2 引数は後で触れる `replacer` です。使わないときは `null`
-- 第 3 引数に `2` を渡すと半角スペース 2 個ずつでインデント
-- 設定ファイルやログ出力など「人間が読む」用途では必ず付けましょう
+冒頭で強調したとおり、**戻り値が Promise の関数・メソッドには `await` が必要** です。`fetch` と `response.json()` はどちらも Promise を返すため、両方に `await` を付けます。
 
-#### 消えるもの
+`response.json()` の `await` を書き忘れると、Promise オブジェクトがそのまま変数に入ってしまい、データのつもりで使うとおかしな挙動になります（演習で体験します）。
 
-`JSON.stringify` は JSON に表現できない値を静かに落とします。
+### JSON とは
 
-```js
-const weird = {
-  name: "Alice",
-  greet: () => "hi",      // 関数は消える
-  createdAt: undefined,   // undefined は消える
-};
+API が返すデータは、ほとんどの場合 **JSON** というテキスト形式で送られてきます。JS のオブジェクト / 配列と見た目がそっくりなので、`response.json()` を通すと JS のオブジェクトや配列として扱えるようになります。
 
-console.log(JSON.stringify(weird)); // '{"name":"Alice"}'
-```
+### エラーを捕まえる: `try` / `catch`
 
-「保存したのにプロパティが欠ける」事故の原因になります。保存対象は JSON で表せる型だけにそろえましょう。
-
-### `JSON.parse` で文字列 → オブジェクト
-
-文字列を JS の値に戻します。
+ネットワークの処理は「URL が間違っている」「接続できない」など失敗する可能性があります。失敗に備えて `try` / `catch` で囲みます。
 
 ```js
-const text = '{"name":"Alice","age":20}';
-const user = JSON.parse(text);
-console.log(user.name); // "Alice"
-console.log(user.age);  // 20
-```
-
-#### 壊れた JSON は例外を投げる
-
-構文が合っていない JSON を `parse` すると `SyntaxError` が投げられます。「try / catch でエラー処理」で学んだとおり、**必ず `try` / `catch` で囲む** 前提です。
-
-```js
-function safeParse(raw) {
+async function main() {
   try {
-    return JSON.parse(raw);
+    const response = await fetch("https://example.com/this-will-fail");
+    const data = await response.json();
+    console.log(data);
   } catch (error) {
-    console.log("JSON が壊れています:", error.message);
-    return null;
+    console.log("失敗しました");
+    console.log(error);
   }
 }
 
-console.log(safeParse('{"ok":true}')); // { ok: true }
-console.log(safeParse("{ broken"));    // null
+main();
 ```
 
-`localStorage` から読む / 外部 API から受け取る、といった **自分で書いていない文字列** を扱うときは、この形がテンプレになります。
+- `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
+- `error` にはエラー情報が入る
 
-### `replacer` と `reviver`（軽く紹介）
+`try` / `catch` は「TODO アプリを作る」の `JSON.parse` でも再利用します。
 
-`stringify` / `parse` にはフィルタ関数を挟む仕組みがあります。今は「こういう仕組みがある」と知っておけば十分です。
+### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
 
-#### `replacer`
+`fetch` で最初につまずきやすい点があります。**サーバーから 404 や 500 などのエラーステータスが返ってきても、`fetch` は失敗とみなさず `try` / `catch` の `catch` には飛びません**。`catch` に飛ぶのは、
 
-`stringify` の第 2 引数に関数を渡すと、キー・値のペアごとに呼ばれて「何を出力するか」をカスタマイズできます。
+- URL の形式がおかしい
+- ネットワーク接続に失敗した（オフラインなど）
+- DNS で名前解決に失敗した
+
+といった **通信そのものが成立しなかった** ときだけです。HTTP の 404 / 500 は「通信は成功、ただしサーバーが『エラーです』と返してきた」状態なので、`fetch` にとっては成功扱いになります。
+
+HTTP エラーを自分で拾いたいときは、`response.ok` という真偽値（200〜299 のときに `true`）を見て分岐します。本コースの演習では深追いしませんが、次の 1 行を覚えておくと実務で役立ちます。
 
 ```js
-const data = { name: "Alice", password: "secret" };
-const safe = JSON.stringify(data, (key, value) => {
-  if (key === "password") return undefined; // undefined を返すとそのキーは消える
-  return value;
-});
-console.log(safe); // '{"name":"Alice"}'
+if (!response.ok) {
+  throw new Error(`HTTP ${response.status}`);
+}
 ```
 
-パスワードなど「保存したくない値」を除外したいときに使います。
+これを書いておくと、4xx / 5xx のときに `throw` して `catch` に飛ばせます。
 
-#### `reviver`
+### ブラウザ側 fetch の注意（予告）
 
-`parse` の第 2 引数に関数を渡すと、復元する値を加工できます。
-
-```js
-const text = '{"createdAt":"2026-04-22T00:00:00.000Z","title":"hello"}';
-const obj = JSON.parse(text, (key, value) => {
-  if (key === "createdAt") return new Date(value);
-  return value;
-});
-console.log(obj.createdAt instanceof Date); // true
-```
-
-文字列化されて消えた `Date` を復元する、といった用途です。本コースの残りでは使いませんが、名前だけ覚えておくと後で読み解きやすくなります。
-
-### デモで確認
-
-オブジェクトを `stringify` してインデント付きで表示し、`parse` で戻して取り出す流れを動かしておきましょう。
-
-<LiveDemo
-  height="300px"
-  :html="`
-<button id='btn' onclick='run()'>動かす</button>
-<pre id='output' style='background:#f5f5f5;padding:12px;border-radius:6px;'></pre>
-  `"
-  :css="`
-body { padding: 16px; font-family: system-ui; }
-pre { white-space: pre-wrap; font-size: 14px; }
-  `"
-  :js="demoJs"
-/>
+ブラウザ側で `fetch` を使うと、ローディング状態の管理や競合（複数の fetch が同時に走って結果がずれる）など、考えることが多くなります。本コースでは、こうしたブラウザ側の fetch の難しさを扱わず、Next.js のレッスン群で **「サーバー側で `fetch` する」** やり方に寄せる方針を取ります。本レッスンでは「Console に出す」までに絞ります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` の 2 ファイルで TODO 配列を JSON 保存・復元します。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -199,53 +105,52 @@ pre { white-space: pre-wrap; font-size: 14px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson32</title>
-    <script type="module" src="./main.js"></script>
+    <title>lesson30</title>
+    <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson32: JSON</h1>
-    <ul id="list"></ul>
-    <pre id="raw"></pre>
+    <h1>lesson30: 非同期処理の基本</h1>
   </body>
 </html>
 ```
 
-**`main.js`**
+**`script.js`**
 
 ```js
-const list = document.querySelector("#list");
-const raw = document.querySelector("#raw");
-
-const todos = [
-  { id: "a1", text: "牛乳を買う", done: false },
-  { id: "a2", text: "本を読む", done: true },
-];
-
-for (const todo of todos) {
-  const li = document.createElement("li");
-  li.textContent = todo.text;
-  list.appendChild(li);
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+async function main() {
+  console.log("start");
+  await wait(1000);
+  console.log("1 秒経過");
+  await wait(1000);
+  console.log("2 秒経過");
+  await wait(1000);
+  console.log("3 秒経過");
+  console.log("end");
+}
+
+main();
+
+console.log("main を呼んだ後のコード");
 ```
 
 </details>
 
 ### ゴール
 
-- TODO 配列を `JSON.stringify` でインデント付き文字列にして画面に出す
-- `localStorage` に保存した JSON を、次回リロード時に `JSON.parse` で復元する
-- 壊れた JSON が入っていても `try` / `catch` で受け止めて空配列から始める
+- JSONPlaceholder（無料の練習用 API）から記事一覧を取得して Console に出す
+- URL をわざと壊して `catch` の中が実行されることを確認する
+- `response.json()` の `await` を外して挙動を観察する
 
 ### 手順
 
-1. `main.js` に `STORAGE_KEY` と `loadTodos` / `saveTodos` を追加する
-2. 初回は初期配列を `saveTodos` で保存し、次回以降は `loadTodos` で復元する
-3. 画面に `<ul>` のリストと、`<pre>` にインデント付き JSON 表示を両方出す
-4. `localStorage.setItem("json-todos", "{ broken")` を Console で叩いてリロードし、復元に失敗しても壊れないことを確認する
+1. `index.html` のタイトルを `lesson32` に変える
+2. `script.js` を以下に書き換える
 
-### 主要ファイルの完成形
-
-**`index.html`**
+### `index.html`
 
 ```html
 <!DOCTYPE html>
@@ -254,122 +159,78 @@ for (const todo of todos) {
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson32</title>
-    <script type="module" src="./main.js"></script>
+    <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson32: JSON</h1>
-    <ul id="list"></ul>
-    <h2>保存されている JSON</h2>
-    <pre id="raw"></pre>
+    <h1>lesson32: fetch で API から取得する</h1>
+    <p>DevTools の Console を確認してください。</p>
   </body>
 </html>
 ```
 
-**`main.js`**
+### `script.js`
 
 ```js
-const STORAGE_KEY = "json-todos";
-
-function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
+async function main() {
   try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
+    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
+    const posts = await response.json();
+    console.log("取得件数:", posts.length);
+    console.log("先頭:", posts[0]);
+
+    for (const post of posts.slice(0, 3)) {
+      console.log(`#${post.id} ${post.title}`);
     }
-    return [];
   } catch (error) {
-    console.log("JSON の復元に失敗:", error.message);
-    return [];
+    console.log("エラーが発生しました");
+    console.log(error);
   }
 }
 
-function saveTodos(todos) {
-  const text = JSON.stringify(todos);
-  localStorage.setItem(STORAGE_KEY, text);
-}
-
-function render(todos) {
-  const list = document.querySelector("#list");
-  const raw = document.querySelector("#raw");
-
-  list.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.done ? `[済] ${todo.text}` : todo.text;
-    list.appendChild(li);
-  }
-
-  raw.textContent = JSON.stringify(todos, null, 2);
-}
-
-let todos = loadTodos();
-
-if (todos.length === 0) {
-  todos = [
-    { id: "a1", text: "牛乳を買う", done: false },
-    { id: "a2", text: "本を読む", done: true },
-    { id: "a3", text: "掃除する", done: false },
-  ];
-  saveTodos(todos);
-}
-
-render(todos);
+main();
 ```
 
 ### 期待出力
 
-画面に次の内容が表示されます。
+Console に次のような内容が出ます（API 側の内容によって文字列は変わる場合があります）。
 
 ```
-lesson32: JSON
-
-- 牛乳を買う
-- [済] 本を読む
-- 掃除する
-
-保存されている JSON
-[
-  {
-    "id": "a1",
-    "text": "牛乳を買う",
-    "done": false
-  },
-  {
-    "id": "a2",
-    "text": "本を読む",
-    "done": true
-  },
-  {
-    "id": "a3",
-    "text": "掃除する",
-    "done": false
-  }
-]
+取得件数: 100
+先頭: {userId: 1, id: 1, title: "sunt aut facere ...", body: "..."}
+#1 sunt aut facere repellat provident occaecati excepturi optio reprehenderit
+#2 qui est esse
+#3 ea molestias quasi exercitationem repellat qui ipsa sit aut
 ```
-
-- DevTools の Application（または Storage）タブ → Local Storage に `json-todos` というキーが入っている
-- Console で `localStorage.setItem("json-todos", "{ broken")` を実行しリロード → Console に「JSON の復元に失敗」と出て、初期データで再起動する
 
 ### 変える
 
-- `JSON.stringify(todos, null, 2)` の `2` を `4` に変える → インデント幅が広がる
-- `JSON.stringify(todos)` と第 3 引数なしにしてみる → `<pre>` が 1 行に詰まる
-- 初期データに `createdAt: new Date()` を足して `stringify` → 日付が文字列として保存される（JSON には `Date` 型がない）
+#### URL を壊して `catch` を動かす
+
+`fetch` の URL の途中を適当に壊して（例: `https://jsonplaceholder.typicode.com/no-such-path-xxxxx`）、Console で「エラーが発生しました」が出ることを確認します。
+
+> 注意: JSONPlaceholder はどのパスでも空配列や JSON を返す傾向があるので、ドメインごと壊す（`https://this-domain-does-not-exist-xxxxx.test/posts`）方が確実にエラーになります。
+
+#### `await` を外すとどうなるか
+
+以下のように `response.json()` の `await` を外してみます。
+
+```js
+const posts = response.json(); // await を外す
+console.log(posts);
+console.log(posts.length);
+```
+
+Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これが「Promise をそのまま使ってしまった状態」です。`await` を忘れると値がおかしい、という失敗の形を体験しておきます。
 
 ### 自分で書く
 
-- `<button id="clear">`全消去`</button>` を置き、押すと `localStorage.removeItem(STORAGE_KEY)` してリロードさせる
-- 各 `<li>` の横に「削除」ボタンを付け、配列から `filter` で除いて `saveTodos` → `render` する
-- `replacer` を使って、`done: true` の項目だけを保存する `stringify` を書く（`saveTodos` をもう 1 つ増やす形で OK）
+- URL を `https://jsonplaceholder.typicode.com/users` に変えて、ユーザー一覧を取得し、各ユーザーの `name` と `email` を Console に出す
+- 取得した `posts` の中から「`id` が 10 以下」のものだけを `filter` で抜き出して出す
+- `try` / `catch` の `catch` の中で、エラーが起きたときに `console.log("読み込みに失敗しました")` と日本語メッセージも表示する
 
 ## まとめ
 
-- JSON は「オブジェクト / 配列 / 文字列 / 数値 / 真偽値 / null」の 6 種類だけで構成される
-- `JSON.stringify` で文字列化。第 3 引数でインデント付き整形ができる
-- `JSON.parse` で文字列から値に戻す。壊れていると例外になる
-- 外部から来た JSON を読むときは **必ず `try` / `catch` で囲む**
-- `replacer` / `reviver` で出力・復元のカスタマイズができる（存在だけ覚える）
+- `fetch(url)` と `response.json()` は **どちらも Promise を返す**。両方 `await` が必要
+- `try` / `catch` で失敗に備える
+- `await` を忘れると Promise オブジェクトがそのまま出てきて、後続の処理が壊れる
+- ブラウザ側 fetch を state と組み合わせて使うのは罠が多いので、本コースでは Next.js のサーバー側で扱う

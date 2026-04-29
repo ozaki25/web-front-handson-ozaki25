@@ -1,444 +1,483 @@
-# lesson112: React Hook Form の基本
+# lesson112: CI/CD パイプラインの設計
 
 ## ゴール
 
-- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
-- RHF を `npm install` してフォームに導入できる
-- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
-- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
-- `formState.errors` でエラーメッセージを表示できる
-- `defaultValues` で初期値を入れる
-- `watch` / `setValue` / `reset` の使い分けを知る
+- 「CI」と「CD」を正しく区別して語れる
+- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
+- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
+- Lighthouse CI で速度劣化を **PR 単位** で検知できる
+- Vercel の **Preview Deployment** とテストを連携できる
+
+::: tip 前提
+このレッスンは lesson111「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson111 を参照してください。
+:::
 
 ## 解説
 
-### 制御コンポーネントの限界
+### CI と CD の違い
 
-これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
+| 略 | 正式名称 | やること |
+|---|---|---|
+| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
+| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
 
-```tsx
-const [name, setName] = useState("");
-const [email, setEmail] = useState("");
-const [message, setMessage] = useState("");
-// ...
-<input value={name} onChange={(e) => setName(e.target.value)} />
-<input value={email} onChange={(e) => setEmail(e.target.value)} />
-<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
+
+### パイプラインの基本構成
+
+```
+push / PR
+   ↓
+┌─────────┐  ┌─────────┐  ┌─────────┐
+│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
+└─────────┘  └─────────┘  └─────────┘
+        ↓        ↓        ↓
+        └────────┴────────┘
+                   ↓
+              ┌─────────┐
+              │  Build  │
+              └─────────┘
+                   ↓
+              ┌─────────┐
+              │ Deploy  │  ← main にマージされた時のみ
+              └─────────┘
 ```
 
-シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
+ポイント:
 
-- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
-- **コードが冗長**: state と setter の宣言が増える
-- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
-- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
+- **lint / test / typecheck は並列**（独立しているので速い）
+- **build は依存** が解決した後（手戻りを早く検知）
+- **deploy は最後** にする
+- **PR では deploy しない**（preview deployment は別フロー）
 
-これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
+### GitHub Actions の最小パイプライン
 
-### React Hook Form とは
+`.github/workflows/ci.yml`:
 
-RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
+```yaml
+name: CI
 
-- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
-- **少ないコード** で大きなフォームを書ける
-- **バリデーション + エラー管理** が組み込み
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
 
-### インストール
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+```
+
+`needs:` で **前のジョブが成功した時だけ** 次に進みます。
+
+### キャッシュで速くする
+
+毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
+
+#### `actions/cache` で任意のディレクトリ
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: |
+      ~/.npm
+      .next/cache
+    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+    restore-keys: |
+      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+```
+
+Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
+
+::: warning キャッシュの落とし穴
+キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
+:::
+
+### マトリクスビルド
+
+複数の Node.js バージョン / OS で同時にテストする時に便利。
+
+```yaml
+test:
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, macos-latest, windows-latest]
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }} }
+    - run: npm ci
+    - run: npm test
+```
+
+これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
+
+### 並列の使いどころ
+
+- **Lint / Typecheck / Test を並列に**
+- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
+- **Storybook ビルドを別ジョブに**
+- **Cypress / Playwright を shard** で分割
+
+シャーディング例（Playwright）:
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    shard: [1, 2, 3, 4]
+steps:
+  - run: npx playwright test --shard=${{ matrix.shard }}/4
+```
+
+### CD（デプロイ）の戦略
+
+#### Vercel / Netlify / Cloudflare Pages を使うなら
+
+これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
+
+#### 自前でデプロイする時の最小例
+
+```yaml
+deploy:
+  if: github.ref == 'refs/heads/main'
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npm run build
+    - run: npm run deploy
+      env:
+        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
+
+### Vercel の Preview Deployment と組み合わせる
+
+Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
+
+- レビュアーが **動作確認しながら** レビューできる
+- E2E テストを **本番に近い環境** で走らせられる
+- Lighthouse CI を **プレビュー URL に対して** 実行できる
+
+#### プレビュー URL に E2E を回す
+
+```yaml
+e2e:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npx playwright install --with-deps
+    - name: Wait for Vercel preview
+      uses: patrickedqvist/wait-for-vercel-preview@v1
+      id: vercel
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        max_timeout: 300
+    - run: npx playwright test
+      env:
+        BASE_URL: ${{ steps.vercel.outputs.url }}
+```
+
+### Lighthouse CI
+
+PR 単位で **Lighthouse スコアの劣化** を検知します。
 
 ```bash
-npm install react-hook-form
+npm install -D @lhci/cli
 ```
 
-### 最小のフォーム
+`lighthouserc.json`:
 
-`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
-
-```tsx
-import { useForm } from "react-hook-form";
-
-type FormValues = {
-  name: string;
-  email: string;
-};
-
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
-
-  function onSubmit(data: FormValues) {
-    console.log(data);
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-required="true"
-          aria-invalid={errors.name ? "true" : "false"}
-          {...register("name", { required: "必須です" })}
-        />
-        {errors.name && <p role="alert">{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-required="true"
-          aria-invalid={errors.email ? "true" : "false"}
-          {...register("email", { required: "必須です" })}
-        />
-        {errors.email && <p role="alert">{errors.email.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        送信
-      </button>
-    </form>
-  );
-}
-```
-
-主な要素:
-
-- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
-- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
-- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
-- **`formState.errors`**: バリデーションエラーが格納される
-- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
-
-### バリデーションオプション
-
-`register` の第 2 引数で各種ルールを指定できます。
-
-```tsx
-{...register("password", {
-  required: "パスワードは必須です",
-  minLength: { value: 8, message: "8 文字以上で入力してください" },
-  maxLength: { value: 100, message: "100 文字以内で入力してください" },
-  pattern: {
-    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
-    message: "英字と数字を混ぜてください",
-  },
-})}
-```
-
-`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
-
-```tsx
-{...register("age", {
-  validate: (value) => {
-    if (value < 18) return "18 歳以上である必要があります";
-    if (value > 120) return "値が大きすぎます";
-    return true; // OK
-  },
-})}
-```
-
-### `defaultValues` で初期値
-
-編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
-
-```tsx
-const { register, handleSubmit } = useForm<FormValues>({
-  defaultValues: {
-    name: "Alice",
-    email: "alice@example.com",
-  },
-});
-```
-
-非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
-
-```tsx
-const { register, handleSubmit, reset } = useForm<FormValues>();
-
-useEffect(() => {
-  fetch("/api/me")
-    .then((r) => r.json())
-    .then((user) => reset(user));
-}, [reset]);
-```
-
-### `watch` で値を購読
-
-特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
-
-```tsx
-const { watch, register } = useForm<FormValues>();
-const subscribe = watch("subscribe");
-
-return (
-  <>
-    <label>
-      <input type="checkbox" {...register("subscribe")} />
-      購読する
-    </label>
-
-    {subscribe && (
-      <div>
-        <label>頻度</label>
-        <select {...register("frequency")}>
-          <option value="daily">毎日</option>
-          <option value="weekly">毎週</option>
-        </select>
-      </div>
-    )}
-  </>
-);
-```
-
-`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
-
-### `setValue` でプログラム的に値を設定
-
-```tsx
-const { setValue } = useForm<FormValues>();
-
-// 別のボタンや非同期処理から値を入れる
-setValue("name", "Bob");
-```
-
-「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
-
-### `reset` でフォームを初期化
-
-送信成功後にフォームを空にする:
-
-```tsx
-async function onSubmit(data: FormValues) {
-  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
-  reset();  // 入力をクリア
-}
-```
-
-### 送信中の表示
-
-`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
-
-```tsx
-const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
-
-return (
-  <button type="submit" disabled={isSubmitting}>
-    {isSubmitting ? "送信中..." : "送信"}
-  </button>
-);
-```
-
-`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
-
-### アクセシブルなエラー表示
-
-「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
-
-```tsx
-<input
-  id="email"
-  type="email"
-  aria-invalid={errors.email ? "true" : "false"}
-  aria-describedby={errors.email ? "email-error" : undefined}
-  {...register("email", { required: "メールは必須です" })}
-/>
-{errors.email && (
-  <p id="email-error" role="alert">
-    {errors.email.message}
-  </p>
-)}
-```
-
-これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
-
-### エラー表示は色だけに頼らない
-
-フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
-
-1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
-2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
-3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
-
-CSS 例:
-
-```css
-.form-error {
-  color: #b91c1c;
-}
-@media (prefers-color-scheme: dark) {
-  .form-error {
-    color: #fca5a5;
+```json
+{
+  "ci": {
+    "collect": {
+      "url": ["https://example.com/"],
+      "numberOfRuns": 3
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
   }
 }
+```
+
+GitHub Actions で:
+
+```yaml
+lighthouse:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npx lhci autorun
+```
+
+スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
+
+### シークレットの取り扱い
+
+- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
+- workflow ファイルに **平文で書かない**
+- **fork からの Pull Request** に対する `pull_request` トリガーでは **secrets は読めません**（空文字列になります）。これは「fork してきた攻撃者が悪意ある workflow を入れて secrets を盗む」サプライチェーン攻撃を防ぐためです。CI で secrets が必要な処理は「自分のリポジトリ内のブランチからの PR」だけで動くように分けます
+- `pull_request_target` を使うと fork PR でも secrets が読めますが、**fork の悪意あるコードがそのまま走るため極めて危険** です。利用は「ラベル付けや welcome コメント等、コードを実行しない処理に限る」のが鉄則です
+
+### 環境（Environment）の活用
+
+`environment: production` を指定すると:
+
+- Required reviewers（**承認が必要**）
+- Wait timer（**N 分待つ**）
+- Branch policy（**main 限定**）
+- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
+
+を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
+
+```yaml
+deploy-prod:
+  environment: production
+  runs-on: ubuntu-latest
+  steps: ...
+```
+
+### 再利用可能な workflow
+
+組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
+
+```yaml
+# .github/workflows/_node-ci.yml（呼ばれる側）
+on:
+  workflow_call:
+    inputs:
+      node-version: { type: string, default: "20" }
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: ${{ inputs.node-version }}, cache: npm }
+      - run: npm ci
+      - run: npm run lint && npm run test
+```
+
+```yaml
+# 呼び出す側
+jobs:
+  ci:
+    uses: my-org/.github/.github/workflows/_node-ci.yml@main
+    with:
+      node-version: "22"
+```
+
+### 失敗を早く検知するコツ
+
+- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
+- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
+- **`timeout-minutes`** を設定して暴走を止める
+- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
+
+### コスト管理
+
+GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
+
+- **キャッシュ** で `npm ci` の時間を削る
+- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
+- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
+
+```yaml
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "package*.json"
 ```
 
 ## 演習
 
 ### ゴール
 
-- React + TS プロジェクトに RHF を導入する
-- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
-- 必須 / メールパターン / 最大長 のバリデーションを実装
-- 送信時に「送信中...」、成功で「送信しました！」を表示
+- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
+- キャッシュを効かせて 2 倍速にする
 
-### 途中から始める場合
-
-これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
+### 手順 1: ベースのプロジェクト
 
 ```bash
-npm create vite@latest rhf-sample -- --template react-ts
-cd rhf-sample
+npm create vite@latest cicd-sample -- --template react-ts
+cd cicd-sample
 npm install
-npm install react-hook-form
+git init && git add . && git commit -m "init"
 ```
 
-### `src/ContactForm.tsx`
+GitHub にリポジトリを作って push。
 
-> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
+### 手順 2: scripts を整える
 
-```tsx
-import { useForm } from "react-hook-form";
-import { useState } from "react";
+`package.json`:
 
-type FormValues = {
-  name: string;
-  email: string;
-  message: string;
-};
-
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
-
-  async function onSubmit(data: FormValues) {
-    // 実際は fetch で送信。ここでは 1 秒待つだけ
-    await new Promise((r) => setTimeout(r, 1000));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
-
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          aria-describedby={errors.name ? "name-error" : undefined}
-          {...register("name", {
-            required: "お名前は必須です",
-            maxLength: { value: 50, message: "50 文字以内で入力してください" },
-          })}
-        />
-        {errors.name && (
-          <p id="name-error" role="alert" className="form-error">
-            {errors.name.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          aria-describedby={errors.email ? "email-error" : undefined}
-          {...register("email", {
-            required: "メールは必須です",
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: "メールアドレスの形式が正しくありません",
-            },
-          })}
-        />
-        {errors.email && (
-          <p id="email-error" role="alert" className="form-error">
-            {errors.email.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          aria-describedby={errors.message ? "message-error" : undefined}
-          {...register("message", {
-            required: "メッセージは必須です",
-            minLength: { value: 10, message: "10 文字以上で入力してください" },
-          })}
-        />
-        {errors.message && (
-          <p id="message-error" role="alert" className="form-error">
-            {errors.message.message}
-          </p>
-        )}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
-  );
 }
 ```
 
-### `src/App.tsx`
+ESLint 設定 / 簡単な test は省略可。
 
-```tsx
-import { ContactForm } from "./ContactForm";
+### 手順 3: workflow
 
-export default function App() {
-  return <ContactForm />;
-}
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
 ```
+
+### 手順 4: PR を作って動作確認
+
+```bash
+git checkout -b feature/test
+echo "// test" >> src/App.tsx
+git commit -am "test"
+git push -u origin feature/test
+```
+
+PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
 
 ### 期待出力
 
-- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
-- メールに `abc` を入れて送信 → メール形式エラー
-- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
-- DevTools の Console に送信値が出る
-
-`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
+- 4 つのジョブが Actions のタブに並ぶ
+- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
+- どれか fail すると build が走らない（`needs:` のおかげ）
 
 ### 変える
 
-- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
-- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
-- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
+- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
+- マトリクスを使って Node 20 と 22 の両方でテストする
+- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
-- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
+- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
+- Vercel に連携して PR で Preview URL が作られる構成にする
+- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
+- `environment: production` で本番デプロイに承認ステップを入れる
 
 ## まとめ
 
-- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
-- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
-- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
-- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
-- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
-- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
-- `isSubmitting` で送信中の UI 制御
+- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
+- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
+- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
+- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
+- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
+- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
+- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
+- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える

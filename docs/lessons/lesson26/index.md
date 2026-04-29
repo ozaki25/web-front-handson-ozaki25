@@ -1,166 +1,132 @@
-# lesson26: 配列の変換
+# lesson26: 分割代入とスプレッド
 
 <script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
 const demoJs = `
-const users = [
-  { name: 'Alice', age: 20 },
-  { name: 'Bob',   age: 15 },
-  { name: 'Carol', age: 30 },
-];
+const user = { name: 'Alice', age: 20 };
+const { name, age } = user;
+console.log('取り出し: ' + name + ', ' + age);
 
-const names  = users.map((u) => u.name);
-const adults = users.filter((u) => u.age >= 20);
-const first  = users.find((u) => u.age >= 20);
+const colors = ['red', 'green', 'blue'];
+const [first, ...rest] = colors;
+console.log('first: ' + first);
+console.log('rest: ' + JSON.stringify(rest));
 
-console.log('map   (名前だけ):', names);
-console.log('filter(成人だけ):', adults);
-console.log('find  (最初の成人):', first);
-console.log('元の配列は変わらない:', users);
+const updated = { ...user, age: 21 };
+console.log('updated: ' + JSON.stringify(updated));
+console.log('元の user: ' + JSON.stringify(user));
+
+const merged = [...colors, 'yellow'];
+console.log('merged: ' + JSON.stringify(merged));
 `
 </script>
 
 ## ゴール
 
-- `map` で配列の各要素を変換した新しい配列を作れる
-- `filter` で条件に合う要素だけを残した新しい配列を作れる
-- いずれも元の配列を変えない（新しい配列を返す）ことを理解する
+- オブジェクトや配列から値を分割代入で取り出せる
+- スプレッド構文でオブジェクトや配列をコピー・結合できる
+- 2 つの書き方を「取り出す」vs「まとめる・広げる」で使い分けられる
 
 ## 解説
 
-### 「全部変換する」`map`
+### 最初に注意
 
-`map` は配列の各要素に関数を適用して、結果を並べた **新しい配列** を返します。
+分割代入とスプレッドは **見た目が似ていて混同しやすい** 機能です。先に目的の違いを押さえます。
 
-```js
-const numbers = [1, 2, 3, 4];
-const doubled = numbers.map((n) => n * 2);
+| 構文 | どこに書く | 目的 | イメージ |
+| --- | --- | --- | --- |
+| 分割代入 | 代入の **左辺** | 値を **取り出す** | 箱の中身を取り出す |
+| スプレッド `...` | 代入の **右辺**（配列・オブジェクトの中） | 値を **まとめる・広げる** | 中身を並べ直す |
 
-console.log(doubled); // [2, 4, 6, 8]
-console.log(numbers); // [1, 2, 3, 4] （元は変わらない）
-```
+この表を意識していれば、コードを読むときに迷いにくくなります。
 
-- `配列.map((要素) => 新しい値)`
-- 戻り値は **同じ長さの新しい配列**
-- 元の配列は変わらない
+### オブジェクトの分割代入
 
-オブジェクトの配列でもよく使います。
+オブジェクトから特定のプロパティを取り出して、同じ名前の変数に入れます。
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-];
+const user = { name: "Alice", age: 20 };
 
-const names = users.map((user) => user.name);
-console.log(names); // ["Alice", "Bob"]
+const { name, age } = user;
+console.log(name); // "Alice"
+console.log(age);  // 20
 ```
 
-### 「条件で絞り込む」`filter`
+`const { name } = user;` のように、欲しいものだけ取り出すこともできます。従来の書き方は `const name = user.name;` で、分割代入はそれを一度に書くための構文です。
 
-`filter` は条件を満たす要素だけを残した **新しい配列** を返します。
+### 配列の分割代入
+
+配列の場合は `[` `]` を使います。位置（インデックス）で取り出します。
 
 ```js
-const numbers = [1, 2, 3, 4, 5];
-const evens = numbers.filter((n) => n % 2 === 0);
+const colors = ["red", "green", "blue"];
 
-console.log(evens);   // [2, 4]
-console.log(numbers); // [1, 2, 3, 4, 5]
+const [first, second] = colors;
+console.log(first);  // "red"
+console.log(second); // "green"
 ```
 
-- `配列.filter((要素) => 条件)`
-- 条件が `true` の要素だけが残る
-- 戻り値は **同じかそれより短い新しい配列**
-- 元の配列は変わらない
+### オブジェクトのスプレッド
 
-オブジェクトの配列で絞り込む例。
+既存のオブジェクトの中身を「展開」して、新しいオブジェクトを作るときに使います。
 
 ```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
+const user = { name: "Alice", age: 20 };
 
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-// [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
+const copy = { ...user };
+console.log(copy); // { name: "Alice", age: 20 }
+
+const updated = { ...user, age: 21 };
+console.log(updated); // { name: "Alice", age: 21 }
+console.log(user);    // { name: "Alice", age: 20 } （元のオブジェクトは変わらない）
 ```
 
-下のデモで、同じ配列に対して `map` / `filter` / `find` がそれぞれどんな結果を返すかを並べて比較できます。元の配列は変わらない点にも注目してください。
+- `{ ...user }` で元の中身を展開してコピー
+- 後ろに `age: 21` を書くと、同じキーは上書きされる
+- 元のオブジェクトは変わらない（これを「イミュータブルな更新」と呼ぶ。4 章 で再登場）
+
+### 配列のスプレッド
+
+配列も同じように展開できます。
+
+```js
+const a = [1, 2];
+const b = [3, 4];
+
+const merged = [...a, ...b];
+console.log(merged); // [1, 2, 3, 4]
+
+const appended = [...a, 100];
+console.log(appended); // [1, 2, 100]
+```
+
+### 分割代入とスプレッドの対比表
+
+もう一度整理します。
+
+| やりたいこと | 書き方 | 例 |
+| --- | --- | --- |
+| オブジェクトから値を取り出す | `const { key } = obj` | `const { name } = user` |
+| 配列から値を取り出す | `const [a, b] = arr` | `const [first, second] = colors` |
+| オブジェクトをコピー / 一部だけ変える | `{ ...obj, key: newValue }` | `{ ...user, age: 21 }` |
+| 配列をコピー / 結合 / 末尾追加 | `[...arr, newValue]` | `[...todos, "新しい"]` |
+
+「左辺に書く `{ }` / `[ ]`」は取り出す。「右辺の中に書く `...`」はまとめる・広げる。この対比で覚えます。
+
+### デモで確認する
+
+下のデモでは、オブジェクトと配列の分割代入、レスト構文、スプレッドによるコピー・マージを一通り実行します。元の値が変わらないこともあわせて確認できます。
 
 <LiveDemo
-  height="260px"
-  :html="`<p>同じ配列に対する map / filter / find の結果:</p>`"
+  height="300px"
+  :html="`<p>分割代入とスプレッドをまとめて確認するデモ</p>`"
   :css="``"
   :js="demoJs"
 />
 
-### `for...of` との違い
-
-「繰り返し処理」の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
-
-- 「変換 / 絞り込み」という **意図が名前で伝わる**
-- 結果が新しい配列で返るので、元の配列を壊さない
-- 1 行で書けて短い
-
-特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
-
-### 「1 件だけ取り出す」`find`
-
-`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
-
-const found = users.find((user) => user.age >= 20);
-console.log(found); // { name: "Alice", age: 20 }
-
-const missing = users.find((user) => user.age >= 100);
-console.log(missing); // undefined
-```
-
-- `配列.find((要素) => 条件)`
-- 戻り値は **1 件の要素**（配列ではない）
-- 該当がなければ `undefined`
-- `filter` と違って、見つけた時点で走査を打ち切る
-
-ID で目的の 1 件を取り出すような場面でよく使います。
-
-```js
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-];
-
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target); // { id: "a2", text: "本を返す" }
-```
-
-5 章 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
-
-### チェーン（つなげて書く）
-
-`map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-];
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-
-console.log(adultNames); // ["Alice", "Carol"]
-```
-
-「成人だけ絞り込んでから、名前だけ取り出す」という流れが素直に書けます。
+`...rest` のように左辺で使うと「残り全部をまとめる」レスト構文になります。右辺で使うスプレッドと見た目は同じですが、役割は「取り出し」側である点に注意します。
 
 ## 演習
 
@@ -183,12 +149,74 @@ console.log(adultNames); // ["Alice", "Carol"]
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson25: 分割代入とスプレッド</h1>
+    <h1>lesson25: オブジェクト</h1>
   </body>
 </html>
 ```
 
 **`script.js`**
+
+```js
+const user = {
+  name: "Alice",
+  age: 20,
+  isStudent: true,
+};
+
+console.log(user);
+console.log(user.name);
+console.log(user.age);
+
+user.age = 21;
+console.log(user.age);
+
+user.city = "Tokyo";
+console.log(user.city);
+console.log(user);
+
+console.log(user.email);
+
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+  { name: "Carol", age: 30 },
+];
+
+for (const u of users) {
+  console.log(`${u.name} は ${u.age} 歳`);
+}
+```
+
+</details>
+
+### ゴール
+
+- （A）`user` オブジェクトから `name` と `age` を分割代入で取り出して表示する
+- （B）分割代入で取り出した値と、既存オブジェクトをスプレッドでマージして新しいオブジェクトを作る
+
+### 手順
+
+1. `index.html` のタイトルを `lesson26` に変える
+2. `script.js` を以下に書き換える
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson26</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson26: 分割代入とスプレッド</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
 // 演習 A: 分割代入
@@ -222,108 +250,37 @@ console.log(added);
 console.log(todos);
 ```
 
-</details>
-
-### ゴール
-
-- ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
-- ユーザー配列から「名前だけ」の配列を作る
-- 2 つを組み合わせて「成人の名前だけ」の配列を作る
-- ID で TODO の 1 件を取り出す（`find`）
-
-### 手順
-
-1. `index.html` のタイトルを `lesson26` に変える
-2. `script.js` を以下に書き換える
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson26</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson26: 配列の変換</h1>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 15 },
-  { name: "Carol", age: 30 },
-  { name: "Dave", age: 17 },
-];
-
-const adults = users.filter((user) => user.age >= 20);
-console.log(adults);
-
-const names = users.map((user) => user.name);
-console.log(names);
-
-const adultNames = users
-  .filter((user) => user.age >= 20)
-  .map((user) => user.name);
-console.log(adultNames);
-
-const numbers = [1, 2, 3, 4, 5];
-const doubled = numbers.map((n) => n * 2);
-const evens = numbers.filter((n) => n % 2 === 0);
-console.log(doubled);
-console.log(evens);
-console.log(numbers);
-
-const todos = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
-  { id: "a3", text: "ゴミを出す" },
-];
-const target = todos.find((todo) => todo.id === "a2");
-console.log(target);
-
-const missing = todos.find((todo) => todo.id === "zzz");
-console.log(missing);
-```
-
 ### 期待出力
 
 ```
-[{name: "Alice", age: 20}, {name: "Carol", age: 30}]
-["Alice", "Bob", "Carol", "Dave"]
-["Alice", "Carol"]
-[2, 4, 6, 8, 10]
-[2, 4]
-[1, 2, 3, 4, 5]
-{id: "a2", text: "本を返す"}
-undefined
+Alice
+20
+red
+green
+{name: "Alice", age: 20, city: "Tokyo"}
+{name: "Alice", age: 21, city: "Tokyo"}
+{name: "Alice", age: 20, city: "Tokyo"}
+[1, 2, 3, 4]
+["牛乳を買う", "本を読む", "ジョギング"]
+["牛乳を買う", "本を読む"]
 ```
 
-最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
+スプレッドで作った `updated` や `added` は新しいオブジェクト / 配列で、元の `user` や `todos` は変わらないことを確認します。
 
 ### 変える
 
-- `filter` の条件を `user.age < 20` に変えて「未成年」を取り出す
-- `map` を `(user) => user.age` に変えて「年齢だけ」の配列を作る
-- チェーンの `filter` と `map` の順番を入れ替えるとどうなるか考える（先に `map` で名前にしてしまうと `user.age` が使えなくなる）
+- 分割代入で `const { name, city } = user;` に変え、`city` の値を取り出す
+- `const [, second, third] = colors;` で先頭を飛ばして 2 番目と 3 番目を取り出す（カンマで位置をずらす）
+- `const updated2 = { ...user, name: "Bob" };` で名前を上書きした新オブジェクトを作る
+- `const added2 = ["先頭", ...todos];` で先頭に追加してみる
 
 ### 自分で書く
 
-- 数値配列 `[10, 25, 7, 42, 3]` から「10 以上のものだけ」を残す → `[10, 25, 42]`
-- 文字列配列 `["apple", "banana", "cherry"]` から「すべて大文字に変えた新しい配列」を作る（ヒント: `s.toUpperCase()`）→ `["APPLE", "BANANA", "CHERRY"]`
-- TODO の配列 `[{ id: "1", text: "A" }, { id: "2", text: "B" }, { id: "3", text: "C" }]` から `id: "2"` だけを除いた新しい配列を作る（`filter` を使う）
+- `book = { title: "JS入門", author: "山田", year: 2024 }` を作り、分割代入で `title` と `author` を取り出して「『○○』（○○）」の形で表示
+- 上記 `book` からスプレッドを使って `year` だけ `2025` に変えた新しいオブジェクトを作り、両方とも Console に出して、元は変わらないことを確認
 
 ## まとめ
 
-- `map` は「同じ長さの新しい配列を作る」変換
-- `filter` は「条件で絞り込んだ新しい配列を作る」抽出
-- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
-- どれも元の配列は変えない
-- チェーンすると複数の処理を 1 行でつなげられる
+- 分割代入は左辺で書く「取り出し」の構文
+- スプレッドは右辺で書く「まとめる・広げる」の構文
+- 元のオブジェクト / 配列を変えずに新しいものを作る（イミュータブルな更新）のが基本

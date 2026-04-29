@@ -1,214 +1,180 @@
-# lesson56: イベントと配列のイミュータブル更新
+# lesson56: state で状態を持つ
 
 ## ゴール
 
-- `onClick` など代表的なイベントハンドラを書ける
-- 配列の state を、新しい配列を作って更新する書き方（イミュータブル更新）ができる
-- 「末尾に追加 / 先頭に追加 / id で削除」の 3 パターンを実装できる
+- `useState` で状態（state）を持ち、ボタンクリックで画面が更新される仕組みを書ける
+- `setCount(count + 1)` と `setCount((c) => c + 1)` の違いを、動く画面で確認できる
+- 「同じイベント内の複数の `setX` をまとめて処理する」というバッチングの考え方を説明できる
 
 ## 解説
 
-### 配列 state の注意点
+### state とは
 
-「state で状態を持つ」でカウンター（数値）の state を扱いました。配列の state でも考え方は同じですが、**守らないといけないルール** が 1 つあります。
+画面が変化するアプリには、必ず「状態」があります。TODO の件数、ログインしているかどうか、入力欄の文字、選んでいるタブ、など。
 
-> **直接 `push` や `splice` で書き換えない**。必ず「新しい配列」を作って渡す。
+素の JS では変数や DOM にその状態を持たせ、イベントのたびに DOM を直接書き換えていました。React では、状態を**フック**と呼ばれる仕組みで扱います。本レッスンで使うのが `useState` です。
+
+```tsx
+import { useState } from "react";
+
+function Counter() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <>
+      <p>現在: {count}</p>
+      <button onClick={() => setCount(count + 1)}>+1</button>
+    </>
+  );
+}
+```
+
+> **`<>...</>` は Fragment**（フラグメント）: コンポーネントは 1 つのタグしか return できないルールがあります。複数の要素を並べたいけれど親タグを増やしたくないとき、`<>` と `</>` で囲むと「中身を直接出す（タグを増やさない）」形になります。`<React.Fragment>` の短縮記法。`<div>` で囲んでも動きますが、不要な `<div>` が増えると CSS や a11y の構造が崩れるため、Fragment を使うのが基本です。
+
+- `useState(0)` は「初期値 0 で state を 1 つ作って」という意味
+- 戻り値は 2 要素のタプル。配列の分割代入で `[count, setCount]` として受け取る
+  - `count`: 今の値
+  - `setCount`: 値を更新するための関数
+- 名前は自由。`[score, setScore]` でも OK
+
+`setCount(1)` を呼ぶと、React が「state が変わった」と気づいてコンポーネントを**再実行**します。再実行した結果の JSX を前回のツリーと比較し、変わった部分だけ DOM に反映します。
+
+### ボタンに関数を渡すときの形
+
+`onClick` には **関数** を渡します。関数呼び出しの結果ではありません。
+
+```tsx
+{/* OK: クリックされたら setCount(count + 1) が走る */}
+<button onClick={() => setCount(count + 1)}>+1</button>
+
+{/* NG: 描画の瞬間に setCount が呼ばれ、無限ループになる */}
+<button onClick={setCount(count + 1)}>+1</button>
+```
+
+アロー関数 `() => ...` で包むのが基本です。
+
+### 壊れやすい書き方 vs 正しい書き方
+
+state を更新する関数には、2 つの渡し方があります。
+
+```tsx
+// (A) 値で渡す形
+setCount(count + 1);
+
+// (B) 関数形式
+setCount((prev) => prev + 1);
+```
+
+1 回だけ呼ぶ分には、どちらも同じに見えます。違いが出るのは、**同じイベントの中で連続して呼んだとき**です。
+
+```tsx
+// 壊れやすい書き方: 3 回呼んでも 1 しか増えない
+function handleClickA() {
+  setCount(count + 1);
+  setCount(count + 1);
+  setCount(count + 1);
+}
+
+// 正しい書き方: 3 回呼ぶと 3 増える
+function handleClickB() {
+  setCount((c) => c + 1);
+  setCount((c) => c + 1);
+  setCount((c) => c + 1);
+}
+```
+
+なぜか。React は **同じイベント内で呼ばれた `setX` をまとめて（バッチで）処理します**。処理するタイミングまで、`count` の値は「このイベントが始まった時点の値」のままです。
+
+つまり (A) では、3 回とも `count + 1` が「0 + 1」と評価され、最終的に state は 1 になります。
+
+(B) の関数形式は「**今 state に入っている値を受け取って、次の値を返す**」書き方です。React は内部で state を更新するたびに `prev` を最新に差し替えてくれるので、3 回目は `prev = 2` が渡されて 3 が返ります。
+
+### バッチングのまとめ
+
+- React は同じイベントで呼ばれた複数の state 更新を、**まとめて 1 回の再レンダリング**にする
+- そのため、同じイベント内では state の値は「イベント開始時点」のまま
+- 現在の state から次の値を計算したいなら、**必ず関数形式 `setX((prev) => ...)`** を使う
+
+規模の大きいアプリでもこの原則は同じです。将来書く `setTodos((prev) => [...prev, newTodo])` のような形も、この延長線上にあります。
+
+### バッチングが効くのは同期イベントハンドラだけ
+
+上の「3 回呼んでも 1 しか増えない」は、`onClick` のような **同期のイベントハンドラの中** で 3 回連続で `setCount` を呼んだケースです。非同期処理（`setTimeout` や `await` のあと）から `setCount` を呼ぶ場合でも React 18 以降は原則バッチングされますが、条件によってはイベントの境界が切れ、1 回の `setCount(count + 1)` で素直に 1 増える挙動になります。挙動に違和感を感じたら、まずは関数形式 `setX((prev) => ...)` に書き換えて安全側に倒すのが無難です。
+
+### `useState` の型
+
+`useState(0)` のように初期値を渡すと、TypeScript は「state の型は `number`」と推論します。
+
+```tsx
+const [count, setCount] = useState(0); // count: number
+const [name, setName] = useState(""); // name: string
+```
+
+複雑な型（配列、オブジェクト、ユニオン）は、次のように明示的に指定できます。
 
 ```tsx
 const [todos, setTodos] = useState<Todo[]>([]);
-
-// NG: 元の配列を書き換えている
-todos.push(newTodo);
-setTodos(todos); // 同じ配列を渡しているので、React から見れば「変わっていない」
-
-// OK: 新しい配列を作って渡す
-setTodos((prev) => [...prev, newTodo]);
 ```
 
-これを「イミュータブル（immutable、書き換えない）更新」と呼びます。
+`useState<Todo[]>` の `<>` は **3 章「ジェネリクス入門」で学んだ型パラメータ** そのものです。「`useState` という関数に、扱う state の型 `Todo[]` を引数として渡している」と読めます。
 
-理由は、React が「state が変わったかどうか」を、**オブジェクトの参照が同じかどうか**で判断しているためです。中身が変わっていても、同じ配列オブジェクトを渡されると「変わっていない」と判断され、再レンダリングされません。
-
-スプレッド構文 `...`（2 章 の「分割代入とスプレッド」）は、このイミュータブル更新で頻出します。
-
-### よく使う 3 パターン
-
-#### (1) 末尾に追加
-
-```tsx
-setTodos((prev) => [...prev, newTodo]);
-```
-
-`[...prev, newTodo]` は「`prev` を広げて、最後に `newTodo` を足した新しい配列」。
-
-#### (2) 先頭に追加
-
-```tsx
-setTodos((prev) => [newTodo, ...prev]);
-```
-
-順番を入れ替えるだけ。最新のものを上に表示したいときはこちら。
-
-#### (3) id で削除
-
-```tsx
-setTodos((prev) => prev.filter((t) => t.id !== id));
-```
-
-`filter`（2 章 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
-
-### イベントハンドラの型（コピペして使う）
-
-TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペして使う**ものとして覚えてください。意味は追い追い分かります。
-
-```tsx
-import type { MouseEvent, ChangeEvent, FormEvent } from "react";
-
-// ボタンのクリック
-function handleClick(e: MouseEvent<HTMLButtonElement>) {
-  /* ... */
-}
-
-// input の変化
-function handleChange(e: ChangeEvent<HTMLInputElement>) {
-  /* ... */
-}
-
-// フォームの送信
-function handleSubmit(e: FormEvent<HTMLFormElement>) {
-  /* ... */
-}
-```
-
-これらの型は `react` パッケージから `import type` で呼びます。`React.MouseEvent` のように名前空間経由で書くこともできますが、新しい JSX ランタイム（Vite の React + TS テンプレート）では名前空間経由だとエラーになる環境があるので、**個別に import する形に統一します**。
-
-とはいえ、**JSX の中にインラインで書くとき**は、型推論が効くので書かなくても OK です。
-
-```tsx
-<button onClick={(e) => console.log(e)}>
-  {/* e は MouseEvent<HTMLButtonElement> 型と自動推論される */}
-</button>
-```
-
-関数を別の場所で定義するときだけ、上の型をコピペして付けます。
-
-### スコープ外: オブジェクトの state 更新
-
-配列ではなく、**オブジェクト** を state に入れたときの更新（`setUser((prev) => ({ ...prev, age: 30 }))` など）も同じ発想でできます。このレッスンでは配列更新だけに集中します。
+今回は数値しか使わないので、型推論に任せます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`src/types.ts`**
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-本レッスンで `Todo` 型と配列 state を扱うので、このファイルを先に用意しておきます。
-
-</details>
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
 
 ### ゴール
 
-- カウンターに「+1」「-1」「リセット」の 3 ボタンを実装
-- `Todo` の配列 state に対して「末尾に追加」「先頭に追加」「id で削除」の 3 パターンを実装
-- いずれの操作も、イミュータブル更新で行う
+- カウンター UI を作り、「壊れやすい書き方」と「正しい書き方」のボタンを並べる
+- 実際に押して、増え方の違いを画面で確認する
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
-2. `src/types.ts` を作成
-3. `src/App.tsx` を書き換える
-
-### `src/types.ts`
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/App.tsx` を書き換える
+3. `src/App.css` を書き換える
 
 ### `src/App.tsx`
 
 ```tsx
 import { useState } from "react";
-import type { Todo } from "./types";
 import "./App.css";
 
 function App() {
-  const [count, setCount] = useState(0);
-  const [todos, setTodos] = useState<Todo[]>([
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "原稿を書く" },
-  ]);
+  const [countA, setCountA] = useState(0);
+  const [countB, setCountB] = useState(0);
 
-  // ---- カウンター ----
-  function handlePlus() {
-    setCount((c) => c + 1);
-  }
-  function handleMinus() {
-    setCount((c) => c - 1);
-  }
-  function handleReset() {
-    setCount(0);
+  // (A) 壊れやすい書き方: count + 1 を 3 回
+  function handleClickA() {
+    setCountA(countA + 1);
+    setCountA(countA + 1);
+    setCountA(countA + 1);
   }
 
-  // ---- TODO ----
-  function addToEnd() {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: `末尾 ${todos.length + 1}`,
-    };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function addToTop() {
-    const newTodo: Todo = {
-      id: crypto.randomUUID(),
-      text: `先頭 ${todos.length + 1}`,
-    };
-    setTodos((prev) => [newTodo, ...prev]);
-  }
-
-  function removeById(id: string) {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
+  // (B) 正しい書き方: 関数形式を 3 回
+  function handleClickB() {
+    setCountB((c) => c + 1);
+    setCountB((c) => c + 1);
+    setCountB((c) => c + 1);
   }
 
   return (
     <>
+      <h1>バッチングを体感する</h1>
+
       <section className="box">
-        <h2>カウンター</h2>
-        <p>現在: {count}</p>
-        <button onClick={handlePlus}>+1</button>
-        <button onClick={handleMinus}>-1</button>
-        <button onClick={handleReset}>リセット</button>
+        <h2>(A) 壊れやすい書き方</h2>
+        <p>現在: {countA}</p>
+        <button onClick={handleClickA}>3 回 setCountA(countA + 1)</button>
       </section>
 
       <section className="box">
-        <h2>TODO</h2>
-        <div className="row">
-          <button onClick={addToEnd}>末尾に追加</button>
-          <button onClick={addToTop}>先頭に追加</button>
-        </div>
-        <ul>
-          {todos.map((todo) => (
-            <li key={todo.id}>
-              {todo.text}
-              <button onClick={() => removeById(todo.id)}>削除</button>
-            </li>
-          ))}
-        </ul>
+        <h2>(B) 正しい書き方</h2>
+        <p>現在: {countB}</p>
+        <button onClick={handleClickB}>3 回 setCountB((c) =&gt; c + 1)</button>
       </section>
     </>
   );
@@ -216,8 +182,6 @@ function App() {
 
 export default App;
 ```
-
-`crypto.randomUUID()` は、ブラウザ組み込みの「ユニークな ID を作る」関数です。2 章 の `localStorage` で使った乱数生成と同じ目的のものと思ってください。**HTTPS / `localhost` で動かす（= secure context の）とき限定** で使える API なので、`file://` で直接開いた HTML では `undefined` になります。本コースは StackBlitz / Vite の dev サーバー（どちらも secure context）で動かすので問題ありませんが、ローカルファイルを直接開く形では動かないことを覚えておきます。
 
 ### `src/App.css`
 
@@ -232,13 +196,8 @@ export default App;
 }
 
 .box button {
-  margin-right: 8px;
-  padding: 4px 10px;
+  padding: 6px 10px;
   cursor: pointer;
-}
-
-.row {
-  margin-bottom: 8px;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -252,35 +211,37 @@ export default App;
 
 ### 期待出力
 
-- 画面上部に「カウンター」ボックス。`+1` を 3 回押すと 3、`-1` を 1 回押すと 2、`リセット` で 0 に戻る
-- 下に「TODO」ボックス。
-  - 初期状態で `牛乳を買う` と `原稿を書く` の 2 件が並ぶ
-  - `末尾に追加` を 2 回押すと、`末尾 3` / `末尾 4` が一番下に追加される
-  - `先頭に追加` を 1 回押すと、`先頭 5` が一番上に追加される
-  - 各行の `削除` ボタンで、その行だけが消える
+- 画面に 2 つのボックス「(A) 壊れやすい書き方」「(B) 正しい書き方」が並ぶ
+- (A) のボタンを 1 回押す → 表示が **0 → 1**。もう 1 回 → **1 → 2**。**1 ずつしか増えない**
+- (B) のボタンを 1 回押す → 表示が **0 → 3**。もう 1 回 → **3 → 6**。**3 ずつ増える**
+
+押したボタンごとに、増え方が明確に違うことを確認してください。
 
 ### 変える
 
-- `removeById` を次のように書き換えると、**バグ** が起きる。試してから元に戻すこと
-  ```tsx
-  function removeById(id: string) {
-    const index = todos.findIndex((t) => t.id === id);
-    todos.splice(index, 1); // NG: 元の配列を破壊している
-    setTodos(todos); // React から見ると変化していない
-  }
-  ```
-  クリックしても削除されない（実際は配列が変わっているのに、React は「同じ配列」と見て再レンダリングしない）
-- `addToEnd` の `setTodos((prev) => [...prev, newTodo])` を `setTodos((prev) => [newTodo, ...prev])` に書き換えると、動作が `addToTop` と同じになる
+- (A) の `handleClickA` の中の `setCountA(countA + 1)` を 5 回に増やしてみる → それでも 1 しか増えない
+- (B) の `setCountB((c) => c + 1)` を 5 回に増やすと、1 クリックで 5 増える
+- (A) を `setCountA((c) => c + 1)` に差し替えると、3 ずつ増える側に変わる
 
 ### 自分で書く
 
-- 「逆順」ボタンを追加し、クリックで配列を逆順にする（**新しい配列を作る**）
-  - ヒント: `setTodos((prev) => [...prev].reverse())`（`.reverse()` 単体は元の配列を書き換える破壊的メソッド。スプレッドでコピーしてから呼ぶ）
-- 「全消し」ボタンを追加し、クリックで空配列にする
-  - ヒント: `setTodos([])`
+- 別の state `[step, setStep]` を作り、初期値を `1` にする
+- `<input>` で `step` の値を数値として編集できるようにする（本格的なフォームは「フォームと制御コンポーネント」で扱うので、ここでは下記のヒントをコピペでよい）
+- 既存のボタンを「`step` ずつ増やす」ボタンに差し替える（`setCountB((c) => c + step)` の形）
+
+ヒント（`<input>` まわりはコピペで OK です）:
+
+```tsx
+<input
+  type="number"
+  value={step}
+  onChange={(e) => setStep(Number(e.target.value))}
+/>
+```
 
 ## まとめ
 
-- 配列 state は `push` / `splice` で直接書き換えず、**新しい配列を作って `setX` に渡す**
-- 末尾追加は `[...prev, x]`、先頭追加は `[x, ...prev]`、削除は `prev.filter(...)`
-- イベントハンドラの型（`MouseEvent<...>` / `ChangeEvent<...>` / `FormEvent<...>` 等）は `react` から `import type` してコピペで OK。インラインなら書かなくても推論される
+- 状態は `useState(初期値)` で持つ。戻り値は `[値, 更新関数]`
+- `setX(v)` を呼ぶと React がコンポーネントを再実行して差分を DOM に反映する
+- 同じイベント内の複数の `setX` は**バッチで**処理されるので、同じイベントの中では state の値は変わらない
+- 現在の state を元に次の値を計算するなら、**関数形式 `setX((prev) => ...)`** を使う

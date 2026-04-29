@@ -1,197 +1,120 @@
-# lesson23: スコープとクロージャ
+# lesson23: 関数
 
 <script setup>
 const demoJs = `
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
+function add(a, b) {
+  return a + b;
 }
 
-const counterA = makeCounter();
-const counterB = makeCounter();
-
-console.log('A:', counterA()); // 1
-console.log('A:', counterA()); // 2
-console.log('B:', counterB()); // 1
-console.log('A:', counterA()); // 3
-console.log('B:', counterB()); // 2
+console.log('add(1, 2) =', add(1, 2));
+console.log('add(10, 20) =', add(10, 20));
+console.log('add(-5, 5) =', add(-5, 5));
 `
 </script>
 
 ## ゴール
 
-- `let` / `const` のブロックスコープと関数スコープを区別できる
-- 「関数の中で作った変数」は外から触れないことを理解する
-- クロージャ（関数が「作られた場所の変数」を覚えているしくみ）を体感する
-- `makeCounter()` のように、関数を呼ぶたびに独立した状態を持たせられる
+- `function` 宣言で関数を定義できる
+- アロー関数でも関数を定義できる
+- 引数と戻り値（`return`）を使える
 
 ## 解説
 
-### スコープとは
+### 関数とは
 
-**変数が有効な範囲** のことを **スコープ** と呼びます。変数は「どこで宣言したか」によって、見える範囲が決まります。
+「決まった処理をまとめて名前をつけたもの」が関数です。同じ処理を何度も書く代わりに、関数を 1 つ作っておけば、名前を呼ぶだけで再利用できます。
 
-スコープを知らないと、「なぜこの変数が `undefined` なのか」「なぜ外から触れないのか」がわからず、デバッグで迷子になりやすくなります。
+### `function` 宣言
 
-### ブロックスコープ（`let` / `const`）
-
-`{` と `}` で囲まれた部分を **ブロック** と呼びます。`let` と `const` で宣言した変数は、そのブロックの中でしか使えません。
+一番シンプルな書き方です。
 
 ```js
-if (true) {
-  const message = "こんにちは";
-  console.log(message); // "こんにちは"
+function greet(name) {
+  console.log(`こんにちは、${name} さん`);
 }
 
-console.log(message); // ReferenceError: message is not defined
+greet("Alice");
+greet("Bob");
 ```
 
-- ブロックの中で宣言した変数は、ブロックの外からは見えない
-- `for` ループの `{` と `}` も同じ
+- `function 関数名(引数) { ... }` で定義
+- `関数名(値)` で呼び出す
+- 引数は「関数に渡す値」、関数の中では受け取った名前（`name`）で使う
+
+### `return` で値を返す
+
+関数は「処理をする」だけでなく「結果を返す」こともできます。
 
 ```js
-for (let i = 0; i < 3; i++) {
-  console.log(i); // 0, 1, 2
+function add(a, b) {
+  return a + b;
 }
 
-console.log(i); // ReferenceError: i is not defined
+const result = add(1, 2);
+console.log(result); // 3
 ```
 
-ループが終わった後、`i` はもう存在しません。
+- `return 値` で呼び出し元に結果を返す
+- `const result = add(1, 2)` のように、戻り値を変数に受け取れる
 
-### 関数スコープ
+`return` を書かない関数は `undefined` を返します。`console.log` だけしている関数は `undefined` を返すことになります。
 
-関数の中で宣言した変数も、関数の外からは見えません。
-
-```js
-function greet() {
-  const message = "こんにちは";
-  console.log(message);
-}
-
-greet(); // "こんにちは"
-console.log(message); // ReferenceError: message is not defined
-```
-
-関数の中は「独立した部屋」と思ってください。中で作った変数は、その部屋を出たら使えません。
-
-### レキシカルスコープ（書かれた場所で決まる）
-
-JavaScript のスコープは **「書かれた場所」** で決まります。呼び出された場所ではありません。これを **レキシカルスコープ** と呼びます。
-
-```js
-const name = "外側";
-
-function outer() {
-  const name = "内側";
-  inner();
-}
-
-function inner() {
-  console.log(name); // "外側"
-}
-
-outer();
-```
-
-`inner` は `outer` から呼ばれていますが、**`inner` が書かれた場所** から見える `name` は外側の `"外側"` です。そのため `"外側"` が出力されます。
-
-### クロージャ
-
-関数は、自分の外側のスコープにある変数を **覚えています**。関数を「外に持ち出しても」その変数を使い続けられます。このしくみを **クロージャ** と呼びます。
-
-```js
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
-}
-
-const counter = makeCounter();
-console.log(counter()); // 1
-console.log(counter()); // 2
-console.log(counter()); // 3
-```
-
-`makeCounter` を呼ぶと、中に作られた `count` と、それを使う関数（戻り値）が一緒に「閉じ込められて」返ってきます。外から `count` に直接触ることはできませんが、返ってきた関数を呼ぶたびに `count` が 1 増えます。
-
-#### 独立したカウンタが複数作れる
-
-`makeCounter()` を 2 回呼ぶと、それぞれが **別の `count`** を持ちます。
-
-```js
-const counterA = makeCounter();
-const counterB = makeCounter();
-
-console.log(counterA()); // 1
-console.log(counterA()); // 2
-console.log(counterB()); // 1 （counterA とは独立）
-console.log(counterA()); // 3
-console.log(counterB()); // 2
-```
-
-`counterA` と `counterB` は、それぞれ自分専用の `count` を抱えています。これが「関数が状態を閉じ込める」しくみです。
-
-下のデモで、独立したカウンタ 2 つがそれぞれ別の `count` を持っている様子を体感できます。`counterA` を 3 回呼んでも `counterB` は影響を受けません。
+下のデモで、関数を複数回呼び出すと同じ処理が毎回動き、結果だけが引数に応じて変わるのを確認できます。
 
 <LiveDemo
-  height="220px"
-  :html="`<p>独立した 2 つのカウンタを動かします。</p>`"
+  height="180px"
+  :html="`<p>関数を複数回呼び出します。</p>`"
   :css="``"
   :js="demoJs"
 />
 
-#### 関数を作って返す（`makeFilter`）
+### アロー関数
 
-同じパターンで、**設定を覚えた関数** を作ることもできます。「配列の変換」の `filter` と組み合わせる例を見てみます。
-
-```js
-function makeFilter(status) {
-  return function (todo) {
-    return todo.status === status;
-  };
-}
-
-const isDone = makeFilter("done");
-const isTodo = makeFilter("todo");
-
-const todos = [
-  { text: "牛乳を買う", status: "done" },
-  { text: "本を読む",   status: "todo" },
-  { text: "掃除する",   status: "done" },
-];
-
-console.log(todos.filter(isDone));
-// [{ text: "牛乳を買う", status: "done" }, { text: "掃除する", status: "done" }]
-
-console.log(todos.filter(isTodo));
-// [{ text: "本を読む", status: "todo" }]
-```
-
-`makeFilter("done")` で返ってきた関数は、**`status` が `"done"` だったこと** を覚えています。この関数を `filter` に渡すと、`status === "done"` の要素だけが残ります。
-
-「呼び出し時の引数を覚えた新しい関数を作る」のは、クロージャのとても実用的な使い方です。
-
-### `var` との違い（軽く対比のみ）
-
-古いコードでは `var` を見かけます。`var` はブロックスコープではなく **関数スコープ** で、宣言前に使ってもエラーにならず `undefined` になる（**巻き上げ**）という挙動があります。
+もう 1 つの書き方がアロー関数です。「繰り返し処理」の `forEach` で一度出てきました。
 
 ```js
-console.log(a); // undefined （エラーにならない）
-var a = 1;
+const add = (a, b) => {
+  return a + b;
+};
 
-if (true) {
-  var b = 2;
-}
-console.log(b); // 2 （ブロックの外でも見える）
+console.log(add(1, 2)); // 3
 ```
 
-本コースでは `let` / `const` だけを使います。`var` は「そういう古い書き方がある」とだけ覚えておけば十分です。
+- `(引数) => { ... }` の形
+- 変数に入れて使う（`const 関数名 = (引数) => { ... }`）
+
+波かっこの中で「計算 → 即 return」だけしたいときは、波かっこと `return` を省略できます。
+
+```js
+const add = (a, b) => a + b;
+console.log(add(1, 2)); // 3
+```
+
+本コースでは、まず **両方の書き方を読める** ことを目指します。書き分けは後から慣れで身につきます。
+
+### どちらを使う？
+
+どちらでも動きます。近年のコードはアロー関数が多いですが、`function` 宣言も十分使われます。本コースでは混ぜて使うので、どちらも読めるようにしておきます。
+
+### 宣言の場所と参照可能なタイミング
+
+`function` 宣言とアロー関数（`const` で受ける）には、**ファイル内で「どこから呼べるか」が違う** という細かい差があります。
+
+```js
+// function 宣言は、宣言より前でも呼べる（巻き上げ）
+sayHi();
+function sayHi() {
+  console.log("Hi");
+}
+
+// アロー関数は、宣言より前で呼ぶとエラー
+greet();           // ReferenceError: Cannot access 'greet' before initialization
+const greet = () => console.log("Hello");
+```
+
+`function` 宣言は **コードの読み込み時にトップに巻き上げられる**（hoisting と呼びます）ので、ファイルのどこに書いても動きます。一方、アロー関数を `const` / `let` で受けた場合は **`const` の規則に従う** ので、宣言より前では参照できません。
+
+実用上は **「使う前に書く」を守れば気にする必要はない** 話ですが、他人のコードで「下のほうにある関数を上のほうから呼んでいる」場面を見たら、これは `function` 宣言だな、と分かります。
 
 ## 演習
 
@@ -214,12 +137,65 @@ console.log(b); // 2 （ブロックの外でも見える）
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson22: 関数</h1>
+    <h1>lesson22: 繰り返し処理</h1>
   </body>
 </html>
 ```
 
 **`script.js`**
+
+```js
+const todos = ["牛乳を買う", "本を読む", "ジョギング"];
+
+console.log("--- for...of ---");
+for (const todo of todos) {
+  console.log(todo);
+}
+
+console.log("--- forEach ---");
+todos.forEach((todo) => {
+  console.log(todo);
+});
+
+console.log("--- 合計 ---");
+const numbers = [1, 2, 3, 4, 5];
+let total = 0;
+for (const n of numbers) {
+  total = total + n;
+}
+console.log(total);
+```
+
+</details>
+
+### ゴール
+
+- 2 つの数を合計する関数を `function` 宣言とアロー関数の両方で書く
+- 関数に挨拶文を作ってもらう
+
+### 手順
+
+1. `index.html` のタイトルを `lesson23` に変える
+2. `script.js` を以下に書き換える
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson23</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson23: 関数</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
 function add(a, b) {
@@ -251,108 +227,31 @@ function introduce(name, age) {
 console.log(introduce("Carol", 30));
 ```
 
-</details>
-
-### ゴール
-
-- `makeCounter()` で独立したカウンタ `counterA` / `counterB` を作る
-- `makeFilter(status)` で「状態ごとのフィルタ関数」を作り、`filter` に渡す
-
-### 手順
-
-1. `index.html` のタイトルを `lesson23` に変える
-2. `script.js` を以下に書き換える
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson23</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson23: スコープとクロージャ</h1>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-function makeCounter() {
-  let count = 0;
-  return function () {
-    count = count + 1;
-    return count;
-  };
-}
-
-const counterA = makeCounter();
-const counterB = makeCounter();
-
-console.log(counterA()); // 1
-console.log(counterA()); // 2
-console.log(counterB()); // 1
-console.log(counterA()); // 3
-console.log(counterB()); // 2
-
-function makeFilter(status) {
-  return function (todo) {
-    return todo.status === status;
-  };
-}
-
-const todos = [
-  { text: "牛乳を買う", status: "done" },
-  { text: "本を読む",   status: "todo" },
-  { text: "掃除する",   status: "done" },
-  { text: "ゴミを出す", status: "todo" },
-];
-
-const isDone = makeFilter("done");
-const isTodo = makeFilter("todo");
-
-console.log(todos.filter(isDone));
-console.log(todos.filter(isTodo));
-```
-
 ### 期待出力
 
 ```
-1
-2
-1
 3
-2
-[{text: "牛乳を買う", status: "done"}, {text: "掃除する", status: "done"}]
-[{text: "本を読む", status: "todo"}, {text: "ゴミを出す", status: "todo"}]
+30
+300
+こんにちは、Alice さん
+こんにちは、Bob さん
+Carol（30 歳）です
 ```
-
-- `counterA` と `counterB` の出力が独立している（`counterB` を呼んでも `counterA` の値には影響しない）
-- `isDone` / `isTodo` を `filter` に渡すと、それぞれの状態の TODO だけが抽出される
 
 ### 変える
 
-- `makeCounter` の `count = 0` を `count = 10` に変える → `counterA()` の初回が `11` から始まる
-- `makeCounter` の中の `count = count + 1` を `count = count + 2` にする → 2 ずつ増える
-- `makeFilter("todo")` を `makeFilter("done")` に書き換えて、結果が変わることを確認する
+- `add` の中身を `a - b` に変える → Console の 1 行目が `-1` になる
+- `greet` に挨拶の文言 2 種類（朝と夜）を引数で受け取るように変える（第 2 引数 `word` を追加して、「おはよう」「こんばんは」を渡せるようにする）
+- `introduce` で `return` を書き忘れるとどうなるか確認する（`console.log` で `undefined` が表示される）
 
 ### 自分で書く
 
-- `makeAdder(n)` を作る。`makeAdder(5)` を呼ぶと「引数に 5 を足す関数」が返ってくる。`add5(10)` が `15` を返せば OK（ヒント: 戻り値の関数の中で外側の `n` を使う）
-- `makeGreeter(word)` を作る。`makeGreeter("こんにちは")` を呼ぶと「`(name) => `${word}、${name} さん`` のような関数」が返ってくる。`greetJa("Alice")` で `"こんにちは、Alice さん"` が返れば OK
-- `makeCounter` を改造して、呼ぶと `{ increment, reset, value }` の 3 つの関数を持つオブジェクトを返すようにする（余力があれば）
+- 3 つの数を合計する関数 `sum3(a, b, c)` を書く
+- 1 つの数を受け取って「偶数」または「奇数」を返す関数 `evenOrOdd(n)` を書く（ヒント: `n % 2 === 0` で偶数判定）
+- 名前と点数を受け取り、点数が 60 以上なら「○○ さんは合格」、そうでなければ「○○ さんは不合格」を返す関数 `judge(name, score)` を書く
 
 ## まとめ
 
-- 変数には **スコープ**（有効な範囲）がある
-- `let` / `const` は **ブロックスコープ**、関数の中の変数は **関数スコープ**
-- JavaScript は **レキシカルスコープ**: 変数の見える範囲は「書かれた場所」で決まる
-- **クロージャ** は「関数が自分の外側の変数を覚えているしくみ」
-- `makeCounter()` のように、関数を呼ぶたびに **独立した状態** を閉じ込めた関数を返せる
-- `makeFilter(status)` のように、**引数を覚えた関数** を作って他のメソッドに渡せる
-- 本コースでは `let` / `const` だけを使う。`var` の古い挙動は覚えなくてよい
+- 書き方は 2 種類: `function 関数名(...) { ... }` とアロー関数 `(...) => { ... }`
+- `return` で値を返し、呼び出し元で `const 変数 = 関数(...)` で受け取れる
+- 引数は複数渡せる

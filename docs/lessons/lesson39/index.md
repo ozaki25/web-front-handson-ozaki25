@@ -1,288 +1,310 @@
-# lesson39: Intl API で国際化の基礎
+# lesson39: 監視系 API（Intersection Observer / ResizeObserver / MutationObserver）
 
 ## ゴール
 
-- `Intl.DateTimeFormat` で日付・時刻をロケール別に整形できる
-- `Intl.NumberFormat` で通貨・パーセント・桁区切りを表示できる
-- `Intl.RelativeTimeFormat` で「3 分前」「2 日後」を書ける
-- `Intl.Collator` でロケールに従った文字列ソートができる
-- 多言語化ライブラリ（next-intl / react-i18next）の立ち位置を理解する
+- Intersection Observer で「要素が画面に入った / 出た」を低コストで検知できる
+- 遅延読み込み（lazy loading）と無限スクロールの基本パターンを書ける
+- ResizeObserver で要素サイズ変化を検知できる（メディアクエリで届かない場面）
+- MutationObserver の存在を知り、必要な時に思い出せる
+- スクロールイベントで監視するアンチパターンを避けられる
 
 ## 解説
 
-### 「国際化」と Intl API
+### 「監視系 API」とは
 
-「国際化（i18n）」は **表示言語の切り替え** だけではありません。日付の書き方（`2026/04/25` vs `25/04/2026` vs `April 25, 2026`）、数値の桁区切り（`1,234,567` vs `1.234.567`）、通貨表記（`¥1,200` vs `$10.50`）、文字列ソート（日本語のかな順 / ドイツ語の ä の扱い）まで含みます。
+ブラウザには、**特定の状態変化を効率よく検知する** ための専用 API があります。代表は次の 3 つ。
 
-これらを自力で書くのは現実的ではありません。ブラウザと Node.js には **`Intl`** という組み込み API があり、ロケール（地域 + 言語）ごとの正しい整形を提供してくれます。**2026 年の現在、i18n の土台はこの `Intl`** です。
-
-### `Intl.DateTimeFormat`
-
-日付 / 時刻を **ロケール別** に整形します。
-
-```js
-const date = new Date("2026-04-25T10:30:00");
-
-new Intl.DateTimeFormat("ja-JP").format(date);
-// => "2026/04/25"
-
-new Intl.DateTimeFormat("en-US").format(date);
-// => "4/25/2026"
-
-new Intl.DateTimeFormat("de-DE").format(date);
-// => "25.4.2026"
-```
-
-#### オプションで細かく制御
-
-```js
-new Intl.DateTimeFormat("ja-JP", {
-  year: "numeric",
-  month: "long",
-  day: "numeric",
-  weekday: "long",
-}).format(date);
-// => "2026年4月25日土曜日"
-
-new Intl.DateTimeFormat("ja-JP", {
-  hour: "2-digit",
-  minute: "2-digit",
-  hour12: false,
-}).format(date);
-// => "10:30"
-```
-
-#### ユースケース
-
-- ユーザーの地域に合わせた日付表示
-- 「2026年4月25日」を「Apr 25, 2026」に切り替える
-
-#### `toLocaleString` の簡便版
-
-1 回限りの整形なら `date.toLocaleString("ja-JP", options)` でも同じことができます。同じものを何度も使うなら `Intl.DateTimeFormat` を **再利用** するほうが速いです（内部キャッシュが効く）。
-
-### `Intl.NumberFormat`
-
-数値を **桁区切り / 通貨 / パーセント / 単位** で整形します。
-
-#### 桁区切り
-
-```js
-new Intl.NumberFormat("ja-JP").format(1234567.89);
-// => "1,234,567.89"
-
-new Intl.NumberFormat("de-DE").format(1234567.89);
-// => "1.234.567,89"
-```
-
-ドイツ語圏では **カンマとピリオドが逆** になります。手書きだとこの種のバグを埋め込みがち。
-
-#### 通貨
-
-```js
-new Intl.NumberFormat("ja-JP", {
-  style: "currency",
-  currency: "JPY",
-}).format(1200);
-// => "￥1,200"
-
-new Intl.NumberFormat("en-US", {
-  style: "currency",
-  currency: "USD",
-}).format(10.5);
-// => "$10.50"
-```
-
-#### パーセント
-
-```js
-new Intl.NumberFormat("ja-JP", { style: "percent" }).format(0.425);
-// => "43%"（0.425 を百分率に）
-
-new Intl.NumberFormat("ja-JP", {
-  style: "percent",
-  minimumFractionDigits: 1,
-}).format(0.425);
-// => "42.5%"
-```
-
-#### 単位
-
-```js
-new Intl.NumberFormat("ja-JP", { style: "unit", unit: "kilometer" }).format(20);
-// => "20 km"
-
-new Intl.NumberFormat("ja-JP", {
-  style: "unit",
-  unit: "kilometer-per-hour",
-}).format(120);
-// => "120 km/h"
-```
-
-#### コンパクト表記
-
-```js
-new Intl.NumberFormat("en", { notation: "compact" }).format(1500000);
-// => "1.5M"
-
-new Intl.NumberFormat("ja", { notation: "compact" }).format(15000);
-// => "1.5万"
-```
-
-「フォロワー数 1.5M」「売上 1.5万円」のような表示にそのまま使えます。
-
-### `Intl.RelativeTimeFormat`
-
-「3 日前」「5 分後」のような相対時間を整形します。
-
-```js
-const rtf = new Intl.RelativeTimeFormat("ja", { numeric: "auto" });
-
-rtf.format(-3, "day");  // => "3 日前"
-rtf.format(5, "minute"); // => "5 分後"
-rtf.format(-1, "day");  // => "昨日"（numeric: "auto" なら言い換える）
-rtf.format(0, "day");   // => "今日"
-```
-
-```js
-const rtf = new Intl.RelativeTimeFormat("en", { numeric: "auto" });
-
-rtf.format(-3, "day");  // => "3 days ago"
-rtf.format(-1, "day");  // => "yesterday"
-rtf.format(5, "minute"); // => "in 5 minutes"
-```
-
-`numeric: "always"` にすると「yesterday」が「1 day ago」に戻ります。
-
-#### 経過秒から呼び出すヘルパー
-
-```js
-function timeAgo(dateString, lang = "ja") {
-  const date = new Date(dateString);
-  const diffSec = Math.round((date.getTime() - Date.now()) / 1000);
-  const rtf = new Intl.RelativeTimeFormat(lang, { numeric: "auto" });
-
-  const units = [
-    ["year", 31536000],
-    ["month", 2592000],
-    ["day", 86400],
-    ["hour", 3600],
-    ["minute", 60],
-    ["second", 1],
-  ];
-  for (const [unit, sec] of units) {
-    if (Math.abs(diffSec) >= sec || unit === "second") {
-      return rtf.format(Math.round(diffSec / sec), unit);
-    }
-  }
-}
-
-timeAgo("2026-04-24T10:00:00"); // => "1 日前"
-```
-
-SNS や通知センターの「3 時間前」実装がこれだけで終わります。
-
-### `Intl.Collator`
-
-「**ロケールに従った文字列ソート**」を提供します。普通の `.sort()` は Unicode コードポイント順なので、かな / アクセント付き文字が期待通りに並びません。
-
-```js
-const items = ["りんご", "バナナ", "Apple", "みかん"];
-
-items.sort(); // コードポイント順（英大文字が先に来る）
-// => ["Apple", "バナナ", "みかん", "りんご"]
-
-items.sort(new Intl.Collator("ja").compare);
-// => ["Apple", "バナナ", "みかん", "りんご"]（日本語の並び）
-```
-
-ドイツ語の `ä` は `a` と同等に扱ってほしい（"apple" と "Äpfel" が隣に来る）など、**ロケールごとの期待** が違います。`Intl.Collator` はその差を吸収します。
-
-```js
-const words = ["apple", "Äpfel", "banana"];
-words.sort(new Intl.Collator("de").compare);
-// => ["apple", "Äpfel", "banana"]（ドイツ語なら ä は a 扱い）
-```
-
-### `Intl.ListFormat`
-
-「A、B、C」のようなリスト整形。
-
-```js
-const lf = new Intl.ListFormat("ja", { style: "long", type: "conjunction" });
-lf.format(["りんご", "バナナ", "みかん"]);
-// => "りんご、バナナ、みかん"
-
-new Intl.ListFormat("en", { type: "conjunction" }).format(["a", "b", "c"]);
-// => "a, b, and c"
-```
-
-日本語の `conjunction` には英語の "and" / "および" のような連結語は付きません（CLDR / ICU のルール）。`type: "disjunction"` なら「A、B、または C」「a, b, or c」になります。
-
-### `Intl.PluralRules`
-
-「1 item / 2 items」のような **単数 / 複数の語形変化** の判定を返します。
-
-```js
-const pr = new Intl.PluralRules("en");
-pr.select(1); // => "one"
-pr.select(2); // => "other"
-
-function itemLabel(n) {
-  const cat = pr.select(n);
-  return cat === "one" ? `${n} item` : `${n} items`;
-}
-```
-
-ロシア語のように「1 / 2〜4 / 5 以上」で形が変わる言語もサポートします。ライブラリを使う時も内部で `Intl.PluralRules` が活躍しています。
-
-### i18n ライブラリとの関係
-
-Intl API は **土台** を提供しますが、「翻訳文字列の辞書管理 / ページ単位の言語切り替え / 翻訳キーの補完」はカバーしません。そこで i18n ライブラリが登場します。
-
-| ライブラリ | 位置付け |
+| API | 監視対象 |
 |---|---|
-| `next-intl` | Next.js App Router 向け。サーバー / クライアント両対応。2026 年の Next.js 一押し |
-| `react-i18next` | React 汎用。老舗で機能が豊富 |
-| `lingui` | マクロで翻訳キーを自動抽出 |
-| `paraglide` | コンパイル時に翻訳を最小バンドル化 |
+| Intersection Observer | 要素が **ビューポート / 親要素** と交差したかどうか |
+| ResizeObserver | 要素の **サイズ** が変化したかどうか |
+| MutationObserver | DOM ツリーの **構造 / 属性** が変化したかどうか |
 
-これらは **中で Intl API を呼んでいる** ので、Intl API を知っておくと **学習が早く**、**ライブラリを使わず直接呼ぶ判断** もできます（小規模な表示なら Intl だけで十分）。
+これらが登場する前は、`scroll` / `resize` イベントに `setTimeout` を組み合わせて判定していました。けれど次の問題があります。
 
-#### next-intl の最小例（参考）
+- イベントが **毎フレーム発火** する → CPU を消費する
+- 「**画面に入った瞬間**」を取るには毎回 `getBoundingClientRect()` を呼ぶ → レイアウト再計算（reflow）が走る
+- 結果としてスクロールがガクつく
+
+監視系 API は **ブラウザ内部で効率よく判定** し、変化があった時だけ JS にコールバックを返します。**スクロールがスムーズになる** のが最大の利点です。
+
+### Intersection Observer
+
+「ある要素が **ビューポート（または親要素）に入ったか** を検知する」API です。
+
+#### 基本形
+
+```js
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      console.log("画面に入った", entry.target);
+    } else {
+      console.log("画面から出た", entry.target);
+    }
+  });
+});
+
+const target = document.querySelector(".target");
+observer.observe(target);
+```
+
+`IntersectionObserver` のコンストラクタにコールバックを渡し、`observe(element)` で監視対象を登録します。**何も起きないとコールバックは呼ばれない**（CPU 消費がない）のがポイント。
+
+#### オプション
+
+```js
+const observer = new IntersectionObserver(callback, {
+  root: null,           // 監視の基準。null = ビューポート
+  rootMargin: "100px",  // 基準の周囲の余白。"100px" なら 100px 早めに反応
+  threshold: 0.5,       // どれだけ重なったら発火するか。0〜1
+});
+```
+
+- `rootMargin: "100px"` は「**画面の 100px 手前** で先読みしたい」時に便利
+- `threshold: 0.5` は「**半分** 重なったら発火」
+- 配列で `[0, 0.25, 0.5, 0.75, 1]` を渡すと、25% 刻みで発火する
+
+#### 例 1: 画像の遅延読み込み（lazy loading）
+
+```html
+<img data-src="/images/heavy.jpg" alt="重い画像" />
+<img data-src="/images/heavy2.jpg" alt="重い画像 2" />
+```
+
+```js
+const lazyImages = document.querySelectorAll("img[data-src]");
+
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (!entry.isIntersecting) return;
+    const img = entry.target;
+    img.src = img.dataset.src;
+    img.removeAttribute("data-src");
+    observer.unobserve(img); // 一度読み込んだらもう監視しない
+  });
+}, { rootMargin: "200px" });
+
+lazyImages.forEach((img) => observer.observe(img));
+```
+
+ビューポートの 200px 手前で `src` をセットして読み込みを開始します。読み込み済みの要素は `unobserve` で監視解除すると効率的。
+
+::: tip ネイティブの loading="lazy" との関係
+画像 / iframe には `loading="lazy"` 属性が標準です。**画像なら属性で十分**。Intersection Observer を使うのは **任意の DOM 要素** や **「画面に入ったらアニメーション」** など、属性では届かない場面です。
+:::
+
+#### 例 2: 無限スクロール
+
+ページの最下部にセンチネル（番兵）要素を置き、それが画面に入ったら次のページを読み込みます。
+
+```html
+<ul id="list"></ul>
+<div id="sentinel"></div>
+```
+
+```js
+let page = 1;
+let loading = false;
+
+async function loadMore() {
+  if (loading) return;
+  loading = true;
+  const res = await fetch(`/api/posts?page=${page}`);
+  const items = await res.json();
+  const list = document.getElementById("list");
+  for (const item of items) {
+    const li = document.createElement("li");
+    li.textContent = item.title;
+    list.appendChild(li);
+  }
+  page++;
+  loading = false;
+}
+
+const sentinel = document.getElementById("sentinel");
+const observer = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) {
+    loadMore();
+  }
+});
+observer.observe(sentinel);
+```
+
+スクロールイベントで `scrollTop` を毎回計算するより、**圧倒的に軽く正確** です。
+
+#### 例 3: 「画面に入ったらフェードイン」
+
+```css
+.fade-in { opacity: 0; transform: translateY(20px); transition: 0.6s; }
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+```
+
+```js
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add("visible");
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.2 });
+
+document.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
+```
+
+スクロールアニメーションの定番パターン。
+
+### ResizeObserver
+
+「要素 **自身のサイズ変化** を検知する」API です。
+
+メディアクエリは画面全体しか見ません。`@container`（lesson16）は CSS だけで分岐できますが、**JS 側で処理を変えたい** 場合は ResizeObserver の出番です。
+
+```js
+const observer = new ResizeObserver((entries) => {
+  entries.forEach((entry) => {
+    const { width, height } = entry.contentRect;
+    console.log(`サイズ: ${width} x ${height}`);
+  });
+});
+
+const box = document.querySelector(".box");
+observer.observe(box);
+```
+
+#### 用途の例
+
+- canvas をリサイズに合わせて再描画
+- 折りたたみ可能な textarea の高さを内容に合わせる
+- 要素サイズに応じて class を切り替える（コンテナクエリの JS 版）
+- chart ライブラリのリサイズ対応
+
+```js
+const card = document.querySelector(".card");
+const observer = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const w = entry.contentRect.width;
+    entry.target.classList.toggle("wide", w > 600);
+  }
+});
+observer.observe(card);
+```
+
+::: warning 注意
+ResizeObserver のコールバック内で **同じ要素のサイズを変える** と、無限ループに陥ります（次フレームでまたコールバックが呼ばれる）。`requestAnimationFrame` などで切る、または「変化量が一定以上の時だけ反応」とガードを入れます。
+:::
+
+### MutationObserver
+
+「DOM の **構造変化** を検知する」API です。
+
+- 子要素の追加 / 削除
+- 属性の変化
+- テキスト内容の変化
+
+```js
+const target = document.getElementById("target");
+const observer = new MutationObserver((mutations) => {
+  mutations.forEach((m) => {
+    console.log(m.type, m.target);
+  });
+});
+
+observer.observe(target, {
+  childList: true,    // 子要素の追加削除
+  attributes: true,   // 属性の変化
+  characterData: true,// テキストの変化
+  subtree: true,      // 子孫まで監視
+});
+```
+
+#### 使い所
+
+- 自前で書いていないライブラリの DOM を監視したい
+- ブラウザ拡張で外部サイトの DOM を監視
+- 古い jQuery ベースの管理画面に「新規行が追加されたら自動整形」を後付けする
+
+普通のアプリ開発では出番が少ないですが、**「他人が触る DOM」** を相手にする時に重宝します。
+
+### スクロールイベントを使うアンチパターン
+
+昔よく書かれたコード:
+
+```js
+window.addEventListener("scroll", () => {
+  const rect = element.getBoundingClientRect();
+  if (rect.top < window.innerHeight) {
+    // 画面に入った時の処理
+  }
+});
+```
+
+このコードの問題:
+
+1. **毎フレーム発火** する。スクロール中に何百回もコールバックが走る
+2. `getBoundingClientRect()` は **レイアウト再計算** を強制する重い処理
+3. `throttle` / `debounce` で対処できるが、**反応が遅れる**
+4. メモリリークの温床（`removeEventListener` 忘れ）
+
+Intersection Observer は **必要な時だけ** コールバックを呼ぶので、すべて解決します。**現代のコードでは Observer を選ぶ** が定石。
+
+### React で使う
+
+カスタムフックにすると再利用しやすいです。
 
 ```tsx
-// app/[locale]/page.tsx
-import { useTranslations, useFormatter } from "next-intl";
+import { useEffect, useRef, useState } from "react";
 
-export default function Page() {
-  const t = useTranslations();
-  const format = useFormatter();
+export function useIntersection(options?: IntersectionObserverInit) {
+  const ref = useRef<HTMLElement | null>(null);
+  const [isIntersecting, setIsIntersecting] = useState(false);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const observer = new IntersectionObserver(([entry]) => {
+      setIsIntersecting(entry.isIntersecting);
+    }, options);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [options]);
+
+  return { ref, isIntersecting };
+}
+```
+
+使う側:
+
+```tsx
+function FadeInSection({ children }: { children: React.ReactNode }) {
+  const { ref, isIntersecting } = useIntersection({ threshold: 0.2 });
   return (
-    <div>
-      <h1>{t("title")}</h1>
-      <p>{format.dateTime(new Date(), { dateStyle: "long" })}</p>
-      <p>{format.number(1234.5, { style: "currency", currency: "JPY" })}</p>
-    </div>
+    <section
+      ref={ref as React.RefObject<HTMLElement>}
+      className={isIntersecting ? "visible" : ""}
+    >
+      {children}
+    </section>
   );
 }
 ```
 
-内部で `Intl.DateTimeFormat` / `Intl.NumberFormat` が動いているだけです。
+> **`options` を毎レンダリング新しく作らない**: 上のフックの `useEffect` の依存配列に `options` を入れているため、**呼び出し側が `useIntersection({ threshold: 0.2 })` のようにオブジェクトリテラルを直書きすると、毎レンダリングで新参照になり Observer が再生成される無限ループ気味の挙動** に陥ります。実用するときは、呼び出し側で `useMemo(() => ({ threshold: 0.2 }), [])` で安定化するか、`threshold` などのプリミティブ値を引数として受け取って `useIntersection(0.2)` のようなシグネチャにする方が安全です。
+
+`useEffect` のクリーンアップで `disconnect` するのを忘れないようにします（メモリリーク防止）。
 
 ## 演習
 
 ### ゴール
 
-- Intl API を使って「投稿の日時」「価格」「経過時間」を表示する小さなページを作る
+- Intersection Observer で「画面に入ったらフェードイン」を作る
+- 無限スクロールの最小実装を体験する
+- ResizeObserver でサイズ表示器を作る
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 新規プロジェクト（StackBlitz の Vanilla テンプレート）
 
-```bash
-npm create vite@latest intl-sample -- --template vanilla-ts
-cd intl-sample
-npm install
-```
+これまでの 2 章 と同じく **StackBlitz の Vanilla（HTML + CSS + JS）テンプレート** で進めます。<https://stackblitz.com/fork/js> から新しいプロジェクトを開きます。
 
 ### 手順 2: index.html
 
@@ -291,146 +313,158 @@ npm install
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>Intl Demo</title>
-    <link rel="stylesheet" href="/src/style.css" />
+    <title>Observer Demo</title>
+    <link rel="stylesheet" href="style.css" />
   </head>
   <body>
     <main>
-      <h1>Intl API ショーケース</h1>
-
-      <label>
-        言語:
-        <select id="locale">
-          <option value="ja-JP">日本語</option>
-          <option value="en-US">English (US)</option>
-          <option value="de-DE">Deutsch</option>
-        </select>
-      </label>
+      <h1>Observer Demo</h1>
 
       <section>
-        <h2>日付</h2>
-        <p id="date"></p>
+        <h2>1. フェードイン</h2>
+        <div class="fade-in">セクション 1</div>
+        <div class="fade-in">セクション 2</div>
+        <div class="fade-in">セクション 3</div>
+        <div class="fade-in">セクション 4</div>
       </section>
 
       <section>
-        <h2>通貨</h2>
-        <p id="currency"></p>
+        <h2>2. 無限スクロール</h2>
+        <ul id="list"></ul>
+        <div id="sentinel">読み込み中...</div>
       </section>
 
       <section>
-        <h2>経過時間</h2>
-        <p id="relative"></p>
-      </section>
-
-      <section>
-        <h2>リスト</h2>
-        <p id="list"></p>
-      </section>
-
-      <section>
-        <h2>ソート</h2>
-        <ul id="sort"></ul>
+        <h2>3. ResizeObserver</h2>
+        <div id="resizable" contenteditable="true">
+          ここに文字を入れて高さを変えてみる
+        </div>
+        <p id="size-info">サイズ: -</p>
       </section>
     </main>
-    <script type="module" src="/src/main.ts"></script>
+    <script src="script.js"></script>
   </body>
 </html>
 ```
 
-### 手順 3: src/style.css
+### 手順 3: style.css
 
 ```css
-body { font-family: sans-serif; padding: 24px; line-height: 1.6; }
+body { font-family: sans-serif; padding: 24px; line-height: 1.6; color: #1a1a1a; background: #fafafa; }
 main { max-width: 700px; margin: 0 auto; }
-section { margin-block: 16px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-label { display: block; margin-bottom: 16px; }
-select { padding: 4px 8px; }
-ul { margin: 0; padding-left: 20px; }
+section { margin-block: 80px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+
+.fade-in {
+  opacity: 0;
+  transform: translateY(40px);
+  transition: opacity 0.6s, transform 0.6s;
+  padding: 80px;
+  background: #f3f4f6;
+  margin-bottom: 24px;
+  border-radius: 8px;
+}
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+
+#list { list-style: none; padding: 0; }
+#list li { padding: 12px; border-bottom: 1px solid #eee; }
+#sentinel { padding: 16px; text-align: center; color: #999; }
+
+#resizable {
+  min-height: 80px;
+  padding: 12px;
+  background: #fef3c7;
+  border-radius: 8px;
+  outline: none;
+}
 ```
 
-### 手順 4: src/main.ts
+### 手順 4: script.js
 
-```ts
-const localeSelect = document.getElementById("locale") as HTMLSelectElement;
-const dateEl = document.getElementById("date")!;
-const currencyEl = document.getElementById("currency")!;
-const relativeEl = document.getElementById("relative")!;
-const listEl = document.getElementById("list")!;
-const sortEl = document.getElementById("sort")!;
+```js
+// 1. フェードイン
+const fadeObserver = new IntersectionObserver(
+  (entries) => {
+    entries.forEach((entry) => {
+      if (entry.isIntersecting) {
+        entry.target.classList.add("visible");
+        fadeObserver.unobserve(entry.target);
+      }
+    });
+  },
+  { threshold: 0.2 }
+);
+document.querySelectorAll(".fade-in").forEach((el) => fadeObserver.observe(el));
 
-const items = ["りんご", "Apple", "Äpfel", "banana", "みかん"];
+// 2. 無限スクロール（ダミーデータ）
+const list = document.getElementById("list");
+const sentinel = document.getElementById("sentinel");
+let page = 1;
 
-function render(locale: string) {
-  const now = new Date();
-
-  dateEl.textContent = new Intl.DateTimeFormat(locale, {
-    dateStyle: "full",
-    timeStyle: "short",
-  }).format(now);
-
-  const currency =
-    locale === "ja-JP" ? "JPY" : locale === "de-DE" ? "EUR" : "USD";
-  currencyEl.textContent = new Intl.NumberFormat(locale, {
-    style: "currency",
-    currency,
-  }).format(1234567.89);
-
-  const rtf = new Intl.RelativeTimeFormat(locale, { numeric: "auto" });
-  relativeEl.textContent = [
-    rtf.format(-3, "day"),
-    rtf.format(5, "minute"),
-    rtf.format(-1, "year"),
-  ].join(" / ");
-
-  const lf = new Intl.ListFormat(locale, { type: "conjunction" });
-  listEl.textContent = lf.format(["りんご", "バナナ", "みかん"]);
-
-  const collator = new Intl.Collator(locale);
-  const sorted = [...items].sort(collator.compare);
-  sortEl.innerHTML = sorted.map((x) => `<li>${x}</li>`).join("");
+function loadMore() {
+  for (let i = 0; i < 10; i++) {
+    const li = document.createElement("li");
+    li.textContent = `アイテム ${(page - 1) * 10 + i + 1}`;
+    list.appendChild(li);
+  }
+  page++;
+  if (page > 5) {
+    sentinel.textContent = "終わり";
+    scrollObserver.disconnect();
+  }
 }
 
-localeSelect.addEventListener("change", () => render(localeSelect.value));
-render("ja-JP");
+const scrollObserver = new IntersectionObserver((entries) => {
+  if (entries[0].isIntersecting) {
+    loadMore();
+  }
+});
+scrollObserver.observe(sentinel);
+
+// 3. ResizeObserver
+const resizable = document.getElementById("resizable");
+const sizeInfo = document.getElementById("size-info");
+const resizeObserver = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const { width, height } = entry.contentRect;
+    sizeInfo.textContent = `サイズ: ${Math.round(width)} x ${Math.round(height)}`;
+  }
+});
+resizeObserver.observe(resizable);
 ```
 
-### 手順 5: 起動して確認
+### 手順 5: ブラウザで確認
 
-```bash
-npm run dev
-```
+StackBlitz は保存と同時にプレビューが更新されます。以下を確認します。
 
-ブラウザで言語を切り替えて観察します。
+1. ページを下にスクロールすると `.fade-in` セクションが **入ってきた瞬間にふわっと** 表示される
+2. もっと下にスクロールするとアイテムが **自動で追加** される（5 ページまで）
+3. 「ResizeObserver」セクションの黄色いボックスをクリックして文字を打ち込むと、**サイズ表示が即座に更新** される
 
 ### 期待出力
 
-| ロケール | 日付例 | 通貨例 | 経過時間 |
-|---|---|---|---|
-| `ja-JP` | 2026年4月25日土曜日 10:30 | ￥1,234,568 | 3 日前 / 5 分後 / 昨年 |
-| `en-US` | Saturday, April 25, 2026 at 10:30 AM | $1,234,567.89 | 3 days ago / in 5 minutes / last year |
-| `de-DE` | Samstag, 25. April 2026 um 10:30 | 1.234.567,89 € | vor 3 Tagen / in 5 Minuten / letztes Jahr |
-
-> 上の出力は **ICU / CLDR バージョン** によって細部が変わります。例えば `en-US` の AM/PM 直前のスペースは新しい ICU では **NNBSP**（U+202F、見た目は半角スペース）に置き換わっており、`ja-JP` の通貨記号も実装によって `¥`（U+00A5）と `￥`（U+FFE5）が入れ替わります。スペースや記号の違いで `===` の文字列比較に失敗することがあるので、出力をそのまま比較する処理を書かないようにします。
-
-リストとソート順もロケールに追従します。
+- スクロール時に各セクションがフェードイン
+- 無限スクロールで合計 50 アイテムまで追加され、「終わり」と表示される
+- contenteditable に文字を入れて改行するとサイズ表示の `height` が増える
 
 ### 変える
 
-- `Intl.DateTimeFormat` の `dateStyle` を `"long"` / `"medium"` / `"short"` に切り替えて差を見る
-- `Intl.NumberFormat` の `notation: "compact"` を追加して `1,500,000 → 1.5M` の挙動を確認
-- `Intl.Collator` の `sensitivity: "base"` を付けて `apple` と `Äpfel` が等価になるか見る
-- `hour12: true` / `false` で時刻表記が切り替わる
+- `threshold: 0.2` を `1.0` にすると **完全に画面に収まらないと** 発火しなくなる
+- `rootMargin: "200px"` を加えると **早めに** 発火する（先読み）
+- `unobserve` を消すと、画面外に出てまた入った時にもう一度発火するようになる
+- `loadMore` の中の `setTimeout` で遅延を入れて、ローディング状態を確認
 
 ### 自分で書く（任意）
 
-- 投稿一覧ページに **「3 時間前」「2 日前」** を表示する関数を `Intl.RelativeTimeFormat` で書く
-- 商品価格のリストを、ユーザーの `navigator.language` に従ったロケールで表示する
-- `Intl.DisplayNames` で国名 / 言語名をロケール別に表示する（例: `ja` で `"日本"`、`en` で `"Japan"`）
+- 「画面の上端に貼り付いたら header の影を濃くする」を Intersection Observer で実装（センチネルを header の上に置く）
+- ResizeObserver で「カードの幅が 400px 未満なら縦並び、それ以上なら横並び」のクラス切り替えを書く
+- React のカスタムフック `useResize` を作って、ボックスの幅をリアルタイム表示する
 
 ## まとめ
 
-- **Intl API** は日付 / 数値 / 相対時間 / ソート / リスト整形を **ロケール別** に行う組み込み API
-- `Intl.DateTimeFormat` / `Intl.NumberFormat` / `Intl.RelativeTimeFormat` / `Intl.Collator` / `Intl.ListFormat` / `Intl.PluralRules` が主な構成要素
-- 何度も使う整形は **インスタンスを使い回す** ほうが速い
-- 多言語化ライブラリ（next-intl / react-i18next）は **Intl API の上に辞書管理** を載せたもの
-- 小規模な表示整形なら Intl だけで十分。本格的な翻訳管理があるなら next-intl など
+- **Intersection Observer** は要素の交差を **必要な時だけ** 通知する。スクロールがスムーズに保てる
+- 遅延読み込み / 無限スクロール / 「画面に入ったらアニメ」が定番ユースケース
+- 画像の遅延読み込みは `loading="lazy"` 属性で十分なことも多い
+- **ResizeObserver** は要素自身のサイズ変化を検知。canvas / chart のリサイズや「コンテナクエリの JS 版」に
+- **MutationObserver** は DOM の構造変化を検知。普通のアプリでは出番が少ないが「他人が触る DOM」相手で活躍
+- スクロールイベントで `getBoundingClientRect()` を呼ぶ古いパターンは **Observer に置き換える**
+- React では `useEffect` のクリーンアップで `disconnect` を忘れない

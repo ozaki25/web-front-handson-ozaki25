@@ -1,354 +1,325 @@
-# lesson61: Context API で多層バケツリレー回避
+# lesson61: 親子コンポーネントの連携
 
 ## ゴール
 
-- 多段階の props リレー（prop drilling）を Context で置き換えられる
-- `createContext` / `Provider` / `useContext` の 3 点セットの形を覚える
-- Context の型を付けられる
-- Context を使うべきでない場面を理解する
+- 親から子へ、子から親へ値を受け渡す関係を整理できる
+- コールバック props を使って、子で起きたイベントを親の state に反映できる
+- 「state を親に持たせる（state lifting）」という考え方を説明できる
 
 ## 解説
 
-### バケツリレー問題
+### props は「親 → 子」の一方通行
 
-「親子コンポーネントの連携」で学んだように、props は「親 → 子」の一方通行でした。これが深い階層になると、**途中のコンポーネントが使わない値を、ただ下に渡すためだけに受け取る** 状況が生まれます。
-
-```
-App (theme を持つ)
- └─ Layout (theme を受け取って Header に渡すだけ)
-     └─ Header (theme を受け取って Nav に渡すだけ)
-         └─ Nav (theme を受け取って ThemeToggle に渡すだけ)
-             └─ ThemeToggle (ここで初めて theme を使う)
-```
-
-`Layout` / `Header` / `Nav` は `theme` を **自分では使わない** のに、props として受け取って子に渡しています。バケツをリレーするように値を運ぶだけの中間層が増え、型定義も面倒になります。これを **prop drilling**（バケツリレー問題）と呼びます。
-
-### Context の考え方
-
-Context は、「ある範囲のコンポーネントツリー全体から参照できる共有値」を作る仕組みです。途中のコンポーネントは関与せず、値を使いたいコンポーネントが **直接** Context から取り出せます。
+props はコンポーネント間で値を渡す仕組みですが、**基本は上から下**に流れます。
 
 ```
-App
- └─ ThemeProvider (value={theme})   ← ここに値を提供
-     └─ Layout
-         └─ Header
-             └─ Nav
-                 └─ ThemeToggle ← useContext(ThemeContext) で直接読む
+親 (App)  --- todos ---> 子 (TodoList)
 ```
 
-中間層はノータッチで、`ThemeToggle` だけが Context を読みます。
+では、子から親に何かを伝えたいときはどうするか。例えば「子のフォームに文字を入力して追加ボタンを押したら、親が持っている配列に追加したい」場合です。
 
-### 3 点セット
+### コールバック props
 
-Context は次の 3 つをセットで使います。
+答えは「親から子に **関数を渡し**、子はその関数を呼ぶ」です。親が渡した関数を子がコールバックする、という形で、**関数が値として props を流れる**点がポイントです。
 
-1. `createContext<型>(初期値)` で Context を作る
-2. `<Context.Provider value={値}>` で配下に値を提供する
-3. 使いたい側で `useContext(Context)` で値を取り出す
+```
+親 (App)  --- onAdd (関数) ---> 子 (TodoInput)
+            <-- 関数呼び出し ---
+```
+
+親側:
 
 ```tsx
-import { createContext, useContext, useState } from "react";
-
-// (1) 作る
-type Theme = "light" | "dark";
-const ThemeContext = createContext<Theme>("light");
-
-// (2) 提供する
 function App() {
-  const [theme, setTheme] = useState<Theme>("light");
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
   return (
-    <ThemeContext value={theme}>
-      <Child />
-    </ThemeContext>
+    <>
+      <TodoInput onAdd={handleAdd} />
+      <ul>{/* ... */}</ul>
+    </>
   );
 }
+```
 
-// (3) 読む
-function Child() {
-  const theme = useContext(ThemeContext);
-  return <p>現在のテーマ: {theme}</p>;
+子側:
+
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+
+type TodoInputProps = {
+  onAdd: (text: string) => void;
+};
+
+function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed); // 親の関数を呼ぶ
+    setText(""); // 入力欄をクリア
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input value={text} onChange={(e) => setText(e.target.value)} />
+      <button type="submit">追加</button>
+    </form>
+  );
 }
 ```
 
-### Context の型と初期値
+- 親は `onAdd` という関数を子に渡す
+- 子は入力欄の state（`text`）を自分で持つ
+- 送信時に `onAdd(text)` を呼ぶ → 親が state を更新 → 画面再レンダリング
 
-`createContext<型>(初期値)` の初期値は、**Provider で包まれていないときに使われる値** です。「包み忘れたらこれを使う」という保険です。
+「関数を props として渡す」という発想に慣れるのがこのレッスンのコアです。
 
-今回のテーマ切替では、値だけでなく「切り替える関数」も一緒に配りたいので、オブジェクトで型を作ります。
+### state lifting（状態の持ち上げ）
 
-```ts
-type Theme = "light" | "dark";
+上の例で、なぜ `todos`（一覧）の state を **親**（App） に置いたのでしょうか。一覧を描画するのは `TodoList` コンポーネントです。一見 `TodoList` に state を置いてもよさそうです。
 
-type ThemeContextValue = {
-  theme: Theme;
-  toggleTheme: () => void;
-};
+理由: **`todos` は「子の TodoInput」と「子の TodoList」の両方が関わる** からです。TodoInput は追加する側、TodoList は表示する側。2 つが同じ state を共有する必要があります。
+
+兄弟どうしの子コンポーネントは、直接 props で値を送れません。`App → TodoInput → App → TodoList` のように、**共通の親** を経由する必要があります。そのため、共通の親（App）に state を持たせます。
+
+これが「state lifting（共通の親に state を持ち上げる）」です。
+
+```
+        App (todos を持つ)
+       /              \
+  TodoInput        TodoList
+  (追加用)        (表示用)
 ```
 
-### Context を使うべきでないケース
+### props のおさらい
 
-Context は便利ですが、何でも入れていい仕組みではありません。
+props を関数にすると、慣習的に名前は `onXxx` の形にします（HTML のイベントと同じ感覚）。
 
-| 場面 | 向く / 向かない |
+| 親が子に渡すもの | 命名例 |
 | --- | --- |
-| テーマ、ログインユーザー情報、言語設定 | 向く（変化が少なく、広く参照される） |
-| フォーム入力のリアルタイム値 | 向かない（頻繁に変わる） |
-| 大規模な state 全体 | 向かない（外部ストア管理の領域） |
+| 値（state） | `todos`、`user`、`count` |
+| 状態変更を依頼する関数 | `onAdd`、`onDelete`、`onToggle` |
 
-**頻繁に変わる値** を Context に入れると、Provider 配下のすべての `useContext` 利用コンポーネントが再レンダリングされます。小さなアプリなら気になりませんが、大きくなると性能上の負荷になります。
-
-そうした用途（TODO アプリ全体の状態管理など）では Zustand / Redux など専用のライブラリが使われますが、**本コースでは扱いません**。今回は「テーマ切替」という変化の少ない題材に絞ります。
-
-### TODO の Context 化は扱わない
-
-「カスタムフック」で `useTodos` カスタムフックを作り、「TODO アプリを React で作る」の発展枠で「`useTodos` を Context でアプリ全体に提供する」パターンに触れます。本レッスンでは **テーマ切替のみ** を扱い、TODO の Context 化には踏み込みません。
+この命名で統一すると、「この props は関数か値か」が読み解きやすくなります。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+このレッスンは独立した TODO 例として完結しています。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。過去のレッスンのファイルは不要で、下の手順に従って `src/types.ts` / `src/TodoInput.tsx` / `src/TodoList.tsx` / `src/App.tsx` を新しく作成していきます。
 
 ### ゴール
 
-- アプリ全体でテーマ（`"light" | "dark"`）を Context で共有する
-- 深い階層の `ThemeToggle` から、props を経由せずにテーマを切り替える
-- 中間層のコンポーネント（`Layout` / `Header` / `Nav`）が props を受け取らないことを確認する
+- `TodoInput`（子）と `TodoList`（子）を、`App`（親）が `todos` state を持って束ねる
+- 入力 → 追加ボタンで一覧末尾に追加
+- 各項目の削除ボタンで 1 件削除
 
 ### 手順
 
 1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/ThemeContext.tsx` を作成
-3. `src/Layout.tsx` / `src/Header.tsx` / `src/Nav.tsx` / `src/ThemeToggle.tsx` を作成
-4. `src/App.tsx` を書き換える
-5. `src/App.css` を書き換える
+2. `src/types.ts` を作成
+3. `src/TodoInput.tsx` を作成
+4. `src/TodoList.tsx` を作成
+5. `src/App.tsx` を書き換える
 
-### `src/ThemeContext.tsx`
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+### `src/TodoInput.tsx`
 
 ```tsx
-import { createContext, useContext, useMemo, useState } from "react";
-import type { ReactNode } from "react";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-export type Theme = "light" | "dark";
-
-type ThemeContextValue = {
-  theme: Theme;
-  toggleTheme: () => void;
+type TodoInputProps = {
+  onAdd: (text: string) => void;
 };
 
-const ThemeContext = createContext<ThemeContextValue | null>(null);
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
 
-type ThemeProviderProps = {
-  children: ReactNode;
-};
-
-export function ThemeProvider({ children }: ThemeProviderProps) {
-  const [theme, setTheme] = useState<Theme>("light");
-
-  // value はオブジェクトリテラルなので毎レンダリングで新参照になる。
-  // useMemo で参照を安定化し、配下の useTheme 利用コンポーネントの
-  // 不要な再レンダリングを防ぐ。
-  const value = useMemo<ThemeContextValue>(
-    () => ({
-      theme,
-      toggleTheme: () =>
-        setTheme((prev) => (prev === "light" ? "dark" : "light")),
-    }),
-    [theme],
-  );
-
-  return <ThemeContext value={value}>{children}</ThemeContext>;
-}
-
-export function useTheme() {
-  const ctx = useContext(ThemeContext);
-  if (ctx === null) {
-    throw new Error("useTheme は ThemeProvider の中で使ってください");
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed);
+    setText("");
   }
-  return ctx;
-}
-```
-
-- Context の初期値を `null` にしておき、`useTheme` で「`null` ならエラー」をチェックしています。これで「Provider で包み忘れた」ときに、はっきりエラーメッセージが出ます
-- Provider はよく使う形なので、`ThemeProvider` という関数コンポーネントとしてラップしています
-- `useTheme` という **カスタムフック** にしておくと、使う側が `useContext(ThemeContext)` と書かずに済みます（カスタムフックは「カスタムフック」で深掘りします）
-- React 19 から **`<ThemeContext value={...}>`** と直書きできるようになりました（`<ThemeContext.Provider>` も従来どおり動きますが、本コースでは新形式に統一します）
-- **`value` は `useMemo` で安定化** しています。`value={{ theme, toggleTheme }}` のように直書きすると `ThemeProvider` の再レンダリングごとに新しいオブジェクト参照ができ、配下の `useTheme()` 利用者が **値が変わっていないのに** 全員再レンダリングされてしまうため
-
-### `src/ThemeToggle.tsx`
-
-```tsx
-import { useTheme } from "./ThemeContext";
-
-export function ThemeToggle() {
-  const { theme, toggleTheme } = useTheme();
 
   return (
-    <button type="button" onClick={toggleTheme} className="theme-toggle">
-      現在: {theme} (クリックで切替)
-    </button>
+    <form onSubmit={handleSubmit} className="todo-input">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
   );
 }
 ```
 
-深い階層のコンポーネントが、props を **一切受け取らず** に Context からテーマを読み出して切り替えています。
-
-### `src/Nav.tsx`
+### `src/TodoList.tsx`
 
 ```tsx
-import { ThemeToggle } from "./ThemeToggle";
+import type { Todo } from "./types";
 
-export function Nav() {
-  return (
-    <nav className="nav">
-      <span>メニュー</span>
-      <ThemeToggle />
-    </nav>
-  );
-}
-```
-
-`Nav` はテーマのことを知りません。`ThemeToggle` を置くだけです。
-
-### `src/Header.tsx`
-
-```tsx
-import { Nav } from "./Nav";
-
-export function Header() {
-  return (
-    <header className="header">
-      <h1>Context API のデモ</h1>
-      <Nav />
-    </header>
-  );
-}
-```
-
-### `src/Layout.tsx`
-
-```tsx
-import type { ReactNode } from "react";
-import { Header } from "./Header";
-import { useTheme } from "./ThemeContext";
-
-type LayoutProps = {
-  children: ReactNode;
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
 };
 
-export function Layout({ children }: LayoutProps) {
-  const { theme } = useTheme();
+export function TodoList({ todos, onDelete }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p className="empty">まだタスクがありません</p>;
+  }
 
   return (
-    <div className={`layout ${theme}`}>
-      <Header />
-      <main className="main">{children}</main>
-    </div>
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          {todo.text}
+          <button
+            type="button"
+            aria-label={`${todo.text} を削除`}
+            onClick={() => onDelete(todo.id)}
+          >
+            削除
+          </button>
+        </li>
+      ))}
+    </ul>
   );
 }
 ```
 
-`Layout` は `theme` の値を **見た目を変えるために** 読みますが、props としては受け取っていません。Context から直接取り出しています。
+`aria-label={`${todo.text} を削除`}` を付けるのは、スクリーンリーダーで「削除ボタン」が連続して読み上げられたときに **どの TODO の削除か区別できる** ようにするためです。視覚的には「削除」のままで、読み上げ時だけ別の文字列が使われます。
 
 ### `src/App.tsx`
 
 ```tsx
-import { ThemeProvider } from "./ThemeContext";
-import { Layout } from "./Layout";
+import { useState } from "react";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
 import "./App.css";
 
 function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function handleDelete(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
+
   return (
-    <ThemeProvider>
-      <Layout>
-        <p>このページは Context からテーマを受け取って見た目を変えます。</p>
-        <p>右上のボタンで light / dark を切り替えてみてください。</p>
-      </Layout>
-    </ThemeProvider>
+    <>
+      <h1>TODO（親子連携版）</h1>
+      <TodoInput onAdd={handleAdd} />
+      <TodoList todos={todos} onDelete={handleDelete} />
+    </>
   );
 }
 
 export default App;
 ```
 
-`App` は `<ThemeProvider>` で全体を包むだけです。`theme` を各コンポーネントに props として渡していません。
-
 ### `src/App.css`
 
 ```css
-.layout {
-  min-height: 100vh;
-  transition: background-color 200ms, color 200ms;
+.todo-input {
+  margin: 12px 0;
 }
 
-.layout.light {
-  background-color: #fff;
+.todo-input input {
+  padding: 6px;
+  margin-right: 8px;
+}
+
+.todo-input button,
+.todo-list button {
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.todo-list {
+  list-style: disc;
+  padding-left: 20px;
   color: #222;
 }
 
-.layout.dark {
-  background-color: #202020;
-  color: #eee;
+.todo-list li {
+  padding: 4px 0;
 }
 
-.header {
-  padding: 12px 16px;
-  border-bottom: 1px solid currentColor;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
+.todo-list li button {
+  margin-left: 8px;
 }
 
-.header h1 {
-  font-size: 1.2rem;
-  margin: 0;
+.empty {
+  color: #666;
 }
 
-.nav {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.main {
-  padding: 16px;
-}
-
-.theme-toggle {
-  padding: 6px 12px;
-  cursor: pointer;
-  border-radius: 4px;
-  border: 1px solid currentColor;
-  background-color: transparent;
-  color: inherit;
+@media (prefers-color-scheme: dark) {
+  .todo-list {
+    color: #eee;
+  }
+  .empty {
+    color: #aaa;
+  }
 }
 ```
 
-背景色と文字色を `.light` / `.dark` クラスで切り替えています。クラス名は `Layout` が `theme` を見て付けています。
-
 ### 期待出力
 
-- 画面右上に「現在: light (クリックで切替)」ボタンが表示される
-- 画面全体が白背景・黒文字（light テーマ）で表示される
-- ボタンを押すと「現在: dark (クリックで切替)」に変わり、画面全体が黒背景・白文字に切り替わる
-- もう一度押すと light に戻る
-- `Nav` / `Header` コンポーネントは props を 1 つも受け取っていないのにテーマ切替が動く
+- 画面上部に入力欄と「追加」ボタン
+- 最初は「まだタスクがありません」と薄い色で表示される
+- 入力して「追加」を押すと一覧に行が増え、各行に「削除」ボタンが付く
+- 「削除」ボタンを押すと、その行だけが消える
+- すべて消すと再び「まだタスクがありません」が現れる
+- 空欄のまま「追加」を押しても、一覧に何も増えない（`trim()` で空文字は弾いている）
 
 ### 変える
 
-- `App.tsx` で `<ThemeProvider>` の行を削除してみます。`useTheme` の中で `throw new Error(...)` が発動し、画面がエラー表示になります。「Provider を必ず外側に置く」必要性を体感する演習です。確認したら元に戻します。
-- `ThemeContext.tsx` の `createContext<ThemeContextValue | null>(null)` を `createContext<ThemeContextValue>({ theme: "light", toggleTheme: () => {} })` のように「ダミーのデフォルト値」に変えることもできます。こうすると Provider 無しでもエラーは出ませんが、「包み忘れ」に気づけなくなる欠点があります。本コースでは `null` + チェック方式を推奨します。
-- `ThemeToggle` を `Header` の直下に移動しても、変わらず動くことを確認します。Context は **ツリーのどこに置いても** Provider の配下なら届きます。
+- `TodoList` の中で、一覧の上に「現在 N 件」という `<p>` を追加してみる（ヒント: `<p>現在 {todos.length} 件</p>`）
+- `handleAdd` を `setTodos((prev) => [newTodo, ...prev])` に変えると、新規が **先頭** に入るようになる
+- `TodoInput` 内の `if (trimmed.length === 0) return;` を消すと、空文字で追加されて一覧に空の行ができる。確認したら戻す
 
 ### 自分で書く
 
-- `useTheme` の戻り値に `isDark: boolean` を追加してみてください（`theme === "dark"` で計算する）。`ThemeToggle` の文言を `isDark ? "Dark" : "Light"` のように切り替えると、より実用的な見た目になります（本コース本体は絵文字なしで統一しています。お好みで差し替えてください）。
-- 別の Context として `LangContext`（`"ja" | "en"` を持つ）を追加し、`Header` の見出しを言語で切り替える演習もおすすめです。Context を **複数使う** 形に慣れます。
+- `TodoItem` コンポーネントを新たに作り、`<li>{text}<button>削除</button></li>` の部分を切り出す
+- `TodoList` は `TodoItem` を `map` で並べるだけにする
+- `TodoItem` が受け取る props の型:
+  ```ts
+  type TodoItemProps = {
+    todo: Todo;
+    onDelete: (id: string) => void;
+  };
+  ```
+- これは「TODO アプリを React で作る」でそのまま使う形です
 
 ## まとめ
 
-- Context は「ツリーの途中を通さずに値を共有する」仕組み
-- `createContext` / `<Provider value>` / `useContext` の 3 点セットで使う
-- 初期値を `null` にして、カスタムフックでチェックすると Provider 包み忘れに気づきやすい
-- テーマ、ログインユーザー、言語設定のように **変化が少なく広く参照される値** に向く
-- 頻繁に変わる値や大規模 state には不向き。外部ライブラリ（Zustand / Redux 等）の領域だが本コースでは扱わない
+- props は基本「親 → 子」の一方通行
+- 子から親に伝えたいときは、親が渡した **関数を子が呼ぶ**（コールバック props）
+- 複数の子が関わる state は、**共通の親** に持たせる（state lifting）
+- 関数の props は `onXxx` という命名にするのが慣習

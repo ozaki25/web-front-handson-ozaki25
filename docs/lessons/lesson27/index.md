@@ -1,195 +1,172 @@
-# lesson27: Web Storage で値をブラウザに保存する
+# lesson27: 配列の変換
 
 <script setup>
 const demoJs = `
-const input = document.querySelector('#note');
-const saveBtn = document.querySelector('#save');
-const loadBtn = document.querySelector('#load');
-const clearBtn = document.querySelector('#clear');
-const output = document.querySelector('#output');
+const users = [
+  { name: 'Alice', age: 20 },
+  { name: 'Bob',   age: 15 },
+  { name: 'Carol', age: 30 },
+];
 
-saveBtn.addEventListener('click', () => {
-  localStorage.setItem('demo-note', input.value);
-  output.textContent = 'localStorage に保存しました: ' + input.value;
-});
+const names  = users.map((u) => u.name);
+const adults = users.filter((u) => u.age >= 20);
+const first  = users.find((u) => u.age >= 20);
 
-loadBtn.addEventListener('click', () => {
-  const saved = localStorage.getItem('demo-note');
-  if (saved === null) {
-    output.textContent = '（まだ保存されていません）';
-  } else {
-    input.value = saved;
-    output.textContent = '読み込みました: ' + saved;
-  }
-});
-
-clearBtn.addEventListener('click', () => {
-  localStorage.removeItem('demo-note');
-  input.value = '';
-  output.textContent = '削除しました';
-});
+console.log('map   (名前だけ):', names);
+console.log('filter(成人だけ):', adults);
+console.log('find  (最初の成人):', first);
+console.log('元の配列は変わらない:', users);
 `
 </script>
 
 ## ゴール
 
-- `localStorage` と `sessionStorage` でブラウザに値を保存・読み出しできる
-- 文字列しか保存できないことを理解し、オブジェクトや配列は `JSON.stringify` / `JSON.parse` 経由で扱える
-- `localStorage` と `sessionStorage` と Cookie の違いを 1 行で説明できる
-- 保存上限と、保存できない場合に備えた `try` / `catch` を書ける
+- `map` で配列の各要素を変換した新しい配列を作れる
+- `filter` で条件に合う要素だけを残した新しい配列を作れる
+- いずれも元の配列を変えない（新しい配列を返す）ことを理解する
 
 ## 解説
 
-### 3 つの保存場所
+### 「全部変換する」`map`
 
-ブラウザにデータを保存する仕組みはいくつかあります。本レッスンでは最もよく使う **Web Storage** を中心に扱います。
-
-| 仕組み | 保持期間 | 容量の目安 | 送信 | 主な用途 |
-|---|---|---|---|---|
-| `localStorage` | タブを閉じても残る | 5〜10MB | しない | ユーザー設定、TODO、下書き |
-| `sessionStorage` | タブを閉じると消える | 5〜10MB | しない | 1 セッション限定のフォーム一時保存 |
-| Cookie | 有効期限次第 | 4KB 程度 | **毎リクエスト自動送信** | 認証、サーバー連携 |
-
-Cookie は **サーバーへ毎回自動で送られる** ため、セッション ID のようにサーバー側で読む必要がある値に使います。クライアント側だけで完結する保存は `localStorage` / `sessionStorage` が基本です。
-
-### `localStorage` の使い方
-
-API は 3 つ覚えれば十分です。
+`map` は配列の各要素に関数を適用して、結果を並べた **新しい配列** を返します。
 
 ```js
-// 保存
-localStorage.setItem("theme", "dark");
+const numbers = [1, 2, 3, 4];
+const doubled = numbers.map((n) => n * 2);
 
-// 読み出し
-const theme = localStorage.getItem("theme");
-console.log(theme); // "dark"
-
-// 削除
-localStorage.removeItem("theme");
-
-// 全部消す（同一オリジン内のすべての値）
-localStorage.clear();
+console.log(doubled); // [2, 4, 6, 8]
+console.log(numbers); // [1, 2, 3, 4] （元は変わらない）
 ```
 
-- キーも値も **文字列** です（後述）
-- 存在しないキーを `getItem` すると **`null`** が返ります
-- 同じキーで `setItem` すると上書きされます
+- `配列.map((要素) => 新しい値)`
+- 戻り値は **同じ長さの新しい配列**
+- 元の配列は変わらない
 
-### `sessionStorage` も API は同じ
-
-`localStorage` と全く同じ API を持ちますが、**タブを閉じると消える** 点だけが違います。
+オブジェクトの配列でもよく使います。
 
 ```js
-sessionStorage.setItem("step", "2");
-sessionStorage.getItem("step"); // "2"
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 25 },
+];
+
+const names = users.map((user) => user.name);
+console.log(names); // ["Alice", "Bob"]
 ```
 
-「タブを開いている間だけ保持したい」値（たとえば複数ページにまたがるウィザードの入力中データ）に向きます。ユーザー設定や TODO のように **次回訪問時も残したい** 値は `localStorage` を選びます。
+### 「条件で絞り込む」`filter`
 
-### 文字列しか保存できない
-
-Web Storage は **文字列だけ** を扱います。数値や真偽値を入れると、読み出したときには文字列に変わっています。
+`filter` は条件を満たす要素だけを残した **新しい配列** を返します。
 
 ```js
-localStorage.setItem("count", 5);
-localStorage.setItem("isOpen", true);
+const numbers = [1, 2, 3, 4, 5];
+const evens = numbers.filter((n) => n % 2 === 0);
 
-console.log(localStorage.getItem("count"));  // "5"  ← 文字列
-console.log(localStorage.getItem("isOpen")); // "true" ← 文字列
+console.log(evens);   // [2, 4]
+console.log(numbers); // [1, 2, 3, 4, 5]
 ```
 
-数値として使いたい場合は `Number(...)`、真偽値は `value === "true"` のように自分で変換します。
+- `配列.filter((要素) => 条件)`
+- 条件が `true` の要素だけが残る
+- 戻り値は **同じかそれより短い新しい配列**
+- 元の配列は変わらない
 
-### オブジェクトや配列は JSON でくるむ
+オブジェクトの配列で絞り込む例。
 
-配列やオブジェクトはそのまま入れても文字列化（`"[object Object]"` など）されてしまい、中身が失われます。**`JSON.stringify` / `JSON.parse` とセット** で使います。
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
+// [{ name: "Alice", age: 20 }, { name: "Carol", age: 30 }]
+```
+
+下のデモで、同じ配列に対して `map` / `filter` / `find` がそれぞれどんな結果を返すかを並べて比較できます。元の配列は変わらない点にも注目してください。
+
+<LiveDemo
+  height="260px"
+  :html="`<p>同じ配列に対する map / filter / find の結果:</p>`"
+  :css="``"
+  :js="demoJs"
+/>
+
+### `for...of` との違い
+
+「繰り返し処理」の `for...of` でも同じことは書けます。ただ、`map` / `filter` を使うと：
+
+- 「変換 / 絞り込み」という **意図が名前で伝わる**
+- 結果が新しい配列で返るので、元の配列を壊さない
+- 1 行で書けて短い
+
+特に「新しい配列を作って返す」点が重要です。後の章（React）で大量に使います。
+
+### 「1 件だけ取り出す」`find`
+
+`filter` と似ていますが、**条件を満たす最初の 1 件だけ** を返すのが `find` です。
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
+
+const found = users.find((user) => user.age >= 20);
+console.log(found); // { name: "Alice", age: 20 }
+
+const missing = users.find((user) => user.age >= 100);
+console.log(missing); // undefined
+```
+
+- `配列.find((要素) => 条件)`
+- 戻り値は **1 件の要素**（配列ではない）
+- 該当がなければ `undefined`
+- `filter` と違って、見つけた時点で走査を打ち切る
+
+ID で目的の 1 件を取り出すような場面でよく使います。
 
 ```js
 const todos = [
-  { id: 1, text: "牛乳を買う", done: false },
-  { id: 2, text: "本を返す", done: true },
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
 ];
 
-// 保存するときは文字列化
-localStorage.setItem("todos", JSON.stringify(todos));
-
-// 読み出すときは元の型に戻す
-const saved = localStorage.getItem("todos");
-const loaded = saved === null ? [] : JSON.parse(saved);
-
-console.log(loaded[0].text); // "牛乳を買う"
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target); // { id: "a2", text: "本を返す" }
 ```
 
-このパターンは TODO アプリや下書き保存などで頻繁に登場します。今は「**配列を保存するなら `JSON.stringify`、取り出すなら `JSON.parse`**」というパターンだけ覚えておけば本レッスンの演習はこなせます。
+5 章 の「動的ルート」で URL の `id` に合う記事を一覧から取り出すときに、この `find` をそのまま使います。
 
-### 失敗しうる場所
+### チェーン（つなげて書く）
 
-Web Storage は **必ず成功する API ではありません**。次のケースで例外が飛ぶことがあります。
-
-1. **容量オーバー**: 上限を超えた `setItem` は `QuotaExceededError` で失敗します
-2. **プライベートブラウジング**: ブラウザによっては Web Storage が実質無効化され、`setItem` が失敗します
-3. **壊れた JSON**: 保存時と読み出し時で形が違うと `JSON.parse` が例外を投げます
-
-安全に書くなら `try` / `catch` でくるみ、失敗時は既定値で乗り切ります。
+`map` も `filter` も戻り値が配列なので、続けてメソッドを呼べます。
 
 ```js
-function loadTodos() {
-  try {
-    const saved = localStorage.getItem("todos");
-    if (saved === null) return [];
-    return JSON.parse(saved);
-  } catch {
-    // 壊れていたら捨てて空で始める
-    return [];
-  }
-}
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+];
 
-function saveTodos(todos) {
-  try {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  } catch {
-    // 容量オーバー等。今回は何もしない
-  }
-}
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+
+console.log(adultNames); // ["Alice", "Carol"]
 ```
 
-### Cookie はクライアントから直接扱わないのが主流
-
-`document.cookie` という API で読み書きもできますが、**文字列連結と `;` 区切り** で扱う古い API で、実務では以下のいずれかで間接的に触ることが多いです。
-
-- ログイン認証などのセッション Cookie は、サーバーが `Set-Cookie` ヘッダで返すものを使う（クライアントでは触らない）
-- クライアントから操作する必要があれば、`js-cookie` のような小さなライブラリを使う
-
-本コースでは **クライアント側の保存は `localStorage` / `sessionStorage`** に統一します。Cookie は「サーバーとやり取りする値が自動で送られる仕組み」としてだけ覚えておけば十分です。
-
-### 小さなデモ
-
-下のデモは `localStorage` の超最小例です。何か書いて「保存」を押し、ブラウザのタブを閉じて開き直しても、「読み込み」で復元できます。
-
-<LiveDemo
-  height="220px"
-  :html="`
-<input id='note' type='text' placeholder='メモを入力' />
-<div>
-  <button id='save' type='button'>保存</button>
-  <button id='load' type='button'>読み込み</button>
-  <button id='clear' type='button'>削除</button>
-</div>
-<p id='output'></p>
-  `"
-  :css="`
-input { padding: 6px 10px; width: 240px; }
-button { margin-right: 6px; padding: 6px 12px; }
-#output { color: #1f4e79; }
-  `"
-  :js="demoJs"
-/>
+「成人だけ絞り込んでから、名前だけ取り出す」という流れが素直に書けます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -202,130 +179,151 @@ button { margin-right: 6px; padding: 6px 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson27</title>
-    <link rel="stylesheet" href="./style.css" />
+    <title>lesson26</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>下書きメモ</h1>
-    <textarea id="memo" rows="6" cols="40" placeholder="ここに入力"></textarea>
-    <div>
-      <button id="clear" type="button">削除</button>
-      <span id="status"></span>
-    </div>
+    <h1>lesson26: 分割代入とスプレッド</h1>
   </body>
 </html>
-```
-
-**`style.css`**
-
-```css
-body { font-family: sans-serif; padding: 16px; color: #222; background: #fff; }
-textarea { display: block; padding: 8px; font-family: inherit; }
-button { margin-top: 8px; padding: 6px 12px; }
-#status { margin-left: 12px; color: #1f4e79; }
-
-@media (prefers-color-scheme: dark) {
-  body { color: #eaeaea; background: #1a1a1a; }
-  textarea { color: #eaeaea; background: #2a2a2a; border: 1px solid #555; }
-  #status { color: #9ecbff; }
-}
 ```
 
 **`script.js`**
 
 ```js
-// 空のまま
+// 演習 A: 分割代入
+const user = { name: "Alice", age: 20, city: "Tokyo" };
+
+const { name, age } = user;
+console.log(name);
+console.log(age);
+
+const colors = ["red", "green", "blue"];
+const [first, second] = colors;
+console.log(first);
+console.log(second);
+
+// 演習 B: スプレッド
+const copy = { ...user };
+console.log(copy);
+
+const updated = { ...user, age: 21 };
+console.log(updated);
+console.log(user);
+
+const a = [1, 2];
+const b = [3, 4];
+const merged = [...a, ...b];
+console.log(merged);
+
+const todos = ["牛乳を買う", "本を読む"];
+const added = [...todos, "ジョギング"];
+console.log(added);
+console.log(todos);
 ```
 
 </details>
 
 ### ゴール
 
-- ページを開いたときに、前回の入力内容が復元される
-- 入力するたびに自動で `localStorage` に保存される
-- 「削除」ボタンで保存内容を消せる
+- ユーザー配列から「成人（20 歳以上）だけ」の配列を作る
+- ユーザー配列から「名前だけ」の配列を作る
+- 2 つを組み合わせて「成人の名前だけ」の配列を作る
+- ID で TODO の 1 件を取り出す（`find`）
 
 ### 手順
 
-1. `script.js` を以下の内容にします。
-2. プレビューでテキストエリアに何か書き、タブを閉じて開き直します。
-3. 書いた内容が復元されることを確認します。
+1. `index.html` のタイトルを `lesson27` に変える
+2. `script.js` を以下に書き換える
 
-### `script.js` の完成形
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson27</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson27: 配列の変換</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
-const STORAGE_KEY = "memo-draft";
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+  { name: "Dave", age: 17 },
+];
 
-const memo = document.querySelector("#memo");
-const clearBtn = document.querySelector("#clear");
-const status = document.querySelector("#status");
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
 
-function showStatus(text) {
-  status.textContent = text;
-  setTimeout(() => {
-    status.textContent = "";
-  }, 1500);
-}
+const names = users.map((user) => user.name);
+console.log(names);
 
-function loadMemo() {
-  try {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    if (saved !== null) {
-      memo.value = saved;
-    }
-  } catch {
-    // 読み込み不可 → 何もしない
-  }
-}
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+console.log(adultNames);
 
-function saveMemo() {
-  try {
-    localStorage.setItem(STORAGE_KEY, memo.value);
-    showStatus("保存しました");
-  } catch {
-    showStatus("保存に失敗しました");
-  }
-}
+const numbers = [1, 2, 3, 4, 5];
+const doubled = numbers.map((n) => n * 2);
+const evens = numbers.filter((n) => n % 2 === 0);
+console.log(doubled);
+console.log(evens);
+console.log(numbers);
 
-function clearMemo() {
-  try {
-    localStorage.removeItem(STORAGE_KEY);
-    memo.value = "";
-    showStatus("削除しました");
-  } catch {
-    showStatus("削除に失敗しました");
-  }
-}
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target);
 
-loadMemo();
-memo.addEventListener("input", saveMemo);
-clearBtn.addEventListener("click", clearMemo);
+const missing = todos.find((todo) => todo.id === "zzz");
+console.log(missing);
 ```
 
 ### 期待出力
 
-- 画面を開くと、前回入力した内容がテキストエリアに復元される
-- テキストエリアに入力するたびに「保存しました」が短く出る
-- 「削除」ボタンを押すと中身が空になり、「削除しました」が出る
-- タブを閉じて開き直しても、削除後は空のまま開く
-- DevTools の Application タブ → Local Storage で、`memo-draft` キーの値が変化する様子を確認できる
+```
+[{name: "Alice", age: 20}, {name: "Carol", age: 30}]
+["Alice", "Bob", "Carol", "Dave"]
+["Alice", "Carol"]
+[2, 4, 6, 8, 10]
+[2, 4]
+[1, 2, 3, 4, 5]
+{id: "a2", text: "本を返す"}
+undefined
+```
+
+最後の `console.log(numbers)` で、元の配列が変わっていないことを確認します。
 
 ### 変える
 
-- `localStorage.setItem` を `sessionStorage.setItem` に書き換えて、タブを閉じると値が消える挙動になることを確認
-- `STORAGE_KEY` を別の文字列（例: `"memo-v2"`）に変えて、以前の値と共存する（キーが違うと別物として扱われる）ことを確認
-- `saveMemo` 内の `localStorage.setItem` をあえて `localStorage.setItem(STORAGE_KEY, JSON.stringify({ text: memo.value, at: Date.now() }))` にして、読み出し側を `JSON.parse` 前提に書き換える。オブジェクトとしての保存パターンを体験する
+- `filter` の条件を `user.age < 20` に変えて「未成年」を取り出す
+- `map` を `(user) => user.age` に変えて「年齢だけ」の配列を作る
+- チェーンの `filter` と `map` の順番を入れ替えるとどうなるか考える（先に `map` で名前にしてしまうと `user.age` が使えなくなる）
 
 ### 自分で書く
 
-- 入力された内容が **10000 文字を超えたら** `showStatus("長すぎます")` を出して保存しない、という制限を加える。ヒント: `if (memo.value.length > 10000)` で分岐
-- ページに「テーマ切替」の `<button>` を足し、クリックするたびに `<body>` に `dark` クラスを付け外しする。付いているかどうかを `localStorage` に保存し、次回訪問時に復元する（「DOM を操作する」の `classList.toggle` と組み合わせ）
+- 数値配列 `[10, 25, 7, 42, 3]` から「10 以上のものだけ」を残す → `[10, 25, 42]`
+- 文字列配列 `["apple", "banana", "cherry"]` から「すべて大文字に変えた新しい配列」を作る（ヒント: `s.toUpperCase()`）→ `["APPLE", "BANANA", "CHERRY"]`
+- TODO の配列 `[{ id: "1", text: "A" }, { id: "2", text: "B" }, { id: "3", text: "C" }]` から `id: "2"` だけを除いた新しい配列を作る（`filter` を使う）
 
 ## まとめ
 
-- ブラウザ内保存は `localStorage`（残る）/ `sessionStorage`（タブを閉じると消える）/ Cookie（サーバー送信あり）
-- Web Storage は **文字列しか保存できない**。オブジェクトや配列は `JSON.stringify` / `JSON.parse` とセット
-- 3 つの基本 API: `setItem` / `getItem`（未保存は `null`）/ `removeItem`
-- 失敗するケース（容量オーバー、プライベートブラウジング、壊れた JSON）を `try` / `catch` で吸収する
-- Cookie は実務ではサーバー側が管理するのが主流。クライアントで扱う保存は Web Storage が基本
+- `map` は「同じ長さの新しい配列を作る」変換
+- `filter` は「条件で絞り込んだ新しい配列を作る」抽出
+- `find` は「条件を満たす最初の 1 件を取り出す」抽出（見つからないときは `undefined`）
+- どれも元の配列は変えない
+- チェーンすると複数の処理を 1 行でつなげられる

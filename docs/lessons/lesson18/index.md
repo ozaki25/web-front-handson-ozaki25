@@ -1,137 +1,108 @@
-# lesson18: 値の種類
+# lesson18: 最初の JavaScript
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-console.log(typeof 'Alice');
-console.log(typeof 42);
-console.log(typeof true);
-console.log(typeof null);
-console.log(typeof undefined);
-console.log(typeof { name: 'Alice' });
+console.log('Hello, JavaScript');
+console.log('2 + 3 は', 2 + 3);
 `
 </script>
 
 ## ゴール
 
-- 文字列・数値・真偽値・`null` / `undefined` を区別できる
-- テンプレートリテラルで文字列の中に変数を埋め込める
+- HTML に外部 JavaScript ファイルを読み込める
+- `console.log` で値を出力できる
+- `let` と `const` で変数を宣言できる
+- DevTools の Console パネルでログを確認できる
+- `<script defer>` を「外部 JS を読み込む標準の書き方」として身につける
 
 ## 解説
 
-### 値には「種類」がある
+### JavaScript はブラウザの中で動く
 
-JS では、変数に入れる値にいくつかの種類があります。今回は 5 種類を覚えます。
+1 章 で書いてきた HTML と CSS は「何を置くか」と「どう見せるか」を担当します。ここから学ぶ JavaScript（以降 JS）は「動きをつける」担当です。ボタンを押したら何かが起きる、入力した内容に応じて画面が変わる、といった処理はすべて JS が担当します。
 
-| 種類 | 例 | 説明 |
-| --- | --- | --- |
-| 文字列 | `"Alice"` / `'hello'` | テキスト。ダブルクオート / シングルクオートで囲む |
-| 数値 | `42` / `3.14` | 整数と小数の両方。クオートを付けない |
-| 真偽値 | `true` / `false` | 「はい / いいえ」の 2 値。条件分岐で使う |
-| `null` | `null` | 「意図的に空」 |
-| `undefined` | `undefined` | 「まだ値がない」 |
+JS は基本的にブラウザの中で動くプログラミング言語です。HTML に JS を読み込ませると、ページを開いたときにブラウザが JS を実行してくれます。
 
-`null` と `undefined` はどちらも「空」を表しますが、ニュアンスが違います。
+### JS を HTML に読み込む方法
 
-- `null`: プログラマが「ここは空にしておくぞ」と明示的に入れるもの
-- `undefined`: 変数を宣言しただけで値を入れていないときに、自動で付く初期状態
+今回から、JS は `script.js` という別ファイルに書いて、HTML から読み込む形にします。HTML に直接書くより読みやすく、後で管理しやすくなります。
 
-当面は「どちらも空を表す」くらいの理解で十分です。使い分けは徐々に身につきます。
+読み込むタグは `<script>` です。本コースでは以下の形に固定します。
 
-### 数値と文字列は混ぜない
-
-```js
-const a = 1 + 2;       // 3 （数値の足し算）
-const b = "1" + "2";   // "12" （文字列の連結）
-const c = 1 + "2";     // "12" （文字列側に寄せられる）
+```html
+<script defer src="./script.js"></script>
 ```
 
-`+` は数値なら足し算、文字列なら連結になります。片方が文字列だと全体が文字列になる、という挙動だけ頭の片隅に置いておきます。
+`defer` 属性を付けると、ブラウザは「HTML をすべて読み終えてから JS を実行する」という順序で動いてくれます。これを徹底しておくと、「DOM を操作する」レッスンで `document.querySelector(...)` が `null` を返す事故（HTML より先に JS が走り、まだ存在しない要素を探してしまう）を防げます。
 
-### テンプレートリテラル
+### なぜ `defer` か（コラム）
 
-文字列の中に変数を埋め込みたいとき、バッククオート（`` ` ``）で囲む書き方が便利です。これをテンプレートリテラルと呼びます。
+`<script>` の書き方には昔からいくつかの流派があります。
 
-```js
-const userName = "Alice";
-const age = 20;
+- `<head>` の中に `<script src="...">` だけ書く → HTML の解析が止まって遅くなる
+- `<body>` の末尾に `<script src="...">` を書く → 動くが、書く場所が散らばる
+- `<head>` の中に `<script defer src="...">` を書く → HTML の解析を止めず、解析完了後に実行される
 
-const message = `あなたは ${userName} さんで、${age} 歳です`;
-console.log(message);
-```
+3 つ目の書き方が現在の推奨です。HTML が完成してから JS が動くため、DOM を探しに行く処理（「DOM を操作する」以降）でも安心して使えます。本コースではこの形だけを使います。
 
-- バッククオートで囲む
-- `${ ... }` の中に変数や式を書く
+### `console.log` と DevTools の Console
 
-シングルクオート / ダブルクオートで囲んだ文字列では `${ ... }` は使えません。埋め込みたいときは必ずバッククオートを使います。
+`console.log(...)` は「この値をログに出す」命令です。ブラウザの DevTools にある「Console」パネルを開くと、そこにログが表示されます。画面には出ませんが、開発中の確認に最も使う命令です。
 
-### デモで確認する
+DevTools の開き方は1 章 で学んだ Elements パネルと同じで、右クリック → 「検証」、または `F12` キーです。Elements の隣に Console タブがあります。
 
-下のデモでは、`typeof` 演算子を使って 6 種類の値の型を順に表示します。Console タブを見ると、それぞれがどの型として扱われるかが分かります。
+下のデモは JS が実際に動いている最小例です。`console.log` の結果がページ下部の黒い領域に表示されます（本物の DevTools Console と同じ内容）。
 
 <LiveDemo
-  height="220px"
-  :html="`<p>各値の型を typeof で確認するデモ</p>`"
+  height="200px"
+  :html="`<p>JS からの出力は下の黒い領域に出ます。</p>`"
   :css="``"
   :js="demoJs"
 />
 
-`null` が `'object'` と表示されるのは JavaScript の歴史的な仕様です。当面は「そういうものだ」と覚えておけば大丈夫です。
+### `let` と `const`
+
+値に名前をつけておくしくみを変数と呼びます。JS では 2 つのキーワードを使い分けます。
+
+- `const`: 後から値を書き換えない変数。迷ったらまずこちら
+- `let`: 後から値を書き換える可能性がある変数
+
+古い教材では `var` も出てきますが、本コースでは使いません。
+
+```js
+const userName = "Alice";
+let count = 0;
+count = count + 1;
+```
+
+`const` で宣言した変数に別の値を代入しようとすると、エラーになります。これは「うっかり書き換え」を防いでくれる仕組みです。
+
+### デバッグが終わったら `console.log` は消す
+
+`console.log` は「動かない原因を絞り込む」ためのデバッグ手段です。本来の機能ではないので、**確認が終わったら必ず削除** します。残し続けると次のような実害があります。
+
+- **情報漏洩**: 個人情報や API の戻り値をそのまま `console.log` に出すクセが付くと、本番で意図せずユーザーのトークン / メール / id を Console に晒す事故になる
+- **パフォーマンス低下**: 大きなオブジェクトを `console.log` に渡すとブラウザがその参照を保持し、ガベージコレクション対象から外れて **メモリリーク** に繋がる
+- **読みづらいコード**: 残骸の `console.log("aaa")` が散らばると、本物のログとデバッグ残骸が見分けられなくなる
+
+実務では「コミット前に `git diff` で `console.log` を grep する」「`debugger` 文や DevTools のブレークポイントで止める方が確実」を覚えておきます。本コースでも、演習が動いたら `console.log` を消す癖を付けてください。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。
-
-<details>
-<summary>出発点のコード</summary>
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson17</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson17: 最初の JavaScript</h1>
-    <p>DevTools の Console を開いてください。</p>
-  </body>
-</html>
-```
-
-**`script.js`**
-
-```js
-const userName = "Alice";
-let count = 0;
-
-console.log("Hello, JavaScript");
-console.log(userName);
-console.log(count);
-
-count = count + 1;
-console.log(count);
-```
-
-</details>
+このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）から始められます。これまでのレッスンのコードは引き継ぎません。
 
 ### ゴール
 
-- 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
+- `script.js` を作り、自分の名前を変数に入れてコンソールに表示する
 
 ### 手順
 
-1. これまでの `index.html` をそのまま使う（タイトルだけ `lesson18` に変える）
-2. `script.js` を以下の内容に書き換える
-3. プレビューの Console を開く
+1. StackBlitz の Vanilla（HTML + CSS + JS）テンプレートを開く
+2. `index.html` を以下の内容にする
+3. `script.js` を以下の内容にする
+4. プレビューを開き、DevTools の Console を開く
 
 ### `index.html`
 
@@ -145,7 +116,8 @@ console.log(count);
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: 値の種類</h1>
+    <h1>lesson18: 最初の JavaScript</h1>
+    <p>DevTools の Console を開いてください。</p>
   </body>
 </html>
 ```
@@ -154,50 +126,47 @@ console.log(count);
 
 ```js
 const userName = "Alice";
-const age = 20;
-const isStudent = true;
-const nickname = null;
-let score;
+let count = 0;
 
+console.log("Hello, JavaScript");
 console.log(userName);
-console.log(age);
-console.log(isStudent);
-console.log(nickname);
-console.log(score);
+console.log(count);
 
-const message = `あなたは ${userName} さんで、${age} 歳です`;
-console.log(message);
-
-const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
-console.log(summary);
+count = count + 1;
+console.log(count);
 ```
 
 ### 期待出力
 
+DevTools の Console に、上から順に次のように表示されます。
+
 ```
+Hello, JavaScript
 Alice
-20
-true
-null
-undefined
-あなたは Alice さんで、20 歳です
-名前: Alice / 学生: true / 点数: undefined
+0
+1
 ```
 
-`score` は `let score;` と宣言しただけで値を入れていないので、自動で `undefined` になります。テンプレートリテラルの中に入れると `undefined` という文字列として表示されます。
+画面には何も追加で表示されません（JS は Console にだけ書き出しています）。
 
 ### 変える
 
-- `age` を `20` から `"20"`（文字列）に変えて、`age + 1` の結果を `console.log` してみる → `201` になる（文字列連結）
-- `isStudent` を `false` に変えて Console を確認
-- `nickname` を `"あり"` に変えて `summary` の出力に含まれる挙動を確認
+- `userName` の中身を自分の名前に書き換える → Console の 2 行目が変わる
+- `count = count + 1;` の下にもう 1 行 `count = count + 1;` を足して `console.log(count);` を追加 → `2` が表示される
+- `const` で宣言した `userName` に別の値を代入する行を追加（例: `userName = "Bob";`）→ Console に赤字でエラーが出ることを確認（下記の注意を参照）
+
+**`const` への再代入を試したときの挙動について**: 再代入の行を加えると、スクリプト全体の実行が **途中で止まる** ことがある。最初の `console.log("Hello, JavaScript")` までしか出ず、その下の `console.log(userName)` などが出ないケースもある。これは環境によって「実行中のエラー」ではなく「パース段階でのエラー」扱いになるため。動作が変だと感じたら、足した 1 行を削除して元に戻せばよい。
+
+**変数名に `name` を使わない理由**: 今回は `userName` を使っている。ブラウザの `window` には組み込みで `window.name` というプロパティがあり、`const name = ...` を書くと環境によって衝突して予想外の挙動になる。他人のコードで `name` を見たときはこの落とし穴を思い出すとよい。
 
 ### 自分で書く
 
-- 自分の情報（名前・好きな数字・趣味）を 3 つの変数に入れ、「私は ○○ です。好きな数字は ○○ で、趣味は ○○ です。」という 1 行の文をテンプレートリテラルで作って表示する
+- `const age = 20;` のような行を追加し、`console.log(age);` で値を表示する
+- `let message = "こんにちは";` と書き、後から `message = "さようなら";` に書き換えて 2 回 `console.log(message)` する
 
 ## まとめ
 
-- 値には文字列 / 数値 / 真偽値 / `null` / `undefined` の 5 種類（当面はこれで十分）
-- 文字列の中に変数を埋め込むときはバッククオート + `${ ... }`
-- クオートの種類（`` ` `` と `"` と `'`）を取り違えると `${ ... }` が文字通りに出てしまうので注意
+- 外部 JS は `<head>` に `<script defer src="...">` で読み込む
+- `console.log(...)` は DevTools の Console にログを出す
+- 変数は `const`（書き換え不可）を基本にし、必要なときだけ `let` を使う
+- `<script defer>` は以降すべてのレッスンで標準形として使い続ける

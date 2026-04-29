@@ -1,24 +1,39 @@
-# lesson70: ページを増やしてリンクで移動する
+# lesson70: Next.js ってなに？
 
 ## ゴール
 
-- `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
-- `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
-- 既存の HTML を JSX に書き換えられます。
-- HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
+- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できます。
+- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解します。
+- 画面に出る部品がデフォルトで **Server Component** として動くことを知ります。
+- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できます。
 
 ## 解説
 
-### 前回のプロジェクトを開く
+### React と Next.js の関係
 
-これまでのレッスンで作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
+4 章 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
 
-### 新しいページを作る手順
+一方で、実際に Web アプリを作ろうとすると、React 単体では足りないものが出てきます。
 
-App Router では、ディレクトリ名がそのまま URL になります。`/about` というページを作るには次の 2 ステップだけです。
+- URL に応じてページを切り替える仕組み（ルーティング）
+- SEO やシェア用にページごとのタイトルや OG 画像を設定する仕組み
+- 一部の処理をサーバーで先に走らせ、初期表示を速くする仕組み
+- データ取得やフォーム送信をサーバーに任せる仕組み
 
-1. `app/` の下に `about/` ディレクトリを作ります。
-2. その中に `page.tsx` を作り、コンポーネントを `export default` します。
+こうした「React の周りに必要な土台」を一式まとめて提供するのが **Next.js** です。Next.js は React を内部で使っているので、React のコンポーネントの書き方はそのまま使えます。React の上に乗る大きめの枠組み、と考えてください。
+
+このコースで使うバージョンは **Next.js 16** / **React 19.2** です。
+
+### App Router とは
+
+Next.js には現在 2 つのルーター（URL の担当部分）があります。
+
+- 古い方: `pages/` ディレクトリを使う Pages Router
+- 新しい方: `app/` ディレクトリを使う **App Router**
+
+本コースでは新しい **App Router** のみを扱います。古い `pages/` ルーターは使いません。
+
+App Router は **ファイルベースルーティング** です。つまり、`app/` 以下のディレクトリ構造がそのまま URL になります。
 
 ```
 app/
@@ -29,446 +44,117 @@ app/
     └── page.tsx       → /todos
 ```
 
-`/todos` も同じ要領です。`app/todos/page.tsx` を作るだけで `/todos` でアクセスできます。
+`page.tsx` という名前のファイルが、その URL で表示される中身を書く場所です。ディレクトリ名がそのまま URL のパスになります。
 
-### HTML → JSX の違い 3 点
+### Server Component がデフォルト
 
-1 章 で書いた HTML を Next.js に持ち込むと、そのままでは動きません。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要です。
+App Router のもう 1 つの大きな特徴は、**コンポーネントが既定でサーバー側で実行される** ことです。これを **Server Component** と呼びます。
 
-1. `class` → `className`
-   - JS の `class` 構文（クラス構文）と衝突するため、JSX では `className` を使います。
-   - 例: `<p class="lead">` → `<p className="lead">`
-2. `for`（`<label for="...">`）→ `htmlFor`
-   - `for` も JS の `for` 文と衝突するため、`htmlFor` に変えます。
-   - 例: `<label for="name">` → `<label htmlFor="name">`
-3. 自己閉じタグに `/` が必要
-   - HTML では `<img>` や `<br>` は終了タグなしで書けますが、JSX では必ず `/` で閉じます。
-   - 例: `<img src="..." alt="">` → `<img src="..." alt="" />`
-   - 例: `<br>` → `<br />`
+今までの React（4 章）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
 
-他にも細かい違いはありますが、当面はこの 3 点を意識すれば1 章 の HTML を移植できます。
+- Server Component: サーバーで動きます。データベース接続やファイル読み込みなど、秘密情報を扱えます。`useState` や `onClick` は使えません。
+- Client Component: ブラウザで動きます。`useState` / イベント / ブラウザ API が使えます。先頭に `"use client"` と書いて明示します。
 
-### `<Link>` でページ遷移する
+最初は「書いたコンポーネントは何もしなければサーバー側で動く」とだけ覚えておけば十分です。
 
-ブラウザの `<a href="...">` でもページは切り替わりますが、その都度ページ全体を再読み込みする重い動きになります。Next.js では `next/link` の `<Link>` を使うことで、必要な部分だけを差し替える軽い遷移ができます。
+### `app/page.tsx` の最小形
+
+App Router で最初に書くトップページは、こんな形です。
 
 ```tsx
-import Link from "next/link";
-
-export default function Home() {
+export default function Page() {
   return (
-    <nav>
-      <Link href="/">Home</Link>
-      <Link href="/about">About</Link>
-      <Link href="/todos">Todos</Link>
-    </nav>
+    <main>
+      <h1>Hello, Next.js</h1>
+      <p>最初のページ。</p>
+    </main>
   );
 }
 ```
 
-- `import` は **`next/link`** からです（`next/router` ではありません。`next/router` は古い Pages Router 用です）。
-- `href` の値は `/about` のように **URL のパス** です。
-- `<Link>` は内部的には `<a>` タグを生成するので、見た目は普通のリンクと同じです。
+- ファイル名は `page.tsx` 固定です。
+- `export default` で関数コンポーネントを 1 つ返します。
+- 関数名は何でも構いません（慣例で `Page` とすることが多いです）。
+
+これだけで、`/`（トップページ）にアクセスしたときにこの JSX が表示されます。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で1 章 の「Flexbox とレスポンシブ」の自己紹介ページの HTML と CSS を参照するため、先に「Flexbox とレスポンシブ」のコードを手元にコピーしておくとスムーズです。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。
 
-### 手順 1: `/todos` の空ページを作る
+### 使う環境
 
-StackBlitz のファイルツリーで、`app/` を右クリックして「New Folder」→ `todos` を作ります。その中に「New File」で `page.tsx` を作り、以下を貼ります。
+本コース5 章 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。4 章 の React + Vite テンプレートとは別物なので、新しく作り直してください。
 
-```tsx
-export default function TodosPage() {
-  return (
-    <main>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </main>
-  );
-}
-```
+### 手順
 
-ブラウザのプレビュー URL に `/todos` を付けてアクセスし、この文言が出ることを確認しましょう。
-
-### 手順 2: 1 章 の自己紹介ページを `/about` に移植
-
-1 章 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **「Flexbox とレスポンシブ」の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、「Flexbox とレスポンシブ」を開いて HTML / CSS をコピーしてから戻ってきてください。
-
-元の HTML（「Flexbox とレスポンシブ」の完成形の抜粋）:
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>私の自己紹介</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <header class="site-header">
-      <h1>私の名前</h1>
-      <nav class="site-nav">
-        <a href="#about">自己紹介</a>
-        <a href="#likes">好きなもの</a>
-        <a href="#contact">問い合わせ</a>
-      </nav>
-    </header>
-
-    <main>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div class="cards">
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像">
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像">
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像">
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label for="name">お名前</label>
-            <input id="name" name="name" type="text" required>
-          </div>
-          <div>
-            <label for="email">メール</label>
-            <input id="email" name="email" type="email" required>
-          </div>
-          <div>
-            <label for="message">メッセージ</label>
-            <textarea id="message" name="message" rows="4" required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <p>&copy; 私の名前</p>
-    </footer>
-  </body>
-</html>
-```
-
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx` が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
-
-`app/about/page.tsx`:
+1. 直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます（Next.js の hello-world テンプレートが Node を内部で動かす WebContainers 上で立ち上がります。初回は依存インストールに数十秒〜 1 分ほどかかります）。
+2. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
+3. 中身をすべて消し、次のコードに置き換えます。
 
 ```tsx
-export default function AboutPage() {
-  return (
-    <>
-      <header className="site-header">
-        <h1>私の名前</h1>
-        <nav className="site-nav">
-          <a href="#about">自己紹介</a>
-          <a href="#likes">好きなもの</a>
-          <a href="#contact">問い合わせ</a>
-        </nav>
-      </header>
-
-      <main>
-        <section id="about">
-          <h2>自己紹介</h2>
-          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-        </section>
-
-        <section id="likes">
-          <h2>好きなもの</h2>
-          <div className="cards">
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-              <h3>コーヒー</h3>
-              <p>朝の 1 杯が欠かせない。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-              <h3>本</h3>
-              <p>技術書からエッセイまで。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-              <h3>散歩</h3>
-              <p>行き先を決めずに歩く。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="contact">
-          <h2>問い合わせ</h2>
-          <form>
-            <div>
-              <label htmlFor="name">お名前</label>
-              <input id="name" name="name" type="text" required />
-            </div>
-            <div>
-              <label htmlFor="email">メール</label>
-              <input id="email" name="email" type="email" required />
-            </div>
-            <div>
-              <label htmlFor="message">メッセージ</label>
-              <textarea id="message" name="message" rows={4} required></textarea>
-            </div>
-            <button type="submit">送信</button>
-          </form>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <p>&copy; 私の名前</p>
-      </footer>
-    </>
-  );
-}
-```
-
-書き換えたのは **HTML → JSX の 3 点の違い** にほぼ収まります:
-
-- `class="..."` → `className="..."`（`.site-header` / `.site-nav` / `.cards` / `.card` / `.site-footer` すべて）
-- `<label for="...">` → `<label htmlFor="...">`（3 箇所）
-- `<input ...>` → `<input ... />`、`<img ...>` → `<img ... />` の自己閉じ
-- 追加で `<textarea rows="4">` の属性は **数値中括弧 `rows={4}`** に（JSX では数値属性は中括弧が慣例）
-
-ほぼ機械的な置換で済むのが JSX の嬉しいところです。1 章 で作った見た目・レイアウトがそのまま Next.js で動きます。
-
-### 手順 3: CSS を当てる
-
-1 章 の「Flexbox とレスポンシブ」の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
-
-`app/about/about.css`（「Flexbox とレスポンシブ」の CSS をそのまま貼る、抜粋）:
-
-```css
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.6;
-  color: #1f2937;
-  background-color: #f9fafb;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb;
-    background-color: #0b1220;
-  }
-}
-
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.site-nav a {
-  color: #f9fafb;
-  margin-right: 16px;
-}
-
-.cards {
-  display: flex;
-  gap: 16px;
-}
-
-.cards .card {
-  flex: 1;
-  background-color: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cards .card {
-    background-color: #111827;
-    border-color: #374151;
-  }
-}
-
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
-}
-
-.site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  text-align: center;
-}
-
-@media (max-width: 600px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .cards {
-    flex-direction: column;
-  }
-}
-```
-
-（フォームや hover など、「Flexbox とレスポンシブ」で書いた他のスタイルも一緒にコピーして構いません。）
-
-`app/about/page.tsx` の **1 行目に CSS の import を追加します**。ファイル全体は次のような形になります（関数本体は先ほど書いたものをそのまま維持します）。
-
-```tsx
-import "./about.css";
-
-export default function AboutPage() {
-  return (
-    <>
-      <header className="site-header">
-        <h1>私の名前</h1>
-        <nav className="site-nav">
-          <a href="#about">自己紹介</a>
-          <a href="#likes">好きなもの</a>
-          <a href="#contact">問い合わせ</a>
-        </nav>
-      </header>
-
-      <main>
-        <section id="about">
-          <h2>自己紹介</h2>
-          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-        </section>
-
-        <section id="likes">
-          <h2>好きなもの</h2>
-          <div className="cards">
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-              <h3>コーヒー</h3>
-              <p>朝の 1 杯が欠かせない。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-              <h3>本</h3>
-              <p>技術書からエッセイまで。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-              <h3>散歩</h3>
-              <p>行き先を決めずに歩く。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="contact">
-          <h2>問い合わせ</h2>
-          <form>
-            <div>
-              <label htmlFor="name">お名前</label>
-              <input id="name" name="name" type="text" required />
-            </div>
-            <div>
-              <label htmlFor="email">メール</label>
-              <input id="email" name="email" type="email" required />
-            </div>
-            <div>
-              <label htmlFor="message">メッセージ</label>
-              <textarea id="message" name="message" rows={4} required></textarea>
-            </div>
-            <button type="submit">送信</button>
-          </form>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <p>&copy; 私の名前</p>
-      </footer>
-    </>
-  );
-}
-```
-
-**期待出力**: `/about` を開くと、1 章 の「Flexbox とレスポンシブ」で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
-
-### 手順 4: ナビを `/` に置く
-
-`app/page.tsx` を以下に書き換えます。これでトップページから 3 つのページに飛べるナビが完成します。
-
-```tsx
-import Link from "next/link";
-
 export default function Page() {
   return (
     <main>
-      <h1>ようこそ</h1>
-      <nav>
-        <ul>
-          <li>
-            <Link href="/">Home</Link>
-          </li>
-          <li>
-            <Link href="/about">About</Link>
-          </li>
-          <li>
-            <Link href="/todos">Todos</Link>
-          </li>
-        </ul>
-      </nav>
+      <h1>Hello, Next.js</h1>
+      <p>最初のページ。</p>
     </main>
   );
 }
 ```
 
+保存すると、右側のプレビューに **「Hello, Next.js」と「最初のページ。」** が表示されます。
+
 ### 期待出力
 
-- `/` にアクセスすると「ようこそ」の見出しと 3 つのリンクが出ます。
-- 「About」をクリックすると1 章 と同じ見た目の自己紹介ページが表示されます（CSS が当たっています）。
-- 「Todos」をクリックすると「TODO 一覧はここに実装する。」が表示されます。
-- ブラウザのネットワークタブを開きながら遷移すると、ページ全体ではなくデータだけが追加で読み込まれます（フル再読み込みにはなりません）。
-- `class` や `for` をそのまま残すと、StackBlitz のターミナルやブラウザ Console に「Invalid DOM property `class`. Did you mean `className`?」のような警告が出ます。
+- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並びます。
+- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示されます。
+- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ています。
 
 ### 変えてみる
 
-1. 自己紹介ページに好きな見出しを 1 つ追加しましょう。
-2. `/about` のナビ内に「Top に戻る」`<Link>` を追加しましょう。
+1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存します。プレビューが更新されることを確認しましょう。
+2. `<p>` を 2 行に増やします。
+
+```tsx
+export default function Page() {
+  return (
+    <main>
+      <h1>自己紹介アプリの入り口</h1>
+      <p>最初のページ。</p>
+      <p>これから少しずつページを増やす。</p>
+    </main>
+  );
+}
+```
+
+### ファイル構造を眺める
+
+左側のツリーから以下を開いて中身を確認しましょう。書き換えは不要です。
+
+- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。「共通レイアウトを作る」で触ります。
+- `app/page.tsx`: 今書き換えたトップページ。
+- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいます。
+
+`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になります。
 
 ### 自分で書く
 
-`/contact` という 3 つ目のページを、ディレクトリ作成 → `page.tsx` → ナビへの `<Link>` 追加、の手順だけを見ないで試してみましょう。中身は「Contact ページです」の 1 行で十分です。
+`app/page.tsx` を何も見ずに書き直してみましょう。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格です。
 
 ## まとめ
 
-- `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになります。
-- ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
-- HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
+- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワークです。
+- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
+- `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
+- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
+
+### コラム: RSC ペイロードって何？
+
+Server Component の結果は、実は **HTML そのもの** としてブラウザに届くわけではありません。Next.js はサーバー側で React をレンダリングし、その結果を **React が読める特殊な形式**（RSC ペイロードと呼ばれる）に変換してブラウザに送ります。ブラウザ側の React はそれを受け取って、ページのツリーに差し込みます。
+
+ブラウザの「ソースを表示」で見える HTML は、初回表示用に別で生成された HTML です。ページ遷移（「ページを増やしてリンクで移動する」の `<Link>`）では、RSC ペイロードだけが追加で送られてきて、必要な部分だけがツリーに差し替わります。
+
+本コースでは RSC ペイロードの詳細までは踏み込みませんが、「Server Component は HTML を直接返すのとは違う仕組みで動いている」とだけ覚えておけば、後の章で困りません。

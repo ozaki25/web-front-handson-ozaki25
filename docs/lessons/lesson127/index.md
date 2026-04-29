@@ -1,589 +1,493 @@
-# lesson127: Server Components の設計論
+# lesson127: React Compiler
 
 ## ゴール
 
-- 「**どこまでサーバー、どこから Client**」の判断軸を持てる
-- データ取得とインタラクションの **分離** が説明できる
-- Server Actions と Client Component の **協調パターン** を書ける
-- よくある設計ミス（巨大 Client Component / 不要なシリアライズ）を避けられる
-- 自分の Next.js プロジェクトで Server / Client の境界設計を整理できる
+- React Compiler が **何を自動化** するかを言える
+- 「手動メモ化（`useMemo` / `useCallback` / `React.memo`）が要らなくなる」境界を理解する
+- React Compiler 1.0（2025 年 10 月安定版）の **現在地** を知る
+- Next.js / Vite で React Compiler を **有効化** できる
+- 既存コードでハマらないための注意点（Rules of React）を押さえる
 
 ::: tip 前提
-このレッスンは lesson73「Server Component と Client Component」、lesson74「Server Component でデータ取得」、lesson79「Server Actions の最小形」の発展編です。基本概念は先のレッスンで確認してください。
+このレッスンは lesson65「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson65 / 55 を確認してください。
 :::
 
 ## 解説
 
-### Server / Client の境界判断
+### 「手動メモ化」の苦しみ
 
-Next.js App Router では **すべてのコンポーネントがデフォルトで Server Component**。Client Component にしたい時に **`"use client"`** を明示します。
+React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなる。そのために導入されたのが:
 
-判断の **基本原則**:
-
-1. **デフォルトは Server**（バンドルから外せて速い）
-2. **状態 / イベントが必要な葉だけ Client**（最小限）
-3. **Client は子に Client / Server を持てるが、Server を import するなら children prop 経由**
-
-### Client Component が必要な合図
-
-次のいずれかが要るなら Client Component:
-
-- `useState` / `useReducer` で **state を持つ**
-- `useEffect` で **副作用** を行う
-- `onClick` / `onChange` などの **イベントハンドラ**
-- `useRef` / `useContext` などの Hook
-- ブラウザ API（`window` / `localStorage` / `navigator`）
-
-それ以外は **Server Component に置いた方が良い**:
-
-- データ取得（DB / 外部 API）
-- マークダウンや HTML のレンダリング
-- 認証情報を使う処理（Cookie 読み取り）
-- フォントやレイアウト
-
-### 「Client Component が大きすぎる」アンチパターン
-
-**よくある失敗**: ページ全体を Client Component にしてしまう。
+- `useMemo`: 値の **再計算を抑える**
+- `useCallback`: 関数の **再生成を抑える**
+- `React.memo`: コンポーネントの **再レンダリングを抑える**
 
 ```tsx
-// app/page.tsx
-"use client";  // 危険信号
+const filtered = useMemo(
+  () => items.filter((i) => i.active),
+  [items],
+);
 
-export default function HomePage() {
-  // すべての処理がブラウザに送られる
-  return (
-    <div>
-      <Header />
-      <Hero />
-      <FeatureList />     {/* 静的でも Client */}
-      <Counter />          {/* これだけ state が必要 */}
-      <Footer />
-    </div>
-  );
+const onClick = useCallback(
+  () => handler(value),
+  [value],
+);
+
+const Memoed = React.memo(Child);
+```
+
+3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
+
+- **書き忘れ**でパフォーマンス劣化
+- **依存配列のミス**でバグ
+- **過度なメモ化**で逆に遅くなる
+- 読みづらいコード
+
+これを **コンパイラが自動でやる** のが React Compiler の役割です。
+
+### React Compiler とは
+
+[React Compiler](https://react.dev/learn/react-compiler/introduction) は、**Babel ベースのコンパイラ** で、ソースコードを **解析してメモ化を自動挿入** します。
+
+```tsx
+// あなたが書くコード
+function Cart({ items }: { items: Item[] }) {
+  const total = items.reduce((sum, i) => sum + i.price, 0);
+  return <p>合計: {total}</p>;
+}
+
+// Compiler が変換した結果（イメージ）
+function Cart({ items }: { items: Item[] }) {
+  const $ = useMemoCache(2);
+  let total;
+  if ($[0] !== items) {
+    total = items.reduce((sum, i) => sum + i.price, 0);
+    $[0] = items;
+    $[1] = total;
+  } else {
+    total = $[1];
+  }
+  return <p>合計: {total}</p>;
 }
 ```
 
-**バンドルサイズが膨らむ**、**SEO に悪い**、**ハイドレーション** が遅い。
+実際の出力は人間が読まなくて良い形式ですが、要は **手動の useMemo を全部書いた状態** に近づけてくれます。
 
-### 改善: Client は **葉に閉じ込める**
+### 1.0 安定版（2025 年 10 月）
+
+[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、**プロダクション ready** 扱い。
+
+主な仕様:
+
+- React 17 / 18 / 19 と互換（19 推奨）
+- TypeScript 完全対応
+- Next.js / Remix / Expo / Vite すべてでサポート
+- ビルド時間は **やや増える**（軽量化が継続中）
+
+### Next.js 16 で有効化
+
+[Next.js 16](https://nextjs.org/blog/next-16)（2025 年 10 月）以降、React Compiler は **stable** な設定オプションになりました（experimental から昇格）。
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactCompiler: true,
+};
+
+export default nextConfig;
+```
+
+これだけで OK。デフォルトでは ON ではないので、**明示的に有効化** します。
+
+#### 細かい設定
+
+```ts
+const nextConfig: NextConfig = {
+  reactCompiler: {
+    compilationMode: "annotation",  // "all" | "annotation" | "infer"
+  },
+};
+```
+
+| `compilationMode` | 説明 |
+|---|---|
+| `"all"`（デフォルト） | すべてのコンポーネントを変換 |
+| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ |
+| `"infer"` | use の前提を満たす関数のみ |
+
+「徐々に試したい」場合は `"annotation"` から始めて、確認後に `"all"` に切り替えるのが安全。
+
+### Vite で有効化
+
+```bash
+npm install -D babel-plugin-react-compiler
+```
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+
+const ReactCompilerConfig = {};
+
+export default defineConfig({
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          ["babel-plugin-react-compiler", ReactCompilerConfig],
+        ],
+      },
+    }),
+  ],
+});
+```
+
+### 「メモ化が要らなくなる」とは
+
+#### Before
 
 ```tsx
-// app/page.tsx（Server Component）
-import Header from "@/components/Header";
-import Hero from "@/components/Hero";
-import FeatureList from "@/components/FeatureList";
-import Counter from "@/components/Counter";  // Client
-import Footer from "@/components/Footer";
-
-export default function HomePage() {
-  return (
-    <div>
-      <Header />
-      <Hero />
-      <FeatureList />
-      <Counter />
-      <Footer />
-    </div>
+function ProductList({ products, query }: Props) {
+  const filtered = useMemo(
+    () => products.filter((p) => p.name.includes(query)),
+    [products, query],
   );
+
+  const handleClick = useCallback(
+    (id: string) => navigate(`/product/${id}`),
+    [navigate],
+  );
+
+  return (
+    <ul>
+      {filtered.map((p) => (
+        <ProductCard key={p.id} product={p} onClick={handleClick} />
+      ))}
+    </ul>
+  );
+}
+
+const ProductCard = React.memo(({ product, onClick }: CardProps) => (
+  <li onClick={() => onClick(product.id)}>{product.name}</li>
+));
+```
+
+#### After（Compiler 有効）
+
+```tsx
+function ProductList({ products, query }: Props) {
+  const filtered = products.filter((p) => p.name.includes(query));
+  const handleClick = (id: string) => navigate(`/product/${id}`);
+
+  return (
+    <ul>
+      {filtered.map((p) => (
+        <ProductCard key={p.id} product={p} onClick={handleClick} />
+      ))}
+    </ul>
+  );
+}
+
+function ProductCard({ product, onClick }: CardProps) {
+  return <li onClick={() => onClick(product.id)}>{product.name}</li>;
 }
 ```
 
-```tsx
-// components/Counter.tsx
-"use client";
-import { useState } from "react";
+「**普通に書いた JSX** が、コンパイル後は **十分にメモ化された** コードに変換される」のが Compiler の価値。
 
-export default function Counter() {
+### 何が変わるか / 変わらないか
+
+#### 変わるもの
+
+- **`useMemo` / `useCallback` の手動記述が不要** に
+- **`React.memo` で囲う必要がない**（依存があれば自動でメモ化される）
+- 依存配列の書き間違いミスが消える
+
+#### 変わらないもの
+
+- `useEffect` / `useState` / `useRef` などの Hook は **そのまま** 使う
+- **データ取得** や **副作用** の責務は変わらない
+- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題
+
+### Rules of React
+
+Compiler が動くには **コードが React のルールに従っている** ことが前提です。
+
+#### Components / Hooks は **純粋**
+
+- レンダリング中に副作用を起こさない（DOM 直接操作 / API 呼び出し / setState）
+- 同じ入力からは同じ出力を返す（**ピュア**）
+
+```tsx
+// NG: レンダリング中に外部状態を変更
+function Bad() {
+  globalCounter++;        // 副作用
+  return <p>{globalCounter}</p>;
+}
+
+// OK: 副作用は useEffect 内で
+function Good() {
+  useEffect(() => { globalCounter++; }, []);
+  return <p>{globalCounter}</p>;
+}
+```
+
+#### イベントハンドラは外部状態を変えても OK
+
+```tsx
+function Counter() {
   const [n, setN] = useState(0);
   return <button onClick={() => setN(n + 1)}>{n}</button>;
 }
 ```
 
-**Counter だけ** がブラウザに送られ、他は Server で解決される。
+イベントハンドラはレンダリング中ではないので **副作用 OK**。Compiler はこれを区別します。
 
-### Server Component から Client Component に **データを渡す**
+#### `eslint-plugin-react-compiler` で違反を検出
 
-これは普通に **props で渡す** だけです。**渡せるのは serializable な値のみ**:
+```bash
+npm install -D eslint-plugin-react-compiler
+```
 
-| 渡せる | 渡せない |
-|---|---|
-| 文字列 / 数値 / boolean / null / undefined | 関数 |
-| 配列 / プレーンオブジェクト | クラスインスタンス |
-| Date / Map / Set | Symbol（一部例外） |
-| Promise（React 19 以降） | DOM ノード |
+```js
+// eslint.config.js
+import reactCompiler from "eslint-plugin-react-compiler";
+
+export default [
+  {
+    plugins: { "react-compiler": reactCompiler },
+    rules: {
+      "react-compiler/react-compiler": "error",
+    },
+  },
+];
+```
+
+このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint でコードの問題を修正しておくのが安全。
+
+### 「Compile されない」コードへの対処
+
+Compiler が「危険」と判断したコンポーネントは **そのまま** にします（壊れない）。
+
+警告メッセージ:
+
+```
+[ReactCompiler] Function `MyComponent` could not be compiled.
+Reason: Mutation of value passed as argument
+```
+
+対応:
+
+1. ESLint の指摘を素直に直す（**ピュア化**）
+2. 直せない事情があれば **`"use no memo"`** ディレクティブで対象外に
+3. **`"use memo"`** で「変換して欲しい」と明示
 
 ```tsx
-// Server Component
-export default async function Page() {
-  const user = await db.user.findFirst();
-  return <UserCard user={user} />; // user はプレーンオブジェクトなら OK
+"use no memo";
+
+function LegacyComponent() {
+  // Compiler 対象外
 }
 ```
 
-### Client Component から Server Component を **使う**
+### 既存プロジェクトに導入する流れ
 
-直接 import はできません。代わりに **`children` prop** で受け取ります。
+1. **`eslint-plugin-react-compiler` を入れて警告を見る**
+2. 警告を直せる範囲で直す
+3. **`compilationMode: "annotation"`** で **限定的に試す**
+4. 動作確認 → 問題なければ **`"all"`** に切り替え
+5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
 
-```tsx
-// app/layout.tsx（Server Component）
-import Sidebar from "@/components/Sidebar";          // Client
-import RecentPosts from "@/components/RecentPosts";  // Server
+「全部一気に」ではなく **段階導入** が事故を減らします。
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-  return (
-    <Sidebar>           {/* Client */}
-      <RecentPosts />   {/* Sidebar は中身を知らずに描画 */}
-      {children}
-    </Sidebar>
-  );
-}
-```
+### パフォーマンス効果は？
 
-```tsx
-// components/Sidebar.tsx
-"use client";
+[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などで:
 
-export default function Sidebar({ children }: { children: React.ReactNode }) {
-  return (
-    <aside>
-      <h2>サイドバー</h2>
-      {children}
-    </aside>
-  );
-}
-```
+- **手動メモ化が完璧でないコードベース** には大きな改善
+- **既に十分メモ化済みのコード** にはほぼ同等
+- **小規模アプリ** には変化なし
 
-「Client Component の中身に Server Component を **slot で挿入する**」発想。Sidebar は中身がServer か Client かを知らず、ただ描画する。
+「**すべての React アプリが速くなる魔法** ではない」けれど、コードの **保守性** は確実に上がります。
 
-### Server Actions との協調
+### `useMemo` を残すべき場面
 
-Server Actions（lesson79）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
+- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替え。Compiler が判断しても明示する方が読みやすい
+- **deep compare** が必要な場合: lodash の `isEqual` で比較したい時など
+- **API 互換**: 公開ライブラリ（コンパイラ前提に強制できない）
 
-```tsx
-// app/posts/page.tsx
-import { createPost } from "./actions";
+### React 19 / Next.js 16 / React Compiler の関係
 
-export default function NewPostPage() {
-  return (
-    <form action={createPost}>
-      <input name="title" />
-      <textarea name="body" />
-      <button>投稿</button>
-    </form>
-  );
-}
-```
+整理すると:
 
-```ts
-// app/posts/actions.ts
-"use server";
-import { revalidatePath } from "next/cache";
+- **React 19**: Hooks 中心の API（`useEffectEvent` / `cacheSignal` / `<Activity />`）
+- **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
+- **Next.js 16**: Turbopack 標準、Cache Components、`reactCompiler` 設定が stable
 
-export async function createPost(formData: FormData) {
-  const title = formData.get("title") as string;
-  const body = formData.get("body") as string;
-  await db.post.create({ data: { title, body } });
-  revalidatePath("/posts");
-}
-```
+3 つは **独立に進化** していて、組み合わせは選択可能。
 
-#### Client Component から呼ぶ
+### よくある誤解
 
-```tsx
-"use client";
-import { useTransition } from "react";
-import { createPost } from "./actions";
-
-export default function NewPostForm() {
-  const [pending, startTransition] = useTransition();
-
-  return (
-    <form
-      action={(formData) => {
-        startTransition(async () => {
-          await createPost(formData);
-        });
-      }}
-    >
-      <input name="title" disabled={pending} />
-      <button disabled={pending}>{pending ? "送信中..." : "投稿"}</button>
-    </form>
-  );
-}
-```
-
-`useTransition` で **送信中** の UI を切り替え。Server Component に **戻り値** を返すこともできます。
-
-### `useActionState`（旧 `useFormState`）
-
-React 19 / Next.js 16 では `useActionState` で **action の結果を state として** 受け取れます。
-
-```tsx
-"use client";
-import { useActionState } from "react";
-import { createPost } from "./actions";
-
-const initialState = { ok: false, error: "" };
-
-export default function NewPostForm() {
-  const [state, formAction, pending] = useActionState(createPost, initialState);
-
-  return (
-    <form action={formAction}>
-      <input name="title" />
-      <button disabled={pending}>投稿</button>
-      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
-      {state.ok && <p>投稿しました</p>}
-    </form>
-  );
-}
-```
-
-```ts
-"use server";
-export async function createPost(prev: any, formData: FormData) {
-  try {
-    await db.post.create({ data: {/* ... */} });
-    return { ok: true, error: "" };
-  } catch (e) {
-    return { ok: false, error: "保存失敗" };
-  }
-}
-```
-
-「Server Action から **エラーメッセージを返す**」が型安全に書けます。
-
-### よくある設計ミス
-
-#### 1. データを Server Component で取って **JSON に詰めて Client Component に丸投げ**
-
-```tsx
-// NG パターン
-export default async function Page() {
-  const posts = await db.post.findMany();  // Server で取得
-  return <PostListClient posts={posts} />; // 全部 Client にバンドル
-}
-```
-
-→ 結局すべて JS にシリアライズされて送られる。**せっかくの Server Component の意味が薄れる**。
-
-改善: **表示は Server で**、操作だけ Client に切り出す。
-
-```tsx
-// 改善
-export default async function Page() {
-  const posts = await db.post.findMany();
-  return (
-    <ul>
-      {posts.map((p) => (
-        <li key={p.id}>
-          <h2>{p.title}</h2>
-          <p>{p.body}</p>
-          <DeleteButton postId={p.id} />  {/* Client は削除ボタンだけ */}
-        </li>
-      ))}
-    </ul>
-  );
-}
-```
-
-#### 2. Server Component の中で Client Component を再描画させたい
-
-Server Component の **再実行はナビゲーション / 再検証** がトリガー。「state が変わったので再取得」したい時は:
-
-- **Server Action + `revalidatePath()`**（推薦）
-- **Client 側で fetch**（やむを得ない時）
-
-```ts
-"use server";
-export async function deletePost(id: string) {
-  await db.post.delete({ where: { id } });
-  revalidatePath("/posts");  // Server Component を再実行
-}
-```
-
-#### 3. Server / Client を混ぜてシリアライズ不能なものを渡す
-
-```tsx
-// NG: 関数を渡す
-<ClientComponent onClick={() => doSomething()} />
-```
-
-→ Server Component から関数は **渡せない**。`onClick` を持つロジックは **Client Component の中** で完結させる。
-
-#### 4. `"use client"` の場所を間違える
-
-```tsx
-// app/page.tsx（Server Component）
-"use client";   // ファイルの先頭でないと無効
-```
-
-`"use client"` は **ファイルの先頭** に書く必要があります。途中に書いても効きません。
-
-### `server-only` と `client-only`
-
-「**意図しない場所で import される事故**」を防ぐ仕組み。
-
-```ts
-// db.ts
-import "server-only";
-
-export const db = /* DB クライアント */;
-```
-
-これを誤って Client Component から import するとビルド時にエラー。**シークレットの漏洩防止** に有効（lesson116）。
-
-```ts
-// browser-utils.ts
-import "client-only";
-
-export function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
-}
-```
-
-逆も同様。
-
-### Suspense と Loading
-
-データ取得中の UI を **Suspense + Loading UI** で書きます（lesson68 / lesson87 と関連）。
-
-```tsx
-// app/posts/page.tsx
-import { Suspense } from "react";
-import PostList from "./PostList";
-import PostListSkeleton from "./PostListSkeleton";
-
-export default function Page() {
-  return (
-    <Suspense fallback={<PostListSkeleton />}>
-      <PostList />
-    </Suspense>
-  );
-}
-```
-
-`PostList` が `await` を含む Server Component なら、待ち時間に **Skeleton が表示** される。**ストリーミング SSR** で各部分が **独立に到着** します。
-
-### `cache()` / `cacheSignal()`
-
-Next.js 16 / React 19 では **同一リクエスト内** のデータをメモ化する `cache()` が安定。`cacheSignal()` は React 19.2 時点で **experimental（実験的）** であり、安定 API になるまでは API が変わる可能性があります。
-
-```ts
-import { cache } from "react";
-
-export const getUser = cache(async (id: string) => {
-  return db.user.findUnique({ where: { id } });
-});
-```
-
-複数の Server Component が `getUser("1")` を呼んでも **DB は 1 回しかヒット** しない。リクエストスコープのメモ化。
-
-### 「全体構造」のテンプレート
-
-経験則で次のように分割します:
-
-```
-app/
-├── layout.tsx                    ← Server（フォント / Provider 設置）
-├── page.tsx                       ← Server
-├── components/
-│   ├── Header.tsx                 ← Server
-│   ├── ThemeToggle.tsx            ← Client（state 必要）
-│   ├── PostList.tsx               ← Server（DB 取得）
-│   ├── PostCard.tsx               ← Server（表示のみ）
-│   ├── DeleteButton.tsx           ← Client（onClick → Action）
-│   └── CommentForm.tsx            ← Client（form + useActionState）
-├── posts/
-│   ├── actions.ts                 ← Server Actions
-│   └── [id]/page.tsx              ← Server
-└── api/
-    └── webhook/route.ts           ← Route Handler
-```
-
-### よくある質問
-
-#### Q: 全部 Client にしてもいいか？
-
-→ **動くけど遅い**。バンドルが膨らみ、ハイドレーションも遅い。最低限「データ取得は Server」を守る。
-
-#### Q: 古い React パターン（Pages Router / `getServerSideProps`）から移行するには？
-
-→ Pages Router の `getServerSideProps` は App Router の **Server Component** に置き換わる。**そのまま Server で `await fetch()`** を書けば良い。
-
-#### Q: Edge Runtime と Node.js Runtime の違いは？
-
-→ **Edge** は軽量・高速だが利用できる API に制限がある、**Node.js** は Node API がまるごと使える。App Router は **Server Component / Route Handler とも Node.js Runtime がデフォルト** で、Edge を使いたいファイルだけ `export const runtime = "edge"` で opt-in する。Next.js 16 では **Middleware も Node.js Runtime を選べる** ようになり、Node API を必要とする処理を Middleware に書きやすくなった。
+- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけ。本質的なボトルネックは別
+- 「**全 useMemo を消すべき**」→ Compiler 任せでも動くが、**読みやすさのために残す** のはアリ
+- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要
 
 ## 演習
 
+> **このレッスンはローカル前提**: React Compiler の Babel プラグインを Next.js のビルドパイプラインに統合する都合上、**ローカルでの Node.js 実行を前提** にしています。StackBlitz の Next.js テンプレでも同じ手順は走りますが、ビルド時間が長くなり Compiler の確認が分かりにくいので、ローカル環境での実行を推奨します。
+
 ### ゴール
 
-- 「ブログ記事一覧 + 投稿フォーム + 削除」を Server / Client の境界を意識して設計する
-- 既存の Client Component を **Server に格上げ** する練習
+- Next.js 16 で React Compiler を有効化する
+- `useMemo` / `useCallback` を消しても動くことを確認
+- ESLint プラグインで違反を検出する
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest rsc-design --ts --app
-cd rsc-design
+npx create-next-app@latest compiler-sample --ts --app
+cd compiler-sample
 ```
 
-### 手順 2: Server Component で一覧
+### 手順 2: React Compiler を有効化
+
+`next.config.ts`:
+
+```ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactCompiler: true,
+};
+
+export default nextConfig;
+```
+
+### 手順 3: ESLint プラグインを導入
+
+```bash
+npm install -D eslint-plugin-react-compiler
+```
+
+`eslint.config.mjs`（Next.js 16 デフォルト）に追加:
+
+```js
+import reactCompiler from "eslint-plugin-react-compiler";
+
+const config = [
+  // ...既存
+  {
+    plugins: { "react-compiler": reactCompiler },
+    rules: { "react-compiler/react-compiler": "error" },
+  },
+];
+
+export default config;
+```
+
+### 手順 4: メモ化なしのコンポーネント
 
 `app/page.tsx`:
 
 ```tsx
-import DeleteButton from "./DeleteButton";
-import { posts } from "@/data/posts";
+"use client";
+import { useState } from "react";
 
-export default async function Home() {
+export default function Page() {
+  const [items, setItems] = useState([1, 2, 3, 4, 5]);
+  const [filter, setFilter] = useState("");
+
+  // useMemo を書かない
+  const filtered = items.filter((n) => String(n).includes(filter));
+
   return (
     <main style={{ padding: 24 }}>
-      <h1>記事一覧</h1>
+      <input value={filter} onChange={(e) => setFilter(e.target.value)} />
       <ul>
-        {posts.map((p) => (
-          <li key={p.id}>
-            <h2>{p.title}</h2>
-            <p>{p.body}</p>
-            <DeleteButton id={p.id} />
-          </li>
+        {filtered.map((n) => (
+          <li key={n}>{n}</li>
         ))}
       </ul>
+      <button onClick={() => setItems((x) => [...x, x.length + 1])}>追加</button>
     </main>
   );
 }
 ```
 
-`data/posts.ts`（仮データ）:
+`npm run dev` で動作。filter 入力 / 追加ボタンが快適に動くことを確認。
 
-```ts
-export const posts = [
-  { id: "1", title: "Hello", body: "本文 1" },
-  { id: "2", title: "World", body: "本文 2" },
-];
-```
-
-### 手順 3: Server Action と Client Component
-
-`app/actions.ts`:
-
-```ts
-"use server";
-import { revalidatePath } from "next/cache";
-
-export async function deletePost(id: string) {
-  // 実際には DB から削除
-  console.log("Deleting:", id);
-  revalidatePath("/");
-}
-```
-
-`app/DeleteButton.tsx`:
+### 手順 5: わざとルール違反
 
 ```tsx
-"use client";
-import { useTransition } from "react";
-import { deletePost } from "./actions";
+let counter = 0;
 
-export default function DeleteButton({ id }: { id: string }) {
-  const [pending, startTransition] = useTransition();
-  return (
-    <button
-      disabled={pending}
-      onClick={() => startTransition(() => deletePost(id))}
-    >
-      {pending ? "..." : "削除"}
-    </button>
-  );
+export default function BadCounter() {
+  counter++;  // レンダリング中の副作用
+  return <p>{counter}</p>;
 }
 ```
 
-### 手順 4: 投稿フォーム（useActionState）
+ESLint がエラーを出します。**修正方法**: state に置き換える / `useEffect` に移す。
 
-`app/PostForm.tsx`:
+### 手順 6: 段階導入を試す
 
-```tsx
-"use client";
-import { useActionState } from "react";
-import { createPost } from "./actions";
-
-export default function PostForm() {
-  const [state, action, pending] = useActionState(createPost, { ok: false, error: "" });
-
-  return (
-    <form action={action}>
-      <input name="title" placeholder="タイトル" required />
-      <textarea name="body" placeholder="本文" />
-      <button disabled={pending}>{pending ? "送信中" : "投稿"}</button>
-      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
-      {state.ok && <p>投稿完了</p>}
-    </form>
-  );
-}
-```
-
-`actions.ts` に `createPost` を追加:
+`next.config.ts`:
 
 ```ts
-export async function createPost(prev: any, formData: FormData) {
-  const title = String(formData.get("title") ?? "");
-  if (!title.trim()) return { ok: false, error: "タイトル必須" };
-  console.log("Created:", title);
-  revalidatePath("/");
-  return { ok: true, error: "" };
-}
+const nextConfig: NextConfig = {
+  reactCompiler: { compilationMode: "annotation" },
+};
 ```
 
-### 手順 5: 動作確認
+このモードで `"use memo"` を書いたコンポーネントだけ変換されます:
 
-`npm run dev` で:
+```tsx
+"use memo";
 
-- 記事一覧は **Server で描画**（ソース表示で HTML に文字列が含まれる）
-- 削除ボタンの onClick 部分だけ **Client にハイドレーション**
-- 投稿フォームでバリデーションエラーをサーバーから返却
+export default function CompiledComponent() { /* ... */ }
+```
 
 ### 期待出力
 
-- ページの初回 HTML には **記事タイトルと本文がそのまま** 含まれている（Server で描画）
-- 削除 / 投稿のロジックはサーバーで実行
-- バリデーションエラーが Client Component の state に反映
+- React Compiler が有効化されたメッセージがビルド時に出る
+- ESLint プラグインがルール違反を **エラー / warning** で出す
+- 動作は手動メモ化版と同じか **わずかに速い**
 
 ### 変える
 
-- `Suspense` + `loading.tsx` でストリーミング表示にする
-- `cache()` で同じデータの取得を 1 回に集約する
-- `server-only` パッケージを入れて、誤って Client から import されないように守る
+- 既存コード（lesson65 / lesson68 の React アプリなど）に Compiler を入れる
+- React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
+- 大量レンダリング（1000 行のリスト）で差を観察
 
-### 自分で書く（5 章 の synthesis 成果物に適用）
+### 自分で書く（4 章 の成果物に適用）
 
-このコースの **5 章「小さなアプリを仕上げる」** で完成させた TODO アプリ（`/todos` / `/todos/[id]` / `/about`）を **境界の目で見直す** 演習です。
+このコースの **4 章 「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト（あるいは「TODO アプリを React で作る」の成果物）に React Compiler を入れて **before / after を比較** します。
 
-1. プロジェクトの全 `.tsx` を `grep "use client"` で抽出 → どれが Client Component か一覧化
-2. 各 Client Component について、**本当に Client が必要か** を確認:
-   - 状態 / イベント / ブラウザ API があるか?
-   - 無いなら `"use client"` を外して Server Component に戻す
-3. **`server-only` パッケージで「壊す」テスト**:
-   - `app/actions.ts` の冒頭に `import "server-only";` を追加
-   - 試しに Client Component から `import { addTodo } from "../actions"` してビルド → **エラーが出る**ことを確認
-4. **データ取得の場所** をチェック: Client Component の `useEffect` 内で `fetch` していないか? あれば Server Component に **吸い上げて props で渡す**
-5. 「`<DeleteButton>` だけが Client、リスト本体は Server」のように **葉に閉じ込める** 形になっているか確認
+1. 該当プロジェクトを開く
+2. **React DevTools の Profiler** で、何かアクション（追加・削除など）を 1 回計測 → 「再レンダリング回数」「総時間」をメモ
+3. `babel-plugin-react-compiler` を追加 + `vite.config.ts` に組み込む
+4. **同じアクション** を再度 Profiler で計測
+5. 「再レンダリングが減ったか」「総時間が短くなったか」を観察
+6. 続けて、コード上の `useMemo` / `useCallback` を **1 つずつ削除** して、Profiler の値が変わらないことを確認
 
-before / after で「Client にバンドルされる JS」が減っていれば成功です（Network タブで JS の合計サイズを見る）。
+これが「Compiler が効いている」直接的な証拠になります。手元に成果物がない場合は、`useMemo` を多用した小さいリスト + フィルタの例を新規に作って試します。
 
 ### 単独の任意課題
 
-- DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
-- React Compiler（lesson126）と組み合わせて、`useMemo` を消した状態で動かす
+- `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
+- ベンチマーク（lesson102 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 
 ## まとめ
 
-- **デフォルトは Server Component**、必要な葉だけ `"use client"`
-- データ取得は Server、インタラクションは Client、書き込みは **Server Actions**
-- Client から Server を使うには **children prop** で挿入
-- props は **serializable な値だけ**（関数 / クラスは渡らない）
-- `useActionState` で Server Action の結果を Client の state に
-- 巨大 Client Component / 不要シリアライズ / 関数受け渡しは **アンチパターン**
-- `server-only` / `client-only` で誤 import を防ぐ
-- `Suspense` + Loading UI で **ストリーミング表示**、`cache()` で同一リクエストのメモ化
-- 「全体構造」を Server / Client で **ファイル単位で分割** すると見通しが良い
+- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラ
+- **2025 年 10 月に 1.0 安定版** がリリース、Meta 大規模で実戦投入済み
+- **Next.js 16** で `reactCompiler: true` の設定が stable に
+- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加
+- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提
+- **`eslint-plugin-react-compiler`** で違反を検出 → 直すか `"use no memo"` で対象外に
+- 段階導入は **`compilationMode: "annotation"`** から
+- 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
+- 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい

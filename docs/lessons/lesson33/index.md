@@ -1,360 +1,192 @@
-# lesson33: DOM を操作する
+# lesson33: JSON を読み書きする
 
 <script setup>
 const demoJs = `
-const title = document.querySelector('#title');
-const textBtn = document.querySelector('#btn-text');
-const classBtn = document.querySelector('#btn-class');
-const resetBtn = document.querySelector('#btn-reset');
+const output = document.getElementById('output');
 
-textBtn.addEventListener('click', () => {
-  title.textContent = '書き換えました';
-  console.log('textContent を変更');
-});
+const user = {
+  name: 'Alice',
+  age: 20,
+  hobbies: ['読書', 'ランニング'],
+};
 
-classBtn.addEventListener('click', () => {
-  title.classList.toggle('active');
-  console.log("classList.toggle('active') でスタイル切り替え");
-});
+const compact = JSON.stringify(user);
+const pretty = JSON.stringify(user, null, 2);
 
-resetBtn.addEventListener('click', () => {
-  title.textContent = '最初の見出し';
-  title.classList.remove('active');
-  console.log('元に戻しました');
-});
+const parsed = JSON.parse(compact);
+
+output.textContent =
+  '--- compact ---\\n' + compact +
+  '\\n\\n--- pretty ---\\n' + pretty +
+  '\\n\\n--- parse 結果 (name だけ取り出す) ---\\n' + parsed.name;
 `
 </script>
 
 ## ゴール
 
-- HTML が DOM という木構造として扱われることを絵で理解できる
-- `querySelector` / `getElementById` で要素を取得し、`textContent` で文字を読み書きできる
-- `classList` で CSS クラスを付け外しできる
-- `innerHTML` / `getAttribute` / `dataset` / `createElement` など主要な DOM API を必要に応じて使い分けられる
+- JSON がどんな形式か（object / array / string / number / boolean / null）を説明できる
+- `JSON.stringify` でオブジェクトを文字列にできる。インデントも付けられる
+- `JSON.parse` で文字列をオブジェクトに戻せる
+- 壊れた JSON を `try` / `catch` で安全に扱える（「try / catch でエラー処理」の応用）
+- `replacer` / `reviver` という仕組みが存在することを知っている
 
 ## 解説
 
-### HTML は DOM という「木」になっている
+### JSON って何？
 
-ブラウザは HTML を読み込むと、それを **木構造（ツリー構造）のデータ** として保持します。この内部表現が **DOM**（Document Object Model） です。JS から DOM を操作すると、画面の内容を動的に変えられます。
+**JSON**（JavaScript Object Notation） は、オブジェクトや配列を **文字列として表現する** フォーマットです。ファイル保存 / `localStorage` / API との通信 / 設定ファイル、あらゆる場面で使います。
 
-「木」と呼ばれるのは、タグの入れ子関係が木の枝分かれのように表現されるためです。たとえば次の HTML を見てみましょう。
+JSON で表現できる **値の種類は次の 6 種だけ** です（プリミティブが 4 つ + 構造が 2 つ）。
 
-```html
-<html>
-  <head>
-    <title>自己紹介</title>
-  </head>
-  <body>
-    <h1>こんにちは</h1>
-    <ul>
-      <li>コーヒー</li>
-      <li>散歩</li>
-    </ul>
-  </body>
-</html>
-```
+プリミティブ（単一の値）:
 
-これは DOM としては、次のように枝分かれする 1 本の木になります。
+- 文字列: `"hello"`（**ダブルクォート必須**）
+- 数値: `12` / `3.14` / `-5`
+- 真偽値: `true` / `false`
+- `null`
 
-<div style="font-family:system-ui, sans-serif; font-size:0.9em; line-height:1.6; background:var(--vp-c-bg-mute); padding:16px 20px; border-radius:6px; margin:12px 0;">
-  <div><code>document</code></div>
-  <div style="padding-left:18px;">└─ <code>&lt;html&gt;</code></div>
-  <div style="padding-left:36px;">├─ <code>&lt;head&gt;</code></div>
-  <div style="padding-left:54px;">│&nbsp;&nbsp;└─ <code>&lt;title&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"自己紹介"</span></div>
-  <div style="padding-left:36px;">└─ <code>&lt;body&gt;</code></div>
-  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;├─ <code>&lt;h1&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"こんにちは"</span></div>
-  <div style="padding-left:54px;">&nbsp;&nbsp;&nbsp;└─ <code>&lt;ul&gt;</code></div>
-  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;├─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"コーヒー"</span></div>
-  <div style="padding-left:72px;">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└─ <code>&lt;li&gt;</code> ── <span style="color:var(--vp-c-brand-1);">"散歩"</span></div>
-</div>
+構造（プリミティブを組み合わせた箱）:
 
-一番上に `document`（ページ全体を表すオブジェクト）があり、そこから `<html>` 要素が伸び、さらに `<head>` と `<body>` に枝分かれします。それぞれの要素の中身（子要素）も同じようにぶら下がります。
+- 配列: `[1, 2, 3]`
+- オブジェクト: `{ "key": "value" }`（キーも **ダブルクォートで囲む**）
 
-この木を扱うときの呼び方を覚えておくと、あとのコードが読みやすくなります。
+JSON の **できないこと** も押さえておきます。
 
-- **親**（parent）: 1 段上の要素。`<li>` の親は `<ul>` です。
-- **子**（child）: 1 段下の要素。`<ul>` の子は `<li>` が 2 つです。
-- **兄弟**（sibling）: 同じ親を持つ隣の要素。2 つの `<li>` は互いに兄弟です。
-- **テキストノード**: タグの中身の文字列（例: `"コーヒー"`）。これも木の一部として、タグの下にぶら下がっています。
+- コメントは書けない
+- `undefined` / 関数 / `Date` オブジェクトはそのまま表現できない（`stringify` 時に消えるか文字列化される）
+- キーをシングルクォートで囲めない
+- 末尾カンマ（trailing comma）は許されない
 
-ブラウザの DevTools の Elements（または「要素」）タブを開くと、まさにこのツリーが左端に展開されて表示されます。手元の Chrome で F12 を押して Elements タブを眺めてみてください。タグをクリックするたびに、ツリーの枝が開いたり閉じたりします。
+### `JSON.stringify` でオブジェクト → 文字列
 
-これまでは Console に出すだけでしたが、本レッスンからは **この木に JS で手を入れて、画面を書き換える** 世界に入ります。
-
-### 要素を取得する: `querySelector` / `getElementById` / `querySelectorAll`
-
-DOM から要素を取り出す方法はいくつかあります。用途に応じて使い分けます。
-
-#### `document.querySelector`: CSS セレクタで 1 つ取る
-
-CSS セレクタで **最初に見つかった 1 つ** を取り出します。
+オブジェクトや配列を文字列化します。
 
 ```js
-const title = document.querySelector("h1");
-const box = document.querySelector("#box");
-const btn = document.querySelector(".btn");
+const user = { name: "Alice", age: 20 };
+const text = JSON.stringify(user);
+console.log(text); // '{"name":"Alice","age":20}'
 ```
 
-- `"h1"`: 要素セレクタ
-- `"#id名"`: id セレクタ
-- `".クラス名"`: クラスセレクタ
-- 複雑なセレクタもそのまま書けます（例: `"ul.menu > li:first-child"`）
+#### インデント付きで整形する（第 3 引数）
 
-見つからない場合は `null` が返ります。
-
-#### `document.getElementById`: id 専用のショートカット
-
-id で取り出すときの専用 API です。`querySelector("#id名")` と同じ結果になりますが、より短く書けます。
+第 3 引数にスペースの数（または文字列）を渡すと、改行とインデントが入った読みやすい形になります。
 
 ```js
-const title = document.getElementById("title");
-// 上と同じ: document.querySelector("#title")
+const pretty = JSON.stringify(user, null, 2);
+console.log(pretty);
+// {
+//   "name": "Alice",
+//   "age": 20
+// }
 ```
 
-引数は **`#` を付けない id 名そのもの** です。`querySelector` と違って CSS セレクタではないので、`#` や `.` を書くと動きません。
+- 第 2 引数は後で触れる `replacer` です。使わないときは `null`
+- 第 3 引数に `2` を渡すと半角スペース 2 個ずつでインデント
+- 設定ファイルやログ出力など「人間が読む」用途では必ず付けましょう
 
-見つからない場合はこちらも `null` が返ります。実務では、id 指定に限っては `getElementById` を好む人もいれば、`querySelector` で統一する人もいます。どちらでも動きますが、本コースの演習では **id 指定は `getElementById`、それ以外は `querySelector`** を使い分ける書き方で進めます。
+#### 消えるもの
 
-#### `document.querySelectorAll`: CSS セレクタで **全部** 取る
-
-同じセレクタに当てはまる要素をまとめて取り出します。戻り値は **NodeList** という配列っぽいオブジェクトで、`forEach` で 1 件ずつ処理できます。
+`JSON.stringify` は JSON に表現できない値を静かに落とします。
 
 ```js
-const items = document.querySelectorAll("li");
+const weird = {
+  name: "Alice",
+  greet: () => "hi",      // 関数は消える
+  createdAt: undefined,   // undefined は消える
+};
 
-items.forEach((li) => {
-  console.log(li.textContent);
+console.log(JSON.stringify(weird)); // '{"name":"Alice"}'
+```
+
+「保存したのにプロパティが欠ける」事故の原因になります。保存対象は JSON で表せる型だけにそろえましょう。
+
+### `JSON.parse` で文字列 → オブジェクト
+
+文字列を JS の値に戻します。
+
+```js
+const text = '{"name":"Alice","age":20}';
+const user = JSON.parse(text);
+console.log(user.name); // "Alice"
+console.log(user.age);  // 20
+```
+
+#### 壊れた JSON は例外を投げる
+
+構文が合っていない JSON を `parse` すると `SyntaxError` が投げられます。「try / catch でエラー処理」で学んだとおり、**必ず `try` / `catch` で囲む** 前提です。
+
+```js
+function safeParse(raw) {
+  try {
+    return JSON.parse(raw);
+  } catch (error) {
+    console.log("JSON が壊れています:", error.message);
+    return null;
+  }
+}
+
+console.log(safeParse('{"ok":true}')); // { ok: true }
+console.log(safeParse("{ broken"));    // null
+```
+
+`localStorage` から読む / 外部 API から受け取る、といった **自分で書いていない文字列** を扱うときは、この形がテンプレになります。
+
+### `replacer` と `reviver`（軽く紹介）
+
+`stringify` / `parse` にはフィルタ関数を挟む仕組みがあります。今は「こういう仕組みがある」と知っておけば十分です。
+
+#### `replacer`
+
+`stringify` の第 2 引数に関数を渡すと、キー・値のペアごとに呼ばれて「何を出力するか」をカスタマイズできます。
+
+```js
+const data = { name: "Alice", password: "secret" };
+const safe = JSON.stringify(data, (key, value) => {
+  if (key === "password") return undefined; // undefined を返すとそのキーは消える
+  return value;
 });
+console.log(safe); // '{"name":"Alice"}'
 ```
 
-配列メソッド（`map` / `filter` など）は直接は使えません。使いたい場合は `Array.from(items)` で真の配列に変換してから扱います。
+パスワードなど「保存したくない値」を除外したいときに使います。
 
-> `<script defer>` を使っていれば、HTML の解析が終わってから JS が動くので、要素がまだ存在せず `null` になる事故を防げます。
+#### `reviver`
 
-### テキストの読み書き: `textContent`
-
-取得した要素の中身のテキストを読み書きします。
+`parse` の第 2 引数に関数を渡すと、復元する値を加工できます。
 
 ```js
-const title = document.querySelector("h1");
-
-console.log(title.textContent);    // 元のテキストを読む
-title.textContent = "書き換えました"; // 書き換える
+const text = '{"createdAt":"2026-04-22T00:00:00.000Z","title":"hello"}';
+const obj = JSON.parse(text, (key, value) => {
+  if (key === "createdAt") return new Date(value);
+  return value;
+});
+console.log(obj.createdAt instanceof Date); // true
 ```
 
-### HTML ごと読み書きする `innerHTML`
+文字列化されて消えた `Date` を復元する、といった用途です。本コースの残りでは使いませんが、名前だけ覚えておくと後で読み解きやすくなります。
 
-`textContent` は「ただの文字列」として扱いますが、**HTML タグとして解釈しながら** 中身を読み書きしたいときは `innerHTML` を使います。
+### デモで確認
 
-```js
-const box = document.querySelector("#box");
-
-console.log(box.innerHTML);
-// 書き込むと HTML として解釈される
-box.innerHTML = "<strong>重要</strong> なお知らせ";
-```
-
-この例では `<strong>` が **タグとして** 解釈され、画面には太字の「重要」と続く「なお知らせ」が表示されます。
-
-#### `innerHTML` の落とし穴（XSS）
-
-便利ですが、**ユーザー入力をそのまま `innerHTML` に入れるのは絶対に避けてください**。悪意ある HTML（例: `<script>` タグや `onerror` 属性付きの `<img>`）が入ってきた場合、ブラウザがそれを実行してしまい、**Cookie の盗難やなりすまし投稿** などの攻撃（XSS = Cross-Site Scripting）につながります。
-
-```js
-// NG: 入力をそのまま埋め込むのは危険
-const userInput = getFromUser();   // 例: '<img src=x onerror="alert(1)">'
-box.innerHTML = userInput;         // ブラウザがタグとして実行してしまう
-
-// OK: テキストとして埋め込む（タグは無害化される）
-box.textContent = userInput;
-```
-
-**指針:**
-
-- **ユーザーが入力した値** や **外部 API から来た値** を画面に出すときは、原則 `textContent` を使う
-- `innerHTML` は「自分で書いた安全な HTML 文字列」を流し込むときだけ使う
-- 迷ったら `textContent`
-
-### クラスの操作: `classList`
-
-CSS クラスを付け外しするための専用 API です。
-
-```js
-const box = document.querySelector("#box");
-
-box.classList.add("active");      // クラスを追加
-box.classList.remove("active");   // クラスを削除
-box.classList.toggle("active");   // あれば消す、なければ付ける
-```
-
-CSS 側で `.active { ... }` のスタイルを定義しておけば、JS で `add` / `remove` / `toggle` を呼ぶだけで見た目を切り替えられます。
-
-### 属性の読み書き `getAttribute` / `setAttribute` / `removeAttribute`
-
-HTML タグの **属性**（`href` / `src` / `alt` / `disabled` など）を読み書きします。
-
-```js
-const link = document.querySelector("a");
-
-console.log(link.getAttribute("href"));     // 現在の href を読む
-link.setAttribute("href", "https://example.com"); // 書き換える
-link.removeAttribute("target");             // 属性を消す
-```
-
-さらに、よく使う属性はプロパティとしても読み書きできます。たとえば `link.href` / `img.src` / `input.disabled` などです。
-
-```js
-const img = document.querySelector("img");
-img.src = "/photo.png";
-img.alt = "写真";
-```
-
-属性名と同じプロパティがあるときは **プロパティ経由（`img.src = ...`）の方が短く書けます**。使い分けは以下を目安にしてください。
-
-- 標準的な HTML 属性 → プロパティ経由で OK（`link.href` / `img.src` / `input.disabled`）
-- `data-*` など自作の属性 → `getAttribute` / `setAttribute`、または後述の `dataset`
-
-### フォームの値 `.value` / `.checked`
-
-`<input>` / `<textarea>` / `<select>` の値は `.value` で読み書きします。チェックボックスやラジオの入り切りは `.checked` です。
-
-```js
-const nameInput = document.querySelector("#name");
-const agreeCheckbox = document.querySelector("#agree");
-
-console.log(nameInput.value);         // 入力欄の現在の文字列
-nameInput.value = "初期値";            // 入力欄に値を入れる
-
-console.log(agreeCheckbox.checked);   // true / false
-agreeCheckbox.checked = true;         // プログラムからチェックを入れる
-```
-
-`<input type="number">` でも `.value` は **文字列** で返ります。数値として扱いたい場合は `Number(nameInput.value)` のように変換します。
-
-### インラインスタイル `element.style`
-
-JS から直接スタイルを当てる場合は `element.style.プロパティ` を使います。CSS のプロパティ名は **キャメルケース** になります（`background-color` → `backgroundColor`）。
-
-```js
-const box = document.querySelector("#box");
-
-box.style.backgroundColor = "steelblue";
-box.style.color = "white";
-box.style.padding = "12px";
-```
-
-ただし、**見た目の切り替えは基本的に CSS 側でクラスを用意して `classList.toggle` する方が保守しやすい** です。`element.style` は、CSS では表現しにくい値（マウス位置に応じた座標や、ドラッグ中の一時的な幅など）を JS から直接計算して当てたいときに使うのが定番です。
-
-### データ属性 `dataset`
-
-HTML の `data-*` 属性は、DOM 要素に **任意のデータをぶら下げる** ための標準的な方法です。JS からは `dataset` 経由で読み書きできます。
-
-```html
-<button id="delete-btn" data-todo-id="42" data-confirm-required="true">削除</button>
-```
-
-```js
-const btn = document.querySelector("#delete-btn");
-
-console.log(btn.dataset.todoId);            // "42"
-console.log(btn.dataset.confirmRequired);   // "true"
-
-btn.dataset.todoId = "99";                  // 書き換えも可能
-```
-
-- `data-todo-id` → `dataset.todoId`（ケバブケース → キャメルケース変換）
-- **値は常に文字列** として扱われるため、数値として使いたい場合は `Number(btn.dataset.todoId)` で変換する
-
-ボタンに「どの TODO を削除するのか」といった情報を持たせたいときに便利です。
-
-下のデモでは、ボタンを押すたびに JS が `textContent` を書き換えたり `classList` を切り替えたりします。何度でも押し直せるので、挙動が気になったら「元に戻す」でやり直してください。
+オブジェクトを `stringify` してインデント付きで表示し、`parse` で戻して取り出す流れを動かしておきましょう。
 
 <LiveDemo
-  height="240px"
+  height="300px"
   :html="`
-<h1 id='title'>最初の見出し</h1>
-<p>ボタンを押すと JS が DOM を書き換えます。</p>
-<div>
-  <button id='btn-text' type='button'>テキストを書き換える</button>
-  <button id='btn-class' type='button'>クラスを切り替える</button>
-  <button id='btn-reset' type='button'>元に戻す</button>
-</div>
+<button id='btn' onclick='run()'>動かす</button>
+<pre id='output' style='background:#f5f5f5;padding:12px;border-radius:6px;'></pre>
   `"
   :css="`
-button { margin-right: 6px; padding: 6px 12px; }
-#title.active {
-  color: white;
-  background: steelblue;
-  padding: 8px 12px;
-  border-radius: 4px;
-}
+body { padding: 16px; font-family: system-ui; }
+pre { white-space: pre-wrap; font-size: 14px; }
   `"
   :js="demoJs"
 />
-
-### 要素を作って追加 `createElement` / `appendChild`
-
-新しい要素を作って、既存の要素の子として追加します。
-
-```js
-const ul = document.querySelector("ul");
-
-const li = document.createElement("li");
-li.textContent = "新しい項目";
-ul.appendChild(li);
-```
-
-手順:
-
-1. `document.createElement("li")` で `<li>` 要素を作る（まだ画面には出ていない）
-2. `li.textContent = "..."` で中身のテキストを入れる
-3. `ul.appendChild(li)` で実際にページに追加する
-
-この「作る → テキストを入れる → 追加する」の流れは、以降のレッスンで繰り返し使います。
-
-### 要素を削除する `element.remove()`
-
-取得した要素を DOM から消すには、その要素自身の `remove()` を呼びます。
-
-```js
-const item = document.querySelector("#old-item");
-item.remove();   // DOM ツリーから取り除く
-```
-
-昔は `parent.removeChild(child)` という書き方が主流でしたが、現代のブラウザでは **`element.remove()` の方が短く直感的** です。本コースでは `remove()` を使います。
-
-削除された要素はページから消えますが、JS の変数にまだ保持している場合は `appendChild` で再度ツリーに戻すこともできます。ただし、この使い方は混乱しやすいので、削除したら忘れる方が安全です。
-
-### ツリーをたどる `parentElement` / `children` / `nextElementSibling`
-
-最初に紹介した「親 / 子 / 兄弟」の関係は、JS からも辿れます。
-
-```js
-const li = document.querySelector("li");
-
-console.log(li.parentElement);          // 親（例: <ul>）
-console.log(li.children);               // 子要素（HTMLCollection）
-console.log(li.nextElementSibling);     // 次の兄弟
-console.log(li.previousElementSibling); // 前の兄弟
-```
-
-- **`parentElement`**: 1 段上の要素
-- **`children`**: 直接の子要素一覧（配列っぽい `HTMLCollection`、`forEach` や `for...of` で回せます）
-- **`nextElementSibling` / `previousElementSibling`**: 同じ親の隣の要素。末端なら `null`
-
-似た名前で `parentNode` / `childNodes` / `nextSibling` もありますが、こちらはテキストノードや改行ノードまで含むので、**通常はタグだけを対象にする `parentElement` / `children` / `nextElementSibling` を使う** のが無難です。
-
-使いどころの例:
-
-- 「削除」ボタンを押されたら、そのボタンを含む `<li>` ごと消したい → `event.target.parentElement.remove()`
-- `<ul>` の中にある全部の `<li>` をループしたい → `ul.children` を `for...of` で回す
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `style.css` も加わります（ファイル作成がまだなら新規作成してください）。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` の 2 ファイルで TODO 配列を JSON 保存・復元します。
 
 <details>
 <summary>出発点のコード</summary>
@@ -368,50 +200,52 @@ console.log(li.previousElementSibling); // 前の兄弟
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson33</title>
-    <script defer src="./script.js"></script>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson33: DOM を操作する</h1>
-    <p>DevTools の Console を確認してください。</p>
+    <h1>lesson33: JSON</h1>
+    <ul id="list"></ul>
+    <pre id="raw"></pre>
   </body>
 </html>
 ```
 
-**`script.js`**
+**`main.js`**
 
 ```js
-async function main() {
-  try {
-    const response = await fetch("https://jsonplaceholder.typicode.com/posts");
-    const posts = await response.json();
-    console.log("取得件数:", posts.length);
-    console.log("先頭:", posts[0]);
+const list = document.querySelector("#list");
+const raw = document.querySelector("#raw");
 
-    for (const post of posts.slice(0, 3)) {
-      console.log(`#${post.id} ${post.title}`);
-    }
-  } catch (error) {
-    console.log("エラーが発生しました");
-    console.log(error);
-  }
+const todos = [
+  { id: "a1", text: "牛乳を買う", done: false },
+  { id: "a2", text: "本を読む", done: true },
+];
+
+for (const todo of todos) {
+  const li = document.createElement("li");
+  li.textContent = todo.text;
+  list.appendChild(li);
 }
-
-main();
 ```
 
 </details>
 
 ### ゴール
 
-- ボタンっぽい見た目の要素のクラスを JS で付け替える
-- JS から新しい `<li>` 要素を作って `<ul>` に追加する
+- TODO 配列を `JSON.stringify` でインデント付き文字列にして画面に出す
+- `localStorage` に保存した JSON を、次回リロード時に `JSON.parse` で復元する
+- 壊れた JSON が入っていても `try` / `catch` で受け止めて空配列から始める
 
 ### 手順
 
-1. `index.html` / `style.css` / `script.js` をそれぞれ以下の内容にする
-2. プレビューを確認する
+1. `main.js` に `STORAGE_KEY` と `loadTodos` / `saveTodos` を追加する
+2. 初回は初期配列を `saveTodos` で保存し、次回以降は `loadTodos` で復元する
+3. 画面に `<ul>` のリストと、`<pre>` にインデント付き JSON 表示を両方出す
+4. `localStorage.setItem("json-todos", "{ broken")` を Console で叩いてリロードし、復元に失敗しても壊れないことを確認する
 
-### `index.html`
+### 主要ファイルの完成形
+
+**`index.html`**
 
 ```html
 <!DOCTYPE html>
@@ -420,117 +254,122 @@ main();
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson33</title>
-    <link rel="stylesheet" href="./style.css" />
-    <script defer src="./script.js"></script>
+    <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1 id="title">lesson33</h1>
-    <p id="box">このボックスのクラスが切り替わります</p>
-    <ul id="list">
-      <li>既存の項目 1</li>
-      <li>既存の項目 2</li>
-    </ul>
+    <h1>lesson33: JSON</h1>
+    <ul id="list"></ul>
+    <h2>保存されている JSON</h2>
+    <pre id="raw"></pre>
   </body>
 </html>
 ```
 
-### `style.css`
-
-```css
-body {
-  color: #222;
-  background-color: #fff;
-  font-family: sans-serif;
-  padding: 16px;
-}
-
-#box {
-  padding: 12px;
-  border: 1px solid #888;
-  border-radius: 6px;
-}
-
-#box.active {
-  background-color: #ffe58f;
-  color: #222;
-  border-color: #d48806;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #eaeaea;
-    background-color: #1a1a1a;
-  }
-
-  #box {
-    border-color: #aaa;
-  }
-
-  #box.active {
-    background-color: #5a4600;
-    color: #fff;
-    border-color: #e6a817;
-  }
-}
-```
-
-### `script.js`
+**`main.js`**
 
 ```js
-const title = document.querySelector("#title");
-console.log(title.textContent);
-title.textContent = "DOM を書き換えました";
+const STORAGE_KEY = "json-todos";
 
-const box = document.querySelector("#box");
-box.classList.add("active");
-
-const list = document.querySelector("#list");
-
-const items = ["りんご", "みかん", "ぶどう"];
-for (const item of items) {
-  const li = document.createElement("li");
-  li.textContent = item;
-  list.appendChild(li);
+function loadTodos() {
+  const raw = localStorage.getItem(STORAGE_KEY);
+  if (raw === null) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (error) {
+    console.log("JSON の復元に失敗:", error.message);
+    return [];
+  }
 }
 
-const newLi = document.createElement("li");
-newLi.textContent = "最後に追加した項目";
-list.appendChild(newLi);
+function saveTodos(todos) {
+  const text = JSON.stringify(todos);
+  localStorage.setItem(STORAGE_KEY, text);
+}
+
+function render(todos) {
+  const list = document.querySelector("#list");
+  const raw = document.querySelector("#raw");
+
+  list.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.done ? `[済] ${todo.text}` : todo.text;
+    list.appendChild(li);
+  }
+
+  raw.textContent = JSON.stringify(todos, null, 2);
+}
+
+let todos = loadTodos();
+
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う", done: false },
+    { id: "a2", text: "本を読む", done: true },
+    { id: "a3", text: "掃除する", done: false },
+  ];
+  saveTodos(todos);
+}
+
+render(todos);
 ```
 
 ### 期待出力
 
-- 画面の見出し: 「DOM を書き換えました」になっている
-- ボックスは背景黄色（または枠色が濃いオレンジ）に変わる
-- リストに `既存の項目 1` / `既存の項目 2` / `りんご` / `みかん` / `ぶどう` / `最後に追加した項目` の 6 項目が並ぶ
-- Console に元のタイトル「lesson33」が出る
+画面に次の内容が表示されます。
+
+```
+lesson33: JSON
+
+- 牛乳を買う
+- [済] 本を読む
+- 掃除する
+
+保存されている JSON
+[
+  {
+    "id": "a1",
+    "text": "牛乳を買う",
+    "done": false
+  },
+  {
+    "id": "a2",
+    "text": "本を読む",
+    "done": true
+  },
+  {
+    "id": "a3",
+    "text": "掃除する",
+    "done": false
+  }
+]
+```
+
+- DevTools の Application（または Storage）タブ → Local Storage に `json-todos` というキーが入っている
+- Console で `localStorage.setItem("json-todos", "{ broken")` を実行しリロード → Console に「JSON の復元に失敗」と出て、初期データで再起動する
 
 ### 変える
 
-- `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
-- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する
-- `items` に要素を 2 つ足して、リストが 8 行になることを確認
-- `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
-- `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認
-- `document.querySelectorAll("li")` で全 `<li>` を取り、`forEach` で `console.log` して件数が合うか確認
+- `JSON.stringify(todos, null, 2)` の `2` を `4` に変える → インデント幅が広がる
+- `JSON.stringify(todos)` と第 3 引数なしにしてみる → `<pre>` が 1 行に詰まる
+- 初期データに `createdAt: new Date()` を足して `stringify` → 日付が文字列として保存される（JSON には `Date` 型がない）
 
 ### 自分で書く
 
-- 新しい段落要素 `<p>` を `createElement` で作り、好きな文章を入れて `document.body.appendChild` で本文末尾に追加する
-- `#title` の `textContent` を、JS 側で `const userName = "..."` と定義した名前を含むテンプレートリテラル（`` `ようこそ、${userName} さん` ``）に置き換える
-- `<a id="mdn" href="https://example.com">MDN</a>` を `index.html` に足し、JS から `setAttribute("href", "https://developer.mozilla.org/ja/")` で書き換える。リンクをクリックして飛び先が変わることを確認する
-- `<li>` の 1 つに `data-fruit="citrus"` を付け、`dataset.fruit` で値を読み取って `console.log` する
-- リストの **最初の `<li>`** を `querySelector("li")` で取り、`remove()` で消す。画面から 1 件減ることを確認する
+- `<button id="clear">`全消去`</button>` を置き、押すと `localStorage.removeItem(STORAGE_KEY)` してリロードさせる
+- 各 `<li>` の横に「削除」ボタンを付け、配列から `filter` で除いて `saveTodos` → `render` する
+- `replacer` を使って、`done: true` の項目だけを保存する `stringify` を書く（`saveTodos` をもう 1 つ増やす形で OK）
 
 ## まとめ
 
-- DOM は HTML の入れ子を表現した木構造。親 / 子 / 兄弟 の関係で要素がつながる
-- 取得: `querySelector`（1 件）/ `querySelectorAll`（複数）/ `getElementById`（id 専用）
-- テキスト書き換え: `textContent`（安全）。HTML として解釈したい場合だけ `innerHTML`（XSS に注意）
-- クラス: `classList.add` / `remove` / `toggle` / `contains`
-- 属性: `getAttribute` / `setAttribute` / `removeAttribute`、標準属性は `element.プロパティ` でも可
-- フォーム値: `.value` / `.checked`（`.value` は常に文字列）
-- スタイル: 切り替えは CSS + `classList`。動的計算した値を当てるときだけ `element.style.プロパティ`
-- データ属性: `data-*` ↔ `dataset.キー`（ケバブ→キャメル変換）
-- 生成: `createElement` + `appendChild`、削除: `element.remove()`
-- たどる: `parentElement` / `children` / `nextElementSibling`
+- JSON は「オブジェクト / 配列 / 文字列 / 数値 / 真偽値 / null」の 6 種類だけで構成される
+- `JSON.stringify` で文字列化。第 3 引数でインデント付き整形ができる
+- `JSON.parse` で文字列から値に戻す。壊れていると例外になる
+- 外部から来た JSON を読むときは **必ず `try` / `catch` で囲む**
+- `replacer` / `reviver` で出力・復元のカスタマイズができる（存在だけ覚える）

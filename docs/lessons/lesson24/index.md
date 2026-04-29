@@ -1,113 +1,197 @@
-# lesson24: オブジェクト
+# lesson24: スコープとクロージャ
 
 <script setup>
-// LiveDemo の :js に渡す JS コード。
-// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
-// script setup の変数経由で渡している。
 const demoJs = `
-const user = { name: 'Alice', age: 20, isStudent: true };
-console.log('name(ドット): ' + user.name);
-console.log('age(ブラケット): ' + user['age']);
-user.age = 21;
-console.log('書き換え後の age: ' + user.age);
-for (const key of Object.keys(user)) {
-  console.log(key + ' = ' + user[key]);
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
 }
+
+const counterA = makeCounter();
+const counterB = makeCounter();
+
+console.log('A:', counterA()); // 1
+console.log('A:', counterA()); // 2
+console.log('B:', counterB()); // 1
+console.log('A:', counterA()); // 3
+console.log('B:', counterB()); // 2
 `
 </script>
 
 ## ゴール
 
-- `{ key: value }` の形でオブジェクトを作れる
-- ドット記法でプロパティを読み書きできる
-- プロパティを追加・更新できる
+- `let` / `const` のブロックスコープと関数スコープを区別できる
+- 「関数の中で作った変数」は外から触れないことを理解する
+- クロージャ（関数が「作られた場所の変数」を覚えているしくみ）を体感する
+- `makeCounter()` のように、関数を呼ぶたびに独立した状態を持たせられる
 
 ## 解説
 
-### オブジェクトとは
+### スコープとは
 
-「名前付きの値」をいくつかまとめたものがオブジェクトです。配列が「並んだリスト」なら、オブジェクトは「ラベル付きの箱の集まり」です。
+**変数が有効な範囲** のことを **スコープ** と呼びます。変数は「どこで宣言したか」によって、見える範囲が決まります。
 
-```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
-};
-```
+スコープを知らないと、「なぜこの変数が `undefined` なのか」「なぜ外から触れないのか」がわからず、デバッグで迷子になりやすくなります。
 
-- `{` と `}` で囲む
-- 中は `キー: 値` のペアをカンマで区切る
-- キーのことをプロパティ名と呼ぶ
+### ブロックスコープ（`let` / `const`）
 
-キーは文字列（クオートは省略できる）、値は何でも入れられます（文字列・数値・真偽値・別のオブジェクト・配列など）。
-
-### ドット記法で読み書き
-
-プロパティを読むときも書くときも、ドット（`.`）を使います。
+`{` と `}` で囲まれた部分を **ブロック** と呼びます。`let` と `const` で宣言した変数は、そのブロックの中でしか使えません。
 
 ```js
-const user = {
-  name: "Alice",
-  age: 20,
-};
-
-console.log(user.name); // "Alice"
-console.log(user.age);  // 20
-
-user.age = 21;          // 書き換え
-console.log(user.age);  // 21
-
-user.city = "Tokyo";    // 新しいプロパティを追加
-console.log(user.city); // "Tokyo"
-```
-
-存在しないプロパティを読むと `undefined` が返ります。
-
-```js
-console.log(user.email); // undefined
-```
-
-`const` で宣言したオブジェクトでも、プロパティの追加や書き換えはできます（配列と同じ）。
-
-### 配列の中にオブジェクトを並べる
-
-実際のデータでよくある形です。
-
-```js
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-console.log(users[0].name);      // "Alice"
-console.log(users[1].age);       // 25
-console.log(users.length);       // 3
-```
-
-`for...of` と組み合わせると、全員の情報を順に処理できます。
-
-```js
-for (const user of users) {
-  console.log(`${user.name} は ${user.age} 歳`);
+if (true) {
+  const message = "こんにちは";
+  console.log(message); // "こんにちは"
 }
+
+console.log(message); // ReferenceError: message is not defined
 ```
 
-この「配列にオブジェクトを並べる」形は、「TODO アプリを作る」などのレッスンで頻繁に使います。
+- ブロックの中で宣言した変数は、ブロックの外からは見えない
+- `for` ループの `{` と `}` も同じ
 
-### デモで確認する
+```js
+for (let i = 0; i < 3; i++) {
+  console.log(i); // 0, 1, 2
+}
 
-下のデモでは、オブジェクトをドット記法・ブラケット記法でアクセスし、値の書き換えとプロパティ一覧表示を体感できます。
+console.log(i); // ReferenceError: i is not defined
+```
+
+ループが終わった後、`i` はもう存在しません。
+
+### 関数スコープ
+
+関数の中で宣言した変数も、関数の外からは見えません。
+
+```js
+function greet() {
+  const message = "こんにちは";
+  console.log(message);
+}
+
+greet(); // "こんにちは"
+console.log(message); // ReferenceError: message is not defined
+```
+
+関数の中は「独立した部屋」と思ってください。中で作った変数は、その部屋を出たら使えません。
+
+### レキシカルスコープ（書かれた場所で決まる）
+
+JavaScript のスコープは **「書かれた場所」** で決まります。呼び出された場所ではありません。これを **レキシカルスコープ** と呼びます。
+
+```js
+const name = "外側";
+
+function outer() {
+  const name = "内側";
+  inner();
+}
+
+function inner() {
+  console.log(name); // "外側"
+}
+
+outer();
+```
+
+`inner` は `outer` から呼ばれていますが、**`inner` が書かれた場所** から見える `name` は外側の `"外側"` です。そのため `"外側"` が出力されます。
+
+### クロージャ
+
+関数は、自分の外側のスコープにある変数を **覚えています**。関数を「外に持ち出しても」その変数を使い続けられます。このしくみを **クロージャ** と呼びます。
+
+```js
+function makeCounter() {
+  let count = 0;
+  return function () {
+    count = count + 1;
+    return count;
+  };
+}
+
+const counter = makeCounter();
+console.log(counter()); // 1
+console.log(counter()); // 2
+console.log(counter()); // 3
+```
+
+`makeCounter` を呼ぶと、中に作られた `count` と、それを使う関数（戻り値）が一緒に「閉じ込められて」返ってきます。外から `count` に直接触ることはできませんが、返ってきた関数を呼ぶたびに `count` が 1 増えます。
+
+#### 独立したカウンタが複数作れる
+
+`makeCounter()` を 2 回呼ぶと、それぞれが **別の `count`** を持ちます。
+
+```js
+const counterA = makeCounter();
+const counterB = makeCounter();
+
+console.log(counterA()); // 1
+console.log(counterA()); // 2
+console.log(counterB()); // 1 （counterA とは独立）
+console.log(counterA()); // 3
+console.log(counterB()); // 2
+```
+
+`counterA` と `counterB` は、それぞれ自分専用の `count` を抱えています。これが「関数が状態を閉じ込める」しくみです。
+
+下のデモで、独立したカウンタ 2 つがそれぞれ別の `count` を持っている様子を体感できます。`counterA` を 3 回呼んでも `counterB` は影響を受けません。
 
 <LiveDemo
-  height="260px"
-  :html="`<p>オブジェクトの読み書きをまとめて確認するデモ</p>`"
+  height="220px"
+  :html="`<p>独立した 2 つのカウンタを動かします。</p>`"
   :css="``"
   :js="demoJs"
 />
 
-`Object.keys(obj)` はオブジェクトのキー名を配列で返すメソッドです。ブラケット記法 `obj[key]` と組み合わせると、全プロパティを順に処理できます。
+#### 関数を作って返す（`makeFilter`）
+
+同じパターンで、**設定を覚えた関数** を作ることもできます。「配列の変換」の `filter` と組み合わせる例を見てみます。
+
+```js
+function makeFilter(status) {
+  return function (todo) {
+    return todo.status === status;
+  };
+}
+
+const isDone = makeFilter("done");
+const isTodo = makeFilter("todo");
+
+const todos = [
+  { text: "牛乳を買う", status: "done" },
+  { text: "本を読む",   status: "todo" },
+  { text: "掃除する",   status: "done" },
+];
+
+console.log(todos.filter(isDone));
+// [{ text: "牛乳を買う", status: "done" }, { text: "掃除する", status: "done" }]
+
+console.log(todos.filter(isTodo));
+// [{ text: "本を読む", status: "todo" }]
+```
+
+`makeFilter("done")` で返ってきた関数は、**`status` が `"done"` だったこと** を覚えています。この関数を `filter` に渡すと、`status === "done"` の要素だけが残ります。
+
+「呼び出し時の引数を覚えた新しい関数を作る」のは、クロージャのとても実用的な使い方です。
+
+### `var` との違い（軽く対比のみ）
+
+古いコードでは `var` を見かけます。`var` はブロックスコープではなく **関数スコープ** で、宣言前に使ってもエラーにならず `undefined` になる（**巻き上げ**）という挙動があります。
+
+```js
+console.log(a); // undefined （エラーにならない）
+var a = 1;
+
+if (true) {
+  var b = 2;
+}
+console.log(b); // 2 （ブロックの外でも見える）
+```
+
+本コースでは `let` / `const` だけを使います。`var` は「そういう古い書き方がある」とだけ覚えておけば十分です。
 
 ## 演習
 
@@ -130,12 +214,73 @@ for (const user of users) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson23: スコープとクロージャ</h1>
+    <h1>lesson23: 関数</h1>
   </body>
 </html>
 ```
 
 **`script.js`**
+
+```js
+function add(a, b) {
+  return a + b;
+}
+
+const addArrow = (a, b) => {
+  return a + b;
+};
+
+const addShort = (a, b) => a + b;
+
+console.log(add(1, 2));
+console.log(addArrow(10, 20));
+console.log(addShort(100, 200));
+
+function greet(name) {
+  return `こんにちは、${name} さん`;
+}
+
+const message = greet("Alice");
+console.log(message);
+console.log(greet("Bob"));
+
+function introduce(name, age) {
+  return `${name}（${age} 歳）です`;
+}
+
+console.log(introduce("Carol", 30));
+```
+
+</details>
+
+### ゴール
+
+- `makeCounter()` で独立したカウンタ `counterA` / `counterB` を作る
+- `makeFilter(status)` で「状態ごとのフィルタ関数」を作り、`filter` に渡す
+
+### 手順
+
+1. `index.html` のタイトルを `lesson24` に変える
+2. `script.js` を以下に書き換える
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson24</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson24: スコープとクロージャ</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
 function makeCounter() {
@@ -149,11 +294,11 @@ function makeCounter() {
 const counterA = makeCounter();
 const counterB = makeCounter();
 
-console.log(counterA());
-console.log(counterA());
-console.log(counterB());
-console.log(counterA());
-console.log(counterB());
+console.log(counterA()); // 1
+console.log(counterA()); // 2
+console.log(counterB()); // 1
+console.log(counterA()); // 3
+console.log(counterB()); // 2
 
 function makeFilter(status) {
   return function (todo) {
@@ -175,99 +320,39 @@ console.log(todos.filter(isDone));
 console.log(todos.filter(isTodo));
 ```
 
-</details>
-
-### ゴール
-
-- `user` オブジェクトを作り、ドット記法で名前と年齢を読み書きする
-- 配列に複数のユーザーを並べて、`for...of` で全員分表示する
-
-### 手順
-
-1. `index.html` のタイトルを `lesson24` に変える
-2. `script.js` を以下に書き換える
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson24</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson24: オブジェクト</h1>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-const user = {
-  name: "Alice",
-  age: 20,
-  isStudent: true,
-};
-
-console.log(user);
-console.log(user.name);
-console.log(user.age);
-
-user.age = 21;
-console.log(user.age);
-
-user.city = "Tokyo";
-console.log(user.city);
-console.log(user);
-
-console.log(user.email);
-
-const users = [
-  { name: "Alice", age: 20 },
-  { name: "Bob", age: 25 },
-  { name: "Carol", age: 30 },
-];
-
-for (const u of users) {
-  console.log(`${u.name} は ${u.age} 歳`);
-}
-```
-
 ### 期待出力
 
 ```
-{name: "Alice", age: 20, isStudent: true}
-Alice
-20
-21
-Tokyo
-{name: "Alice", age: 21, isStudent: true, city: "Tokyo"}
-undefined
-Alice は 20 歳
-Bob は 25 歳
-Carol は 30 歳
+1
+2
+1
+3
+2
+[{text: "牛乳を買う", status: "done"}, {text: "掃除する", status: "done"}]
+[{text: "本を読む", status: "todo"}, {text: "ゴミを出す", status: "todo"}]
 ```
 
-オブジェクト全体を `console.log` したときの表示形式はブラウザで少し異なります。
+- `counterA` と `counterB` の出力が独立している（`counterB` を呼んでも `counterA` の値には影響しない）
+- `isDone` / `isTodo` を `filter` に渡すと、それぞれの状態の TODO だけが抽出される
 
 ### 変える
 
-- `user` に `hobby: "読書"` というプロパティを追加で持たせて `console.log(user.hobby)` を試す
-- `user.isStudent = false;` で値を書き換えて Console に出してみる
-- `users` に 4 人目 `{ name: "Dave", age: 40 }` を `push` で追加し、もう一度 `for...of` で全員出す
+- `makeCounter` の `count = 0` を `count = 10` に変える → `counterA()` の初回が `11` から始まる
+- `makeCounter` の中の `count = count + 1` を `count = count + 2` にする → 2 ずつ増える
+- `makeFilter("todo")` を `makeFilter("done")` に書き換えて、結果が変わることを確認する
 
 ### 自分で書く
 
-- `book` オブジェクト（`title` / `author` / `year`）を作り、3 つのプロパティをテンプレートリテラルで 1 行にまとめて表示する
-- 本を 3 冊入れた `books` 配列を作り、`for...of` で「『タイトル』（著者, 年）」の形で全件出す
+- `makeAdder(n)` を作る。`makeAdder(5)` を呼ぶと「引数に 5 を足す関数」が返ってくる。`add5(10)` が `15` を返せば OK（ヒント: 戻り値の関数の中で外側の `n` を使う）
+- `makeGreeter(word)` を作る。`makeGreeter("こんにちは")` を呼ぶと「`(name) => `${word}、${name} さん`` のような関数」が返ってくる。`greetJa("Alice")` で `"こんにちは、Alice さん"` が返れば OK
+- `makeCounter` を改造して、呼ぶと `{ increment, reset, value }` の 3 つの関数を持つオブジェクトを返すようにする（余力があれば）
 
 ## まとめ
 
-- オブジェクトは `{ key: value, ... }` で作る
-- 読み書きはドット記法（`user.name`）
-- 存在しないプロパティを読むと `undefined`
-- 配列にオブジェクトを並べる形は実務でもよく使う
+- 変数には **スコープ**（有効な範囲）がある
+- `let` / `const` は **ブロックスコープ**、関数の中の変数は **関数スコープ**
+- JavaScript は **レキシカルスコープ**: 変数の見える範囲は「書かれた場所」で決まる
+- **クロージャ** は「関数が自分の外側の変数を覚えているしくみ」
+- `makeCounter()` のように、関数を呼ぶたびに **独立した状態** を閉じ込めた関数を返せる
+- `makeFilter(status)` のように、**引数を覚えた関数** を作って他のメソッドに渡せる
+- 本コースでは `let` / `const` だけを使う。`var` の古い挙動は覚えなくてよい

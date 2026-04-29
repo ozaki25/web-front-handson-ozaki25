@@ -1,122 +1,153 @@
-# lesson29: 非同期処理の基本
-
-<script setup>
-const demoJs = `
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main() {
-  console.log('start');
-  await wait(1000);
-  console.log('1 秒後');
-  await wait(1000);
-  console.log('さらに 1 秒後（計 2 秒）');
-  console.log('end');
-}
-
-main();
-`
-</script>
+# lesson29: import / export でモジュール化
 
 ## ゴール
 
-- 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
-- `async` / `await` を使って「結果を待ってから続ける」書き方ができる
-- Promise を「まだ完了していない結果を表す箱」として直感的に理解する
+- JS ファイルを複数に分割して、`import` と `export` で繋げられる
+- 名前付き export と `export default` の違いを使い分けられる
+- `<script type="module">` を使ってモジュールを読み込める
+- ロジックを役割ごとに複数ファイルに分けて整理できる
 
 ## 解説
 
-### 同期と非同期
+### なぜファイルを分けるのか
 
-ここまで書いてきた処理は、上から順にすぐ実行されていました。これを **同期処理** と呼びます。
+1 つの `script.js` に全部書いていくと、だんだん「どの処理がどこにあるか」がわからなくなります。
 
-```js
-console.log("A");
-console.log("B");
-console.log("C");
-// 出力: A → B → C
+- 保存 / 読み込みのロジック
+- 画面への描画ロジック
+- イベントを受け取るエントリーポイント
+
+これらを **役割ごとに別ファイルに分けておく** と、1 ファイルあたりの責任が小さくなり、読みやすくなります。これを **モジュール化** と呼びます。
+
+### モジュールとして読み込む: `type="module"`
+
+HTML から JS ファイルを読み込むとき、通常の `<script>` ではなく `<script type="module">` を使います。こうすると、その JS ファイルは「モジュール」として扱われ、`import` / `export` が使えるようになります。
+
+```html
+<script type="module" src="./main.js"></script>
 ```
 
-一方で、「ネットワーク通信」「一定時間待つ」など、**時間がかかる処理** もあります。こうした処理は、途中で止まらず後続のコードを先に進めておく仕組みになっています。これを **非同期処理** と呼びます。
+- `type="module"` を付けないと `import` / `export` は使えない
+- `defer` を付けなくても、モジュールは自動的に遅延読み込みされる
+
+### export（外に出す）
+
+他のファイルから使ってほしい関数や値は、`export` で外に出します。書き方は 2 種類あります。
+
+#### 名前付き export
+
+**その名前のまま** 外に出します。1 つのファイルから複数の値を出すときに向きます。
 
 ```js
-console.log("A");
-setTimeout(() => {
-  console.log("B");
-}, 1000);
-console.log("C");
-// 出力: A → C → （1秒後に）B
-```
-
-`setTimeout(関数, ミリ秒)` は「指定時間後に関数を呼ぶ」ブラウザの機能です。1 秒待っている間に `C` が先に出る、というのが非同期の挙動です。
-
-### Promise というもの
-
-非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise**（プロミス） という仕組みがあります。
-
-- `fetch` は「結果そのもの」ではなく「Promise」を返す
-- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
-- Promise は「いつか結果が入る箱」
-- 結果を取り出すには「箱が埋まるのを待つ」必要がある
-
-本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
-
-> **補足: 本レッスンで Promise を返すのは `wait(ms)` だけ**: 「Promise を返す処理」がどれかを今この時点で見分ける必要はありません。本レッスンの演習では `wait(ms)` 1 つだけが Promise を返すと覚えれば十分です。
-
-### `async` / `await`
-
-関数の前に `async` と書き、Promise を返す処理の前に `await` と書くと、「結果が返ってくるのを待ってから続きを実行」できます。
-
-```js
-async function main() {
-  console.log("start");
-  await wait(1000);   // 1 秒待つ
-  console.log("end"); // 1 秒後に実行される
+// math.js
+export function add(a, b) {
+  return a + b;
 }
 
-main();
+export function sub(a, b) {
+  return a - b;
+}
+
+export const PI = 3.14;
 ```
 
-- `async function` は「中で `await` を使える関数」
-- `await Promise` は「その Promise の結果が返るまで待つ」
-- `await` は `async function` の中でしか使えない
-
-### `wait(ms)` 関数（コピペで使う）
-
-「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
+まとめて最後に書くこともできます。どちらでも動きます。
 
 ```js
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
+// math.js
+function add(a, b) {
+  return a + b;
+}
+function sub(a, b) {
+  return a - b;
+}
+const PI = 3.14;
+
+export { add, sub, PI };
+```
+
+#### デフォルト export
+
+ファイルから **「中心となる 1 つ」だけを出す** 書き方です。1 ファイルにつき 1 つだけ書けます。
+
+```js
+// greeter.js
+export default function greet(name) {
+  return `こんにちは、${name} さん`;
 }
 ```
 
-この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
+### import（読み込む）
 
-下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
+別のファイルから `export` したものを受け取ります。パスの末尾には **`.js` まで書きます**（ブラウザで動かすときの決まり）。
 
-<LiveDemo
-  height="240px"
-  :html="`<p>await が実際に時間を待つ様子:</p>`"
-  :css="``"
-  :js="demoJs"
-/>
+#### 名前付き import
 
-### 次への橋渡し
+`{ }` で囲んで、export したときと同じ名前で受け取ります。
 
-**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+```js
+// main.js
+import { add, sub, PI } from "./math.js";
 
-「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
+console.log(add(1, 2)); // 3
+console.log(sub(5, 3)); // 2
+console.log(PI);        // 3.14
+```
+
+- `{ add, sub }` のように必要なものだけ受け取れる
+- 名前は export 側と **同じ** にする
+
+#### デフォルト import
+
+`{ }` を付けず、好きな名前で受け取れます。
+
+```js
+// main.js
+import greet from "./greeter.js";
+
+console.log(greet("Alice")); // "こんにちは、Alice さん"
+```
+
+- `{ }` を付けない
+- 名前は自由に決められる（`greet` でも `hello` でも動く）
+
+#### 名前付きとデフォルトの混在
+
+同じファイルから両方 import することもできます。
+
+```js
+import greet, { PI } from "./greeter.js";
+```
+
+### 使い分けの目安
+
+- **複数の関数 / 値を出すファイル** → 名前付き export（本コースではこちらを基本に）
+- **中心となる宣言が 1 つだけのファイル**（例: 1 つのコンポーネント） → デフォルト export
+
+どちらが正解ということはなく、プロジェクトの方針で決めます。本コースでは **名前付き export を基本** にします。
+
+### `.js` 拡張子は省略しない
+
+Node.js のパッケージ開発では省略されることもありますが、**ブラウザで直接読み込むときは `.js` まで書きます**。
+
+```js
+// OK
+import { add } from "./math.js";
+
+// NG（ブラウザで 404 になる）
+import { add } from "./math";
+```
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「これまでに作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンからは `index.html` / `main.js` / `storage.js` / `render.js` の 4 ファイル構成になります。`script.js` は使わなくなるため、次の手順で新しいファイルを作成してください。
 
 <details>
 <summary>出発点のコード</summary>
+
+これは **新規 StackBlitz から始める方向け** の最小スターターです（「Web Storage で値をブラウザに保存する」レッスンの完成形を厳密に再現したものではないため、内容は import / export の題材練習用に絞っています）。
 
 **`index.html`**
 
@@ -126,17 +157,91 @@ function wait(ms) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson28</title>
+    <title>lesson29</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson29: import / export の出発点</h1>
+  </body>
+</html>
+```
+
+**`script.js`**
+
+```js
+const users = [
+  { name: "Alice", age: 20 },
+  { name: "Bob", age: 15 },
+  { name: "Carol", age: 30 },
+  { name: "Dave", age: 17 },
+];
+
+const adults = users.filter((user) => user.age >= 20);
+console.log(adults);
+
+const names = users.map((user) => user.name);
+console.log(names);
+
+const adultNames = users
+  .filter((user) => user.age >= 20)
+  .map((user) => user.name);
+console.log(adultNames);
+
+const numbers = [1, 2, 3, 4, 5];
+const doubled = numbers.map((n) => n * 2);
+const evens = numbers.filter((n) => n % 2 === 0);
+console.log(doubled);
+console.log(evens);
+console.log(numbers);
+
+const todos = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+  { id: "a3", text: "ゴミを出す" },
+];
+const target = todos.find((todo) => todo.id === "a2");
+console.log(target);
+
+const missing = todos.find((todo) => todo.id === "zzz");
+console.log(missing);
+```
+
+</details>
+
+### ゴール
+
+- TODO アプリのロジックを 3 ファイルに分割する
+  - `storage.js`: `localStorage` に配列を保存 / 読み出し（`JSON.parse` は `try` / `catch` で囲む）
+  - `render.js`: 配列を受け取って `<ul>` に `<li>` を並べる
+  - `main.js`: 2 つを import して、画面の初期描画だけを行うエントリ
+- 画面を開くと、`storage.js` に仕込んだ初期データが `<ul>` に並んで表示される
+
+### 手順
+
+1. 以下 4 ファイルをプロジェクトに作る: `index.html` / `main.js` / `storage.js` / `render.js`
+2. HTML から `<script type="module" src="./main.js">` を読み込む
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson29</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson28: import / export</h1>
+    <h1>lesson29: import / export</h1>
     <ul id="list"></ul>
   </body>
 </html>
 ```
 
-**`storage.js`**
+### `storage.js`
+
+`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、後の「fetch で API から取得する」で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
 
 ```js
 const STORAGE_KEY = "module-todos";
@@ -164,7 +269,12 @@ export function saveTodos(todos) {
 }
 ```
 
-**`render.js`**
+- `loadTodos()`: 保存されている配列を返す。なければ空配列、壊れていても空配列
+- `saveTodos(todos)`: 配列を文字列に変えて保存
+
+### `render.js`
+
+DOM への描画だけを担当します。「どこに描くか」と「何を描くか」を引数で受け取れるようにしておくと、画面構成が変わっても中身を書き直さずに済みます。
 
 ```js
 export function renderTodos(listElement, todos) {
@@ -177,7 +287,12 @@ export function renderTodos(listElement, todos) {
 }
 ```
 
-**`main.js`**
+- `listElement.textContent = ""` で一度中身を空にする
+- 配列の各要素に対して `<li>` を作って `<ul>` に追加する
+
+### `main.js`
+
+エントリーポイントです。`storage.js` と `render.js` を import して、初期データがあれば描画、なければ動作確認用の初期データを入れて保存します。
 
 ```js
 import { loadTodos, saveTodos } from "./storage.js";
@@ -199,90 +314,42 @@ if (todos.length === 0) {
 renderTodos(list, todos);
 ```
 
-</details>
-
-### ゴール
-
-- `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る
-
-### 手順
-
-1. `index.html` のタイトルを `lesson29` に変える
-2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson29</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson29: 非同期処理の基本</h1>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-function wait(ms) {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function main() {
-  console.log("start");
-  await wait(1000);
-  console.log("1 秒経過");
-  await wait(1000);
-  console.log("2 秒経過");
-  await wait(1000);
-  console.log("3 秒経過");
-  console.log("end");
-}
-
-main();
-
-console.log("main を呼んだ後のコード");
-```
+- 2 つのファイルから必要な関数を **名前付き import** で受け取る
+- 初回起動時だけ、動作確認用のサンプルデータを保存する
+- `renderTodos` に `<ul>` 要素と配列を渡して描画
 
 ### 期待出力
 
-Console に、1 秒ごとに以下が順に追加されます。
+- 画面に以下の 3 行が `<ul>` の中に並ぶ
 
 ```
-start
-main を呼んだ後のコード
-1 秒経過
-2 秒経過
-3 秒経過
-end
+牛乳を買う
+本を読む
+掃除する
 ```
 
-ポイント:
-
-- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
-- `main` の内部は `await` があるので、順番に待ちながら進む
-- 合計で「約 3 秒」かけて順番にログが出る
+- DevTools の Application（または Storage）タブ → Local Storage に `module-todos` というキーで JSON 文字列が保存されている
+- Console で `localStorage.setItem("module-todos", "{ broken")` と壊れた文字列をわざと入れてリロード → Console に「保存データの読み込みに失敗しました」と出て、サンプルデータで起動し直される（`try` / `catch` の効果）
+- Console に `Uncaught SyntaxError: Cannot use import statement outside a module` が **出ない** ことを確認（出ていたら `<script type="module">` になっていない）
 
 ### 変える
 
-- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
-- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
-- `main()` の呼び出しを削除すると、何も実行されないことを確認
+- `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `module-todos` を削除してからリロードすると、新しいサンプルが表示される
+- `renderTodos` の `textContent` を `textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
+- `main.js` で `renderTodos(list, todos)` を呼ばないようにコメントアウト → `<ul>` が空のまま
 
 ### 自分で書く
 
-- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
-- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
+- `storage.js` に `clearTodos()` という関数を追加して export する。中身は `localStorage.removeItem(STORAGE_KEY)` だけ。`main.js` から import して、ページ読み込み時に 1 回呼んでみる（動作確認したら外す）
+- `render.js` を **デフォルト export** に書き換える（`export default function renderTodos(...) { ... }`）。`main.js` 側の import を `import renderTodos from "./render.js";` に変えて、同じ動きをすることを確認する
+- 新しいファイル `format.js` を作り、`export function formatTodo(todo) { return `[${todo.id}] ${todo.text}`; }` を書く。`render.js` の中で import して、`<li>` に整形後の文字列を表示する
 
 ## まとめ
 
-- 同期は「上から順にすぐ実行」、非同期は「時間がかかる処理を待たずに先へ進む」
-- 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
-- `async` 関数の中で `await Promise` すると、結果が返るまで待てる
-- `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う
+- ファイルを役割ごとに分けると、読みやすく・変更しやすくなる
+- ブラウザで `import` / `export` を使うには `<script type="module" src="...">` で読み込む
+- **名前付き export**（`export function foo() {}`）と **デフォルト export**（`export default ...`）の 2 種類
+- **名前付き import** は `{ 名前 }` で受け取り、名前は export と同じにする
+- **デフォルト import** は `{ }` なしで、受け取り側で名前を自由に決められる
+- ブラウザで直接読み込む場合、import パスの末尾は **`.js` まで書く**
+- 本コースは **名前付き export を基本** とする

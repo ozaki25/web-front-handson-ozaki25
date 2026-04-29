@@ -1,163 +1,128 @@
-# lesson59: 条件で出し分ける
-
-<script setup>
-const closeScript = '<' + '/script>'
-const demoHtml =
-  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
-  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
-  '<div id="root"></div>'
-
-const demoJs = `
-// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
-// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
-const h = React.createElement;
-const { useState } = React;
-
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [unread, setUnread] = useState(0);
-
-  return h(
-    'div',
-    null,
-    // (1) 三項演算子: 2 択の切り替え
-    isLoggedIn
-      ? h('p', null, 'ようこそ、Alice さん')
-      : h('p', null, 'ゲストさん、こんにちは'),
-    h(
-      'button',
-      { onClick: () => setIsLoggedIn(v => !v), style: { marginRight: '8px' } },
-      isLoggedIn ? 'ログアウト' : 'ログイン'
-    ),
-    h('hr'),
-    // (2) && で「あるときだけ出す」
-    h('p', null, '未読: ' + unread),
-    unread > 0 &&
-      h('p', { style: { color: '#b91c1c', fontWeight: 'bold' } }, unread + ' 件の未読があります'),
-    h('button', { onClick: () => setUnread(c => c + 1), style: { marginRight: '8px' } }, '+1'),
-    h('button', { onClick: () => setUnread(0) }, '既読にする')
-  );
-}
-
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(h(App));
-`
-</script>
+# lesson59: フォームと制御コンポーネント
 
 ## ゴール
 
-- `&&` / 三項演算子 / 早期 return の 3 パターンを使い分けて、状態に応じた表示切り替えができる
-- それぞれの使いどころを説明できる
+- `value` と `onChange` を使って、入力値を state と同期できる（制御コンポーネント）
+- 1 章 の「フォームを作る」の HTML フォーム（`name` 属性で値を集める形）と、React の書き方との違いを説明できる
+- `<form action={fn}>` にも触れ、5 章 の「Server Actions の最小形」で本格的に使うことを予告として受け取る
 
 ## 解説
 
-### JSX は式だから、分岐も式で書く
+### 1 章 の「フォームを作る」の HTML フォームとの対比
 
-「JSX を書く」で触れたとおり、JSX の `{ ... }` に書けるのは **式** だけです。`if` 文は書けません。なので、条件で出し分けるときも**式の形**を使います。
+1 章 の「フォームを作る」の自己紹介フォームを思い出してください。次のような形でした。
 
-よく使うのは次の 3 つです。
+```html
+<form action="/contact" method="POST">
+  <label for="email">メール</label>
+  <input id="email" name="email" type="email" required />
+  <button type="submit">送信</button>
+</form>
+```
 
-1. `条件 && <JSX />`
-2. `条件 ? <A /> : <B />`
-3. 関数の先頭で `if` を使って早期 return
+- `name="email"` が「この入力欄はメールです」という目印
+- 送信ボタンを押すと、ブラウザが `name` 属性をキーにして値を集め、`action` に指定された URL に送る
+- 値の持ち主は **ブラウザ**
 
-### (1) `&&` で「あるときだけ出す」
+React の**制御コンポーネント**はこの形と少し違います。
 
-「条件が真のときだけ表示する / 偽なら何も出さない」は `&&` が定番です。
+- 値の持ち主は **React の state**
+- `<input>` には「今の state の値」を `value` として渡す
+- 入力するたびに `onChange` で state を更新する
+- `<input>` は常に state と同期している
+
+どちらも「フォームを作る」ことには違いありません。使い分けの現場感としては、HTML ネイティブで十分なら前者、入力値を**その場で JS から使いたい**（リアルタイムプレビュー、バリデーション、条件付き無効化など）なら後者です。React では制御コンポーネントが基本です。
+
+### 制御コンポーネントの最小形
 
 ```tsx
-{
-  isLoggedIn && <p>ログイン中</p>;
+import { useState } from "react";
+
+function NameInput() {
+  const [name, setName] = useState("");
+
+  return (
+    <div>
+      <input
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+        placeholder="名前"
+      />
+      <p>こんにちは、{name} さん</p>
+    </div>
+  );
 }
 ```
 
-- `isLoggedIn` が `true` なら `<p>ログイン中</p>` が評価されて表示される
-- `isLoggedIn` が `false` なら `false` が評価結果になり、JSX としては何も描画されない
+- `value={name}` で「いま表示する値」を指定
+- `onChange={(e) => setName(e.target.value)}` で「入力されたら state を更新」
+- これで `<input>` と `name` state がつねに一致する
 
-#### `&&` の落とし穴（数値 0）
+ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。つまり、**見た目の真実は state 側にある**。
 
-`&&` の左側には **本当に真偽値** を置くようにしてください。数値の `0` を書くと、そのまま `0` が画面に表示されてしまいます。
+### `e.target.value`
 
-```tsx
-{
-  count && <p>{count} 件あります</p>;
-}
-// count が 0 だと、画面に「0」という数字が出てしまう
-```
-
-件数のような**数値**で判定したいときは、明示的に真偽値に変換します。
+`onChange` が受け取る `e`（イベント）の中に、変化があった要素（`target`）が入っています。`<input>` の value は常に文字列型です。
 
 ```tsx
-{
-  count > 0 && <p>{count} 件あります</p>;
-}
-```
-
-`string` や `Todo[]` は `length === 0` を意識しつつ、迷ったら三項演算子を使うとより安全です。
-
-### (2) 三項演算子で「A か B か」
-
-「ログイン中なら A、ログアウト中なら B を表示」のように **2 択** で切り替えたいときは三項演算子が素直です。
-
-```tsx
-{
-  isLoggedIn ? <p>ログイン中</p> : <a href="/login">ログインへ</a>;
-}
-```
-
-- `isLoggedIn` が `true` なら左側、`false` なら右側が表示される
-
-3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次の 3 番目の方が読みやすいです。
-
-### (3) 早期 return
-
-関数の**一番上**で条件判定して、不要な場合は `return` してしまう書き方です。
-
-```tsx
-type MessageProps = {
-  text: string;
-};
-
-function Message({ text }: MessageProps) {
-  if (text.length === 0) {
-    return null; // null を返すと「何も描画しない」
-  }
-  return <p>{text}</p>;
-}
-```
-
-- `null` を `return` すると、そのコンポーネントは **何も描画しない**
-- 条件が多い場合は、三項や `&&` を重ねるより圧倒的に読みやすい
-
-ローディング中専用のスピナー、エラー時専用のメッセージ、3 択以上の状態分岐など、分岐ごとに違う大きな JSX を返したい場合に使うとスッキリします。
-
-### 小さなコンポーネントに分ける発想
-
-条件が重なってきたら、「サブコンポーネントに切り出す」ことも考えます。
-
-```tsx
-function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
-  if (isLoggedIn) {
-    return <p>ようこそ！</p>;
-  }
-  return <a href="/login">ログイン</a>;
-}
-
-// 呼び出し側
-<UserStatus isLoggedIn={isLoggedIn} />;
-```
-
-1 ファイルの中で条件分岐が増えすぎたら、このような分割も選択肢になります。本コースでは以降のレッスンで使っていきます。
-
-### 動きを見てみる
-
-下のデモでボタンを押すと、三項演算子と `&&` の 2 パターンで表示が切り替わる様子を確認できます。「ログイン」を押すと挨拶文が差し替わり、`+1` を押して未読が 1 以上になったときだけ赤字の警告が現れます。
-
-<LiveDemo
-  height="320px"
-  :html="demoHtml"
-  :js="demoJs"
+<input
+  type="number"
+  value={age}
+  onChange={(e) => setAge(Number(e.target.value))}
 />
+```
+
+数値で扱いたいときは、`Number()` で変換する必要があります。HTML 的には `type="number"` でも、JS から見えるのは文字列です。
+
+### textarea と select も同じ形
+
+HTML では `<textarea>入る文字</textarea>` のように子要素として書いていましたが、React では `<input>` と同じく `value` と `onChange` を使います。
+
+```tsx
+<textarea value={memo} onChange={(e) => setMemo(e.target.value)} />
+<select value={category} onChange={(e) => setCategory(e.target.value)}>
+  <option value="home">家事</option>
+  <option value="work">仕事</option>
+</select>
+```
+
+### `<form>` の送信
+
+送信ボタンを押したときの動作は 2 通り書き方があります。
+
+#### (a) `onSubmit` で書く（本コースの4 章 はこれ）
+
+```tsx
+<form
+  onSubmit={(e) => {
+    e.preventDefault();
+    // state をもとに処理する
+  }}
+>
+  {/* ... */}
+</form>
+```
+
+- `e.preventDefault()` で、ブラウザ既定の送信（ページ遷移）を止める
+- その後は自分で `fetch` なり state 更新なりをする
+- 「親子コンポーネントの連携」「TODO アプリを React で作る」で使う形
+
+#### (b) `<form action={fn}>`（紹介のみ、5 章 で本格使用）
+
+React 19 では、`<form>` の `action` 属性に **関数** も渡せるようになりました。
+
+```tsx
+<form action={submitTodo}>
+  <input name="text" />
+  <button type="submit">送信</button>
+</form>
+```
+
+- `action` が関数なら、React は **既定の送信動作（ページ遷移）を抑止し、`FormData` を引数に関数を呼ぶ**
+- 結果として、自分で `e.preventDefault()` を書かなくて済む
+- 従来どおり `action="/contact"` のように **URL 文字列** を渡すこともできる（普通の HTML 送信）
+
+本コースでは4 章 の段階では **紹介のみ**です。5 章 の「Server Actions の最小形」の Server Actions でこの形を使うときに「関数を渡すパターン」を詳しく学びます。「4 章 は `onSubmit` 形、5 章 で `action={fn}` 形に乗り換える」という流れを予告として覚えておいてください。
 
 ## 演習
 
@@ -167,75 +132,73 @@ function UserStatus({ isLoggedIn }: { isLoggedIn: boolean }) {
 
 ### ゴール
 
-- ログイン / ログアウトの状態で表示を切り替える画面を作る
-- `&&` / 三項 / 早期 return の 3 パターンそれぞれを、別の箇所で 1 回ずつ書く
+- 名前とメモの入力欄を作り、入力内容がリアルタイムに下に表示されるプレビュー画面を作る
+- 送信ボタンを押したら（`onSubmit` で）入力内容をまとめて表示する
 
 ### 手順
 
 1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` と `src/Message.tsx` を書く
-
-### `src/Message.tsx`
-
-```tsx
-type MessageProps = {
-  text: string;
-};
-
-export function Message({ text }: MessageProps) {
-  // 早期 return: 空文字なら何も描画しない
-  if (text.length === 0) {
-    return null;
-  }
-  return <p className="message">{text}</p>;
-}
-```
+2. `src/App.tsx` を書き換える
+3. `src/App.css` を書き換える
 
 ### `src/App.tsx`
 
 ```tsx
 import { useState } from "react";
-import { Message } from "./Message";
+import type { FormEvent } from "react";
 import "./App.css";
 
 function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [unread, setUnread] = useState(0);
+  const [name, setName] = useState("");
   const [memo, setMemo] = useState("");
+  const [submitted, setSubmitted] = useState<{ name: string; memo: string } | null>(
+    null
+  );
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    setSubmitted({ name, memo });
+  }
 
   return (
     <>
-      <h1>条件表示のデモ</h1>
+      <h1>入力プレビュー</h1>
+
+      <form onSubmit={handleSubmit} className="box">
+        <div className="row">
+          <label htmlFor="name">名前</label>
+          <input
+            id="name"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+          />
+        </div>
+
+        <div className="row">
+          <label htmlFor="memo">メモ</label>
+          <textarea
+            id="memo"
+            value={memo}
+            onChange={(e) => setMemo(e.target.value)}
+          />
+        </div>
+
+        <button type="submit">送信</button>
+      </form>
 
       <section className="box">
-        <h2>(A) 三項演算子: ログイン状態で切り替え</h2>
-        {isLoggedIn ? (
-          <p>ようこそ、Alice さん</p>
-        ) : (
-          <p>ゲストさん、こんにちは</p>
-        )}
-        <button onClick={() => setIsLoggedIn((v) => !v)}>
-          {isLoggedIn ? "ログアウト" : "ログイン"}
-        </button>
+        <h2>リアルタイムプレビュー</h2>
+        <p>名前: {name}</p>
+        <p>メモ: {memo}</p>
       </section>
 
-      <section className="box">
-        <h2>(B) && で「あるときだけ出す」</h2>
-        <p>未読: {unread}</p>
-        {unread > 0 && <p className="alert">{unread} 件の未読があります</p>}
-        <button onClick={() => setUnread((c) => c + 1)}>+1</button>
-        <button onClick={() => setUnread(0)}>既読にする</button>
-      </section>
-
-      <section className="box">
-        <h2>(C) 早期 return: Message コンポーネント</h2>
-        <input
-          value={memo}
-          onChange={(e) => setMemo(e.target.value)}
-          placeholder="空のままだと表示されない"
-        />
-        <Message text={memo} />
-      </section>
+      {submitted !== null && (
+        <section className="box">
+          <h2>送信結果</h2>
+          <p>名前: {submitted.name}</p>
+          <p>メモ: {submitted.memo}</p>
+        </section>
+      )}
     </>
   );
 }
@@ -255,21 +218,27 @@ export default App;
   background-color: #fff;
 }
 
-.box button {
-  margin-right: 8px;
-  padding: 4px 10px;
-  cursor: pointer;
+.row {
+  margin-bottom: 8px;
+  display: flex;
+  flex-direction: column;
 }
 
-.alert {
-  color: #b3261e;
+.row label {
+  margin-bottom: 4px;
   font-weight: bold;
 }
 
-.message {
-  background-color: #eaf6ff;
-  padding: 6px 10px;
+.row input,
+.row textarea {
+  padding: 6px;
+  border: 1px solid #999;
   border-radius: 4px;
+}
+
+button {
+  padding: 6px 12px;
+  cursor: pointer;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -278,39 +247,54 @@ export default App;
     background-color: #202020;
     border-color: #555;
   }
-  .alert {
-    color: #ff7a6d;
-  }
-  .message {
-    background-color: #13344d;
+  .row input,
+  .row textarea {
     color: #eee;
+    background-color: #2a2a2a;
+    border-color: #666;
   }
 }
 ```
 
 ### 期待出力
 
-- (A) ボタン「ログイン」を押すと、見出し下のメッセージが `ゲストさん、こんにちは` → `ようこそ、Alice さん` に変わる。ボタンの文言も `ログアウト` に変わる
-- (B) `+1` ボタンを押すと「未読」の数字が増え、**1 以上になると初めて** 「N 件の未読があります」が赤文字で現れる。`既読にする` を押すと数字が 0 になり、警告文も消える
-- (C) 入力欄に文字を入れると、下に水色背景の `<p>` が現れる。空にすると `<p>` ごと消える（`null` を返している）
+- 画面に「名前」入力欄と「メモ」テキストエリア、「送信」ボタン
+- 「リアルタイムプレビュー」セクションに、入力内容が**打つたびに**反映される
+- 「送信」を押すと、「送信結果」セクションが現れて、押した時点の入力内容が固定表示される
+- その後もリアルタイムプレビューは入力に追従するが、「送信結果」は次に押すまで変わらない
 
 ### 変える
 
-- (B) の条件を `unread > 0 &&` から `unread &&` に書き換えて、未読 0 のときに **画面に `0` が表示される** 現象を再現する。**確認したら必ず `unread > 0 &&` に戻す**。`&&` の左辺は **常に真偽値**（`x > 0`、`x.length > 0`、`Boolean(x)` など）にするのが原則
-- (A) の三項を `&&` と `||` の組み合わせに書き換えてみる（余裕があれば）
-- (C) の `if (text.length === 0)` を `if (text === "")` に変えても同じ動きになることを確認
+- `onChange` を消して `value={name}` だけ残すと、**入力できなくなる**（読み取り専用扱い）。確認したら戻す
+- `<input>` のラベル `<label htmlFor="name">` の `htmlFor` を `for` に書き換えると、ブラウザのコンソールに警告が出る（JSX では `htmlFor`）
+- `handleSubmit` から `e.preventDefault()` を消すと、送信時にページがリロードされてプレビューが消える。**なぜリロードされるのか** を自分の言葉で説明してみる
 
 ### 自分で書く
 
-- 「ステータス」の state を `"offline" | "loading" | "online"` のユニオン型で作る
-- 値に応じて、`offline → 灰色の丸`、`loading → 黄色の丸 + "接続中..."`、`online → 緑の丸 + "接続済み"` を表示する
-- 3 択なので、早期 return か、または `switch` で `if ... return` を 3 本重ねる形がおすすめ
-- ヒント: `const [status, setStatus] = useState<"offline" | "loading" | "online">("offline");`
+- カテゴリ選択用の `<select>` を追加し、`state.category` と同期させる
+- 選択肢: `"家事"` / `"仕事"` / `"趣味"`
+- プレビューと送信結果にカテゴリも表示する
+
+ヒント:
+
+```tsx
+const [category, setCategory] = useState("家事");
+// ...
+<select value={category} onChange={(e) => setCategory(e.target.value)}>
+  <option value="家事">家事</option>
+  <option value="仕事">仕事</option>
+  <option value="趣味">趣味</option>
+</select>;
+```
+
+### 末尾予告
+
+- 4 章 内では `<form onSubmit={(e) => { e.preventDefault(); ... }}>` の形を「親子コンポーネントの連携」「TODO アプリを React で作る」で使い続ける
+- `<form action={fn}>` 形は5 章 の「Server Actions の最小形」の Server Actions で登場する。そこで `preventDefault` が不要になる理由とあわせて扱う
 
 ## まとめ
 
-- JSX の中に書けるのは式だけ。条件分岐も **式の形** で書く
-- `&&`: あるときだけ出す（ただし数値 0 に注意）
-- 三項演算子: 2 択の切り替え
-- 早期 return（`return null` を含む）: 3 択以上 / それぞれが大きいとき
-- 条件が増えてきたら **コンポーネント分割** も選択肢
+- 制御コンポーネントは `value={state}` + `onChange` の組み合わせ。値の持ち主は state
+- `e.target.value` は常に文字列。数値で扱いたいなら `Number()` で変換
+- `<label>` の `for` は JSX では **`htmlFor`**
+- フォーム送信は当面 `onSubmit` + `e.preventDefault()`。`<form action={fn}>` は5 章 でフル活用

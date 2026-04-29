@@ -1,120 +1,144 @@
-# lesson78: エラーと見つからないページ
+# lesson78: 動的ルート
 
 ## ゴール
 
-- レンダリング中に発生した例外を `error.tsx` で捕まえて、壊れた画面の代わりにエラー画面を出せます。
-- `notFound()` を呼んで `not-found.tsx` を表示できます。
-- `error.tsx` が担当する範囲と、Server Actions のフォームエラー（「送信状態とエラー表示」）の担当範囲が **別物** であることを理解しています。
+- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
+- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
+- 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
 
 ## 解説
 
-### ページの事故を 2 種類に分ける
+### 動的ルートとは
 
-Web アプリで出会う「いつもの画面が出ない」状況は、Next.js では次の 2 つに分けて扱います。
+「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
 
-1. **存在しない URL / データ**: 記事 ID が存在しない、ユーザーが削除済みなど。→ `not-found.tsx`
-2. **実行中の例外**: fetch が失敗、`throw new Error(...)` が飛んだ、など。→ `error.tsx`
-
-この 2 つをそれぞれ専用のファイルで受け止めます。
-
-### `not-found.tsx` と `notFound()`
-
-該当データが見つからないときは、**`next/navigation`** から `notFound()` 関数を呼び出します。すると同じディレクトリ（またはその上位ディレクトリ）の `not-found.tsx` が表示されます。
+App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
 
 ```
 app/
 └── posts/
+    ├── page.tsx            → /posts（一覧）
     └── [id]/
-        ├── page.tsx
-        └── not-found.tsx
+        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
 ```
 
-```tsx
-// app/posts/[id]/page.tsx
-import { notFound } from "next/navigation";
+`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
 
+### `params` は Promise になった
+
+Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
+
+> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
+
+型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
+
+```tsx
 export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const { id } = await params;
-  // ...探す
-  const post = posts.find((p) => String(p.id) === id);
-  if (!post) {
-    notFound(); // ここで実行は止まり、not-found.tsx に切り替わる
-  }
-  return <div>{post.title}</div>;
+  // id を使って処理
 }
 ```
 
-- `notFound()` は呼ぶだけで良いです。`return` は書きません（書いても問題はありませんが、`notFound()` が例外を投げる仕組みで実行を止めるため、それ以降は走りません）。
-- `not-found.tsx` はそのディレクトリに置きます。上位のディレクトリに置いておけば、配下のページ全部で共通利用できます。
+`PageProps<"/posts/[id]">` の文字列は、**この `page.tsx` があるルート** を書きます。`[id]` の部分がそのまま `params.id` の型に反映されます（`string` 型）。
 
-> **`notFound()` は HTTP ステータスも 404 にする**: 単に「見つかりません」と画面に書くだけだと、HTTP ステータスは **200 OK** のままです。検索エンジンは 200 で返ってきたページを「正常に表示されている」と判断し、**「見つかりません」というページをインデックスに入れてしまう** （= ソフト 404）リスクがあります。`notFound()` を呼ぶと Next.js が **正しく 404 ステータス** を返すため、検索エンジンに「このページは存在しない」と伝わります。SEO の観点でも `notFound()` は重要です。
+- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
+- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
+- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
 
-### `error.tsx`
+### `find` で 1 件だけ取り出す
 
-レンダリング中に `throw` された例外を捕まえるのが `error.tsx` です。**Client Component として書く必要があります**（`"use client"` が必要です）。エラーの情報とリトライ関数を props で受け取ります。
+2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
 
-::: tip 4 章 の Error Boundary との関係
-これは 4 章 の **「Error Boundary と Suspense」** で自作したクラスコンポーネント版 Error Boundary を、Next.js が **ファイル規約** に押し込めた仕組みです。`error.tsx` を置くと Next.js が裏で Error Boundary を組み立てて配下のページを包んでくれます。
-:::
-
-```
-app/
-└── posts/
-    └── [id]/
-        ├── page.tsx
-        └── error.tsx
+```ts
+const target = posts.find((p) => p.id === id);
 ```
 
-```tsx
-"use client";
+- 見つかったとき: その要素を返します。
+- 見つからないとき: `undefined` を返します。
 
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
-};
+なので、詳細ページでは次のような流れになります。
 
-export default function Error({ error, reset }: Props) {
-  return (
-    <div>
-      <h1>問題が発生した</h1>
-      <p>{error.message}</p>
-      <button onClick={reset}>もう一度試す</button>
-    </div>
-  );
+1. 一覧を `fetch` で全部取ってくる（Server Component）。
+2. `await params` で URL の `id` を取り出す。
+3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
+4. 見つからないときは 404 を返す。
+
+この段階ではシンプルに「一覧から `find` で取り出して表示」までを作ります。
+
+### 実務では「単件 fetch」が原則
+
+学習用の演習では `posts` 一覧をまるごと fetch して `find` で 1 件選び出していますが、**実務ではこの書き方を本番に持ち込みません**。一覧が 1 万件あれば「1 件のページを表示するために 1 万件をネットワーク越しに取ってくる」ことになり、転送量・実行時間ともに無駄が大きく、外部 API への過剰呼び出しにもなります。
+
+JSONPlaceholder の場合は **`/posts/${id}` で単件取得できる** ので、実務寄りに書くなら次のようにします。
+
+```ts
+const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+if (!res.ok) {
+  // 見つからなかったときの処理（notFound() など）
 }
+const post: Post = await res.json();
 ```
 
-- 1 行目に `"use client"` を書きます。
-- `error` は `Error` オブジェクトです。本番ビルドでは `message` は潰されます（情報漏れ防止）。開発中は読めます。
-- `reset()` を呼ぶとページを再レンダリングしようとします。
+加えて、変更頻度の低いデータなら `{ next: { revalidate: 60 } }` のような **時間ベースの再検証** を付けたり、ビルド時に静的生成する `generateStaticParams` で **既知の `id` 一覧を SSG する** 戦略もあります。本コースでは概念に集中するため `find` のままにしますが、本番に持ち込む前に「単件 API があれば単件 fetch、なければキャッシュ戦略を考える」を頭に入れておきます。
 
-### `error.tsx` の範囲は「レンダリング中」
+### searchParams は今回扱わない
 
-ここが混同しやすいポイントです。**`error.tsx` はレンダリング中の例外だけを拾います**。
-
-- Server Component の中で `throw` / `fetch` 失敗 → `error.tsx` で拾えます。
-- Server Actions のフォーム送信で「空入力」のようなバリデーションエラー → `error.tsx` では **拾いません**。
-
-Server Actions のフォームエラーは、例外を投げる代わりに **戻り値でエラー情報を返す** 設計になっています。「送信状態とエラー表示」で扱う `useActionState` がその受け皿です。フォーム送信のエラーを `error.tsx` に落とそうとしても動かないので、混同しないでください。
-
-まとめると:
-
-| 事故の種類 | 担当 |
-|---|---|
-| 存在しない ID / ユーザー | `notFound()` + `not-found.tsx` |
-| fetch 失敗・レンダリング中の `throw` | `error.tsx` |
-| フォームの入力エラー | 「送信状態とエラー表示」の `useActionState`（戻り値） |
+URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 以降 Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」の中で「指定された ID にハイライトを付ける」演習で初めて使います。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「動的ルート」で作った `/posts/[id]` を前提にしています。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
 
 <details>
-<summary>出発点のファイル</summary>
+<summary>出発点のファイル（`/posts` 部分）</summary>
 
 **`app/posts/page.tsx`**
+
+```tsx
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  return (
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+**`app/posts/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
+}
+```
+
+</details>
+
+### 前回のプロジェクトを開く
+
+「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
+
+### 手順 1: 一覧ページを詳細リンク付きに更新
+
+`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
 
 ```tsx
 import Link from "next/link";
@@ -146,7 +170,9 @@ export default async function PostsPage() {
 }
 ```
 
-**`app/posts/[id]/page.tsx`**
+### 手順 2: 動的ルートのファイルを作る
+
+`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
 
 ```tsx
 type Post = {
@@ -161,6 +187,7 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
   const res = await fetch("https://jsonplaceholder.typicode.com/posts");
   const posts: Post[] = await res.json();
 
+  // URL の id は string、API の id は number なので揃える
   const post = posts.find((p) => String(p.id) === id);
 
   if (!post) {
@@ -181,125 +208,38 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 }
 ```
 
-**`app/posts/loading.tsx`**
+ポイント:
 
-```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
-}
-```
-
-</details>
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順 1: `not-found.tsx` を置く
-
-`app/posts/[id]/not-found.tsx` を新規作成します。
-
-```tsx
-import Link from "next/link";
-
-export default function NotFound() {
-  return (
-    <>
-      <h1>記事が見つからない</h1>
-      <p>指定された ID の記事は存在しない。</p>
-      <Link href="/posts">一覧に戻る</Link>
-    </>
-  );
-}
-```
-
-### 手順 2: 詳細ページで `notFound()` を呼ぶ
-
-`app/posts/[id]/page.tsx` を書き換えます。見つからないときは `notFound()` を呼ぶ形に変更します。
-
-```tsx
-import { notFound } from "next/navigation";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    notFound();
-  }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
-}
-```
-
-### 手順 3: `error.tsx` を置く
-
-`app/posts/[id]/error.tsx` を新規作成します。
-
-```tsx
-"use client";
-
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
-};
-
-export default function Error({ error, reset }: Props) {
-  return (
-    <>
-      <h1>読み込み中に問題が発生した</h1>
-      <p>{error.message}</p>
-      <button onClick={reset}>もう一度試す</button>
-    </>
-  );
-}
-```
-
-### 手順 4: わざとエラーを起こす
-
-`app/posts/[id]/page.tsx` の fetch URL をタイポで壊します（例: `typicodee`）。
-
-```tsx
-const res = await fetch("https://jsonplaceholder.typicodee.com/posts");
-```
-
-このままでは `res.json()` の手前で fetch が失敗し、例外が飛びます。`error.tsx` が表示されます。
+- `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
+- `await params` してから `id` を取り出します。
+- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
+- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。
 
 ### 期待出力
 
-1. `/posts/1` にアクセス → タイポ URL のせいで `error.tsx` の「読み込み中に問題が発生した」が表示されます。
-2. 「もう一度試す」ボタン → 同じエラーが再発します（URL を直さない限り）。
-3. URL を正しい `typicode.com` に戻して再読み込み → 通常どおり記事が表示されます。
-4. `/posts/999` にアクセス（存在しない ID）→ `not-found.tsx` の「記事が見つからない」と「一覧に戻る」リンクが表示されます。
-5. エラー画面と not-found 画面は **別のファイルで扱われている** ことを確認しましょう。
+1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
+2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
+3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
+4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
 
 ### 変えてみる
 
-1. `not-found.tsx` にイラストや再検索用のテキストを足して、よりユーザーに優しい表示にしましょう。
-2. `error.tsx` の「もう一度試す」の下に `<Link href="/">トップに戻る</Link>` を追加しましょう。
-3. `notFound()` を呼ぶ代わりに直接 `throw new Error("not found")` としてみましょう → `error.tsx` が出ることを確認します（`notFound()` を使わないと 404 ではなく 500 系扱いになる、という違いを体感できます）。
+1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
+2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
+3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`PageProps<"/posts/[postId]">` に合わせて書き直します（グローバル型なので再ビルドすると自動で型が切り替わります）。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
 
 ### 自分で書く
 
-「存在しないユーザー ID のときの `not-found.tsx`」を `/users/[id]/` 配下に自力で追加してみましょう（「動的ルート」の「自分で書く」で `/users/[id]/page.tsx` を作っていればその続きです）。見た目は posts 側と同じレベルで良いです。
+`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
+
+- URL: `/users/1`
+- API: `https://jsonplaceholder.typicode.com/users`
+- 表示: `name` と `email`、`phone`
+
+`PageProps<"/users/[id]">` の型定義、`await params`、`find` の 3 点が書ければ合格です。
 
 ## まとめ
 
-- 「見つからない」ときは `notFound()` + `not-found.tsx` です。
-- 「レンダリング中の例外」は `error.tsx` です（`"use client"` 必須）。
-- 2 つは担当範囲が違います。
+- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
+- Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
+- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。

@@ -1,450 +1,610 @@
-# lesson15: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）
+# lesson15: Transition と hover アニメーション
 
 ## ゴール
 
-- `:has()` で **親セレクタ**（子の状態に応じて親を装飾）を書ける
-- `@container`（Container Queries）で **親要素の幅** に応じたレイアウトを書ける
-- `:is()` / `:where()` / `@layer` / `@scope` / View Transitions API などモダン CSS の主要機能を「読める状態」にできる
+- `transition` プロパティで、CSS の値の変化をなめらかに補間できる。
+- `transition-property` / `transition-duration` / `transition-timing-function` の役割を説明できる。
+- `transform: translate` で要素を動かし、`transform: scale` で拡大縮小できる。
+- `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。
+- DevTools の Rendering タブで `prefers-reduced-motion: reduce` をエミュレートして動作確認できる。
 
 ## 解説
 
-ここまで1 章 で扱ってきた CSS は **2010 年代に固まった基本** が中心でした。一方、2022〜2025 年にかけて CSS は急速に進化しています。`:has()` の登場で「親セレクタが書ける」、`@container` で「メディアクエリの限界」が解消され、`@layer` で「優先度の暴走」を防げるようになりました。
+### `transition` は「値の変化をなめらかにつなぐ」
 
-「いま新しく CSS を書くなら最初から使ってよいもの」だけを集めたのがこのレッスンです。
+通常、CSS の値が変わると **一瞬で** 切り替わります。たとえば `:hover` で色を変えると、マウスを乗せた瞬間にパッと色が変わります。
 
-### :has() — 親セレクタ
-
-長年「CSS には親セレクタがない」と言われてきました。子の状態を見て親を装飾するには JavaScript を使うしかなかった。それが `:has()` で書けるようになりました。
-
-#### 例 1: 画像を含む段落だけ余白を広げる
+`transition` プロパティを付けると、**値の変化に時間をかけて** くれます。結果として「ふわっと色が変わる」「じわっと位置が動く」ような演出ができます。
 
 ```css
-p:has(img) {
-  margin-block: 2rem;
+.button {
+  background-color: #2563eb;
+  transition: background-color 200ms ease;
+}
+
+.button:hover {
+  background-color: #1d4ed8;
 }
 ```
 
-#### 例 2: フォーカス中の入力を持つフォームに枠を出す
+この例では「`background-color` が変化するときだけ、200ms（= 0.2 秒）かけて `ease`（ゆっくり始まってゆっくり終わる）でつなぐ」という意味になります。
 
-```css
-form:has(input:focus) {
-  outline: 2px solid #2563eb;
-}
-```
-
-#### 例 3: チェック済みの input を持つ label を強調
-
-```css
-label:has(input:checked) {
-  background: #dbeafe;
-  font-weight: bold;
-}
-```
+下のデモは、左のボタンに `transition` を付けず、右のボタンに付けた比較です。両方にホバーしてみると、左は **一瞬で** 切り替わり、右は **ふわっと** 切り替わるのが分かります。
 
 <LiveDemo
-  height="220px"
+  height="160px"
   :html="`
-<form>
-  <label><input type='checkbox'> 利用規約に同意する</label>
-  <label><input type='checkbox'> ニュースレターを受け取る</label>
-  <input type='text' placeholder='フォーカスしてみて'>
-</form>
+<button class='no-trans'>transition なし</button>
+<button class='with-trans'>transition あり</button>
   `"
   :css="`
-form { display: grid; gap: 12px; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-form:has(input:focus) { outline: 2px solid #2563eb; outline-offset: 2px; }
-label { padding: 8px; border-radius: 4px; }
-label:has(input:checked) { background: #dbeafe; font-weight: bold; }
-input[type=text] { padding: 8px; }
+body { padding: 16px; background: #f5f7fa; }
+button {
+  padding: 10px 18px;
+  margin: 4px 8px 4px 0;
+  background: #2563eb;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font: inherit;
+  cursor: pointer;
+}
+.no-trans:hover {
+  background: #dc2626;
+  transform: translateY(-4px);
+}
+.with-trans {
+  transition: all 250ms ease;
+}
+.with-trans:hover {
+  background: #dc2626;
+  transform: translateY(-4px);
+}
   `"
   :js="``"
 />
 
-これまで JS で「checkbox の change を listen → 親 label にクラス付与」と書いていたコードが、**CSS 1 行** に置き換わります。
+### `transition` の 4 つのパーツ
 
-`:has()` は **2023 年末に全主要ブラウザで対応**し、2026 年の現在は安心して使えます。
+`transition` は 4 つのサブプロパティをまとめたショートハンドです。
 
-### :is() / :where() — セレクタの共通化
+| プロパティ | 意味 | 例 |
+|---|---|---|
+| `transition-property` | どのプロパティに掛けるか | `background-color`、`all`（全部） |
+| `transition-duration` | 何 ms / 何 s かけるか | `200ms`、`0.3s` |
+| `transition-timing-function` | 変化の緩急 | `ease`、`linear`、`ease-in-out` |
+| `transition-delay` | 変化が始まるまでの待ち時間 | `0s`、`100ms` |
 
-複数のセレクタに同じスタイルを当てたい時、これまで `,` で並べて書いていました。
+ショートハンドで書くと次のようになります（`delay` は省略可）。
 
 ```css
-h1 a, h2 a, h3 a {
-  color: #2563eb;
+.button {
+  transition: background-color 200ms ease;
 }
 ```
 
-`:is()` でまとめられます。
+複数のプロパティに別々の時間を掛けたいときはカンマ区切りで並べられます。
 
 ```css
-:is(h1, h2, h3) a {
-  color: #2563eb;
-}
-```
-
-`:where()` は **書き方が同じで詳細度だけ 0** になる版です。リセット CSS など「他の指定に絶対勝たないでほしい」場面で使います。
-
-```css
-:where(button, input, select) {
-  all: unset;
-}
-/* 詳細度 0 なので、後から書くどんなスタイルにも負ける */
-```
-
-詳細度の暴走を意図的に避けられるのがポイントです。
-
-### @layer — カスケードを意図的に積む
-
-CSS の優先度（カスケード）は「詳細度」「宣言順」「`!important`」で決まりますが、規模が大きくなると **どのスタイルが勝つか読めなくなる** 問題が起きます。
-
-`@layer` は「優先度の階層」を **明示的に** 書く仕組みです。
-
-```css
-@layer reset, base, components, utilities;
-
-@layer reset {
-  * { margin: 0; padding: 0; box-sizing: border-box; }
-}
-
-@layer base {
-  body { font-family: sans-serif; line-height: 1.6; }
-}
-
-@layer components {
-  .button {
-    background: #2563eb;
-    color: white;
-    padding: 8px 16px;
-    border-radius: 4px;
-  }
-}
-
-@layer utilities {
-  .mt-4 { margin-top: 1rem; }
-}
-```
-
-ルール:
-
-- **宣言順が優先度**。後ろの layer が勝つ
-- layer 内の詳細度は **layer 間の優先度に勝てない**
-- 「layer なし」の宣言は **すべての layer より強い**
-
-これで「なぜか utilities が効かない」事故が消えます。Tailwind CSS v4 もこの `@layer` を全面採用しています。
-
-### @scope — コンポーネント単位のスコープ
-
-「このカードの中の `a` だけスタイルを当てたい」を、深いネストや BEM クラス名なしで書けます。
-
-```html
-<article class="card">
-  <h2>タイトル</h2>
-  <a href="#">続きを読む</a>
-</article>
-
-<a href="#">外側のリンク</a>
-```
-
-```css
-@scope (.card) {
-  a {
-    color: #dc2626;
-    text-decoration: none;
-  }
-}
-```
-
-`.card` 内の `a` だけ赤くなり、外側の `a` には影響しません。
-
-範囲を **下限指定** で「ここから先は適用外」にもできます。
-
-```css
-@scope (.card) to (.card-actions) {
-  /* .card の中だが .card-actions より上の階層だけが対象 */
-}
-```
-
-`@scope` は 2024 年以降に Chrome / Safari / Firefox（160）で対応が進みました。CSS Modules や CSS-in-JS なしで「スコープ付き CSS」が書けます。
-
-### @container — Container Queries
-
-これまでのメディアクエリは **画面幅** にしか反応できませんでした。
-
-```css
-@media (min-width: 768px) {
-  /* 画面幅 768px 以上 */
-}
-```
-
-これだと「サイドバーに置いた時の Card」と「メインに置いた時の Card」を **同じ画面幅で違うレイアウト** にすることが難しい。`@container` は「**親要素の幅** で分岐できる」仕組みです。
-
-```css
-.card-list {
-  container-type: inline-size;
-}
-
 .card {
-  display: block;
-}
-
-@container (min-width: 600px) {
-  .card {
-    display: grid;
-    grid-template-columns: 200px 1fr;
-    gap: 16px;
-  }
+  transition:
+    transform 200ms ease,
+    box-shadow 200ms ease;
 }
 ```
 
-`.card-list` が 600px 以上の場所に置かれた時だけ、子の `.card` が横並びになります。**画面幅は無関係**。
+最初のうちは、**`all 200ms ease`** と書いて「変化する全プロパティに同じ時間をかける」くらいで十分実用になります。
 
-これで「**コンポーネントが置かれた場所** に応じて見た目が変わる」、真にレスポンシブな部品が書けます。
-
-### View Transitions API — 滑らかな遷移
-
-「state 変化や画面遷移をフェード / スライドで自然に」を **CSS のみ + JS 数行** で実現できます。
-
-#### 同一ページ内で（`document.startViewTransition`）
-
-```js
-const box = document.getElementById("box");
-const button = document.getElementById("toggle");
-
-button.addEventListener("click", () => {
-  // 対応していないブラウザは普通に変更だけする
-  if (!document.startViewTransition) {
-    box.classList.toggle("big");
-    return;
-  }
-  document.startViewTransition(() => {
-    box.classList.toggle("big");
-  });
-});
+```css
+.card {
+  transition: all 200ms ease;
+}
 ```
 
-`startViewTransition` のコールバック内で DOM を変えると、変更前後の **スナップショットを自動で撮ってクロスフェード** してくれます。
+### `transform` で位置・拡大を変える
+
+`transition` と組み合わせるとよく使うのが `transform` です。
+
+- `transform: translateY(-4px)` → 要素を 4px 上に動かす。
+- `transform: scale(1.05)` → 要素を 1.05 倍（5% 大きく）に拡大する。
+- `transform: translateY(-4px) scale(1.05)` → 両方同時。
+
+`transform` の利点は、**レイアウトを壊さない** ことです。`margin-top: -4px` でも似た動きに見えますが、こちらは周囲の要素の位置計算に影響を与えます。`transform` は描画だけをズラすのでパフォーマンスもよく、アニメーションに向いています。
+
+下のデモで、カードにマウスを乗せると `transform` と `box-shadow` が `transition` でなめらかに変化します。ホバーを外すと元の状態に戻るところまで、目で追えます。
 
 <LiveDemo
-  height="320px"
+  height="220px"
   :html="`
-<button id='toggle'>切り替え</button>
-<div id='box'></div>
+<div class='card'>
+  <h3>ホバーしてみて</h3>
+  <p>transform と box-shadow が 250ms でなめらかに動きます。</p>
+</div>
   `"
   :css="`
-button { padding: 8px 16px; margin-bottom: 16px; }
-#box { width: 100px; height: 100px; background: #2563eb; border-radius: 8px; }
-#box.big { width: 280px; height: 200px; background: #dc2626; }
-::view-transition-old(root), ::view-transition-new(root) { animation-duration: 0.5s; }
+body { padding: 24px; background: #f5f7fa; }
+.card {
+  max-width: 320px;
+  padding: 24px;
+  background: white;
+  border-radius: 8px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.08);
+  cursor: pointer;
+  transition: transform 250ms ease, box-shadow 250ms ease;
+}
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+.card h3 { margin: 0 0 8px; }
+.card p { margin: 0; color: #555; }
   `"
-  :js="`
-const box = document.getElementById('box');
-const button = document.getElementById('toggle');
-button.addEventListener('click', () => {
-  if (!document.startViewTransition) {
-    box.classList.toggle('big');
-    return;
-  }
-  document.startViewTransition(() => {
-    box.classList.toggle('big');
-  });
-});
-  `"
+  :js="``"
 />
 
-#### ページ間（cross-document, MPA）
+### `prefers-reduced-motion` で動きを抑える
 
-2024〜2025 年に対応が進み、**異なるページ間** でも View Transition が使えるようになりました。
+動きのあるアニメーションは楽しい一方で、**乗り物酔い** のように画面の動きで気分が悪くなる人がいます。OS 側に「動きを減らす」設定があり（macOS の「視差効果を減らす」、Windows の「アニメーションを表示」OFF など）、この設定は CSS から **`@media (prefers-reduced-motion: reduce)`** で検出できます。
 
 ```css
-@view-transition {
-  navigation: auto;
+.card {
+  transition: all 200ms ease;
 }
-```
 
-これを CSS に書くと、同一オリジン内のページ遷移が **自動でフェード** します。さらに「両ページに共通する要素」に名前を付けると、ページをまたいで **同じ要素が動く** 演出ができます。
-
-```css
-.hero-image {
-  view-transition-name: hero-image;
-}
-```
-
-ページ A の `.hero-image` から ページ B の `.hero-image` へ、自然にモーフィングします。Next.js の App Router でも `next/link` の遷移に乗ります。
-
-#### Safari / Firefox の状況
-
-- 同一ページ内: Chrome / Safari / Firefox で対応
-- ページ間: Chrome 系で先行。Safari は段階的、Firefox は対応中（2026 年現在）
-
-未対応ブラウザでは **遷移なしで普通に動く** だけなので、Progressive Enhancement として安心して書けます。
-
-#### `prefers-reduced-motion` への配慮
-
-View Transition は画面が大きく動くため、**前庭機能障害** や **乗り物酔い** の傾向がある人には不快に感じられます。OS で「動きを減らす」設定をしているユーザーには、遷移を抑える指定を必ず入れます。
-
-```css
 @media (prefers-reduced-motion: reduce) {
-  ::view-transition-old(*),
-  ::view-transition-new(*) {
-    animation-duration: 0.01ms;
+  .card {
+    transition: none;
   }
 }
 ```
 
-これで「動きを減らす」設定の環境では、遷移演出が事実上スキップされます（完全に削除すると一部の擬似要素で副作用が出るため、極短時間にする慣習）。
+この書き方で「動きを減らす設定の人にはアニメーションを OFF」にできます。CSS だけで配慮できるので、足しておく価値が十分にあります。
 
-### おまけ — 知っておくと得する 2026 のモダン CSS
+### DevTools で `prefers-reduced-motion` をエミュレート
 
-- **`@starting-style`**: 要素が表示される瞬間のスタイル。`display: none` から表示への transition が書ける
-- **Anchor Positioning**（`anchor()`）: ある要素を **別の要素** に紐付けて配置。tooltip / popover が JS なしで書ける
-- **`color-mix()`**: `color-mix(in oklch, blue 70%, white)` のような色合成
-- **CSS Nesting**: Sass のように `&` で入れ子。2024 年に全ブラウザ対応
+自分の OS 設定を変えなくても、ブラウザの DevTools 側で「動きを減らす」状態を一時的に再現できます。Chrome の手順:
 
-これらも現場で増えていく機能です。
+1. DevTools を開く（`F12` / `Ctrl+Shift+I` / `Cmd+Option+I`）。
+2. DevTools の右上の **3 点メニュー**（縦の `⋮`）→ **More tools** → **Rendering** を選ぶ。
+3. 出てきた Rendering パネル（下部か横に並ぶ）をスクロールして **Emulate CSS media feature prefers-reduced-motion** を探す。
+4. ドロップダウンで `reduce` を選ぶ。
+
+以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
 
 ## 演習
 
-### ゴール
+### 途中から始める場合
 
-- `:has()` / `@container` / View Transitions API を **同じページに同居** させて動作を確認する
+これまでのレッスンで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
 
-### 手順 1: 新規プロジェクト（StackBlitz の Vanilla テンプレート）
+<details>
+<summary>出発点のコード</summary>
 
-これまでの 1 章 と同じく **StackBlitz の Vanilla（HTML + CSS + JS）テンプレート** で進めます。<https://stackblitz.com/fork/js> を開いて新しいプロジェクトを始めるか、これまで作ってきた自己紹介ページの隣に `modern-css.html` のような別ファイルとして追加してもかまいません。
-
-### 手順 2: index.html
-
-`index.html` を以下に置き換えます。
+**`index.html`**
 
 ```html
-<!doctype html>
+<!DOCTYPE html>
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>Modern CSS Demo</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>私の自己紹介</title>
     <link rel="stylesheet" href="style.css" />
   </head>
   <body>
-    <main>
-      <h1>モダン CSS のショーケース</h1>
+    <header class="site-header">
+      <h1>私の名前</h1>
+      <nav class="site-nav">
+        <a href="#about">自己紹介</a>
+        <a href="#likes">好きなもの</a>
+        <a href="#contact">問い合わせ</a>
+      </nav>
+    </header>
 
-      <section class="container">
-        <div class="card-list">
-          <article class="card"><h2>カード A</h2><p>説明文 A</p></article>
-          <article class="card"><h2>カード B</h2><p>説明文 B</p></article>
+    <main>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div class="cards">
+          <article class="card card-new">
+            <span class="badge">NEW</span>
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="音楽のプレースホルダ画像" />
+            <h3>音楽</h3>
+            <p>作業中はインストゥルメンタル。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="写真のプレースホルダ画像" />
+            <h3>写真</h3>
+            <p>スマホで散歩の途中に。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="料理のプレースホルダ画像" />
+            <h3>料理</h3>
+            <p>凝らない、続ける。</p>
+          </article>
         </div>
       </section>
 
-      <section>
-        <button id="toggle">切り替え</button>
-        <div id="box"></div>
-      </section>
-
-      <section>
+      <section id="contact">
+        <h2>問い合わせ</h2>
         <form>
-          <label><input type="checkbox" /> 同意する</label>
-          <input type="text" placeholder="フォーカスしてみる" />
+          <div>
+            <label for="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label for="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label for="message">メッセージ</label>
+            <textarea id="message" name="message" rows="4" required></textarea>
+          </div>
+          <button type="submit">送信</button>
         </form>
       </section>
+
+      <section id="gallery">
+        <h2>ギャラリー</h2>
+        <div class="gallery">
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 1" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 2" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 3" />
+          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 4" />
+        </div>
+      </section>
     </main>
-    <script src="script.js"></script>
+
+    <a class="to-top" href="#">ページトップへ</a>
+
+    <footer class="site-footer">
+      <p>&copy; 私の名前</p>
+    </footer>
   </body>
 </html>
 ```
 
-### 手順 3: style.css
+**`style.css`**
 
 ```css
-@layer reset, base, components;
-
-@layer reset {
-  * { margin: 0; padding: 0; box-sizing: border-box; }
+* {
+  box-sizing: border-box;
 }
 
-@layer base {
-  body { font-family: sans-serif; padding: 24px; line-height: 1.6; color: #1a1a1a; background: #fafafa; }
-  main { display: grid; gap: 32px; max-width: 800px; }
-  section { padding: 16px; border: 1px solid #ccc; border-radius: 8px; background: #fff; }
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  background-color: #f9fafb;
 }
 
-@layer components {
-  /* Container Queries */
-  .card-list {
-    container-type: inline-size;
-    display: grid;
-    gap: 16px;
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e5e7eb;
+    background-color: #0b1220;
   }
-  .card { padding: 16px; background: #f3f4f6; border-radius: 8px; }
-  @container (min-width: 600px) {
-    .card-list { grid-template-columns: 1fr 1fr; }
+}
+
+a {
+  color: #2563eb;
+}
+
+a:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+h1,
+h2,
+h3 {
+  margin-top: 0;
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.site-header {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-header h1 {
+  margin: 0;
+}
+
+.site-nav a {
+  color: #f9fafb;
+  margin-right: 16px;
+}
+
+.card {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #111827;
+    border-color: #374151;
+  }
+}
+
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+
+.gallery {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.gallery img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.site-footer {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
   }
 
-  /* :has() */
-  form:has(input:focus) { outline: 2px solid #2563eb; outline-offset: 2px; }
-  label:has(input:checked) { background: #dbeafe; font-weight: bold; padding: 4px 8px; border-radius: 4px; }
-  form { display: grid; gap: 12px; }
+  .site-nav a {
+    margin-right: 0;
+    margin-top: 4px;
+    display: inline-block;
+  }
+}
 
-  /* View Transitions */
-  #box { width: 100px; height: 100px; background: #2563eb; border-radius: 8px; margin-top: 12px; }
-  #box.big { width: 100%; height: 200px; background: #dc2626; }
-  ::view-transition-old(root),
-  ::view-transition-new(root) {
-    animation-duration: 0.5s;
+form div {
+  margin-bottom: 12px;
+}
+
+form label {
+  display: block;
+  margin-bottom: 4px;
+  font-weight: bold;
+}
+
+form input,
+form textarea {
+  width: 100%;
+  padding: 8px;
+  border: 1px solid #9ca3af;
+  border-radius: 4px;
+  font: inherit;
+}
+
+form input:focus,
+form textarea:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 1px;
+}
+
+form button {
+  padding: 8px 16px;
+  background-color: #2563eb;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-weight: bold;
+  cursor: pointer;
+}
+
+form button:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+.to-top {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+
+  padding: 12px 16px;
+  background-color: #2563eb;
+  color: #ffffff;
+  text-decoration: none;
+  border-radius: 24px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 10;
+}
+
+.to-top:focus {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .to-top {
+    background-color: #3b82f6;
+    color: #ffffff;
+  }
+}
+
+.badge {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+
+  padding: 2px 8px;
+  background-color: #dc2626;
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: bold;
+  border-radius: 4px;
+  z-index: 1;
+}
+
+@media (prefers-color-scheme: dark) {
+  .badge {
+    background-color: #ef4444;
+    color: #ffffff;
   }
 }
 ```
 
-### 手順 4: script.js
+</details>
 
-```js
-const box = document.getElementById("box");
-const toggle = document.getElementById("toggle");
+### やること
 
-toggle.addEventListener("click", () => {
-  if (!document.startViewTransition) {
-    box.classList.toggle("big");
-    return;
+自己紹介ページの「好きなもの」カードに、以下のアニメーションを付けます。
+
+1. `:hover` で **カードが少し上に浮く**（`translateY(-4px)`）。
+2. 同時に **影が少し濃くなる**（`box-shadow` の変化）。
+3. `transition: all 200ms ease` で滑らかに補間する。
+4. `prefers-reduced-motion: reduce` の環境では `transition: none` に切り替え、動きを OFF にする。
+
+### ステップ 1: カードにデフォルトの影を付ける
+
+`style.css` の `.card` を次のように書き換えます（これまでのレッスンで既に背景色や padding は指定済みの前提）。
+
+```css
+.card {
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+  position: relative;
+
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  transition: all 200ms ease;
+}
+
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #111827;
+    border-color: #374151;
+    box-shadow: 0 2px 6px rgba(0, 0, 0, 0.6);
   }
-  document.startViewTransition(() => {
-    box.classList.toggle("big");
-  });
-});
+}
 ```
 
-### 手順 5: ブラウザで確認
+ポイント:
 
-StackBlitz は保存と同時にプレビューが更新されます。以下を確認します。
+- 先ほど追加した `position: relative`（バッジの基準用）はそのまま残す。
+- `box-shadow` で薄い影を付ける（ダークモードでは影を濃く）。
+- `transition: all 200ms ease` を書いておく。`all` にしておけば、`:hover` で変わる全プロパティに同じ補間が掛かる。
 
-1. **`:has()`**: form 内の `input` をフォーカスすると form 全体に枠が出る。checkbox を ON にすると label の背景が変わる
-2. **`@container`**: ブラウザの `<section>` の幅を狭めるとカードが縦並びに、広げると横並びになる（**画面幅ではなく親要素の幅** で動くことを確認）
-3. **View Transitions**: 「切り替え」を押すと box の大きさと色がフェードしながら変化する
+### ステップ 2: `:hover` で浮き上がらせる
+
+`style.css` に次を追加します。
+
+```css
+.card:hover {
+  transform: translateY(-4px);
+  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.15);
+}
+
+@media (prefers-color-scheme: dark) {
+  .card:hover {
+    box-shadow: 0 8px 20px rgba(0, 0, 0, 0.8);
+  }
+}
+```
+
+`translateY(-4px)` で 4px 上に、`box-shadow` を濃く大きくして「浮いている」印象を強めます。
+
+### ステップ 3: `prefers-reduced-motion` で動きを OFF
+
+`style.css` の末尾に次を追加します。
+
+```css
+@media (prefers-reduced-motion: reduce) {
+  .card {
+    transition: none;
+  }
+
+  .card:hover {
+    transform: none;
+  }
+}
+```
+
+これで、OS やブラウザが「動きを減らす」設定のときは、カードはパッと切り替わるだけで、浮き上がるアニメーションは発生しません。影の変化も瞬時になるので気分を悪くしにくくなります。
 
 ### 期待出力
 
-- フォームの input にフォーカスすると **青い枠** が出る
-- checkbox ON で label の背景が **薄い青** になる
-- ブラウザの幅を狭めるとカードが **縦並び**、広げると **2 列**
-- 「切り替え」ボタンで box が **フェードしながら** 拡大 / 縮小
+- プレビューのカードにマウスを乗せると、**約 200ms かけてカードが 4px 上に浮き**、同時に **影が濃く大きく** なる。
+- マウスを外すと、また約 200ms かけて元の位置と影に戻る。
+- DevTools の **Rendering タブで `prefers-reduced-motion: reduce` をエミュレート** した状態にすると、マウスを乗せた瞬間にパッと位置と影が変わり、動きが無くなる。戻すと（`no-preference`）また滑らかに動く。
+- Chrome で `Ctrl+Shift+P`（macOS は `Cmd+Shift+P`）でコマンドパレットを開き、「Show Rendering」と入力しても Rendering タブを呼び出せる。
 
-### 変える
+### 変えてみる
 
-- `@container (min-width: 600px)` を `(min-width: 400px)` に変えて分岐点を確認
-- `card-list` の `container-type` を消すと `@container` が効かなくなることを確認
-- `::view-transition-old/new` の `animation-duration` を `1.5s` にすると遷移がゆっくりになる
-- `@layer components` を `@layer reset` の前に動かすと優先度が変わる（`reset` が勝って `card` の余白が消える）
+1. `transition: all 200ms ease` の `200ms` を `500ms` や `1000ms` に変えてみる。動きが「ゆっくり」になることを確認する。
+2. `ease` を `linear` に変えてみる。緩急が無くなり機械的な動きになる。`ease-in-out` にすると、始まりと終わりが特にゆっくりになる。
+3. `transform: translateY(-4px)` に `scale(1.03)` を足す（`transform: translateY(-4px) scale(1.03);`）。浮きながら少し拡大される効果になる。
 
 ### 自分で書く
 
-- `:has(input[type="email"]:invalid)` で「メール形式が不正な input を含む form」に赤枠を出す
-- 2 ページ作って `@view-transition { navigation: auto; }` を CSS に追加し、ページ間遷移にフェードがかかることを確認
-- `view-transition-name: hero;` を付けた要素を 2 ページに置き、ページをまたいだ要素が **モーフィング** することを確認（Chrome 系推奨）
+「ページトップに戻る」ボタン（先ほど追加した `.to-top`）にも、hover 時のアニメーションを付けてみます。条件:
+
+- hover で背景色が濃い青（`#1d4ed8`）に変わる
+- hover で 1.05 倍に拡大する（`transform: scale(1.05)`）
+- `transition: all 200ms ease` で補間
+- `prefers-reduced-motion: reduce` のときは `transition: none` と `transform: none`
+
+ヒントは `.card` のコードを真似すること。完成したら、DevTools の Rendering タブで `prefers-reduced-motion` を切り替え、動きの有無を確認します。
+
+### よくあるつまずき
+
+- `transition` を `:hover` の側に書いてしまう。`transition` は **通常状態** に書きます。そうしないと「マウスを離すとき」の戻りが補間されません（厳密には `:hover` 側にも書く書き方もありますが、最初は通常状態に付けるのが素直です）。
+- `transform` を使わず `margin-top: -4px` で浮かせる → 周囲のレイアウトがガタつく。`transform` を使う。
+- `transition: all` が効かない → そもそも変化するプロパティが書かれていない（`:hover` で色も位置も変わっていないなど）。まず何を変えたいかを決めて、`:hover` 側に書く。
 
 ## まとめ
 
-- `:has()` で **親セレクタ** が書ける。子の状態に応じた装飾を CSS だけで実現できる
-- `:is()` でセレクタを共通化、`:where()` は詳細度 0 で「弱い指定」を作る
-- `@layer` で **カスケードを意図的に積む**。Tailwind CSS v4 も採用
-- `@scope` で **コンポーネント単位のスコープ**。BEM や CSS Modules がなくても局所化できる
-- `@container` は **親要素の幅** で分岐。コンポーネント単位のレスポンシブが書ける
-- View Transitions API は `startViewTransition()` 1 つで状態遷移を滑らかにし、`@view-transition` でページ間にも拡張できる
-- 1 章「HTML / CSS」はここで一段落。**2 章「JavaScript」** へ進んでブラウザを動的に動かす方法に入る
+- `transition` で値の変化をなめらかに補間できる。最初は `transition: all 200ms ease` で十分。
+- `transform: translateY()` / `scale()` はレイアウトを壊さずに位置・大きさを変えられる。
+- `@media (prefers-reduced-motion: reduce)` で動きを OFF にできる。動きが苦手な人への最低限の配慮として覚えておく。
+- DevTools の Rendering タブで `prefers-reduced-motion` をエミュレートして動作確認できる。

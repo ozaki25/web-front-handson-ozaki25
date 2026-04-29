@@ -1,223 +1,488 @@
-# lesson96: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
+# lesson96: ARIA 属性とキーボード操作
 
 ## ゴール
 
-- Chrome DevTools 内蔵の **Lighthouse** で a11y スコアを計測できる
-- **axe DevTools** 拡張で詳細な違反をチェックできる
-- 自動チェックでは拾えない領域（文脈・操作感）を **スクリーンリーダー**（VoiceOver / NVDA）で確認できる
-- CI に **axe-core**（`@axe-core/playwright` など）を組み込む発想を理解する
-- 「自動チェック + 手動チェック + 実ユーザー」の 3 段構えが必要な理由を説明できる
+- ARIA の **5 つの原則**（特にセマンティック HTML を優先）を理解する
+- よく使う ARIA 属性（`aria-label` / `aria-labelledby` / `aria-describedby` / `aria-expanded` / `aria-hidden` / `aria-live`）を使い分けられる
+- `role` 属性をどんな時に使うかを説明できる
+- キーボード操作（Tab / Shift+Tab / Enter / Space / Esc / 矢印キー）の標準パターンを知る
+- `tabindex` の 3 つの値（`0` / `-1` / 正の数値）の意味を説明できる
+- モーダルでのフォーカストラップ・フォーカスリングを消さない原則を守れる
 
 ## 解説
 
-### チェックの 3 段構え
+### ARIA の原則: セマンティック HTML を優先する
 
-a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は 3〜4 割で、残りは **文脈** に依存します。たとえば:
+ARIA（Accessible Rich Internet Applications）は、HTML だけでは表現しきれない意味をスクリーンリーダーに伝えるための **追加の属性** です。W3C が **ARIA の 5 つの原則** として次の「使うべきでない条件」を示しています（抜粋）。
 
-- `alt="画像"` と書いてあっても、画像の本当の内容を表していなければ機械は気づけない
-- ボタンラベルが `aria-label="保存"` でも、「何を保存するのか」が文脈に合ってなければ機械は気づけない
-- キーボードで Tab 順序が「技術的に通る」でも、論理的な順序として使いづらい場合がある
+1. **HTML 要素で表現できるなら、ARIA を使わない**。`<button>` が使えるなら `<div role="button">` は書かない
+2. **HTML の意味を ARIA で上書きしない**。`<h1 role="button">` のように `<h1>` を無理にボタンにしない
+3. **ARIA 付きの要素もキーボード操作可能に**。role を付けたら Tab で到達でき、Enter や Space で反応する必要がある
+4. **フォーカス可能な要素に `role="presentation"` や `aria-hidden="true"` を付けない**（触れなくなる）
+5. **インタラクティブな要素には、アクセシブルな名前を付ける**（画像ボタンなら `aria-label` を）
 
-実務では次の 3 段階でチェックします。
+つまり「**ARIA は最後の手段**」です。まずは `<button>` / `<nav>` / `<h1>` / `<label>` のような意味あるタグを使い、それでも足りないとき（複雑なウィジェット・動的更新・ネイティブ要素がないもの）だけ ARIA を足します。
 
-1. **自動**: Lighthouse / axe DevTools → 開発中の基本ラインを自動検知
-2. **手動**: キーボードだけで操作してみる / スクリーンリーダーで読み上げる → 体験として正しいか
-3. **実ユーザー**: 可能ならアクセシビリティ利用者に触ってもらう → リアルなフィードバック
+### よく使う ARIA 属性
 
-本レッスンでは 1 と 2 を一通り触ります。
+実務でよく書くのは以下です。全部を覚える必要はありません。
 
-### 1. Lighthouse: 基本ラインを自動で
+#### 1. `aria-label`: テキストが無い要素に名前を付ける
 
-Chrome DevTools 内蔵の **Lighthouse** タブは、その場でページを監査して 4 つのカテゴリ（Performance / Accessibility / Best Practices / SEO）を 0〜100 の点数で返します。
+アイコンだけのボタンにラベルを与えます。
 
-手順:
-
-1. Chrome でチェックしたいページを開く
-2. DevTools（`F12`）→ **Lighthouse** タブ
-3. Categories で **Accessibility** だけ選択（他もまとめて出しても良い）
-4. Device は Desktop / Mobile どちらかを選び、**Analyze page load** をクリック
-5. レポートが出る。Accessibility のスコアが 100 / 90 / 80 ... のように点数化される
-
-典型的な違反の例:
-
-- Background and foreground colors do not have a sufficient contrast ratio（コントラスト不足）
-- Image elements do not have `[alt]` attributes（alt 欠落）
-- Form elements do not have associated labels（label 欠落）
-- Heading elements are not in a sequentially-descending order（見出し階層の飛び）
-- Buttons do not have an accessible name（アクセシブルネーム欠落）
-- `[aria-*]` attributes do not match their roles（ARIA の誤用）
-
-Lighthouse は **違反ごとに該当の DOM ノード** を示してくれるので、クリックすれば Elements タブにジャンプして直すだけです。
-
-**スコア 100 が目標ですが、それが a11y 完璧の意味ではない** 点に注意してください。Lighthouse が拾うのは機械的な項目だけです。
-
-### 2. axe DevTools: より細かく診断
-
-Lighthouse より **詳細な違反情報** が欲しいときは、Chrome 拡張の **axe DevTools**（<https://www.deque.com/axe/devtools/>）を使います。無料版でも十分に使えます。
-
-インストール後:
-
-1. Chrome 拡張からインストール
-2. DevTools に **axe DevTools** タブが追加される
-3. **Scan ALL of my page** を押す
-4. Critical / Serious / Moderate / Minor の優先度別に違反が一覧される
-5. 各違反に「なぜ違反か」「どう直すか」のガイドリンク付き
-
-Lighthouse との違い:
-
-- axe DevTools は **Deque**（a11y 専門会社）が提供。業界標準の axe-core エンジンを使う
-- 違反の説明が詳しく、**修正方法のコード例** まで載っている
-- Lighthouse は axe-core の一部を内蔵している。つまり **axe DevTools の方が厳しめ**
-
-両方回して、Lighthouse で基本を見て、axe で細部を詰めるのが定番です。
-
-### 3. キーボード手動チェック
-
-ここからは **人間の目と手でしか分からない** 領域です。次を試してください。
-
-1. マウスから手を離す
-2. Tab キーだけでページを最初から最後まで操作する
-3. 次を確認する:
-   - **フォーカスリングが常に見える** か（どこにフォーカスがあるか分かるか）
-   - **Tab の順序が論理的** か（画面上の自然な流れと一致しているか）
-   - すべての **操作可能な要素** に Tab で到達できるか（マウスでしかクリックできない部分はないか）
-   - **モーダル**が開いたとき、Tab がモーダル内で巡回し、Esc で閉じられるか
-   - **キーボードの罠** がないか（Tab を押してもフォーカスが進まない場所はないか）
-
-「フォーカスが見えない」は最頻発の違反です。CSS で `outline: none` を書いていないか、`:focus-visible` で代替を用意しているか、再確認しましょう。
-
-### 4. スクリーンリーダー手動チェック
-
-スクリーンリーダーは **OS 付属（VoiceOver）や無料**（NVDA） が使えます。自分で触ってみると、文章だけでは分からない体験が一気に分かります。
-
-#### macOS: VoiceOver
-
-- 起動: `Cmd + F5`（または `Touch ID` を 3 回連打）
-- 停止: もう一度 `Cmd + F5`
-- ページ読み上げ: `Ctrl + Option + A`
-- 次の見出しへ移動: `Ctrl + Option + Cmd + H`
-- ランドマーク一覧: `Ctrl + Option + U`（ローター）
-
-初めての場合、読み上げスピードが速すぎると感じます。システム設定 → アクセシビリティ → VoiceOver で速度を遅くできます。
-
-#### Windows: NVDA（無料）
-
-- <https://www.nvaccess.org/download/> からダウンロード
-- 起動後、Web ページを開くと自動で読み上げ開始
-- 次の見出しへ: `H`
-- 次のランドマークへ: `D`
-- 読み上げ停止: `Ctrl`
-
-#### 何を確認するか
-
-- **ページを開いた瞬間に何が読まれるか**（最初の見出しか、関係ないテキストか）
-- ナビゲーションで **「メインコンテンツにスキップ」** できるか（`<main>` ランドマークがあるか）
-- フォームで **ラベルと入力欄が正しく紐付いている** か
-- **アイコンボタンの名前** が読まれるか（`aria-label` 未設定だと「ボタン」としか読まれない）
-- **動的更新**（通知メッセージなど）が `aria-live` で自動通知されるか
-
-「セマンティック HTML とアクセシビリティの基礎」「ARIA 属性とキーボード操作」で作った演習ページで試してみると、これまで配置した属性が効いているのが体感できます。
-
-### 5. CI に組み込む: `@axe-core/playwright`
-
-手動チェックだけでは、**デグレ**（一度直した違反が再発すること）を防げません。E2E テストで axe を回して CI に組み込むと、PR の段階で自動検知できます。
-
-```ts
-// e2e/a11y.spec.ts
-import { test, expect } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
-
-test("トップページに a11y 違反がない", async ({ page }) => {
-  await page.goto("http://localhost:3000/");
-
-  const results = await new AxeBuilder({ page })
-    // 既知の現状割れているチェックは disable する（後で順次解消）
-    .disableRules(["color-contrast"])
-    // 最初は WCAG A / AA だけに絞ると現実的
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
-
-  expect(results.violations).toEqual([]);
-});
+```html
+<!-- 検索アイコンだけのボタン -->
+<button aria-label="検索">
+  <svg>...</svg>
+</button>
 ```
 
-「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。`expect(results.violations).toEqual([])` をいきなり全ルールで通すと、新しいルールが追加されたときに **無関係の PR が落ちる** ので、`withTags` でスコープを絞り、`disableRules` で既知の課題を一旦よけてから順次解消するのが定石です。
+スクリーンリーダーは「検索、ボタン」と読み上げます。`aria-label` がないと「ボタン」としか読まれず、何のボタンか分かりません。
 
-> React のユニットテストレベルなら `jest-axe` や `vitest-axe` が使えます。コンポーネント単体の違反チェックに向きます。
+#### 2. `aria-labelledby`: 他の要素をラベルにする
 
-### まとめの「チェックリスト」
+すでに画面に表示されている見出しをラベルとして流用します。
 
-デプロイ前に以下を確認すれば、機械的には OK ラインに届きます（最低限）。
+```html
+<section aria-labelledby="contact-heading">
+  <h2 id="contact-heading">お問い合わせ</h2>
+  <p>...</p>
+</section>
+```
 
-- [ ] Lighthouse Accessibility スコアが 90 以上
-- [ ] axe DevTools の Critical / Serious が 0
-- [ ] マウスを使わず Tab だけで全機能を操作できる
-- [ ] Tab を押したときに常にフォーカスリングが見える
-- [ ] モーダルが Esc で閉じ、フォーカスが元に戻る
-- [ ] スクリーンリーダーでページを開いた最初の読み上げが自然
+この `<section>` は「お問い合わせ」というセクションだとスクリーンリーダーが認識します。「セマンティック HTML とアクセシビリティの基礎」の演習でも同じパターンを使いました。
+
+#### 3. `aria-describedby`: 追加の説明を関連付ける
+
+入力欄にエラーメッセージや補足説明を結びつけます。
+
+```html
+<label for="password">パスワード</label>
+<input
+  id="password"
+  type="password"
+  aria-describedby="password-hint password-error"
+  aria-invalid="true"
+/>
+<p id="password-hint">8 文字以上、英数字混在</p>
+<p id="password-error">英字が含まれていません</p>
+```
+
+スクリーンリーダーはラベルに続いて hint と error も読み上げます。フォームのアクセシビリティで定番のパターンです。
+
+#### 4. `aria-expanded`: 開閉状態を伝える
+
+折りたたみ式 UI（アコーディオン / ドロップダウン）で、現在開いているかを伝えます。
+
+```html
+<button aria-expanded="false" aria-controls="menu">メニュー</button>
+<ul id="menu" hidden>
+  <li>項目 1</li>
+  <li>項目 2</li>
+</ul>
+```
+
+クリックで `aria-expanded` を `true` に切り替え、`hidden` 属性も外します。`aria-controls` は「このボタンがどの要素を操作するか」の関連付けです。
+
+#### 5. `aria-hidden`: スクリーンリーダーから隠す
+
+装飾的な要素（アイコン画像など）を読み上げから除外します。
+
+```html
+<button>
+  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">
+    <path d="M3 3h8v9H3z" fill="currentColor" />
+  </svg>
+  削除
+</button>
+```
+
+アイコンを画像的に添えるだけで、隣に「削除」というテキストがある場合、アイコンは読ませずテキストだけ読ませたい、というケースです。
+
+> 注意: **フォーカス可能な要素** に `aria-hidden="true"` を付けてはいけません（原則 4）。フォーカスは当たるのに読み上げられない、という矛盾状態が起きます。
+
+#### 6. `aria-live`: 動的に変化する場所を伝える
+
+JS で中身が変わる領域を、スクリーンリーダーに「変化があったら読み上げてね」と伝えます。
+
+```html
+<div aria-live="polite" id="status"></div>
+
+<script>
+  // ボタン押下で「保存しました」に差し替えると、
+  // スクリーンリーダーが自動でその変化を読み上げる
+  document.getElementById('status').textContent = '保存しました';
+</script>
+```
+
+値は 3 種類:
+
+- `polite`: 今の読み上げが終わってから通知。普通はこれ
+- `assertive`: 今の読み上げを割り込んで即通知。緊急通知のみ
+- `off`: 通知しない（省略と同じ）
+
+チャットの新着通知や、フォーム送信後の成功メッセージで使います。
+
+### `role` 属性: 要素に別の役割を与える
+
+HTML にぴったりの要素がないとき、`role` で役割を付与します。ただし **HTML で書けるものは HTML を優先** です。
+
+```html
+<!-- OK: HTML にタブを表す要素がないので role で補う -->
+<div role="tablist">
+  <button role="tab" aria-selected="true">タブ 1</button>
+  <button role="tab" aria-selected="false">タブ 2</button>
+</div>
+
+<!-- NG: button があるのに div + role -->
+<div role="button" tabindex="0" onclick="handleClick()">送信</div>
+<!-- → 素直に <button>送信</button> で良い -->
+```
+
+よく使う role:
+
+- `role="button"` / `role="link"` / `role="checkbox"` など（**原則 HTML 要素を優先**）
+- `role="tablist"` / `role="tab"` / `role="tabpanel"`（タブ UI）
+- `role="dialog"` / `role="alertdialog"`（モーダル。後述）
+- `role="alert"`（`aria-live="assertive"` 相当、即時通知）
+- `role="status"`（`aria-live="polite"` 相当、穏やかな通知）
+
+最近は `<dialog>` タグ（HTML 標準）で済むケースも増えたので、まず `<dialog>` を検討するのが正攻法です。
+
+### キーボード操作の標準パターン
+
+マウスを使わずに操作できるのは、スクリーンリーダー利用者だけでなく **効率重視の開発者や、運動機能に制約のあるユーザー** にとっても重要です。ブラウザと OS が標準で提供している挙動を壊さないのが基本です。
+
+| キー | 標準の挙動 |
+|---|---|
+| **Tab** | フォーカスを次の操作可能要素へ |
+| **Shift + Tab** | フォーカスを前の操作可能要素へ |
+| **Enter** | リンクならページ遷移、ボタンなら実行 |
+| **Space** | ボタンを実行（チェックボックスのトグル、スクロール） |
+| **Esc** | モーダル・メニュー・ドロップダウンを閉じる |
+| **矢印キー** | ラジオグループ内の移動、タブの切り替え、メニュー内の移動 |
+
+これらを **自分で実装する必要は普通ありません**。`<button>` や `<a>` を使えばブラウザが自動でやってくれます。**独自コンポーネントを作るときだけ** 自分で実装します（ARIA Authoring Practices（<https://www.w3.org/WAI/ARIA/apg/patterns/>）に各パターンが載っています）。
+
+### `tabindex` の 3 つの値
+
+`tabindex` 属性で Tab 順序を制御できます。覚えるのは 3 パターンだけです。
+
+```html
+<!-- 1. tabindex="0": Tab 順序に加える。通常の順番で到達可能に -->
+<div tabindex="0" role="button">カスタムボタン</div>
+
+<!-- 2. tabindex="-1": プログラムから focus() できるが、Tab ではスキップ -->
+<div tabindex="-1" id="modal">...</div>
+<!-- JS で modal.focus() は可能。Tab 巡回には入らない -->
+
+<!-- 3. 正の数値（tabindex="1", "2" ...）: 使わない -->
+<button tabindex="5">...</button>
+<!-- NG: 自然な順序を壊すので避ける -->
+```
+
+**`tabindex` の正の数値は原則使わない** のが鉄則です。DOM の登場順に従うのが一番自然で、壊れにくいからです。
+
+### フォーカスを「見えるようにする」
+
+キーボード操作でフォーカスがどこにあるか分からないと、ユーザーは迷子になります。ブラウザはデフォルトでフォーカス時に枠（フォーカスリング）を表示します。**これを CSS で消してはいけません**。
+
+```css
+/* NG: フォーカスリングを完全に消す */
+button:focus {
+  outline: none;  /* 絶対にダメ */
+}
+
+/* OK: デフォルトより目立つリングに差し替える */
+button:focus-visible {
+  outline: 3px solid #2563eb;
+  outline-offset: 2px;
+}
+```
+
+`:focus-visible` は「キーボード操作でフォーカスが来た時だけ」反応する擬似クラスで、マウスクリック時には出ません。これで「マウス派にはリングが見えず邪魔にならない」「キーボード派には明確に見える」を両立できます。
+
+### モーダルのフォーカストラップ
+
+モーダル（ダイアログ）を開いたら、**モーダルの中だけで Tab が巡回する** ようにします。背景のボタンに Tab で飛べてしまうと、スクリーンリーダー利用者は「モーダルを開いたはずが、なぜか元のページに戻っている」という混乱が起きます。
+
+手動で実装するのは煩雑なので、**`<dialog>` タグの `showModal()` を使う** のが最も簡単です（ブラウザがフォーカストラップを自動で行います）。
+
+```html
+<dialog id="my-dialog">
+  <h2>確認</h2>
+  <p>削除しますか？</p>
+  <button type="button" onclick="this.closest('dialog').close()">キャンセル</button>
+  <button type="button" onclick="handleConfirm()">OK</button>
+</dialog>
+
+<button onclick="document.getElementById('my-dialog').showModal()">
+  開く
+</button>
+```
+
+`<dialog>.showModal()` を呼ぶと:
+
+- モーダルが表示される
+- フォーカスがモーダル内に入り、Tab で外に出られなくなる
+- Esc キーで自動的に閉じる
+- 閉じるとフォーカスが元のトリガー要素に戻る
+
+React のモーダルライブラリ（Radix UI の Dialog、Headless UI など）も内部的に同じ作法を守っています。自作する前に既存実装を検討するのがおすすめです。
 
 ## 演習
 
 ### ゴール
 
-- ローカル or 公開 Web サイト 1 ページに対して Lighthouse を実行する
-- axe DevTools をインストールして違反を眺める
-- キーボードだけで 1 つのサイトを操作する体験をする
-- （任意）スクリーンリーダーを起動してページを読み上げさせる
+- アイコンボタンに `aria-label` を付ける
+- 折りたたみ式メニューに `aria-expanded` / `aria-controls` を付ける
+- 動的メッセージに `aria-live` を付ける
+- フォーカスリングを明示的にスタイル（`:focus-visible` で）
+- `<dialog>` で最小のモーダルを作り、フォーカストラップを体験する
 
-### 手順 1: Lighthouse を回す
+### 途中から始める場合
 
-1. Chrome で本コースの教材サイト、または自分が作ったポートフォリオを開きます
-2. DevTools（`F12`）→ **Lighthouse** タブ
-3. Categories で **Accessibility** だけチェックを残し、**Analyze page load** をクリック
-4. スコアが出るまで 10〜30 秒待ちます
-5. スコアと、違反があれば内容をメモします
+独立したレッスンです。新規 StackBlitz の Vanilla テンプレートを開いて、下のコードを貼ってください。
 
-### 手順 2: axe DevTools を使う
+<details>
+<summary>出発点のコード</summary>
 
-1. Chrome Web Store で「axe DevTools」を検索してインストール
-2. DevTools に **axe DevTools** タブが出る
-3. **Scan ALL of my page** をクリック
-4. 結果ペインで違反一覧を眺めます。各違反をクリックすると詳細と該当 DOM が出ます
+**`index.html`**
 
-### 手順 3: キーボードだけで操作する
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ARIA とキーボード操作</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <h1>ARIA 演習</h1>
+    <p>Tab キーで操作してみてください。</p>
+  </body>
+</html>
+```
 
-1. マウスをデスクから**物理的に離して** みる（誘惑を断つため）
-2. Tab キーだけで全リンク・全ボタンを順に通過する
-3. 「ここに行きたいが Tab で辿り着けない」ポイントがないか確認
-4. 見つかったら、Tab 順序の修正候補をメモ（原因は `tabindex` 誤設定 / 非インタラクティブな `<div>` をボタン代わりにしている、など）
+**`style.css`**
 
-### 手順 4（任意）: スクリーンリーダー
+```css
+body { font-family: sans-serif; padding: 16px; color: #1a1a1a; background: #fff; }
+```
 
-Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストールして起動し、同じページを読ませてみます。
+</details>
 
-「何が読まれるか」より「何が読まれないか」に注目すると、見えてないラベルやランドマークが炙り出されます。
+### 手順
+
+1. `index.html` を下の完成形にします
+2. `style.css` を下の完成形にします
+3. プレビューでキーボードの Tab と Enter だけで全操作ができるか確認します
+
+### `index.html` の完成形
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>ARIA とキーボード操作</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <h1>ARIA 演習</h1>
+
+    <section aria-labelledby="toolbar-heading">
+      <h2 id="toolbar-heading">ツールバー</h2>
+      <button aria-label="保存" id="save">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+          <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" />
+          <rect x="5" y="2" width="6" height="4" fill="currentColor" />
+        </svg>
+      </button>
+      <button aria-label="削除" id="delete">
+        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
+          <path d="M4 6h8v7H4z M6 3h4v2H6z" fill="currentColor" />
+        </svg>
+      </button>
+    </section>
+
+    <section aria-labelledby="menu-heading">
+      <h2 id="menu-heading">折りたたみメニュー</h2>
+      <button id="menu-toggle" aria-expanded="false" aria-controls="menu">
+        メニューを開く
+      </button>
+      <ul id="menu" hidden>
+        <li><a href="#">項目 1</a></li>
+        <li><a href="#">項目 2</a></li>
+        <li><a href="#">項目 3</a></li>
+      </ul>
+    </section>
+
+    <section aria-labelledby="status-heading">
+      <h2 id="status-heading">保存の通知</h2>
+      <button id="save-btn">保存する</button>
+      <div id="status" aria-live="polite"></div>
+    </section>
+
+    <section aria-labelledby="dialog-heading">
+      <h2 id="dialog-heading">モーダル</h2>
+      <button id="open-dialog">確認ダイアログを開く</button>
+      <dialog id="confirm-dialog" aria-labelledby="dialog-title">
+        <h3 id="dialog-title">削除の確認</h3>
+        <p>本当に削除してもよろしいですか？</p>
+        <button type="button" id="cancel-btn">キャンセル</button>
+        <button type="button" id="confirm-btn">削除する</button>
+      </dialog>
+    </section>
+
+    <script>
+      // 折りたたみメニュー
+      const toggle = document.getElementById('menu-toggle');
+      const menu = document.getElementById('menu');
+      toggle.addEventListener('click', () => {
+        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
+        toggle.setAttribute('aria-expanded', String(!isOpen));
+        toggle.textContent = isOpen ? 'メニューを開く' : 'メニューを閉じる';
+        if (isOpen) {
+          menu.setAttribute('hidden', '');
+        } else {
+          menu.removeAttribute('hidden');
+        }
+      });
+
+      // ツールバーボタン（デモなのでログだけ）
+      document.getElementById('save').addEventListener('click', () => {
+        console.log('保存ボタンが押されました');
+      });
+      document.getElementById('delete').addEventListener('click', () => {
+        console.log('削除ボタンが押されました');
+      });
+
+      // 動的ステータス通知
+      document.getElementById('save-btn').addEventListener('click', () => {
+        const status = document.getElementById('status');
+        status.textContent = '保存しました (' + new Date().toLocaleTimeString() + ')';
+      });
+
+      // モーダル
+      const dialog = document.getElementById('confirm-dialog');
+      document.getElementById('open-dialog').addEventListener('click', () => {
+        dialog.showModal();
+      });
+      document.getElementById('cancel-btn').addEventListener('click', () => {
+        dialog.close();
+      });
+      document.getElementById('confirm-btn').addEventListener('click', () => {
+        console.log('削除を実行しました');
+        dialog.close();
+      });
+    </script>
+  </body>
+</html>
+```
+
+### `style.css` の完成形
+
+```css
+body {
+  font-family: sans-serif;
+  padding: 16px;
+  color: #1a1a1a;
+  background: #ffffff;
+}
+
+section {
+  margin: 24px 0;
+  padding: 16px;
+  border: 1px solid #d1d5db;
+  border-radius: 4px;
+}
+
+h1 {
+  margin-top: 0;
+}
+
+button {
+  padding: 8px 16px;
+  margin-right: 8px;
+  background: #1e3a8a;
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 14px;
+}
+
+/* フォーカスリング: キーボード操作時だけ目立たせる */
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid #60a5fa;
+  outline-offset: 2px;
+}
+
+/* マウスクリック時は既定のアウトラインを消してもよい（:focus ではなく :focus-visible を使うため、マウス時は自動で出ない） */
+
+ul {
+  margin-top: 8px;
+  padding-left: 20px;
+}
+
+/* モーダル */
+dialog[open] {
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 24px;
+  min-width: 320px;
+}
+
+dialog::backdrop {
+  background: rgba(0, 0, 0, 0.5);
+}
+
+#status {
+  margin-top: 8px;
+  color: #1e3a8a;
+  font-weight: bold;
+}
+```
 
 ### 期待出力
 
-- Lighthouse の Accessibility スコアが数字で出る（教材サイトは 90+ のはず）
-- axe DevTools の違反リストが 0 件 or Critical が 0 件
-- Tab だけで迷子にならずに全操作ができる
-- スクリーンリーダー体験で「どう読まれるか」の感覚が掴める
+- アイコンボタン（保存 / 削除の SVG アイコン）が画面に並び、マウスホバーで tooltip 的に `aria-label` が出るブラウザもある
+- Tab キーで「保存」ボタン → 「削除」ボタン → 「メニューを開く」ボタン → （メニュー展開後は）項目リンク → 「保存する」ボタン → 「確認ダイアログを開く」ボタン と順に移動する
+- 「メニューを開く」を Enter で押すと、メニューが展開されボタンのラベルが「メニューを閉じる」に切り替わる
+- 「保存する」を押すと、下の `aria-live` 領域に時刻付きメッセージが追加される
+- 「確認ダイアログを開く」を押すと、モーダルが表示されフォーカスがモーダル内に移動する。Tab はモーダル内だけを巡回する
+- Esc キーでモーダルが閉じ、フォーカスが元のトリガーボタンに戻る
+
+### スクリーンリーダーで確認（任意）
+
+macOS なら **VoiceOver**（`Cmd + F5` で起動）、Windows なら **NVDA**（無料、<https://www.nvaccess.org/>）を使います。それぞれ:
+
+- アイコンボタンが「保存、ボタン」「削除、ボタン」と読み上げられる
+- 折りたたみボタンが「メニューを開く、ボタン、折りたたみ済み」（展開後は「展開済み」）と状態付きで読まれる
+- 「保存する」を押した瞬間、「保存しました（時刻）」と自動で読み上げられる（`aria-live` のおかげ）
+- モーダル内のコンテンツが「削除の確認、ダイアログ」と読み上げられる
 
 ### 変える
 
-- 自分のポートフォリオやブログ（あれば）で同じ手順を試してみる。違反が出たら、「セマンティック HTML とアクセシビリティの基礎」と「ARIA 属性とキーボード操作」のレッスンに戻って該当 HTML を直す
-- Lighthouse の **Device** を Mobile に切り替えてみる。タップ領域の不足など、モバイル固有の違反が出る場合がある
-- `axe DevTools` の **Intelligent Guided Tests**（有料版機能）の存在を認識しておく。無料版の自動チェックで拾えないものを、人間をガイドしながら問診してくれる
+- `aria-label="保存"` を削除してみる。スクリーンリーダーでは「ボタン」とだけ読まれ、何のボタンか分からなくなる
+- `aria-expanded="false"` を削除してみる。Lighthouse が「Some elements have no accessible name」と警告する
+- `aria-live="polite"` を `aria-live="assertive"` に変えてみる。保存を連打すると、読み上げが即時割り込みで切り替わる
+- `button:focus-visible` のアウトラインを `outline: none` にしてみる（**試したらすぐ戻す**）。キーボード操作でどこにフォーカスがあるか全く見えなくなる恐ろしさを体感できる
 
 ### 自分で書く
 
-- `@axe-core/playwright` を使った E2E a11y テストのサンプルを読んで、雰囲気を掴む（実装は「テスト入門」で Playwright を導入するレッスンと合わせて）
-- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン
+- 「コピーする」ボタンを追加する。クリックで `navigator.clipboard.writeText('...')` を呼び、`aria-live` 領域に「コピーしました」と出す
+- モーダル内の最初のフォーカス可能要素に **最初から** フォーカスが当たることを確認。`showModal()` が自動でやってくれるので特に追記コードは不要
 
 ## まとめ
 
-- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは 3〜4 割しかカバーできない
-- **Lighthouse**: Chrome 内蔵。a11y スコアと違反一覧を即出せる
-- **axe DevTools**: Chrome 拡張。より詳細・厳しめ。Deque 提供の業界標準
-- 手動チェック: キーボードだけで操作 / スクリーンリーダーで読ませる
-- **VoiceOver**（macOS）/ **NVDA**（Windows 無料）でスクリーンリーダー体験
-- CI に `@axe-core/playwright` や `jest-axe` / `vitest-axe` を組み込むと、デグレ検知が自動化できる
-- `eslint-plugin-jsx-a11y` も併用すると書く段階で違反を捕まえられる
-- これで a11y の 3 レッスン（セマンティック HTML / ARIA とキーボード / 自動チェック）が完結。次のテーマに進んで、実務の周辺知識を積み上げる
+- ARIA の原則の第一は **「HTML で書けるなら ARIA を使わない」**
+- よく使う ARIA 属性: `aria-label` / `aria-labelledby` / `aria-describedby` / `aria-expanded` / `aria-hidden` / `aria-live`
+- `role` 属性は HTML で表現できない複雑ウィジェット（タブ / アコーディオン）で使う
+- キーボードの標準操作（Tab / Enter / Space / Esc / 矢印）はブラウザがやってくれる。自分で実装するのは独自コンポーネントだけ
+- `tabindex` は `0` / `-1` の 2 種類だけを使う。正の数値は使わない
+- フォーカスリングは **`outline: none` で消さない**。`:focus-visible` で目立たせる
+- モーダルは `<dialog>.showModal()` でフォーカストラップを自動入手

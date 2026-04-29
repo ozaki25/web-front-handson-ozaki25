@@ -1,454 +1,427 @@
-# lesson129: Web Analytics（Vercel Analytics / GA4）
+# lesson129: エラートラッキング（Sentry）
 
 ## ゴール
 
-- 「サイトを公開したら見るべき指標」が何かを理解する
-- Vercel Analytics と Speed Insights を Next.js に入れられる
-- Google Analytics 4（GA4）の最小設定とカスタムイベント送信が分かる
-- プライバシー（Cookie 同意 / ITP / iOS の制限）配慮の基本を押さえる
-- 解析結果から **何を改善するか** を判断する手順を持つ
+- 本番のエラーを **見逃さず通知する** 仕組みの必要性を理解する
+- Sentry を React / Next.js プロジェクトに導入できる
+- Source Map で **minified コードを元のコードに復元** する流れが分かる
+- ユーザーコンテキスト / タグ / リリースで **エラーを絞り込む** 方法を知る
+- 代替サービス（Datadog / Bugsnag / Rollbar 等）の位置付けを把握する
 
 ## 解説
 
-### 「サイトを公開したら見るべきもの」
+### なぜエラートラッキングが必要か
 
-公開後に最低限見たい指標は次の 3 軸です。
+開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
 
-| 軸 | 例 |
-|---|---|
-| 来訪数 | PV（ページビュー）/ UU（ユニークユーザー）/ 流入元 |
-| 体験 | 表示速度（Core Web Vitals）/ エラー率（→ Sentry） |
-| 行動 | クリック / スクロール / フォーム送信 / コンバージョン |
+エラートラッキングサービスは:
 
-エラー率は Sentry のレッスンで扱いました。**残り 2 軸を埋めるのが Web Analytics** の役割です。
+- ブラウザで起きたエラーを **自動収集** する
+- スタックトレース / OS / ブラウザ / URL / 直前の操作（breadcrumbs）を一緒に送る
+- **集約・重複排除** してダッシュボードに並べる
+- Slack / Email / PagerDuty に **通知** する
+- リリース単位で「**この版で増えたエラー**」を可視化する
 
-### サービスの組み合わせ
+これがあるかないかで、本番運用の体感が大きく変わります。
 
-| ツール | カバーする軸 | 特徴 |
-|---|---|---|
-| **Vercel Analytics** | PV / 流入元 | Cookieless、Next.js 統合が秒で済む |
-| **Vercel Speed Insights** | Core Web Vitals | 実ユーザーの LCP / INP / CLS を集める |
-| **Google Analytics 4**（GA4） | PV / イベント / コンバージョン | 機能多 / 学習コスト高 / Cookie 必要 |
-| **Plausible / Fathom / Simple Analytics** | PV / 流入元 | プライバシー重視、料金固定 |
-| **PostHog / Mixpanel / Amplitude** | プロダクト分析（イベント深掘り） | 機能フラグ / セッション再生も統合 |
+### Sentry の位置付け
 
-「Vercel Analytics + Sentry」だけで小規模サイトは十分。**ユーザー行動の深掘り** が要るなら GA4 / PostHog などを追加します。
+[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
 
-### Vercel Analytics（Next.js）
+特徴:
 
-Vercel に Next.js をデプロイしているなら **管理画面で ON にして 1 行 import するだけ** で導入できます。
+- React / Next.js / Node.js / モバイルなど **多言語対応**
+- パフォーマンス監視 / セッションリプレイ / プロファイリングも統合
+- Source Map アップロードが整っていて、**minify されたコードでも元のコードで読める**
+- 月 5,000 イベントまで **無料枠**
 
-```bash
-npm install @vercel/analytics
-```
-
-`app/layout.tsx`:
-
-```tsx
-import { Analytics } from "@vercel/analytics/next";
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Analytics />
-      </body>
-    </html>
-  );
-}
-```
-
-ポイント:
-
-- **Cookie を使わない** プライバシー設計（ファーストパーティ集計）
-- 個人情報を保存しない
-- ヨーロッパでも同意バナーなしで使える
-- Vercel ダッシュボードに **PV / 流入経路 / リファラー / 国別** が出る
-
-### Vercel Speed Insights
-
-実ユーザーの **Core Web Vitals**（lesson101）を集めるツールです。
+### React に導入する最小手順
 
 ```bash
-npm install @vercel/speed-insights
+npm install @sentry/react
 ```
 
-```tsx
-import { SpeedInsights } from "@vercel/speed-insights/next";
-
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <SpeedInsights />
-      </body>
-    </html>
-  );
-}
-```
-
-これで Lighthouse の合成指標ではなく **本物のユーザー体験** が記録されます。「LCP が悪化したのは○月○日のリリース後」のような診断ができる。
-
-### Google Analytics 4（GA4）
-
-#### 設定の流れ
-
-1. [Google アナリティクス](https://analytics.google.com/) にログイン
-2. プロパティを作成（**GA4 を選ぶ**。**Universal Analytics は 2023 年に終了**しているので新規はもう作れない）
-3. **測定 ID**（`G-XXXXXXXXXX`）を取得
-
-#### Next.js に追加（最小）
+`src/main.tsx`（最初の方）:
 
 ```tsx
-// app/layout.tsx
-import Script from "next/script";
+import * as Sentry from "@sentry/react";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  const gaId = process.env.NEXT_PUBLIC_GA_ID;
-
-  return (
-    <html lang="ja">
-      <head>
-        {gaId && (
-          <>
-            <Script
-              src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`}
-              strategy="afterInteractive"
-            />
-            <Script id="ga4-init" strategy="afterInteractive">
-              {`
-                window.dataLayer = window.dataLayer || [];
-                function gtag(){dataLayer.push(arguments);}
-                gtag('js', new Date());
-                gtag('config', '${gaId}');
-              `}
-            </Script>
-          </>
-        )}
-      </head>
-      <body>{children}</body>
-    </html>
-  );
-}
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  integrations: [
+    Sentry.browserTracingIntegration(),
+    Sentry.replayIntegration(),
+  ],
+  tracesSampleRate: 1.0,        // パフォーマンス計測。本番は 0.1 程度に
+  replaysSessionSampleRate: 0.1,
+  replaysOnErrorSampleRate: 1.0,
+  environment: import.meta.env.MODE,
+  release: import.meta.env.VITE_APP_VERSION,
+});
 ```
 
 `.env`:
 
 ```
-NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
+VITE_SENTRY_DSN=https://xxxxx@oXXX.ingest.sentry.io/12345
+VITE_APP_VERSION=1.0.0
 ```
 
-#### カスタムイベントを送る
+DSN は Sentry の管理画面で「プロジェクトの設定」から取得します。
 
-GA4 は **イベントベース**。「ページが読まれた」も `page_view` イベントです。任意のイベントを送れます。
+> **補足: DSN は公開してよい値だが、悪用対策は別途**: `VITE_SENTRY_DSN` は `VITE_` プレフィックスのとおり **クライアントバンドルに埋め込まれる** ため、ブラウザの DevTools で誰でも読めます。Sentry の DSN は **設計上公開して構わない値** で、認証が必要な操作（プロジェクト削除等）はできません。ただし第三者がフェイクのエラーを送りつけて **イベント枠を食い潰す** 攻撃は可能なので、本番では Sentry プロジェクト設定の「**Allowed Domains**」で自分のサイトのオリジンに制限し、必要に応じて **Inbound Filters / Rate Limit** も併用します。CSRF や認証情報を持つ API キーとは扱いが違うこと、ただし完全に放置してよいわけではないこと、の 2 点を覚えておきます。
 
-```ts
-declare global {
-  interface Window {
-    gtag?: (
-      command: "event",
-      action: string,
-      params?: Record<string, unknown>,
-    ) => void;
-  }
-}
+### エラーを意図的に送る
 
-function trackEvent(name: string, params?: Record<string, unknown>) {
-  if (typeof window !== "undefined" && window.gtag) {
-    window.gtag("event", name, params);
-  }
-}
+#### 自動的に拾われるもの
 
-// 使う側
-trackEvent("signup_completed", { method: "email" });
-trackEvent("add_to_cart", { item_id: "ABC", value: 1200, currency: "JPY" });
-```
+- 未捕捉の `throw`
+- 未処理の Promise rejection
+- React のレンダリング中エラー（後述の Error Boundary 経由）
 
-GA4 の管理画面で **「主要イベント（旧コンバージョン）」** にチェックを入れると、その回数が KPI として追えるようになります。
-
-#### App Router の SPA 遷移を補足する
-
-App Router は Server Components で初回はネイティブ遷移ですが、`next/link` で **クライアント遷移** すると `page_view` が自動では飛びません。`usePathname` の変化で送ります。
+#### 手動で送る
 
 ```tsx
-"use client";
-import { useEffect } from "react";
-import { usePathname, useSearchParams } from "next/navigation";
-
-export function GAPageView({ gaId }: { gaId: string }) {
-  const pathname = usePathname();
-  const search = useSearchParams();
-
-  useEffect(() => {
-    if (!window.gtag) return;
-    const url = pathname + (search?.toString() ? `?${search}` : "");
-    window.gtag("event", "page_view", {
-      page_path: url,
-      send_to: gaId,
-    });
-  }, [pathname, search, gaId]);
-
-  return null;
+try {
+  await someApi();
+} catch (e) {
+  Sentry.captureException(e);
+  throw e;  // 必要なら再 throw
 }
+
+// メッセージだけ送る
+Sentry.captureMessage("ユーザーが何度もログインに失敗");
 ```
 
-`<GAPageView gaId={gaId} />` を `app/layout.tsx` に置くだけ。
+### React の Error Boundary と統合
 
-### プライバシー（重要）
-
-#### GDPR / Cookie 同意
-
-**ヨーロッパ** からアクセスがある場合、Cookie を使う Analytics は **同意バナー** が必要です。日本の個人情報保護法も「クッキー類による行動データの第三者提供」に同意取得を要求するケースが増えています。
-
-実装の選択肢:
-
-- **Cookieless な Vercel Analytics / Plausible / Fathom** に切り替える
-- GA4 を使うなら **同意管理プラットフォーム**（CMP） を入れる：CookieYes、Cookiebot、Osano、Iubenda
-- GA4 の **Consent Mode v2** を使うと、同意がない場合でも「集計値だけ」を匿名で送れる
-
-#### ITP（Intelligent Tracking Prevention）
-
-Safari の ITP は **3rd-party cookie を実質ブロック**、1st-party cookie も **7 日で失効** させます。Chrome は **2024 年 7 月に 3rd-party cookie の一律廃止計画を撤回** し、**ユーザーが選択する形** で段階的にブロックを進める方針へ転換しました（2025 年以降も継続）。とはいえ Safari の挙動と合わせて長期的には **「3rd-party cookie に依存しない設計」** が必要なのは変わりません。
-
-#### 個人情報を送らない
-
-URL に `?email=xxx@example.com` のようなクエリが入った場合、それが **そのまま Analytics に送られる** 事故が起きます。**送信前にサニタイズ** する習慣を。
-
-```ts
-function trackPageView(path: string) {
-  // メールアドレスっぽい文字列を匿名化
-  const safe = path.replace(/[\w.+-]+@[\w-]+\.[\w.-]+/g, "[email]");
-  window.gtag?.("event", "page_view", { page_path: safe });
-}
-```
-
-### 解析結果の読み方
-
-#### PV だけ見ない
-
-PV が増えても **すぐ離脱** していたら意味がありません。次の指標を組み合わせて見ます。
-
-- **エンゲージメント時間**: 1 セッションあたりの滞在
-- **直帰率**（Bounce Rate）: 1 ページだけ見て離脱した割合
-- **コンバージョン率**: 目的のアクション（購入 / 登録）に至った割合
-
-#### 集約より分解
-
-「全体の PV」より「**流入元別の PV**」「**国別の PV**」を見ると、何を改善するかが見えやすいです。「Twitter からの流入は直帰率が高い」「日本以外は読まれていない」など。
-
-#### Speed Insights は「**75 パーセンタイル**」を見る
-
-平均値ではなく **75th percentile** が指標になります。「**75% のユーザーがこの値より良い体験**」という意味。Core Web Vitals の合格基準も 75th percentile で判定されます。
-
-### 自分の Vercel デプロイ以外（Vite SPA など）
-
-Vercel Analytics は **Vercel 以外でも動く** ようになりました。`@vercel/analytics/react` をインポートするだけ。
+Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson69 と相性 ◎）。
 
 ```tsx
-import { Analytics } from "@vercel/analytics/react";
+import * as Sentry from "@sentry/react";
 
-createRoot(document.getElementById("root")!).render(
-  <>
-    <App />
-    <Analytics />
-  </>,
+const App = () => (
+  <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
+    <Routes />
+  </Sentry.ErrorBoundary>
 );
 ```
 
-GA4 / Plausible / PostHog などはホスティング先を問わず動きます。
+これだけで「**Error Boundary が捕まえた React レンダリングエラー** が Sentry に届く」状態になります。
 
-### 最低限の Cookie 同意ダイアログ（参考）
+### Next.js に導入する最小手順
 
-外部 CMP を使わず、**同意があるまで GA4 を読み込まない** 簡易実装。
+[Sentry の Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/) は **ウィザード** で 1 コマンド導入できます。
 
-```tsx
-"use client";
-import { useState, useEffect, useRef } from "react";
-import Script from "next/script";
-
-export function ConsentBanner({ gaId }: { gaId: string }) {
-  const [accepted, setAccepted] = useState(false);
-  const acceptBtnRef = useRef<HTMLButtonElement>(null);
-
-  useEffect(() => {
-    setAccepted(localStorage.getItem("ga-consent") === "yes");
-  }, []);
-
-  // 表示直後にフォーカスを「同意する」ボタンに当てる
-  useEffect(() => {
-    if (!accepted) {
-      acceptBtnRef.current?.focus();
-    }
-  }, [accepted]);
-
-  // Esc キーで閉じる（保留扱い: 同意せず一時的に隠すだけ）
-  useEffect(() => {
-    if (accepted) return;
-    function onKey(e: KeyboardEvent) {
-      if (e.key === "Escape") setAccepted(true);
-    }
-    window.addEventListener("keydown", onKey);
-    return () => window.removeEventListener("keydown", onKey);
-  }, [accepted]);
-
-  const accept = () => {
-    localStorage.setItem("ga-consent", "yes");
-    setAccepted(true);
-  };
-
-  return (
-    <>
-      {accepted && (
-        <>
-          <Script src={`https://www.googletagmanager.com/gtag/js?id=${gaId}`} />
-          <Script id="ga4">
-            {`window.dataLayer=window.dataLayer||[];function gtag(){dataLayer.push(arguments);}gtag('js',new Date());gtag('config','${gaId}');`}
-          </Script>
-        </>
-      )}
-      {!accepted && (
-        <div
-          role="dialog"
-          aria-modal="true"
-          aria-labelledby="consent-title"
-          aria-describedby="consent-desc"
-        >
-          <h2 id="consent-title">Cookie 同意</h2>
-          <p id="consent-desc">このサイトは GA4 で利用状況を計測しています。</p>
-          <button ref={acceptBtnRef} type="button" onClick={accept}>
-            同意する
-          </button>
-        </div>
-      )}
-    </>
-  );
-}
+```bash
+npx @sentry/wizard@latest -i nextjs
 ```
 
-> **`aria-modal` と focus 制御の最小三点**: バナー / モーダルとして読み上げてもらうには `aria-modal="true"` と **アクセシブルな名前**（`aria-labelledby` / `aria-label`）の指定、**初期フォーカスを内部の操作対象に当てる**（上の例では「同意する」ボタン）、**Esc で閉じる** の三点が最小ラインです。複雑な focus trap（背後にフォーカスを移さない厳密な実装）まで自前で書くより、本格的な要件は次に説明する CMP に任せるのが現実的です。
+ウィザードが行うこと:
 
-実運用では地域判定 / 拒否時の挙動 / 設定リンクなど追加要件があるので、**プロダクションでは CMP を使う** のが現実的。
+- プロジェクトの選択 / DSN の設定
+- `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
+- `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
+- `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
+- `next.config.ts` を `withSentryConfig` でラップ
+- ビルド時に **Source Map を自動アップロード** する設定を追加
+
+```ts
+// next.config.ts（生成例）
+import { withSentryConfig } from "@sentry/nextjs";
+
+const nextConfig = {
+  /* 既存の Next.js 設定 */
+};
+
+export default withSentryConfig(nextConfig, {
+  org: "your-org",
+  project: "your-project",
+  silent: !process.env.CI,
+  widenClientFileUpload: true,
+});
+```
+
+**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
+
+### Source Map とは
+
+本番ビルドの JS は **minify** されて変数名が `a` / `b` になり、行も詰められています。これだとスタックトレースを見ても **どのコードか分からない**。
+
+Source Map は「minify 後の位置 → 元のソースの行・列」のマッピング情報です。これがあると:
+
+```
+TypeError: Cannot read property 'foo' of undefined
+  at a.b.c (index-Xj9k2.js:1:12345)
+```
+
+が:
+
+```
+TypeError: Cannot read property 'foo' of undefined
+  at UserProfile.fetchData (src/components/UserProfile.tsx:42:18)
+```
+
+に **復元** されます。
+
+#### Sentry の Source Map 運用
+
+- **ビルド時に Source Map を生成**（`vite build` / `next build`）
+- それを **Sentry にアップロード**（公開しない）
+- Sentry の管理画面で **元のソースで** スタックトレースが見られる
+
+`@sentry/nextjs` のウィザードがビルド時のアップロードまで設定してくれるので、最近は手動設定の必要が減りました。
+
+::: warning Source Map をブラウザに公開しない
+Source Map をそのまま `dist/` に置いてデプロイすると、**元のソースが誰でも読める** 状態になります。Sentry にアップロードして、ビルド成果物からは削除（または `.map` を CDN に出さない）するのが安全。
+:::
+
+### ユーザーコンテキスト
+
+「**誰の** エラーか」が分かると原因究明が圧倒的に早くなります。
+
+```ts
+Sentry.setUser({
+  id: user.id,
+  email: user.email,
+  username: user.name,
+});
+```
+
+ログアウト時:
+
+```ts
+Sentry.setUser(null);
+```
+
+::: tip 個人情報の扱い
+メールアドレスや氏名は **個人情報**。GDPR / 個人情報保護法的に、ユーザー同意やデータ最小化が必要です。本番では **ID だけ送る** / **ハッシュ化する** などの運用が無難。
+:::
+
+### タグとコンテキスト
+
+タグは「**フィルタ用** の短い key-value」、コンテキストは「**詳細データ**」です。
+
+```ts
+// タグ（ダッシュボードで絞り込みに使える）
+Sentry.setTag("page", "checkout");
+Sentry.setTag("payment-provider", "stripe");
+
+// コンテキスト（イベントに添付される詳細）
+Sentry.setContext("cart", {
+  items: 3,
+  total: 12000,
+  currency: "JPY",
+});
+```
+
+### リリース管理
+
+「この版で増えたエラー」を見るには、`release` と `environment` を設定します。
+
+```ts
+Sentry.init({
+  dsn: "...",
+  release: "my-app@1.2.3",       // package.json のバージョンや Git の SHA
+  environment: process.env.NODE_ENV,
+});
+```
+
+CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知すると、ダッシュボードで:
+
+- 「リリース 1.2.3 で **新規** に出たエラー」
+- 「リリース 1.2.2 では出ていなかったが 1.2.3 で **退行** したエラー」
+- 「修正済みリリース」
+
+がトラッキングできます。
+
+### Breadcrumbs
+
+エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
+
+- ボタンクリック / フォーム送信
+- ページ遷移
+- ネットワークリクエスト
+- console.log（任意）
+
+```ts
+Sentry.addBreadcrumb({
+  category: "checkout",
+  message: "クーポンコードを適用",
+  level: "info",
+});
+```
+
+「エラー発生 5 秒前にこのボタンを押している」が分かるので **再現が容易** になります。
+
+### セッションリプレイ
+
+Sentry の **Session Replay** を有効にすると、エラー発生時の **画面録画** が見られます（DOM の差分を記録するので画像ではなく軽い）。
+
+```ts
+Sentry.init({
+  // ...
+  integrations: [Sentry.replayIntegration()],
+  replaysSessionSampleRate: 0.1,   // 通常セッションの 10%
+  replaysOnErrorSampleRate: 1.0,   // エラーが起きたセッションは 100%
+});
+```
+
+「**ユーザーがどう操作してエラーに辿り着いたか**」が動画で分かるのは強烈です。ただし **個人情報の保護** が必要（パスワード入力欄などはマスクする設定）。
+
+### 代替サービス
+
+| サービス | 特徴 |
+|---|---|
+| **Sentry** | OSS / 自前ホスト可。フロント・バック両方 |
+| **Datadog** | 監視全部入り（メトリクス / ログ / APM / RUM）。運用の重心が APM 寄り |
+| **Bugsnag** | エラートラッキング特化。料金体系がシンプル |
+| **Rollbar** | 老舗のエラートラッキング。深い検索機能 |
+| **LogRocket** | セッションリプレイが強み |
+| **Honeybadger** | 開発者にやさしい価格 |
+
+「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
+
+### Edge / Worker 環境での扱い
+
+Cloudflare Workers / Vercel Edge Functions では従来の Sentry SDK が動きにくかったですが、2026 年現在は **`@sentry/cloudflare` / `@sentry/vercel-edge`** など環境別 SDK が整備されています。Next.js の Edge Middleware は `@sentry/nextjs` の `sentry.edge.config.ts` で対応します。
 
 ## 演習
 
 ### ゴール
 
-- Next.js プロジェクトに **Vercel Analytics + Speed Insights** を入れる
-- GA4 のカスタムイベントを 1 つ送れるようにする
+- React + Vite プロジェクトに Sentry を入れる
+- 意図的にエラーを起こして Sentry に届くことを確認する
+- ユーザーコンテキストとタグを付ける
 
-### 手順 1: 新規 Next.js プロジェクト
+### 手順 1: Sentry アカウントとプロジェクト作成
 
-```bash
-npx create-next-app@latest analytics-sample --ts --app
-cd analytics-sample
-```
+[sentry.io](https://sentry.io/) で無料アカウントを作り、**新規プロジェクト**（platform = React）を作成。**DSN** を控えます。
 
-質問にはデフォルトで答えます（Tailwind: yes / src directory: no / App Router: yes）。
-
-### 手順 2: Vercel Analytics と Speed Insights
+### 手順 2: 新規 React プロジェクト
 
 ```bash
-npm install @vercel/analytics @vercel/speed-insights
+npm create vite@latest sentry-sample -- --template react-ts
+cd sentry-sample
+npm install @sentry/react
+npm install
 ```
 
-`app/layout.tsx`:
+### 手順 3: 初期化
+
+`.env`:
+
+```
+VITE_SENTRY_DSN=（控えた DSN を貼る）
+VITE_APP_VERSION=0.1.0
+```
+
+`src/main.tsx`:
 
 ```tsx
-import type { Metadata } from "next";
-import { Analytics } from "@vercel/analytics/next";
-import { SpeedInsights } from "@vercel/speed-insights/next";
-import "./globals.css";
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import * as Sentry from "@sentry/react";
+import App from "./App.tsx";
+import "./index.css";
 
-export const metadata: Metadata = {
-  title: "Analytics Sample",
-  description: "Vercel Analytics と GA4 のテスト",
-};
+Sentry.init({
+  dsn: import.meta.env.VITE_SENTRY_DSN,
+  integrations: [Sentry.browserTracingIntegration()],
+  tracesSampleRate: 1.0,
+  environment: import.meta.env.MODE,
+  release: `sentry-sample@${import.meta.env.VITE_APP_VERSION}`,
+});
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Analytics />
-        <SpeedInsights />
-      </body>
-    </html>
-  );
-}
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
+      <App />
+    </Sentry.ErrorBoundary>
+  </StrictMode>,
+);
 ```
 
-### 手順 3: GA4 を追加
+### 手順 4: わざとエラーを起こす
 
-`.env.local`:
-
-```
-NEXT_PUBLIC_GA_ID=G-XXXXXXXXXX
-```
-
-`app/layout.tsx` に Script を追加（「Next.js に追加（最小）」で示したコードの通り）。
-
-### 手順 4: カスタムイベントを送るボタン
-
-`app/page.tsx`:
+`src/App.tsx`:
 
 ```tsx
-"use client";
+import * as Sentry from "@sentry/react";
+import { useState } from "react";
 
-declare global {
-  interface Window {
-    gtag?: (cmd: "event", name: string, params?: Record<string, unknown>) => void;
+export default function App() {
+  const [crash, setCrash] = useState(false);
+
+  if (crash) {
+    throw new Error("意図的にクラッシュさせた");
   }
-}
 
-export default function Home() {
-  const handleClick = () => {
-    window.gtag?.("event", "demo_click", { label: "hero-cta", value: 1 });
-    alert("送信しました（DevTools の Network で確認）");
+  const sendCustom = () => {
+    Sentry.captureMessage("カスタムメッセージ from Sentry test");
+  };
+
+  const sendException = () => {
+    try {
+      // @ts-expect-error わざと
+      null.foo();
+    } catch (e) {
+      Sentry.captureException(e);
+    }
+  };
+
+  const setUser = () => {
+    Sentry.setUser({ id: "user-123", username: "テストユーザー" });
+    Sentry.setTag("test-run", "manual");
   };
 
   return (
-    <main style={{ padding: 24 }}>
-      <h1>Analytics 演習</h1>
-      <button onClick={handleClick}>イベントを送信</button>
-    </main>
+    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <h1>Sentry Demo</h1>
+      <button onClick={() => setCrash(true)}>レンダリングエラー</button>
+      <button onClick={sendException}>例外を送信</button>
+      <button onClick={sendCustom}>メッセージを送信</button>
+      <button onClick={setUser}>ユーザーをセット</button>
+    </div>
   );
 }
 ```
 
-### 手順 5: 確認
+### 手順 5: 起動して確認
 
 ```bash
 npm run dev
 ```
 
-ブラウザの DevTools で **Network** タブを開き、`google-analytics.com/g/collect` へのリクエストが飛ぶことを確認します（GA4 のイベント送信）。`vitals.vercel-insights.com` への送信も Speed Insights のもの。
+ボタンを押して、Sentry のダッシュボードでイベントが届くのを確認します（数秒〜数十秒の遅延あり）。
 
 ### 期待出力
 
-- ボタンクリックで `collect?...&en=demo_click` 形式のリクエストが出る
-- `vitals.vercel-insights.com/v1/vitals` に LCP / INP / CLS のメトリクスが送られる
-- Vercel にデプロイすると、ダッシュボードで PV と Speed Insights が見られる
+- 「レンダリングエラー」を押すと Error Boundary の fallback が表示され、Sentry にイベントが届く
+- 「例外を送信」で `TypeError` が届く
+- 「メッセージを送信」で文字列イベントが届く
+- 「ユーザーをセット」した後のイベントは **ユーザー情報付き** で届く
+- ダッシュボードで `release: sentry-sample@0.1.0` 付きとして表示される
 
 ### 変える
 
-- ConsentBanner を実装し、同意があるまで GA4 を読まない構成に変える
-- イベント名を `add_to_cart` / `view_item` のような **GA4 推奨イベント名** にすると、レポートで自動分類される
-- `gtag('config', gaId, { send_page_view: false })` にして `page_view` を自分で送る形にする
+- `tracesSampleRate` を `0.1` にして、パフォーマンス計測のサンプリング率を下げる
+- `Sentry.replayIntegration()` を追加し、セッションリプレイを有効にする
+- `setTag("page", "home")` などタグを増やしてダッシュボードで絞り込みを試す
 
 ### 自分で書く（任意）
 
-- Plausible / Fathom / PostHog のうち 1 つを試して、Vercel Analytics との UI 差を比較する
-- ページ遷移ごとに `page_view` を送る `<GAPageView />` を作って `app/layout.tsx` に組み込む
-- `Speed Insights` のデータと `Lighthouse` のスコアを比較し、合成 vs 実ユーザーの差を観察
+- Next.js プロジェクトに `npx @sentry/wizard@latest -i nextjs` で Sentry を入れる
+- API Route の中で意図的にエラーを起こし、Sentry に届くことを確認する
+- ビルド時に Source Map をアップロードして、minify 後のコードが元のソースで表示されることを確認
 
 ## まとめ
 
-- 「公開後に見るもの」は **来訪 / 体験 / 行動** の 3 軸。エラーは Sentry、残り 2 軸が Analytics の役割
-- **Vercel Analytics** は Cookieless で導入が秒。Vercel 以外でも `@vercel/analytics/react` で動く
-- **Speed Insights** は実ユーザーの Core Web Vitals を **75 パーセンタイル** で集める
-- **GA4** はイベントベースで強力だが、**Cookie 同意 / Consent Mode v2** を意識する必要がある
-- 個人情報（メールアドレスなど）が **URL から漏れて Analytics に送られる事故** を避ける
-- ITP / 3rd-party cookie 廃止の流れで、**1st-party / Cookieless 設計** が主流
-- 「PV だけを見ない」。**エンゲージメント / 流入元 / 国 / コンバージョン** を分解して見る
+- **エラートラッキング** は「ユーザーが言わなければ気づけないバグ」を救うインフラ
+- Sentry は React / Next.js / Node.js を 1 つの SDK でカバー
+- React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
+- **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
+- `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
+- `release` / `environment` で **退行**（regression） を可視化
+- **Breadcrumbs** と **Session Replay** で再現が容易になる
+- 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択

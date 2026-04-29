@@ -1,143 +1,84 @@
-# lesson19: 条件で分岐する
+# lesson19: 値の種類
 
 <script setup>
 // LiveDemo の :js に渡す JS コード。
 // 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
 // script setup の変数経由で渡している。
 const demoJs = `
-const age = 20;
-
-if (age >= 20) {
-  console.log(age + ' 歳: 成人です');
-} else if (age >= 13) {
-  console.log(age + ' 歳: 10 代です');
-} else {
-  console.log(age + ' 歳: 子供です');
-}
-
-if (age >= 20 && age < 60) {
-  console.log('働き盛り');
-}
+console.log(typeof 'Alice');
+console.log(typeof 42);
+console.log(typeof true);
+console.log(typeof null);
+console.log(typeof undefined);
+console.log(typeof { name: 'Alice' });
 `
 </script>
 
 ## ゴール
 
-- `if` / `else if` / `else` で処理を分けられる
-- `===` / `!==` で等しい / 等しくないを判定できる
-- `&&` / `||` / `!` を組み合わせて条件を書ける
+- 文字列・数値・真偽値・`null` / `undefined` を区別できる
+- テンプレートリテラルで文字列の中に変数を埋め込める
 
 ## 解説
 
-### `if` の基本形
+### 値には「種類」がある
+
+JS では、変数に入れる値にいくつかの種類があります。今回は 5 種類を覚えます。
+
+| 種類 | 例 | 説明 |
+| --- | --- | --- |
+| 文字列 | `"Alice"` / `'hello'` | テキスト。ダブルクオート / シングルクオートで囲む |
+| 数値 | `42` / `3.14` | 整数と小数の両方。クオートを付けない |
+| 真偽値 | `true` / `false` | 「はい / いいえ」の 2 値。条件分岐で使う |
+| `null` | `null` | 「意図的に空」 |
+| `undefined` | `undefined` | 「まだ値がない」 |
+
+`null` と `undefined` はどちらも「空」を表しますが、ニュアンスが違います。
+
+- `null`: プログラマが「ここは空にしておくぞ」と明示的に入れるもの
+- `undefined`: 変数を宣言しただけで値を入れていないときに、自動で付く初期状態
+
+当面は「どちらも空を表す」くらいの理解で十分です。使い分けは徐々に身につきます。
+
+### 数値と文字列は混ぜない
 
 ```js
-if (条件) {
-  // 条件が true のときに実行される
-}
+const a = 1 + 2;       // 3 （数値の足し算）
+const b = "1" + "2";   // "12" （文字列の連結）
+const c = 1 + "2";     // "12" （文字列側に寄せられる）
 ```
 
-条件が「真（`true`）」のときだけ、波かっこの中が実行されます。「偽（`false`）」なら飛ばされます。
+`+` は数値なら足し算、文字列なら連結になります。片方が文字列だと全体が文字列になる、という挙動だけ頭の片隅に置いておきます。
 
-### `else` と `else if`
+### テンプレートリテラル
 
-「そうでないとき」は `else`、「別の条件も試したい」は `else if` を使います。
+文字列の中に変数を埋め込みたいとき、バッククオート（`` ` ``）で囲む書き方が便利です。これをテンプレートリテラルと呼びます。
 
 ```js
-if (age >= 20) {
-  console.log("成人");
-} else if (age >= 13) {
-  console.log("中高生");
-} else {
-  console.log("それ以外");
-}
+const userName = "Alice";
+const age = 20;
+
+const message = `あなたは ${userName} さんで、${age} 歳です`;
+console.log(message);
 ```
 
-上から順に条件を見て、最初に `true` になったブロックだけが実行されます。どれも当てはまらなければ `else` が実行されます。
+- バッククオートで囲む
+- `${ ... }` の中に変数や式を書く
 
-### 比較演算子
+シングルクオート / ダブルクオートで囲んだ文字列では `${ ... }` は使えません。埋め込みたいときは必ずバッククオートを使います。
 
-| 演算子 | 意味 |
-| --- | --- |
-| `===` | 等しい |
-| `!==` | 等しくない |
-| `>` | 左が右より大きい |
-| `>=` | 左が右以上 |
-| `<` | 左が右より小さい |
-| `<=` | 左が右以下 |
+### デモで確認する
 
-等しいかどうかは **必ず `===` と `!==`** を使います。`==` と `!=` は値の種類が違っても自動で変換して比較する古い演算子で、混乱の原因になるため本コースでは使いません。
-
-### `==` の罠（読めるようにだけ）
-
-他人のコードや古い記事では `==` が出てきます。書くことは推奨しませんが、読めるようには知っておきます。`==` は「型が違っても無理に合わせて比較する」ため、次のような直感に反する結果になります。
-
-```js
-0 == "";              // true（空文字を 0 として比較）
-null == undefined;    // true（特別扱い）
-"1" == 1;             // true（文字列を数値に変換）
-```
-
-`===` ならどれも `false` です。**自分で書くときは必ず `===`** にしてください。
-
-### falsy 値（`if` の中で「偽」と扱われる値）
-
-`if (x)` のように値そのものを条件として使うと、次の **6 つの値だけが `false` 扱い** になります（これを **falsy** と呼びます）。それ以外はすべて `true` 扱い（**truthy**）です。
-
-| falsy 値 | 意味 |
-| --- | --- |
-| `false` | 真偽値の `false` |
-| `0` | 数値のゼロ |
-| `""` | 空文字列 |
-| `null` | 「意図的に空」 |
-| `undefined` | 「まだ値がない」 |
-| `NaN` | 数値計算が失敗した結果（例: `Number("abc")` の戻り値） |
-
-`NaN` は「Not a Number」の略で、数値同士の演算や `Number(...)` 変換が **数値として成立しないとき** に出る特殊な値です。本レッスンでは「読めれば OK」で、当面は気にしなくて構いません。
-
-```js
-console.log(Number("abc")); // NaN
-
-if ("hello") { /* 実行される（空でない文字列は truthy） */ }
-if ("") { /* 実行されない（空文字は falsy） */ }
-if (0) { /* 実行されない（0 は falsy） */ }
-if ("0") { /* 実行される（"0" は空でない文字列なので truthy） */ }
-```
-
-`if (name)` のように省略して書くと「`name` が空文字 / `null` / `undefined` のどれでも `false`」の意味になり、`if (name === "")` を書くより短くなります。便利ですが「`0` も falsy」の事実を忘れると、数値の 0 を空扱いしてしまうバグの原因になります。
-
-### 論理演算子
-
-複数の条件をつなぎたいときに使います。
-
-| 演算子 | 意味 |
-| --- | --- |
-| `&&` | 両方とも `true` のとき `true` |
-| `\|\|` | どちらかが `true` なら `true` |
-| `!` | `true` と `false` を反転 |
-
-```js
-if (age >= 13 && age <= 19) {
-  console.log("10 代");
-}
-
-if (name === "" || name === null) {
-  console.log("名前が未入力");
-}
-
-if (!isStudent) {
-  console.log("学生ではない");
-}
-```
-
-下のデモで、`age` の値を変えると条件分岐の結果が Console にどう出るかを体感できます。`age` を `12` / `20` / `70` に書き換えると出力が変わります。
+下のデモでは、`typeof` 演算子を使って 6 種類の値の型を順に表示します。Console タブを見ると、それぞれがどの型として扱われるかが分かります。
 
 <LiveDemo
-  height="180px"
-  :html="`<p>age の値を変えてデモのソースを書き換えて試してください。</p>`"
+  height="220px"
+  :html="`<p>各値の型を typeof で確認するデモ</p>`"
   :css="``"
   :js="demoJs"
 />
+
+`null` が `'object'` と表示されるのは JavaScript の歴史的な仕様です。当面は「そういうものだ」と覚えておけば大丈夫です。
 
 ## 演習
 
@@ -160,12 +101,56 @@ if (!isStudent) {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: 値の種類</h1>
+    <h1>lesson18: 最初の JavaScript</h1>
+    <p>DevTools の Console を開いてください。</p>
   </body>
 </html>
 ```
 
 **`script.js`**
+
+```js
+const userName = "Alice";
+let count = 0;
+
+console.log("Hello, JavaScript");
+console.log(userName);
+console.log(count);
+
+count = count + 1;
+console.log(count);
+```
+
+</details>
+
+### ゴール
+
+- 変数 `userName` と `age` を定義し、テンプレートリテラルで「あなたは ○○ さんで、○○ 歳です」のような文を作ってコンソールに表示する
+
+### 手順
+
+1. これまでの `index.html` をそのまま使う（タイトルだけ `lesson19` に変える）
+2. `script.js` を以下の内容に書き換える
+3. プレビューの Console を開く
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson19</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson19: 値の種類</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
 const userName = "Alice";
@@ -187,93 +172,32 @@ const summary = `名前: ${userName} / 学生: ${isStudent} / 点数: ${score}`;
 console.log(summary);
 ```
 
-</details>
-
-### ゴール
-
-- 年齢を表す変数 `age` の値によって「成人 / 未成年」を分岐表示する
-- 年齢を変えて結果が切り替わることを確認する
-
-### 手順
-
-1. `index.html` のタイトルを `lesson19` に変える
-2. `script.js` を以下に書き換える
-3. Console で結果を確認する
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson19</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson19: 条件で分岐する</h1>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-const age = 20;
-const userName = "Alice";
-const isStudent = true;
-
-if (age >= 20) {
-  console.log(`${userName} さんは成人です`);
-} else {
-  console.log(`${userName} さんは未成年です`);
-}
-
-if (age >= 13 && age <= 19) {
-  console.log("10 代です");
-} else if (age >= 20 && age < 60) {
-  console.log("大人です");
-} else {
-  console.log("それ以外の年代です");
-}
-
-if (isStudent && age >= 20) {
-  console.log("成人の学生です");
-}
-
-if (!isStudent) {
-  console.log("学生ではありません");
-} else {
-  console.log("学生です");
-}
-```
-
 ### 期待出力
 
-`age = 20` の場合、Console には次のように表示されます。
+```
+Alice
+20
+true
+null
+undefined
+あなたは Alice さんで、20 歳です
+名前: Alice / 学生: true / 点数: undefined
+```
 
-```
-Alice さんは成人です
-大人です
-成人の学生です
-学生です
-```
+`score` は `let score;` と宣言しただけで値を入れていないので、自動で `undefined` になります。テンプレートリテラルの中に入れると `undefined` という文字列として表示されます。
 
 ### 変える
 
-- `age` を `18` に変える → 「未成年です」「10 代です」「学生です」に変わる（「成人の学生です」の行は出なくなる）
-- `age` を `65` に変える → 「成人です」「それ以外の年代です」「学生です」になる（`isStudent` が `true` のまま）
-- `isStudent` を `false` に変える → 「学生ではありません」に切り替わる
-- `===` と `==`、`!==` と `!=` は本コースでは前者だけを使う。試しに `age == "20"` と書いてみると `true` になる（型が違うのに等しいと判定される）ので、その気持ち悪さだけ体験しておく
+- `age` を `20` から `"20"`（文字列）に変えて、`age + 1` の結果を `console.log` してみる → `201` になる（文字列連結）
+- `isStudent` を `false` に変えて Console を確認
+- `nickname` を `"あり"` に変えて `summary` の出力に含まれる挙動を確認
 
 ### 自分で書く
 
-- 変数 `score`（テストの点数）を作り、90 以上なら「A」、70 以上なら「B」、50 以上なら「C」、それ未満なら「D」と出すコードを書く
-- 変数 `hour`（0〜23）を作り、`6 <= hour && hour < 12` なら「おはよう」、`12 <= hour && hour < 18` なら「こんにちは」、そうでなければ「こんばんは」と出すコードを書く
+- 自分の情報（名前・好きな数字・趣味）を 3 つの変数に入れ、「私は ○○ です。好きな数字は ○○ で、趣味は ○○ です。」という 1 行の文をテンプレートリテラルで作って表示する
 
 ## まとめ
 
-- `if` / `else if` / `else` で分岐を書く
-- 等しいかの判定は `===` / `!==`（`==` / `!=` は使わない）
-- 複数条件は `&&`（かつ）/ `||`（または）/ `!`（否定）を使い分ける
+- 値には文字列 / 数値 / 真偽値 / `null` / `undefined` の 5 種類（当面はこれで十分）
+- 文字列の中に変数を埋め込むときはバッククオート + `${ ... }`
+- クオートの種類（`` ` `` と `"` と `'`）を取り違えると `${ ... }` が文字通りに出てしまうので注意

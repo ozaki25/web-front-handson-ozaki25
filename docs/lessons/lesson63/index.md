@@ -1,130 +1,145 @@
-# lesson63: useEffect の基本
+# lesson63: useRef（DOM 参照と値保持）
 
 ## ゴール
 
-- `useEffect` が何のためにあるかを説明できる
-- 依存配列 `[]` とそれ以外（`[todos]` など）の違いを書き分けられる
-- `document.title` をマウント時に書き換える最小の例を手を動かして作れる
-
-## このレッスンの範囲（冒頭で明示）
-
-本コースで扱う `useEffect` は、この 2 パターンだけです。
-
-1. マウント時に 1 回だけ実行（依存配列 `[]`）: **このレッスン**
-2. 特定の値が変わるたびに実行（依存配列 `[todos]` など）: **「TODO アプリを React で作る」** で localStorage 保存に使う
-
-**以下は扱いません**（本コースのスコープ外）。必要になった時点でドキュメントを調べてください。
-
-- クリーンアップ関数（`useEffect` の中で return する関数）
-- `addEventListener` / `removeEventListener` のようなイベントリスナの取り付け
-- `setInterval` / `setTimeout` のタイマー管理
+- `useRef` で DOM 要素への参照を取れる
+- フォームの入力欄に自動 focus を当てられる
+- `useRef` と `useState` の違いを説明できる
+- React 19 以降、`ref` は通常の props として渡せることを理解する
 
 ## 解説
 
-### 副作用（side effect）とは
+### なぜ DOM を直接触りたいことがあるか
 
-ここまでのレッスンで書いたコンポーネントは、次の形でした。
+React は普段「JSX を書けば DOM は React が作る・更新する」仕組みです。自分で DOM を探したり書き換えたりする必要はありません。
 
-- **入力**: props と state
-- **出力**: JSX（画面）
+ただし、**React が自動でやってくれない操作** もあります。
 
-この「入力から JSX を計算する」部分だけなら、コンポーネントは純粋な関数です。関数を呼ぶと JSX が返ってくる、それだけ。
+- 入力欄に自動で focus を当てる（`input.focus()`）
+- 動画要素を再生・停止する（`video.play()`）
+- canvas に描画する
+- 外部ライブラリに DOM 要素を渡す
 
-ところが、実用的なアプリでは次のようなこともしたいことがあります。
+これらは「画面を描く」ではなく「画面の要素に対して命令を出す」操作です。React の JSX からは直接書けません。このとき、`useRef` で **DOM 要素への参照** を取ります。
 
-- `document.title` を書き換える
-- ブラウザの localStorage にデータを書き込む
-- サーバーにデータを送る
-
-これらはコンポーネントの「描画」そのものではなく、**画面を描いた結果として起きてほしい**処理です。こうした処理をまとめて **副作用**（side effect） と呼びます。
-
-`useEffect` は「描画の後に、副作用を実行する」ためのフックです。
-
-### 最小形
+### useRef の基本形
 
 ```tsx
-import { useEffect } from "react";
+import { useRef } from "react";
 
-useEffect(() => {
-  document.title = "Hello";
-}, []);
-```
+function MyInput() {
+  const inputRef = useRef<HTMLInputElement>(null);
 
-- 第 1 引数: 副作用として実行したい関数
-- 第 2 引数: **依存配列**
+  function handleClick() {
+    inputRef.current?.focus();
+  }
 
-### 依存配列の意味
-
-依存配列は、「中に入っている値のうち 1 つでも前回と違ったら、副作用を再実行する」というルールで効きます。
-
-- **`[]`**（空配列）: どの値も監視しない → **マウント時に 1 回だけ** 実行
-- **`[count]`**: `count` が変わるたびに実行
-- **`[todos]`**: `todos` が変わるたびに実行
-- 書かない（第 2 引数を省略）: **毎回の描画後** に実行。原則使わない（無限ループの原因になりやすい）
-
-本コースでは `[]` と `[何かの値]` の 2 通りだけ使います。
-
-### マウント時に 1 回だけ
-
-「マウント」はコンポーネントが **初めて画面に現れた瞬間** を指します。
-
-```tsx
-useEffect(() => {
-  console.log("mounted");
-}, []);
-```
-
-このコードは、コンポーネントが表示されたときに一度だけ `mounted` をログに出します。その後、state が変わって再レンダリングされても、もうこの副作用は走りません。
-
-### 何かが変わるたび
-
-```tsx
-useEffect(() => {
-  document.title = `TODO (${todos.length})`;
-}, [todos]);
-```
-
-`todos` が変わるたびにタブのタイトルを更新する例です。配列の**中身**が変わっただけでなく、**配列オブジェクト自体**が前回と違う必要があります。「イベントと配列のイミュータブル更新」で学んだ「スプレッドで新しい配列を作る」イミュータブル更新が、このシグナルとして効きます。
-
-### コラム: React 19 では `<title>` を JSX に書ける
-
-React 19 では、JSX の中に `<title>` / `<meta>` / `<link>` を直接書くと、React が `<head>` に自動で差し込んでくれるようになりました。
-
-```tsx
-function Page() {
   return (
     <>
-      <title>TODO</title>
-      <h1>...</h1>
+      <input ref={inputRef} />
+      <button onClick={handleClick}>input に focus</button>
     </>
   );
 }
 ```
 
-つまり「タイトルを変えたいだけ」なら、`useEffect` で `document.title` を書き換える必要はありません。それでもこのレッスンでは **`useEffect` の素振り** として `document.title` を扱います。「タイトル書き換え」という用途に限れば `<title>` の方が簡単、という事実は頭の片隅に。
+- `useRef<HTMLInputElement>(null)` で `ref` オブジェクトを作る
+- `<input ref={inputRef} />` で、その `ref` に DOM 要素が入るよう指示
+- コンポーネントがレンダリングされた後、`inputRef.current` にその DOM 要素が入る
+- `inputRef.current?.focus()` で DOM のメソッドを呼ぶ
 
-### コラム: React 19.2 の `useEffectEvent`
+### `current` が `null` になり得る理由
 
-React 19.2 で **`useEffectEvent`** という新しいフックが追加されました。これは「effect の中で使っているが、その値が変わっても effect を再実行したくない」という場面に使います。
+`inputRef.current` は `HTMLInputElement | null` 型です。`null` の可能性があるのは、次の理由です。
+
+- 初期値を `null` にして作っているため
+- 条件付きレンダリングで `<input>` が描画されていないときは null のまま
+
+そのため、使うときは **`?.`**（optional chaining） で null チェックします。
 
 ```tsx
-import { useEffectEvent } from "react";
+inputRef.current?.focus(); // current が null なら何もしない
+```
 
-function Chat({ roomId, theme }) {
-  const onConnected = useEffectEvent(() => {
-    // theme を参照しても、theme が変わっただけでは再接続しない
-    showNotification(theme, "接続しました");
-  });
+### 値保持用途
 
-  useEffect(() => {
-    const connection = connectToRoom(roomId);
-    connection.on("connected", onConnected);
-    return () => connection.disconnect();
-  }, [roomId]); // theme は依存配列に入れなくて良い
+`useRef` は DOM だけのためのものではありません。「再レンダリングされても値を保持したい」が「値が変わっても再レンダリングしたくない」ケースでも使えます。
+
+```tsx
+const clickCount = useRef(0);
+
+function handleClick() {
+  clickCount.current += 1;
+  console.log(`${clickCount.current} 回目のクリック`);
 }
 ```
 
-依存配列に入れたくないイベントハンドラ的な処理を `useEffectEvent` に切り出すと、**依存配列から除外しても ESLint に怒られません**。本レッスンでは踏み込みませんが、useEffect の複雑な依存配列に悩んだら思い出してください。
+この `clickCount.current` は:
+
+- 再レンダリングを挟んでも値が残る
+- 書き換えても **再レンダリングは起きない**
+
+### useState との違い
+
+| | `useState` | `useRef` |
+| --- | --- | --- |
+| 値を保持する | はい | はい |
+| 値を変えると再レンダリングされる | はい | **いいえ** |
+| 画面に表示する値 | 向く | 向かない |
+| 画面に表示しない値（前回のクリック時刻など） | 無駄な再レンダリングが起きる | 向く |
+| DOM 参照 | 使えない | 向く |
+
+**画面に反映したい値は `useState`、画面に出さない値は `useRef`** と覚えるのが基本です。
+
+### React 19 の ref: 普通の props として渡せる
+
+React 19 以降、自作の関数コンポーネントでも `ref` を **普通の props として** 受け取れるようになりました。
+
+```tsx
+import type { Ref } from "react";
+
+type MyInputProps = {
+  ref: Ref<HTMLInputElement>;
+  placeholder?: string;
+};
+
+function MyInput({ ref, placeholder }: MyInputProps) {
+  return <input ref={ref} placeholder={placeholder} />;
+}
+
+// 呼び出し側
+function App() {
+  const inputRef = useRef<HTMLInputElement>(null);
+  return <MyInput ref={inputRef} placeholder="名前" />;
+}
+```
+
+- `ref` を普通の props として受け取って、中の `<input>` に渡すだけ
+- 型は `react` から `Ref<HTMLInputElement>` を `import type` で取る
+
+### `useRef` の型と `RefObject<T | null>`
+
+`useRef<HTMLInputElement>(null)` の戻り値の型は `RefObject<HTMLInputElement | null>` です（React 19 で型定義が整理されました）。`current` プロパティは `HTMLInputElement | null` 型なので、**読むときに必ず null チェックが要る** のはこのためです。
+
+```tsx
+const inputRef = useRef<HTMLInputElement>(null);
+// inputRef の型: RefObject<HTMLInputElement | null>
+// inputRef.current の型: HTMLInputElement | null
+
+if (inputRef.current) {
+  inputRef.current.focus();  // ここでは HTMLInputElement に絞られる
+}
+```
+
+Props として ref を受け取る側の型 `Ref<HTMLInputElement>` は、内部的にはこの `RefObject<HTMLInputElement | null>` または「ref をセットする関数」のユニオンです（callback ref と呼ばれる別形式があるため）。本コースでは **オブジェクト形式の ref のみ扱います**。
+
+> **TS strict 前提**: 本コースは `tsconfig.json` の `"strict": true` を前提にしています（3 章 「tsconfig.json を読む」参照）。strict が無効だと `current` の null チェックを忘れても型エラーが出ず、実行時に「`Cannot read property 'focus' of null`」で落ちます。strict を切らないでください。
+
+### 過去形（`forwardRef`）は扱わない
+
+React 18 までは、自作コンポーネントで `ref` を受け取るために `React.forwardRef(...)` という特別な関数で包む必要がありました。
+
+**本コースでは `forwardRef` を扱いません**。React 19 以降は不要になった書き方です。ただし既存コードや古いチュートリアルで `forwardRef` を見かけることはあるので、「昔のやり方だ」と認識できれば十分です。
 
 ## 演習
 
@@ -134,40 +149,77 @@ function Chat({ roomId, theme }) {
 
 ### ゴール
 
-- 画面の `<h1>` とカウンター UI を作り、マウント時に `document.title` を書き換える
-- カウンターの値が変わるたびに `document.title` を `TODO (N)` のように更新する
+- TODO 追加フォームで、「追加」ボタンを押したあとに **自動で入力欄に focus が戻る** 形を作る
+- `useRef` で `<input>` の DOM 要素を取り、`.focus()` を呼ぶ
 
 ### 手順
 
 1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` を書き換える
+2. `src/types.ts` を作成
+3. `src/App.tsx` を書き換える
+4. `src/App.css` を書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
 
 ### `src/App.tsx`
 
 ```tsx
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
+import type { FormEvent } from "react";
+import type { Todo } from "./types";
 import "./App.css";
 
 function App() {
-  const [count, setCount] = useState(0);
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [text, setText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // (1) マウント時に 1 回だけ
-  useEffect(() => {
-    console.log("mounted: 初期タイトルをセット");
-    document.title = "TODO (起動中)";
-  }, []);
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    const newTodo: Todo = { id: crypto.randomUUID(), text: trimmed };
+    setTodos((prev) => [...prev, newTodo]);
+    setText("");
+    // 追加後に入力欄へ focus を戻す
+    inputRef.current?.focus();
+  }
 
-  // (2) count が変わるたびに
-  useEffect(() => {
-    document.title = `TODO (${count})`;
-  }, [count]);
+  function handleDelete(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
 
   return (
     <>
-      <h1>useEffect 入門</h1>
-      <p>カウンター: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-      <button onClick={() => setCount(0)}>リセット</button>
+      <h1>useRef で自動 focus</h1>
+
+      <form onSubmit={handleSubmit} className="box">
+        <input
+          ref={inputRef}
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="やることを入力"
+        />
+        <button type="submit">追加</button>
+      </form>
+
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li key={todo.id}>
+            {todo.text}
+            <button type="button" onClick={() => handleDelete(todo.id)}>
+              削除
+            </button>
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
@@ -175,43 +227,144 @@ function App() {
 export default App;
 ```
 
+- `useRef<HTMLInputElement>(null)` で ref を作る
+- `<input ref={inputRef} ...>` で、その input DOM への参照を受け取る
+- 追加処理の末尾で `inputRef.current?.focus()` を呼ぶことで、続けて次の TODO をタイプできる
+
+### `src/App.css`
+
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
+
+.box input {
+  padding: 6px;
+  margin-right: 8px;
+}
+
+.box button {
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.todo-list {
+  list-style: disc;
+  padding-left: 20px;
+  color: #222;
+}
+
+.todo-list li {
+  padding: 4px 0;
+}
+
+.todo-list li button {
+  margin-left: 8px;
+  padding: 2px 8px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+  .todo-list {
+    color: #eee;
+  }
+}
+```
+
 ### 期待出力
 
-- 画面に `useEffect 入門` という見出しと `カウンター: 0` 、`+1` / `リセット` ボタン
-- **ブラウザのタブのタイトル** が `TODO (0)` になっている（開いた直後は `TODO (起動中)` になることもあるが、すぐ `TODO (0)` に上書きされる）
-- `+1` を押すたびにタブのタイトルが `TODO (1)` → `TODO (2)` → ... に変わる
-- `リセット` を押すとタブのタイトルが `TODO (0)` に戻る
-- ブラウザのコンソールに `mounted: 初期タイトルをセット` が **一度だけ** 出る
+- 画面に入力欄と「追加」ボタン、その下に TODO 一覧
+- 入力欄に文字を打ち「追加」を押すと、一覧に追加され、入力欄はクリアされて **カーソル（focus）が戻る**
+- マウスで入力欄をクリックし直さなくても、続けてキー入力できる
+- 「削除」ボタンで各行を削除できる
 
 ### 変える
 
-- (1) の依存配列 `[]` を消す（依存配列ごと省略する）と、`mounted: 初期タイトルをセット` がクリックのたびに出てしまう（描画のたびに副作用が走る）。確認したら戻す
-- (2) の `[count]` を `[]` に変えると、タブのタイトルが `+1` しても更新されなくなる（マウント時の 1 回だけになる）
-- (1) と (2) を 1 つにまとめてもよい（依存配列は `[count]` で、中で `document.title = TODO (${count})`）
+- `handleSubmit` の末尾の `inputRef.current?.focus()` を **コメントアウト** します。追加したあと、入力欄に focus が戻らず、続けて打とうとすると何も反応しなくなることを確認します。`useRef` の効果を体感する演習です。確認したら戻します。
+- `useRef<HTMLInputElement>(null)` の型パラメータ `<HTMLInputElement>` を消すと、`inputRef.current` の型が不明瞭になり `.focus()` の行でエラーになります。**型を付けることの意味** を体感する演習です。
+- `<input ref={inputRef} ... />` の `ref={inputRef}` を消すと、`inputRef.current` がずっと `null` のままで focus が効かなくなります。
 
 ### 自分で書く
 
-- `count` の代わりに、「親子コンポーネントの連携」で作った `todos` state を使って、`document.title` を `TODO (${todos.length})` に更新する
-- `<input>` で文字を入れて追加ボタンで増やすと、タブのタイトルの件数が増える、という挙動を作る
-- 「TODO アプリを React で作る」の準備として、ファイルを保存しておくと役立つ
+- 「クリア」ボタンを追加して、押したら `todos` を空配列にすると同時に `inputRef.current?.focus()` で入力欄に focus を戻してください。
+- ページを開いた直後に入力欄に focus が当たっているようにします。`useEffect(() => { inputRef.current?.focus(); }, [])` で実現できます。**ただし、開いた直後の自動 focus は「フォーム単体ページ（検索ページ・ログイン画面・新規追加専用画面）」のように『ユーザーがその場で必ず入力する』前提のときだけ** にしてください。普通のページで自動 focus すると、スクリーンリーダーの読み上げ位置がいきなり入力欄まで飛んだり、キーボード操作中の人が予期せずスクロール位置を奪われたりします。
 
-### 末尾予告
+### 挑戦（折りたたみ）: 連打防止のデバウンスもどき
 
-- ブラウザ側で `fetch` を `useEffect` で呼ぶパターンは、競合状態、ローディング、エラー管理など罠が多いので、本コースでは扱いません。データ取得は 5 章（Next.js）の **Server Component** にサーバー側 `fetch` としてまとめます
-- `useEffect` を **localStorage への保存** に使うパターンもよくあります（依存配列に `todos` を渡す形）。2 章 の「TODO アプリを作る」で作った「リロードしても消えない TODO」をこの形で React 版にも持ち込めます
+::: details useRef で前回クリック時刻を記憶する
 
-### 開発時に effect が 2 回呼ばれる（StrictMode）
+`useRef` は「画面に出さない値を保持する」用途でも使えます。その応用として、**1 秒以内の連打を無視する** 追加ボタンを作ってみます。
 
-`npm run dev` で動かすと、`mounted: 初期タイトルをセット` の console.log が **2 回** 出ることがあります。これは Vite / Next.js のテンプレが既定で **`<React.StrictMode>` でアプリを包んでいる** ためで、開発中にだけ effect が **マウント → クリーンアップ → 再マウント** の順で走ります。「クリーンアップ漏れ」「同じ API を 2 回叩いてしまう書き方」を早期に気づかせるための仕組みで、**バグではありません**。
+```tsx
+import { useRef, useState } from "react";
+import type { FormEvent } from "react";
+import type { Todo } from "./types";
 
-- **本番ビルド**（`npm run build` 後）では 1 回だけ走ります
-- 「2 回呼ばれて困る」effect は、それ自体が StrictMode で炙り出されたバグ（fetch を 2 回飛ばす / イベントリスナを 2 回登録する等）です。クリーンアップ関数（`return () => { ... }`）で正しく後始末を書くのが正攻法
-- 「2 回出るのが気になる」というだけで `<React.StrictMode>` を外すのは避けるのが定石
+function App() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [text, setText] = useState("");
+  const inputRef = useRef<HTMLInputElement>(null);
+  const lastAddedAt = useRef<number>(0);
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+
+    const now = Date.now();
+    if (now - lastAddedAt.current < 1000) {
+      // 前回追加から 1 秒以内なら無視
+      return;
+    }
+    lastAddedAt.current = now;
+
+    const newTodo: Todo = { id: crypto.randomUUID(), text: trimmed };
+    setTodos((prev) => [...prev, newTodo]);
+    setText("");
+    inputRef.current?.focus();
+  }
+
+  // ... JSX は本編と同じ
+}
+```
+
+ポイント:
+
+- `lastAddedAt` を **`useState` ではなく `useRef`** で持っています。時刻を更新しても再レンダリングしたくない（画面に出さない値だから）ためです
+- `useState` で持つと、クリックのたびに再レンダリングが走って無駄になります
+
+本格的なデバウンスは `setTimeout` と `clearTimeout` でタイマー管理が必要になり、クリーンアップ関数（本コースでは扱わない）に踏み込むことになります。ここでは「前回時刻を覚えておいて比較する」という一番単純な形で体感します。
+
+:::
+
+::: details 気をつけるポイント: 自動 focus は常に親切とは限らない
+
+「画面が表示された瞬間に input に focus を当てる」は便利ですが、すべての場面で良いわけではありません。
+
+- **ページ遷移直後の自動 focus** はスクリーンリーダーの読み上げを途中で割り込ませるため、ページ全体の文脈を聞き逃します（読み上げ位置が input に飛ぶ）
+- **モーダル / 検索バーが画面のずっと下にあるのに focus を当てる** と、画面が勝手にスクロールして読者の現在地を奪います
+- **キーボードで Tab を押して進めている最中** に外から focus を奪うと、操作経路が壊れます
+
+良い目安は「**ユーザーがそのアクションを起こした直後**」（追加ボタンを押した直後の入力欄、モーダルを開いた直後の最初の要素 など）に focus を移すこと。本レッスンの演習はこの良い例にあたります。
+
+なお、より高度な「モーダルの中で Tab がループする focus トラップ」「Esc で focus を元に戻す」などは、専用ライブラリ（Radix UI / React Aria 等）に任せるのが現代の定番です。
+
+:::
 
 ## まとめ
 
-- `useEffect(() => { ... }, deps)` は「描画の後に走る処理」を書く場所
-- 依存配列 `[]` は **マウント時 1 回だけ**
-- 依存配列に値を入れると、その値が変わるたびに再実行
-- 本コースではこの 2 パターンのみ扱う。クリーンアップ関数やイベントリスナ管理は扱わない
-- React 19 では `<title>` を JSX に直接書けるので、実務で「タイトルだけ」なら `useEffect` は不要
+- `useRef<HTMLInputElement>(null)` + `ref={inputRef}` で DOM 要素にアクセスできる
+- `inputRef.current?.focus()` のように null チェックして使う
+- `useState` は「画面に出す値」、`useRef` は「画面に出さない値」「DOM への参照」で使い分ける
+- React 19 以降、`ref` は普通の props として渡せる（`function MyInput({ ref }: { ref: Ref<HTMLInputElement> })` の形）
+- `forwardRef` の過去形は本コースでは扱わない

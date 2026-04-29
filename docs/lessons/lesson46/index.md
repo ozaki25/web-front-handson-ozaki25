@@ -1,325 +1,192 @@
-# lesson46: 型ガード（`typeof` / `in` / カスタム）
+# lesson46: `unknown` と `never`
 
 ## ゴール
 
-- `typeof` 演算子でプリミティブ型のユニオンを絞り込める。
-- `in` 演算子でオブジェクトのプロパティの有無から型を絞り込める。
-- `Array.isArray` で「配列かどうか」を絞り込める。
-- `function isTodo(x: unknown): x is Todo` のような **ユーザー定義型ガード** を書ける。
-- 「`unknown` と `never`」で受けた `unknown` を、型ガードを通して具体的な型まで絞り込める。
+- `any` を使うと TS の型チェックが無効化されること、本コースでは `any` を **原則禁止** にする方針を理解する。
+- 「型が分からない値」は `unknown` で受けられる。`unknown` のままでは **何もできない** 制約を体験する。
+- `never`（「起こり得ない」を表す型）の役割を知り、`switch` + `never` による **網羅性チェック** を書ける。
 
 ## 解説
 
-### `unknown` からの接続
+### `any` とその問題点
 
-別のレッスン「`unknown` と `never`」で扱った「`unknown` で受けた値は **そのままでは何もできない**」を、本レッスンでは「絞り込む道具」を使って **使える形** に変える方法として展開します。
-
-`unknown` を扱うには、「この値は実際どの型なのか」を **実行時に確かめる** コードを書きます。TS はそのコードを読んで「このブロックの中では `unknown` ではなく具体的な型として扱ってよい」と判断してくれます。この「コードから型を絞り込む仕組み」を **型ガード** と呼びます。
-
-### `typeof` 型ガード
-
-JS の `typeof` 演算子は、値のプリミティブな種類を文字列で返します。TS はこの `typeof` の結果を読み取って、**分岐の中で型を絞り込みます**。
+TS には、型チェックを **一時的にすべて無効にする** `any` という型があります。何を代入しても、何を呼び出しても、TS は何も警告しません。
 
 ```ts
-function describe(value: string | number): string {
-  if (typeof value === "string") {
-    return `文字列: ${value.toUpperCase()}`;
+let x: any = 123;
+x = "hello";        // OK
+x = { a: 1 };       // OK
+x.toUpperCase();    // 実行時エラーになるのに、TS は止めない
+x.bar.baz.qux();    // これも通ってしまう
+```
+
+`any` は JS の世界に戻るのと同じことです。コンパイルは通ってしまい、**実行してはじめて壊れていることに気付きます**。
+
+本コースでは **`any` は原則禁止** とします。既存ライブラリの型情報が不足している場合などに仕方なく使う場面はありますが、学習中は使う場面をゼロにして差し支えありません。
+
+### `unknown`: 「型が分からない」を安全に受ける
+
+「型が分からない値」を受ける安全な代替が **`unknown`** です。`any` と違い、`unknown` はそのままでは **ほとんど何も操作できません**。
+
+```ts
+let x: unknown = 123;
+x = "hello";   // 代入自体は何でも OK
+x = { a: 1 };  // OK
+
+console.log(x.toUpperCase()); // エラー
+```
+
+```
+'x' is of type 'unknown'.
+```
+
+`unknown` のままでは、プロパティアクセスもメソッド呼び出しもできません。**「使う前に型を絞り込め」** と TS が促してくれます。
+
+本レッスンでは、`unknown` が「絞り込まないと何もできない型」であることだけを体験します。
+
+### `unknown` の使いどころ
+
+`unknown` が登場する典型は、**外から入ってくる値** です。
+
+- `JSON.parse(text)` の戻り値
+- `fetch(...).then(r => r.json())` の戻り値
+- Server Actions / Route Handlers のリクエストボディ
+
+これらは実行時まで中身が何か分かりません。かつては `any` で受けていましたが、現在の TS では `unknown` で受けて、あとから型ガードで絞り込むのが基本形です。
+
+```ts
+const raw: unknown = JSON.parse('{"name":"Alice"}');
+// raw.name と書きたくても書けない。
+```
+
+### `never`: 「起こり得ない」を表す型
+
+`never` は「**値が存在しえない**」ことを表す型です。次のような場面で登場します。
+
+- 関数が **例外しか投げない**、あるいは **無限ループで絶対に return しない** 場合の戻り値型
+
+    ```ts
+    function fail(message: string): never {
+      throw new Error(message);
+    }
+    ```
+
+- `switch` の全ケースを処理し終えた後の残り物。これを使って **網羅性チェック** ができる。
+
+「`never` に値を代入しようとするとエラーになる」という性質を逆手にとると、「**ここに値が来たら漏れがある**」という警告を TS に書かせることができます。
+
+### 網羅性チェック（`switch` + `never`）
+
+「配列・ユニオン・リテラル型・オプショナル」で学んだリテラル型のユニオンを `switch` で分岐するとき、**全ケースを処理したことを TS に検証させる** 書き方を紹介します。
+
+```ts
+type Status = "open" | "done" | "archived";
+
+function label(status: Status): string {
+  switch (status) {
+    case "open":
+      return "未完了";
+    case "done":
+      return "完了";
+    case "archived":
+      return "保管";
+    default: {
+      const _exhaustive: never = status; // ここに来たら網羅できていない
+      return _exhaustive;
+    }
   }
-  return `数値: ${value.toFixed(2)}`;
 }
-
-console.log(describe("hello"));
-console.log(describe(3.14));
 ```
 
-出力:
+ポイントは `default` で `const _exhaustive: never = status;` と書いている部分です。
 
-```
-文字列: HELLO
-数値: 3.14
-```
+- `Status` が `"open" | "done" | "archived"` のとき、上の 3 つの `case` で全部処理している。
+- `default` に到達する時点で `status` の型は **残りがない** ので `never` 型になる。
+- `never` 型の変数に代入できるのは `never` 型の値だけ。このとき `status` が `never` なので代入が通る。
 
-- `if (typeof value === "string")` の中では `value` の型は `string` に絞られている。`.toUpperCase()` を呼べる。
-- その外（`if` を通らなかった側）では `number` に絞られている。`.toFixed(2)` を呼べる。
+> **補足**: 仕組みは「型の絞り込み」（narrowing）と呼ばれる動きです。TS は `case "open"` を通過したら「`status` の候補から `"open"` が消える」、というふうに **case を進むたびに型を絞り込んで** いきます。3 つ全部処理し終えた `default` の時点で残りが無くなり `never` になる、という流れです。これを **型の絞り込み**（narrowing）と呼び、`if (typeof x === "string")` などにも同じ仕組みが効きます。**今は上の `_exhaustive: never = status` をテンプレとしてコピペで使えれば十分** です。
 
-`typeof` で判定できる文字列は `"string"` / `"number"` / `"boolean"` / `"bigint"` / `"symbol"` / `"function"` / `"undefined"` / `"object"` の 8 種類。ここで注意が必要なのは **`typeof null` が `"object"` になる** こと（JS の歴史的経緯）、そして **配列も `typeof` では `"object"`** になること。
-
-### `Array.isArray` で配列を絞り込む
-
-配列かどうかは `typeof` では判定できないので、専用の `Array.isArray` を使います。
+ここで `Status` に **新しいケースを足した** とします。
 
 ```ts
-function length(value: string | string[]): number {
-  if (Array.isArray(value)) {
-    return value.length; // ここでは string[]
-  }
-  return value.length;   // ここでは string
-}
-
-console.log(length("hello"));         // 5
-console.log(length(["a", "b", "c"])); // 3
+type Status = "open" | "done" | "archived" | "deleted";
 ```
 
-`Array.isArray(value)` が `true` のブロックでは `value` が `string[]`、それ以外では `string` として扱われる。
-
-### `in` 演算子で絞り込む
-
-オブジェクトの型のユニオンでは、`in` 演算子で「そのプロパティを持っているか」を見ることで絞り込めます。
-
-```ts
-type TodoItem = { kind: "todo"; text: string };
-type NoteItem = { kind: "note"; body: string };
-type Item = TodoItem | NoteItem;
-
-function render(item: Item): string {
-  if ("text" in item) {
-    return `TODO: ${item.text}`;
-  }
-  return `Note: ${item.body}`;
-}
-
-console.log(render({ kind: "todo", text: "牛乳を買う" }));
-console.log(render({ kind: "note", body: "今日は良い天気" }));
-```
-
-出力:
+すると `label` の `default` で、`status` の型は `"deleted"` が残っている状態（= `never` ではない）になります。
 
 ```
-TODO: 牛乳を買う
-Note: 今日は良い天気
+Type '"deleted"' is not assignable to type 'never'.
 ```
 
-- `"text" in item` が `true` のブロックでは `item` の型が `TodoItem` に絞られる。`item.text` が使える。
-- `false` 側では `NoteItem` に絞られ、`item.body` が使える。
+TS が `label` 関数の中で「`"deleted"` ケースを書き忘れている」と教えてくれます。新しい状態を追加したときに処理漏れを防ぐ、強力な仕組みです。
 
-`in` は「文字列 `"プロパティ名"` が、オブジェクトの中に存在するか」を見ます。共通で持っているプロパティ（ここでは `kind`）ではなく、**片方だけが持つプロパティ**（`text` や `body`）で見分けるのがコツです。
+### このレッスンで扱わないこと
 
-なお、`kind` のような **「種類を表す共通プロパティ」** で分岐する方法（**判別共用体**）もあります。
-
-### ユーザー定義型ガード（`x is Todo`）
-
-組み込みの `typeof` や `in` で足りないときは、**自分で型ガード関数を書きます**。形は次の通り。
-
-```ts
-function isTodo(x: unknown): x is Todo {
-  // この関数が true を返したら、呼び出し側では x の型が Todo になる
-}
-```
-
-ポイントは戻り値型 `x is Todo` の部分。通常の戻り値型 `boolean` の代わりにこれを書くと、「`true` を返したら **呼び出し側の `x` の型を `Todo` に絞ってよい**」と TS に教えられます。これを **型述語**（type predicate）と呼びます。
-
-具体的に書くと次のようになります（`Todo` は「配列・ユニオン・リテラル型・オプショナル」で育てた `{ id: string; text: string; status: "open" | "done"; memo?: string }`）。
-
-```ts
-import type { Todo } from "./types";
-
-function isTodo(x: unknown): x is Todo {
-  if (typeof x !== "object" || x === null) return false;
-  const o = x as Record<string, unknown>;
-  if (typeof o.id !== "string") return false;
-  if (typeof o.text !== "string") return false;
-  if (o.status !== "open" && o.status !== "done") return false;
-  if (o.memo !== undefined && typeof o.memo !== "string") return false;
-  return true;
-}
-```
-
-- 最初の `typeof x !== "object" || x === null` で「そもそもオブジェクトか」を見る。`null` を除く理由は `typeof null === "object"` だから。
-- `x as Record<string, unknown>` は「プロパティアクセスのために一時的に型を付け替える」書き方。`Record<string, unknown>` は「任意の文字列キーを持ち、値は `unknown`」の型。これで `o.id` などを書けるようになるが、個々のプロパティはまだ `unknown` のままなので、この後 1 つずつ `typeof` で確認する。
-- 各プロパティを順に `typeof` で確認。全部通ったら `return true`。
-- `memo` は `?:` なので「あるなら `string`、ないなら `undefined`」を許す。
-
-この形の `isTodo` は、サーバー側で受け取った JSON が本当に `Todo` の形かを検証するのにそのまま使い回せます。
-
-### 型ガードを通した `unknown` の扱い
-
-`isTodo` を使うと、`unknown` を安全に `Todo` として扱えます。
-
-```ts
-const raw: unknown = JSON.parse('{"id":"a1","text":"牛乳","status":"open"}');
-
-if (isTodo(raw)) {
-  console.log(raw.text); // ここでは raw は Todo 型
-} else {
-  console.log("Todo の形ではありません");
-}
-```
-
-- `if (isTodo(raw))` の中では `raw` の型が `unknown` から `Todo` に絞られている。`.text` や `.id` に安全にアクセスできる。
-- `else` 側では絞り込みが成立していないので、`raw` は `unknown` のまま。
-
-これが「`unknown` と `never`」で予告した「`unknown` を絞り込む具体的な方法」です。
+`unknown` を **どう絞り込むか**（`typeof` / `in` / カスタム型ガード）はここでは深掘りしません。「絞り込まないと何もできない」こと、そして「`never` で網羅性を検査できる」ことだけ押さえればじゅうぶんです。
 
 ## 演習
 
 ### 途中から始める場合
 
-新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-<details>
-<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+### 手順 1: `any` の危うさを確認する
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
-
-</details>
-
-### 手順 1: `typeof` 型ガード
-
-`src/main.ts` を次の内容に置き換える。
+`src/main.ts` の中身を以下に置き換える。
 
 ```ts
-function describe(value: string | number): string {
-  if (typeof value === "string") {
-    return `文字列: ${value.toUpperCase()}`;
-  }
-  return `数値: ${value.toFixed(2)}`;
-}
-
-console.log(describe("hello"));
-console.log(describe(3.14));
+let x: any = 123;
+x = "hello";
+console.log(x.toUpperCase()); // OK
+console.log(x.bar.baz.qux()); // TS は止めないが、実行するとクラッシュする
 ```
 
-#### 期待出力
+エディタでは赤線が出ない。ビルドも通る。しかし実行すると次のような実行時エラーになる。
 
 ```
-文字列: HELLO
-数値: 3.14
+TypeError: Cannot read properties of undefined (reading 'baz')
 ```
 
-わざと絞り込み **なし** で呼ぼうとしてみる。
+`any` を使うと、TS は「ある型として扱える」と信じ込んでしまう。**実行するまで壊れていることに気付けない** のがポイント。
+
+### 手順 2: `unknown` に置き換えて、エラーが出ることを確認する
+
+同じコードを `unknown` で書き直す。
 
 ```ts
-function describe(value: string | number): string {
-  return value.toUpperCase();
-}
+let x: unknown = 123;
+x = "hello";
+console.log(x.toUpperCase());
+```
+
+期待されるメッセージ（`x.toUpperCase()` の行に赤線）:
+
+```
+'x' is of type 'unknown'.
+```
+
+さらにプロパティアクセスも試す。
+
+```ts
+console.log(x.bar);
 ```
 
 期待されるメッセージ:
 
 ```
-Property 'toUpperCase' does not exist on type 'string | number'.
-  Property 'toUpperCase' does not exist on type 'number'.
+'x' is of type 'unknown'.
 ```
 
-`string | number` のままでは `string` 限定のメソッドが呼べない。`typeof` で絞ると呼べるようになることを実感する。確認できたら元に戻す。
+`unknown` は「中身が何か分からない」ので、プロパティにもメソッドにも触らせてくれない。`any` のように **実行してから壊れる** のではなく、**書いた瞬間に TS が止める**。
 
-### 手順 2: `in` 演算子で分岐
+### 手順 3: `JSON.parse` の戻り値を受けてみる
+
+TS の型定義では `JSON.parse` の戻り値は `any` ですが、実務では安全のため `unknown` にキャストして受けるやり方があります。ここでは学習のため明示的に `unknown` で受けます。
 
 ```ts
-type TodoItem = { kind: "todo"; text: string };
-type NoteItem = { kind: "note"; body: string };
-type Item = TodoItem | NoteItem;
+const raw: unknown = JSON.parse('{"name":"Alice","age":20}');
 
-function render(item: Item): string {
-  if ("text" in item) {
-    return `TODO: ${item.text}`;
-  }
-  return `Note: ${item.body}`;
-}
-
-console.log(render({ kind: "todo", text: "牛乳を買う" }));
-console.log(render({ kind: "note", body: "今日は良い天気" }));
-```
-
-#### 期待出力
-
-```
-TODO: 牛乳を買う
-Note: 今日は良い天気
-```
-
-わざと `if` を外すとどうなるかも確認する。
-
-```ts
-function render(item: Item): string {
-  return `TODO: ${item.text}`;
-}
-```
-
-期待されるメッセージ:
-
-```
-Property 'text' does not exist on type 'Item'.
-  Property 'text' does not exist on type 'NoteItem'.
-```
-
-`Item` のままでは `.text` が `NoteItem` に存在しないため呼べない。`in` で絞ってから呼ぶのが正しい。確認できたら元に戻す。
-
-### 手順 3: `unknown` から `Todo` に絞り込むカスタム型ガード
-
-`src/types.ts` は「配列・ユニオン・リテラル型・オプショナル」で育てた形をそのまま使う。
-
-```ts
-// src/types.ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
-
-`src/main.ts` を次の内容に置き換える。
-
-```ts
-import type { Todo } from "./types";
-
-function isTodo(x: unknown): x is Todo {
-  if (typeof x !== "object" || x === null) return false;
-  const o = x as Record<string, unknown>;
-  if (typeof o.id !== "string") return false;
-  if (typeof o.text !== "string") return false;
-  if (o.status !== "open" && o.status !== "done") return false;
-  if (o.memo !== undefined && typeof o.memo !== "string") return false;
-  return true;
-}
-
-const raw1: unknown = JSON.parse(
-  '{"id":"a1","text":"牛乳を買う","status":"open"}'
-);
-const raw2: unknown = JSON.parse('{"id":"a2"}');
-const raw3: unknown = "just a string";
-
-function show(raw: unknown): void {
-  if (isTodo(raw)) {
-    console.log(`OK: ${raw.id} / ${raw.text} / ${raw.status}`);
-  } else {
-    console.log("NG: Todo の形ではありません");
-  }
-}
-
-show(raw1);
-show(raw2);
-show(raw3);
-```
-
-#### 期待出力
-
-```
-OK: a1 / 牛乳を買う / open
-NG: Todo の形ではありません
-NG: Todo の形ではありません
-```
-
-- `raw1` は `Todo` の形に合致するので `if` に入る。
-- `raw2` は `text` が欠けているため弾かれる。
-- `raw3` はそもそも文字列なので弾かれる。
-
-### 手順 4: 型ガードなしで使おうとしてエラーを見る
-
-`show` の中で、型ガードを外して直接触ろうとしてみる。
-
-```ts
-function show(raw: unknown): void {
-  console.log(raw.text);
-}
+console.log(raw.name);
 ```
 
 期待されるメッセージ:
@@ -328,75 +195,132 @@ function show(raw: unknown): void {
 'raw' is of type 'unknown'.
 ```
 
-`unknown` に対しては絞り込みなしでプロパティアクセスできない。確認できたら型ガード版に戻す。
+`raw` を `unknown` 型で受けると、中身にアクセスする前に「絞り込み」が必要になる。
 
-### 手順 5: `Array.isArray` を使う
+確認できたら `console.log(raw.name);` は消しておく（ビルドを通すため）。
 
-「`Todo[]` かどうか」を検証するには、まず配列であることを確かめ、次に各要素が `Todo` かを確かめます。
+### 手順 4: `never` による網羅性チェック
+
+次のコードを `src/main.ts` に書く。
 
 ```ts
-function isTodoArray(x: unknown): x is Todo[] {
-  if (!Array.isArray(x)) return false;
-  return x.every((item) => isTodo(item));
+type Status = "open" | "done" | "archived";
+
+function label(status: Status): string {
+  switch (status) {
+    case "open":
+      return "未完了";
+    case "done":
+      return "完了";
+    case "archived":
+      return "保管";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
 }
 
-const raw4: unknown = JSON.parse(
-  '[{"id":"a1","text":"牛乳","status":"open"},{"id":"a2","text":"本","status":"done"}]'
-);
-const raw5: unknown = JSON.parse('[{"id":"a1"}]');
-
-if (isTodoArray(raw4)) {
-  console.log(`Todo 配列 (${raw4.length} 件)`);
-} else {
-  console.log("Todo 配列ではありません");
-}
-
-if (isTodoArray(raw5)) {
-  console.log(`Todo 配列 (${raw5.length} 件)`);
-} else {
-  console.log("Todo 配列ではありません");
-}
+console.log(label("open"));
+console.log(label("done"));
+console.log(label("archived"));
 ```
 
 #### 期待出力
 
 ```
-Todo 配列 (2 件)
-Todo 配列ではありません
+未完了
+完了
+保管
 ```
 
-- `Array.isArray(x)` で配列かどうかを先に確認。
-- 各要素に対して `isTodo` を呼び、**全部合格** したら `true` を返す。
-- 戻り値型 `x is Todo[]` と書いているので、`true` が返った後は呼び出し側で `Todo[]` として `.length` / `.map` 等が使える。
+### 手順 5: ユニオンにケースを追加して、処理漏れを検出させる
 
-### 変えてみる
-
-`Todo` の `status` に `"archived"` を足したとします（型は一時的に `"open" | "done" | "archived"` とする）。`isTodo` の中の `status` チェックを、3 値に対応するよう書き換える。
+`Status` に `"deleted"` を追加する。
 
 ```ts
-if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
-  return false;
+type Status = "open" | "done" | "archived" | "deleted";
+```
+
+`label` 関数の本体は変えない。すると `default` 節の `const _exhaustive: never = status;` に赤線が出る。
+
+期待されるメッセージ:
+
+```
+Type '"deleted"' is not assignable to type 'never'.
+```
+
+「`label` 関数で `"deleted"` のケースが処理されていない」と TS が教えてくれる。
+
+`case "deleted":` を追加して処理を書き足すと、エラーが消える。
+
+```ts
+function label(status: Status): string {
+  switch (status) {
+    case "open":
+      return "未完了";
+    case "done":
+      return "完了";
+    case "archived":
+      return "保管";
+    case "deleted":
+      return "削除済み";
+    default: {
+      const _exhaustive: never = status;
+      return _exhaustive;
+    }
+  }
 }
 ```
 
-3 つ以上のリテラル値を許す形の書き方に慣れる。確認できたら、本編を壊さないように `Todo` 型も型ガードも元の 2 値に戻しておく。
+これで `Status` が増えるたびに、処理を書き忘れたら TS が止めてくれる。
+
+### 変えてみる
+
+`never` を返す関数を試す。
+
+```ts
+function fail(message: string): never {
+  throw new Error(message);
+}
+
+const value: string = fail("ここでストップ");
+console.log(value); // ここには到達しない
+```
+
+実行すると例外で止まり、`console.log` の行は動かない。
+
+```
+Error: ここでストップ
+```
+
+`never` を戻り値とする関数は「呼んだら戻ってこない」ことを型レベルで表現している。
 
 ### 自分で書く
 
-次の型ガードを自分で書く。
+次のユニオン型と関数を書く。
 
-1. `isUser(x: unknown): x is User`
-    - `User` 型は `{ id: string; name: string; age: number }` とする（「オブジェクトの型と type エイリアス」で `types.ts` に追加した形）。
-    - 戻り値の「`x is User`」を忘れない。
-2. `isUserArray(x: unknown): x is User[]`
-    - `isTodoArray` を参考に、`Array.isArray` と `.every` を組み合わせて書く。
+```ts
+type Shape =
+  | { kind: "circle"; radius: number }
+  | { kind: "square"; side: number };
 
-書けたら、`JSON.parse` で作った `unknown` を 3 パターン（正しい `User` / プロパティ欠け / そもそも配列でない）試し、期待通りに分岐することを確認する。
+function area(shape: Shape): number {
+  // ...
+}
+```
+
+- `case "circle":` で `Math.PI * shape.radius ** 2` を返す。
+- `case "square":` で `shape.side ** 2` を返す。
+- `default:` で `const _exhaustive: never = shape;` を書く。
+
+書けたら、わざと `Shape` に `{ kind: "triangle"; base: number; height: number }` を追加して、`_exhaustive` に赤線が出ることを確認する。確認できたら追加分を元に戻す。
+
+ヒント: `switch (shape.kind)` で分岐する。このような「プロパティで種類を見分ける」形は「判別共用体」で **判別共用体** として本格的に扱う。
 
 ## まとめ
 
-- 型ガードは「**実行時の確認を通して、TS に型を絞り込ませる**」仕組み。
-- `typeof`: プリミティブ（`string` / `number` / `boolean` など）の判定。`typeof null === "object"` の落とし穴に注意。
-- `Array.isArray`: 配列かどうかの専用判定。
-- `in`: オブジェクトに特定のプロパティがあるかで判定。
-- **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。「`unknown` と `never`」で受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。
+- `any` は型チェックを無効化してしまうため、**本コースでは原則禁止**。
+- `unknown` は「型が分からない」を安全に受ける型。そのままでは **何もできない** 制約がある。
+- `never` は「起こり得ない」を表す型。`switch` の `default` で `const _: never = x;` と書くと、処理漏れを TS に検出してもらえる（網羅性チェック）。
+- リテラル型のユニオンが増えたとき、網羅性チェックが入っていれば **処理を書き忘れた場所が赤線で分かる**。安全にユニオンを育てていくための定番パターン。

@@ -1,80 +1,94 @@
-# lesson21: 繰り返し処理
+# lesson21: 配列を扱う
 
 <script setup>
+// LiveDemo の :js に渡す JS コード。
+// 属性値に直接書くと Vue の HTML パーサーが JS 内の < や && を誤認するため、
+// script setup の変数経由で渡している。
 const demoJs = `
-const todos = ['牛乳を買う', '本を読む', 'ジョギング'];
-
-for (const todo of todos) {
-  console.log('- ' + todo);
-}
-
-console.log('合計', todos.length, '件');
+const fruits = ['apple', 'banana'];
+fruits.push('cherry');
+console.log(fruits);
+console.log('length: ' + fruits.length);
+console.log('先頭: ' + fruits[0]);
+console.log('末尾: ' + fruits[fruits.length - 1]);
 `
 </script>
 
 ## ゴール
 
-- `for...of` で配列の全要素を順に処理できる
-- `forEach` でも同じことができることを知る
+- 配列を作り、中の要素を取り出せる
+- `length` で要素数を確認できる
+- `push` / `pop` で末尾に追加・削除できる
 
 ## 解説
 
-### 「全部に対して同じことをする」
+### 配列とは
 
-配列の要素を 1 つずつ取り出して `console.log` したいとき、`todos[0]` / `todos[1]` / `todos[2]` ... と書き並べるのは大変です。要素数が増えるたびに書き足す必要があり、現実的ではありません。
-
-こういう「全部の要素に対して同じことをする」ために、繰り返し処理を使います。
-
-### `for...of`
-
-本コースで最初に覚える書き方は `for...of` です。配列専用ではありませんが、配列との相性がよく、書き方が素直です。
+同じ種類のデータを複数まとめたものが配列です。「やることリスト」「買い物リスト」のように「並んでいるもの」に使います。
 
 ```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
-
-for (const todo of todos) {
-  console.log(todo);
-}
+const fruits = ["apple", "banana", "cherry"];
 ```
 
-- `for (const 変数名 of 配列)` と書く
-- `{ ... }` の中が「各要素に対してやりたい処理」
-- ループのたびに `todo` に次の要素が順番に入る
+- `[` と `]` で囲む
+- 要素と要素はカンマで区切る
+- 中身は文字列でも数値でも何でも入れられる
 
-インデックスは使わず、「要素そのもの」を直接受け取ります。
+### インデックスで取り出す
 
-下のデモで、配列を 1 件ずつ取り出して `console.log` が順に並ぶ様子を確認できます。
+配列の中の要素には、先頭から `0`, `1`, `2`, ... と番号が振られています。これをインデックスと呼びます。
+
+```js
+const fruits = ["apple", "banana", "cherry"];
+console.log(fruits[0]); // "apple"
+console.log(fruits[1]); // "banana"
+console.log(fruits[2]); // "cherry"
+```
+
+0 から始まる点に注意します。`fruits[1]` は「2 番目」ではなく「インデックス 1 の要素（=先頭から 2 つ目）」です。
+
+存在しないインデックスを指定すると `undefined` が返ります。
+
+```js
+console.log(fruits[5]); // undefined
+```
+
+### `length` で要素数を知る
+
+```js
+const fruits = ["apple", "banana", "cherry"];
+console.log(fruits.length); // 3
+```
+
+末尾の要素は `fruits[fruits.length - 1]` で取れます（インデックスは 0 始まりなので `-1`）。
+
+### 追加と削除
+
+- `push(値)`: 末尾に追加する
+- `pop()`: 末尾を取り除く（取り除いた値を返す）
+
+```js
+const fruits = ["apple", "banana"];
+fruits.push("cherry");
+console.log(fruits); // ["apple", "banana", "cherry"]
+
+const removed = fruits.pop();
+console.log(removed); // "cherry"
+console.log(fruits);  // ["apple", "banana"]
+```
+
+`const` で宣言した配列に対しても `push` や `pop` は使えます。`const` は「変数に入っている配列そのものを別のものに差し替えない」という約束で、配列の中身の操作はできます。
+
+### デモで確認する
+
+下のデモでは、配列に `push` で要素を足し、`length` とインデックスアクセスで先頭 / 末尾を取り出す動きを確認できます。
 
 <LiveDemo
-  height="220px"
-  :html="`<p>配列を順に出力します。</p>`"
+  height="260px"
+  :html="`<p>配列の基本操作をまとめて確認するデモ</p>`"
   :css="``"
   :js="demoJs"
 />
-
-### `forEach`（軽く触れる）
-
-配列には `forEach` というメソッドもあります。書き味が少し違うだけで、できることはほぼ同じです。
-
-```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
-
-todos.forEach((todo) => {
-  console.log(todo);
-});
-```
-
-- `(todo) => { ... }` はアロー関数と呼ばれる記法
-- 配列の各要素に対して、カッコの中の処理が呼ばれる
-
-本コースでは `for...of` を主に使いますが、実際のコードでは `forEach` もよく見かけます。「同じ意味の別の書き方」として覚えておきます。
-
-### どちらを使う？
-
-- 読みやすさ重視なら `for...of`
-- 既存コードに合わせるなら `forEach`
-
-迷ったら `for...of` で統一して構いません。
 
 ## 演習
 
@@ -97,12 +111,73 @@ todos.forEach((todo) => {
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson20: 配列を扱う</h1>
+    <h1>lesson20: 条件で分岐する</h1>
   </body>
 </html>
 ```
 
 **`script.js`**
+
+```js
+const age = 20;
+const userName = "Alice";
+const isStudent = true;
+
+if (age >= 20) {
+  console.log(`${userName} さんは成人です`);
+} else {
+  console.log(`${userName} さんは未成年です`);
+}
+
+if (age >= 13 && age <= 19) {
+  console.log("10 代です");
+} else if (age >= 20 && age < 60) {
+  console.log("大人です");
+} else {
+  console.log("それ以外の年代です");
+}
+
+if (isStudent && age >= 20) {
+  console.log("成人の学生です");
+}
+
+if (!isStudent) {
+  console.log("学生ではありません");
+} else {
+  console.log("学生です");
+}
+```
+
+</details>
+
+### ゴール
+
+- 「やることリスト」の配列を作り、要素を足したり取り出したりしてコンソールに表示する
+
+### 手順
+
+1. `index.html` のタイトルを `lesson21` に変える
+2. `script.js` を以下に書き換える
+3. Console を確認する
+
+### `index.html`
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>lesson21</title>
+    <script defer src="./script.js"></script>
+  </head>
+  <body>
+    <h1>lesson21: 配列を扱う</h1>
+  </body>
+</html>
+```
+
+### `script.js`
 
 ```js
 const todos = ["牛乳を買う", "本を読む", "ジョギング"];
@@ -123,87 +198,37 @@ console.log(todos);
 console.log(todos[99]);
 ```
 
-</details>
-
-### ゴール
-
-- やることリストの配列を `for...of` で全件 Console に出す
-- 同じ処理を `forEach` でも書いてみる
-
-### 手順
-
-1. `index.html` のタイトルを `lesson21` に変える
-2. `script.js` を以下に書き換える
-
-### `index.html`
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson21</title>
-    <script defer src="./script.js"></script>
-  </head>
-  <body>
-    <h1>lesson21: 繰り返し処理</h1>
-  </body>
-</html>
-```
-
-### `script.js`
-
-```js
-const todos = ["牛乳を買う", "本を読む", "ジョギング"];
-
-console.log("--- for...of ---");
-for (const todo of todos) {
-  console.log(todo);
-}
-
-console.log("--- forEach ---");
-todos.forEach((todo) => {
-  console.log(todo);
-});
-
-console.log("--- 合計 ---");
-const numbers = [1, 2, 3, 4, 5];
-let total = 0;
-for (const n of numbers) {
-  total = total + n;
-}
-console.log(total);
-```
-
 ### 期待出力
 
 ```
---- for...of ---
+["牛乳を買う", "本を読む", "ジョギング"]
+3
 牛乳を買う
-本を読む
 ジョギング
---- forEach ---
-牛乳を買う
-本を読む
-ジョギング
---- 合計 ---
-15
+["牛乳を買う", "本を読む", "ジョギング", "部屋を片付ける"]
+4
+部屋を片付ける
+["牛乳を買う", "本を読む", "ジョギング"]
+undefined
 ```
+
+配列の表示形式はブラウザによって少し変わりますが、要素の並びは同じです。
 
 ### 変える
 
-- `todos` の要素を 5 つに増やす → どちらのループも自動で 5 回実行される
-- `console.log(todo)` を `console.log("- " + todo)` に変える → 各行の先頭に `- ` が付く
-- `numbers` の合計処理で、`total = total + n` を `total = total + n * 2` に変える → 出力が `30` になる
+- `todos` の初期値に 5 つ要素を入れる → `length` が `5` になることを確認
+- `todos.push(...)` を 2 回連続で呼んで、末尾に 2 つ追加する
+- `todos.pop()` を 3 回呼んで、3 つ取り除く（配列が空になる）
+- 空の配列 `[]` に `pop` を呼ぶと何が返るか確認する（`undefined`）
 
 ### 自分で書く
 
-- 数値の配列 `scores = [80, 95, 62, 77, 90]` を作り、`for...of` で合計と平均を計算して出す（平均 = 合計 / 要素数）
-- 文字列の配列 `names = ["Alice", "Bob", "Carol"]` を作り、`for...of` で「こんにちは、○○ さん」と 1 人ずつ出力する
+- 好きな食べ物 3 つを配列 `foods` に入れて、それぞれをインデックスで取り出して `console.log` する
+- `foods` の末尾に 2 つ追加し、末尾から 1 つ取り除いてから、最終的な `foods` を `console.log` する
 
 ## まとめ
 
-- 配列の全要素を処理するには `for...of` を使う
-- `forEach` でも同じことが書けるが、本コースでは `for...of` を主に使う
-- ループの中で `let` で用意した合計用変数を更新すると、合計や平均も計算できる
+- 配列は `[値1, 値2, ...]` で作る
+- インデックスは 0 から始まる
+- 要素数は `length`、末尾追加は `push`、末尾削除は `pop`
+- 存在しないインデックスを読むと `undefined` が返る

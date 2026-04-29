@@ -1,326 +1,374 @@
-# lesson45: `unknown` と `never`
+# lesson45: 配列・ユニオン・リテラル型・オプショナル
 
 ## ゴール
 
-- `any` を使うと TS の型チェックが無効化されること、本コースでは `any` を **原則禁止** にする方針を理解する。
-- 「型が分からない値」は `unknown` で受けられる。`unknown` のままでは **何もできない** 制約を体験する。
-- `never`（「起こり得ない」を表す型）の役割を知り、`switch` + `never` による **網羅性チェック** を書ける。
+- 配列の型を `T[]` / `Array<T>` の 2 通りで書ける。
+- 「この型 **または** あの型」を表す **ユニオン型**（`|`）を書ける。
+- 「特定の値のみ許す」 **リテラル型** を書ける。
+- 省略可能なプロパティ `?:` を書ける。
+- 「オブジェクトの型と type エイリアス」の `Todo` 型に `status: "open" | "done"` と `memo?: string` を足して、育てた `Todo` 型で配列を扱える。
 
 ## 解説
 
-### `any` とその問題点
+### 配列の型
 
-TS には、型チェックを **一時的にすべて無効にする** `any` という型があります。何を代入しても、何を呼び出しても、TS は何も警告しません。
-
-```ts
-let x: any = 123;
-x = "hello";        // OK
-x = { a: 1 };       // OK
-x.toUpperCase();    // 実行時エラーになるのに、TS は止めない
-x.bar.baz.qux();    // これも通ってしまう
-```
-
-`any` は JS の世界に戻るのと同じことです。コンパイルは通ってしまい、**実行してはじめて壊れていることに気付きます**。
-
-本コースでは **`any` は原則禁止** とします。既存ライブラリの型情報が不足している場合などに仕方なく使う場面はありますが、学習中は使う場面をゼロにして差し支えありません。
-
-### `unknown`: 「型が分からない」を安全に受ける
-
-「型が分からない値」を受ける安全な代替が **`unknown`** です。`any` と違い、`unknown` はそのままでは **ほとんど何も操作できません**。
+2 章 で書いた配列に型を付けていきます。配列の型は 2 通りの書き方があります。どちらも意味は同じです。
 
 ```ts
-let x: unknown = 123;
-x = "hello";   // 代入自体は何でも OK
-x = { a: 1 };  // OK
-
-console.log(x.toUpperCase()); // エラー
+const numbers: number[] = [1, 2, 3];
+const names: Array<string> = ["Alice", "Bob"];
 ```
 
-```
-'x' is of type 'unknown'.
-```
+- `number[]`: 「数値の配列」。短くて読みやすいので普段はこちら。
+- `Array<number>`: 「`Array` という型に `number` を流し込んだもの」。ジェネリクス（「ジェネリクス入門」で扱う）の書き方。
 
-`unknown` のままでは、プロパティアクセスもメソッド呼び出しもできません。**「使う前に型を絞り込め」** と TS が促してくれます。
-
-本レッスンでは、`unknown` が「絞り込まないと何もできない型」であることだけを体験します。
-
-### `unknown` の使いどころ
-
-`unknown` が登場する典型は、**外から入ってくる値** です。
-
-- `JSON.parse(text)` の戻り値
-- `fetch(...).then(r => r.json())` の戻り値
-- Server Actions / Route Handlers のリクエストボディ
-
-これらは実行時まで中身が何か分かりません。かつては `any` で受けていましたが、現在の TS では `unknown` で受けて、あとから型ガードで絞り込むのが基本形です。
+どちらも、中身の型が合わないとエラーになる。
 
 ```ts
-const raw: unknown = JSON.parse('{"name":"Alice"}');
-// raw.name と書きたくても書けない。
+const numbers: number[] = [1, 2, "3"];
 ```
 
-### `never`: 「起こり得ない」を表す型
+```
+Type 'string' is not assignable to type 'number'.
+```
 
-`never` は「**値が存在しえない**」ことを表す型です。次のような場面で登場します。
+### ユニオン型 `|`
 
-- 関数が **例外しか投げない**、あるいは **無限ループで絶対に return しない** 場合の戻り値型
-
-    ```ts
-    function fail(message: string): never {
-      throw new Error(message);
-    }
-    ```
-
-- `switch` の全ケースを処理し終えた後の残り物。これを使って **網羅性チェック** ができる。
-
-「`never` に値を代入しようとするとエラーになる」という性質を逆手にとると、「**ここに値が来たら漏れがある**」という警告を TS に書かせることができます。
-
-### 網羅性チェック（`switch` + `never`）
-
-「配列・ユニオン・リテラル型・オプショナル」で学んだリテラル型のユニオンを `switch` で分岐するとき、**全ケースを処理したことを TS に検証させる** 書き方を紹介します。
+「文字列 **または** 数値」のように、複数の型のどれかを受け入れる型を **ユニオン型** と呼びます。
 
 ```ts
-type Status = "open" | "done" | "archived";
+let id: string | number;
+id = "abc123"; // OK
+id = 42;        // OK
+id = true;      // エラー
+```
 
-function label(status: Status): string {
-  switch (status) {
-    case "open":
-      return "未完了";
-    case "done":
-      return "完了";
-    case "archived":
-      return "保管";
-    default: {
-      const _exhaustive: never = status; // ここに来たら網羅できていない
-      return _exhaustive;
-    }
+```
+Type 'boolean' is not assignable to type 'string | number'.
+```
+
+ユニオン型の値を使うときは、どちらの型の操作でも共通して使える部分しか呼べません。例えば `string | number` に対しては文字列だけが持つ `.toUpperCase()` は呼べません。使い分けたいときは `typeof` で絞り込みます（このコースでは深追いしない）。
+
+### リテラル型
+
+TS では **値そのもの** を型として使えます。これを **リテラル型** と呼びます。
+
+```ts
+let answer: "yes";
+answer = "yes"; // OK
+answer = "no";  // エラー
+```
+
+```
+Type '"no"' is not assignable to type '"yes"'.
+```
+
+これだけだと使い道がありませんが、ユニオン型と組み合わせると強力です。
+
+```ts
+let status: "open" | "done" | "archived";
+status = "open";     // OK
+status = "done";     // OK
+status = "archived"; // OK
+status = "todo";     // エラー
+```
+
+```
+Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
+```
+
+「この変数には `"open"` か `"done"` か `"archived"` のどれかしか入らない」ということが型で書けます。2 章 で文字列リテラルを比較していた部分（`if (status === "done")` など）が、typo まで含めて TS が守ってくれるようになります。
+
+### オプショナルプロパティ `?:`
+
+オブジェクトのプロパティのうち「あってもなくてもよい」ものは、名前の後ろに `?` を付けます。
+
+```ts
+type User = {
+  name: string;
+  email?: string;
+};
+
+const alice: User = { name: "Alice" };                          // OK
+const bob: User = { name: "Bob", email: "bob@example.com" };    // OK
+```
+
+- `email?: string` は「`email` は省略してもよい。書くなら `string`」という意味。
+- 省略した場合、`user.email` の型は `string | undefined` になる（`undefined` も入りうる、ということ）。
+
+`undefined` が入りうるので、使う側では存在チェックが必要になります。
+
+```ts
+function printEmail(user: User): void {
+  if (user.email) {
+    console.log(user.email.toUpperCase());
+  } else {
+    console.log("メールなし");
   }
 }
 ```
 
-ポイントは `default` で `const _exhaustive: never = status;` と書いている部分です。
+`if (user.email)` を付けずに `user.email.toUpperCase()` とだけ書くと、TS が次のように止めます。
 
-- `Status` が `"open" | "done" | "archived"` のとき、上の 3 つの `case` で全部処理している。
-- `default` に到達する時点で `status` の型は **残りがない** ので `never` 型になる。
-- `never` 型の変数に代入できるのは `never` 型の値だけ。このとき `status` が `never` なので代入が通る。
+```
+'user.email' is possibly 'undefined'.
+```
 
-> **補足: 仕組みは「型の絞り込み」（narrowing）**: TS は `case "open"` を通過したら「`status` の候補から `"open"` が消える」、というふうに **case を進むたびに型を絞り込んで** いきます。3 つ全部処理し終えた `default` の時点で残りが無くなり `never` になる、という流れです。これを **型の絞り込み**（narrowing）と呼び、`if (typeof x === "string")` などにも同じ仕組みが効きます。**今は上の `_exhaustive: never = status` をテンプレとしてコピペで使えれば十分** です。
+### `Todo` 型を育てる
 
-ここで `Status` に **新しいケースを足した** とします。
+「オブジェクトの型と type エイリアス」の `Todo` 型を次の形に育てます。
 
 ```ts
-type Status = "open" | "done" | "archived" | "deleted";
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
 ```
 
-すると `label` の `default` で、`status` の型は `"deleted"` が残っている状態（= `never` ではない）になります。
+- `status`: `"open"` か `"done"` のどちらか。必須。
+- `memo?`: 省略可能な自由記述のメモ。書くなら文字列。
 
-```
-Type '"deleted"' is not assignable to type 'never'.
-```
-
-TS が `label` 関数の中で「`"deleted"` ケースを書き忘れている」と教えてくれます。新しい状態を追加したときに処理漏れを防ぐ、強力な仕組みです。
-
-### このレッスンで扱わないこと
-
-`unknown` を **どう絞り込むか**（`typeof` / `in` / カスタム型ガード）はここでは深掘りしません。「絞り込まないと何もできない」こと、そして「`never` で網羅性を検査できる」ことだけ押さえればじゅうぶんです。
+これで「未完了 / 完了」を型レベルで表せるようになり、`Todo[]` は「育った `Todo` の配列」になります。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
-### 手順 1: `any` の危うさを確認する
+<details>
+<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+</details>
+
+### 手順 1: 配列の型に慣れる
 
 `src/main.ts` の中身を以下に置き換える。
 
 ```ts
-let x: any = 123;
-x = "hello";
-console.log(x.toUpperCase()); // OK
-console.log(x.bar.baz.qux()); // TS は止めないが、実行するとクラッシュする
-```
+const numbers: number[] = [1, 2, 3];
+const names: Array<string> = ["Alice", "Bob", "Charlie"];
 
-エディタでは赤線が出ない。ビルドも通る。しかし実行すると次のような実行時エラーになる。
-
-```
-TypeError: Cannot read properties of undefined (reading 'baz')
-```
-
-`any` を使うと、TS は「ある型として扱える」と信じ込んでしまう。**実行するまで壊れていることに気付けない** のがポイント。
-
-### 手順 2: `unknown` に置き換えて、エラーが出ることを確認する
-
-同じコードを `unknown` で書き直す。
-
-```ts
-let x: unknown = 123;
-x = "hello";
-console.log(x.toUpperCase());
-```
-
-期待されるメッセージ（`x.toUpperCase()` の行に赤線）:
-
-```
-'x' is of type 'unknown'.
-```
-
-さらにプロパティアクセスも試す。
-
-```ts
-console.log(x.bar);
-```
-
-期待されるメッセージ:
-
-```
-'x' is of type 'unknown'.
-```
-
-`unknown` は「中身が何か分からない」ので、プロパティにもメソッドにも触らせてくれない。`any` のように **実行してから壊れる** のではなく、**書いた瞬間に TS が止める**。
-
-### 手順 3: `JSON.parse` の戻り値を受けてみる
-
-TS の型定義では `JSON.parse` の戻り値は `any` ですが、実務では安全のため `unknown` にキャストして受けるやり方があります。ここでは学習のため明示的に `unknown` で受けます。
-
-```ts
-const raw: unknown = JSON.parse('{"name":"Alice","age":20}');
-
-console.log(raw.name);
-```
-
-期待されるメッセージ:
-
-```
-'raw' is of type 'unknown'.
-```
-
-`raw` を `unknown` 型で受けると、中身にアクセスする前に「絞り込み」が必要になる。
-
-確認できたら `console.log(raw.name);` は消しておく（ビルドを通すため）。
-
-### 手順 4: `never` による網羅性チェック
-
-次のコードを `src/main.ts` に書く。
-
-```ts
-type Status = "open" | "done" | "archived";
-
-function label(status: Status): string {
-  switch (status) {
-    case "open":
-      return "未完了";
-    case "done":
-      return "完了";
-    case "archived":
-      return "保管";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
-  }
+for (const n of numbers) {
+  console.log(n);
 }
 
-console.log(label("open"));
-console.log(label("done"));
-console.log(label("archived"));
+for (const name of names) {
+  console.log(name);
+}
 ```
 
 #### 期待出力
 
 ```
-未完了
-完了
-保管
+1
+2
+3
+Alice
+Bob
+Charlie
 ```
 
-### 手順 5: ユニオンにケースを追加して、処理漏れを検出させる
-
-`Status` に `"deleted"` を追加する。
+わざと要素の型を間違えてみる。
 
 ```ts
-type Status = "open" | "done" | "archived" | "deleted";
+const numbers: number[] = [1, 2, "3"];
 ```
-
-`label` 関数の本体は変えない。すると `default` 節の `const _exhaustive: never = status;` に赤線が出る。
 
 期待されるメッセージ:
 
 ```
-Type '"deleted"' is not assignable to type 'never'.
+Type 'string' is not assignable to type 'number'.
 ```
 
-「`label` 関数で `"deleted"` のケースが処理されていない」と TS が教えてくれる。
+確認したら `[1, 2, 3]` に戻す。
 
-`case "deleted":` を追加して処理を書き足すと、エラーが消える。
+### 手順 2: ユニオン型とリテラル型
 
 ```ts
-function label(status: Status): string {
-  switch (status) {
-    case "open":
-      return "未完了";
-    case "done":
-      return "完了";
-    case "archived":
-      return "保管";
-    case "deleted":
-      return "削除済み";
-    default: {
-      const _exhaustive: never = status;
-      return _exhaustive;
-    }
+let id: string | number;
+
+id = "abc123";
+console.log(id);
+
+id = 42;
+console.log(id);
+```
+
+#### 期待出力
+
+```
+abc123
+42
+```
+
+次に `true` を代入してみる。
+
+```ts
+id = true;
+```
+
+期待されるメッセージ:
+
+```
+Type 'boolean' is not assignable to type 'string | number'.
+```
+
+赤線を確認したら、**`id = true;` の行は消して** 次に進む（残しておくと後続コードが実行されない可能性がある）。続けて、リテラル型のユニオンを試す。
+
+```ts
+let status: "open" | "done" | "archived";
+status = "open";
+console.log(status);
+status = "done";
+console.log(status);
+status = "todo"; // typo わざと
+```
+
+期待されるメッセージ:
+
+```
+Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
+```
+
+確認したら `status = "todo";` の行を消すか、正しい値（`"archived"` など）に直す。
+
+### 手順 3: `Todo` 型を育てる
+
+`src/types.ts` を次の形に書き換える。
+
+```ts
+// src/types.ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+`src/main.ts` を次の形に書き換える。
+
+```ts
+import type { Todo } from "./types";
+
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
+  { id: "a3", text: "ゴミを出す", status: "open" },
+];
+
+function printTodo(todo: Todo): void {
+  const mark = todo.status === "done" ? "x" : " ";
+  const memoText = todo.memo ? ` (memo: ${todo.memo})` : "";
+  console.log(`[${mark}] ${todo.text}${memoText}`);
+}
+
+for (const todo of todos) {
+  printTodo(todo);
+}
+```
+
+#### 期待出力
+
+```
+[ ] 牛乳を買う
+[x] 本を返す (memo: 駅前の図書館)
+[ ] ゴミを出す
+```
+
+`memo` を持つ項目だけ `(memo: ...)` が付き、完了しているものは `[x]`、未完了は `[ ]` になる。
+
+### 手順 4: 型のミスを見つけてもらう
+
+次の 3 つをそれぞれ試し、メッセージを確認する。確認したら元に戻す。
+
+```ts
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "todo" }, // typo
+];
+```
+
+```
+Type '"todo"' is not assignable to type '"open" | "done"'.
+```
+
+```ts
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" }, // status が足りない
+];
+```
+
+```
+Property 'status' is missing in type '{ id: string; text: string; }' but required in type 'Todo'.
+```
+
+```ts
+function printTodo(todo: Todo): void {
+  console.log(todo.memo.toUpperCase());
+}
+```
+
+```
+'todo.memo' is possibly 'undefined'.
+```
+
+最後のパターンは、オプショナルプロパティが `undefined` になりうることを TS が警告してくれている例。`if (todo.memo)` を挟んでから `toUpperCase()` するのが正しい使い方。
+
+### 変えてみる
+
+`printTodo` の中で「未完了の TODO のテキストを大文字にして目立たせる」実装にしてみる。
+
+```ts
+function printTodo(todo: Todo): void {
+  if (todo.status === "open") {
+    console.log(`TODO: ${todo.text.toUpperCase()}`);
+  } else {
+    console.log(`DONE: ${todo.text}`);
   }
 }
 ```
 
-これで `Status` が増えるたびに、処理を書き忘れたら TS が止めてくれる。
-
-### 変えてみる
-
-`never` を返す関数を試す。
-
-```ts
-function fail(message: string): never {
-  throw new Error(message);
-}
-
-const value: string = fail("ここでストップ");
-console.log(value); // ここには到達しない
-```
-
-実行すると例外で止まり、`console.log` の行は動かない。
+期待出力:
 
 ```
-Error: ここでストップ
+TODO: 牛乳を買う
+DONE: 本を返す
+TODO: ゴミを出す
 ```
-
-`never` を戻り値とする関数は「呼んだら戻ってこない」ことを型レベルで表現している。
 
 ### 自分で書く
 
-次のユニオン型と関数を書く。
+`Todo` 型の配列 `todos` に対して、次の 2 つの関数を書く。
 
-```ts
-type Shape =
-  | { kind: "circle"; radius: number }
-  | { kind: "square"; side: number };
+1. `countOpen(todos: Todo[]): number` — `status === "open"` の件数を返す。
+2. `filterDone(todos: Todo[]): Todo[]` — `status === "done"` のものだけを新しい配列で返す。
 
-function area(shape: Shape): number {
-  // ...
-}
-```
+呼び出して結果を Console に出す。使える道具は2 章 で学んだ `for...of`、`filter`、`length` など。どれを使っても構わない。
 
-- `case "circle":` で `Math.PI * shape.radius ** 2` を返す。
-- `case "square":` で `shape.side ** 2` を返す。
-- `default:` で `const _exhaustive: never = shape;` を書く。
+### スコープ外の明記
 
-書けたら、わざと `Shape` に `{ kind: "triangle"; base: number; height: number }` を追加して、`_exhaustive` に赤線が出ることを確認する。確認できたら追加分を元に戻す。
+TS には「列挙型」を作る `enum` や、値を型に格上げする `as const` という機能もあります。**本コースでは扱いません**。理由は次の通り。
 
-ヒント: `switch (shape.kind)` で分岐する。このような「プロパティで種類を見分ける」形は「判別共用体」で **判別共用体** として本格的に扱う。
+- `"open" | "done"` のようなリテラル型ユニオンで、列挙型が担う用途のほとんどは代替できる。
+- `enum` はランタイムにコードを生成するため、`import type` で消せない副作用を持つ。
+- `as const` は学習コストに対してこのコースのゴール（Next.js で小さなアプリ）への寄与が薄い。
+
+使う場面に出会ったら、そのときに公式ドキュメントを読めば十分追いつけます。
 
 ## まとめ
 
-- `any` は型チェックを無効化してしまうため、**本コースでは原則禁止**。
-- `unknown` は「型が分からない」を安全に受ける型。そのままでは **何もできない** 制約がある。
-- `never` は「起こり得ない」を表す型。`switch` の `default` で `const _: never = x;` と書くと、処理漏れを TS に検出してもらえる（網羅性チェック）。
-- リテラル型のユニオンが増えたとき、網羅性チェックが入っていれば **処理を書き忘れた場所が赤線で分かる**。安全にユニオンを育てていくための定番パターン。
+- 配列の型は `T[]` / `Array<T>` の 2 通り。普段は `T[]`。
+- ユニオン型 `A | B` で「どちらでも受け入れる」が書ける。
+- リテラル型とユニオン型を組み合わせると、`"open" | "done"` のように「決まった値だけ許す」型が書ける。
+- `?:` で省略可能なプロパティを書ける。使う側では `undefined` を意識した分岐が必要。
+- `enum` / `as const` は本コースでは扱わない。

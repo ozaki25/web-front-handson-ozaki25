@@ -1,142 +1,209 @@
-# lesson09: 色と文字を整える
+# lesson09: セレクタの組み合わせと詳細度
 
 ## ゴール
 
-- 文字色（`color`）・背景色（`background-color`）を指定できる。
-- 文字サイズ（`font-size`）・行間（`line-height`）を指定できる。
-- `font-family` で使用フォントの優先順位を指定できる。
+- 子孫セレクタ（`a b`）/ 子セレクタ（`a > b`）/ 隣接セレクタ（`a + b`）を使い分けられる。
+- 属性セレクタ（`[type="email"]`）が書ける。
+- **詳細度** の基本ルール（id > class > 要素 / 同じなら後勝ち）を説明できる。
+- `!important` がなぜ最後の手段なのかを理解する。
 
 ## 解説
 
-### このレッスンで扱うプロパティ
+「クラスと状態」までで、要素セレクタとクラスセレクタを使い分けられるようになりました。これらを **組み合わせる** と、もう少し細かい指定ができます。
 
-| プロパティ | 役割 |
-| --- | --- |
-| `color` | 文字色 |
-| `background-color` | 背景色 |
-| `font-size` | 文字サイズ |
-| `line-height` | 行の高さ（実質的な行間） |
-| `font-family` | 使用するフォントの優先順位リスト |
+### 子孫セレクタ: `a b`（半角スペース)
 
-「CSS を当てる」で `color` と `line-height` は先出ししていましたが、ここでまとめて扱います。
-
-### 色の指定（復習 + 少し追加）
-
-「CSS を当てる」で色名（`steelblue`）と 16 進数（`#333333`）を使いました。16 進数は 6 桁のほかに 3 桁の短縮形も書けます。
+セレクタを **半角スペースで** つなげると、「`a` の中にある `b`」を意味します。間に他の要素が挟まっていても OK です。
 
 ```css
-.example {
-  color: #333; /* #333333 と同じ */
-  background-color: #fff; /* #ffffff と同じ */
+.card p {
+  color: #555;
 }
 ```
 
-見やすさのため、本コースでは 6 桁で統一することが多いです。
+これは「`.card` の中にある `<p>` すべて」に色を付けます。直接の子でなくても、`.card` の子孫であれば対象になります。
 
-### `font-size` の単位
+```html
+<div class="card">
+  <h2>タイトル</h2>
+  <div class="body">
+    <p>本文</p>  <!-- 対象 -->
+  </div>
+</div>
+<p>これは外側</p>  <!-- 対象外 -->
+```
 
-文字サイズには複数の単位があります。覚えておきたいのは次の 3 つ。
+### 子セレクタ: `a > b`
 
-- `px`（ピクセル）: 絶対的な大きさ。ブラウザの文字サイズ設定に影響されない。ピッタリ合わせたいときに使う。
-- `rem`: ルート要素（`<html>`）の `font-size` を基準にした相対値。`1rem` がふつう `16px`。ユーザーがブラウザの文字サイズを変えたとき、一緒に拡大縮小されるので親切。
-- `em`: 親要素の `font-size` を基準にした相対値。入れ子で影響が連鎖するため、使い所が難しい。
-
-本コースでは、基本は `rem` を推奨しつつ、小さな調整には `px` も使っていきます。
+`>` を挟むと「**直接の子**」だけに限定できます。孫より下は対象外です。
 
 ```css
-h1 {
-  font-size: 2rem; /* 通常 32px */
-}
-
-p {
-  font-size: 1rem; /* 16px */
+.card > p {
+  font-weight: bold;
 }
 ```
 
-### `line-height`（行間）
+```html
+<div class="card">
+  <p>直接の子</p>      <!-- 対象 -->
+  <div>
+    <p>孫の p</p>     <!-- 対象外 -->
+  </div>
+</div>
+```
 
-`line-height` は、その要素の 1 行分の高さを指定します。数字だけ書く書き方（単位なし）がよく使われます。
+「ナビゲーションの直下のリンクだけ装飾したい」のように、ネストの深い箇所まで巻き込みたくないときに使います。
+
+### 隣接セレクタ: `a + b`
+
+`+` を挟むと「**`a` の直後にある `b`**」だけに当たります。1 つだけです。
 
 ```css
-p {
-  line-height: 1.7;
+h2 + p {
+  margin-top: 0;
 }
 ```
 
-`1.7` は「その要素の `font-size` の 1.7 倍」の意味。本文の読みやすさは 1.5〜1.8 くらいが目安です。狭すぎると行同士がくっついて読みづらく、広すぎると段落がまとまって見えません。
+「見出しの直後の段落だけ余白を詰める」のような微調整に使います。
 
-下のデモで `line-height: 1.2`（狭い）と `line-height: 1.8`（読みやすい）を並べて比べられます。3 行以上の段落ほど差が大きいのが分かります。
+### 属性セレクタ: `[属性名="値"]`
+
+属性とその値で要素を選べます。
+
+```css
+input[type="email"] {
+  background-color: #f0f9ff;
+}
+
+a[href^="https://"] {
+  color: #16a34a;
+}
+```
+
+- `[type="email"]`: `type` 属性が `"email"` の入力欄
+- `[href^="https://"]`: `href` が `https://` で **始まる** リンク（`^=` は前方一致）
+
+`type="checkbox"` だけ装飾を変えたい、外部リンクだけ色を変えたい、など `<input>` 周りで重宝します。
+
+### デモ: 組み合わせを目で見比べる
+
+下のデモは、同じ `<p>` でも置かれる場所によって当たるルールが変わる様子を確認できます。`.card` 直下と入れ子の中で見た目が違うのが見えます。
 
 <LiveDemo
-  height="300px"
+  height="240px"
   :html="`
-<h3>line-height: 1.2（狭い）</h3>
-<p class='tight'>
-  Web フロントエンドを学んでいます。まずは HTML と CSS から始めて、
-  次に JavaScript、それから React、Next.js の順に進めていきます。
-  1 日 1 レッスンを目安にのんびり進めます。
-</p>
-
-<h3>line-height: 1.8（読みやすい）</h3>
-<p class='loose'>
-  Web フロントエンドを学んでいます。まずは HTML と CSS から始めて、
-  次に JavaScript、それから React、Next.js の順に進めていきます。
-  1 日 1 レッスンを目安にのんびり進めます。
-</p>
+<div class='card'>
+  <h2>タイトル</h2>
+  <p>子セレクタが当たる: 太字</p>
+  <div class='inner'>
+    <p>子孫セレクタだけ: 灰色のまま、太字にはならない</p>
+  </div>
+</div>
+<p>外側の p（どのルールも当たらない）</p>
   `"
   :css="`
-.tight { line-height: 1.2; }
-.loose { line-height: 1.8; }
+body { padding: 16px; font-family: system-ui; color: #111; background: #fff; }
+.card { border: 1px solid #d1d5db; padding: 16px; }
+.card p { color: #555; }
+.card > p { font-weight: bold; }
   `"
   :js="``"
 />
 
-### `font-family`（フォントの優先順位）
+### 詳細度（specificity）
 
-使うフォントは `font-family` で指定します。「OS によって入っているフォントが違う」ので、**カンマで区切って優先順位リスト** を書くのが定石です。左から順に「このフォントがあればこれ、なければ次」とブラウザが探します。
+複数のルールが同じ要素にマッチしたとき、**どれが勝つか** を決めるのが **詳細度** です。
+
+セレクタの種類を 3 つの数字 `(id, class, element)` で数えます。数字が大きいほど強いです。
+
+| セレクタ | 例 | 数え方 |
+|---|---|---|
+| ID セレクタ | `#submit` | (1, 0, 0) |
+| クラス / 属性 / 擬似クラス | `.btn` / `[type="email"]` / `:hover` | (0, 1, 0) |
+| 要素 / 擬似要素 | `p` / `::before` | (0, 0, 1) |
+
+複合セレクタは、それぞれを **足し算** します。
+
+| セレクタ | 詳細度 |
+|---|---|
+| `p` | (0, 0, 1) |
+| `.card p` | (0, 1, 1) |
+| `.card > p` | (0, 1, 1) |
+| `.card .body p` | (0, 2, 1) |
+| `#main .card p` | (1, 1, 1) |
+
+**比較は左から順** に行われます。`(1, 0, 0)` は `(0, 99, 0)` より強いです。クラスを 99 個並べても、id 1 個には勝てません。
+
+### 同じ詳細度なら後勝ち
+
+詳細度が完全に同じなら、**後から書かれた方** が勝ちます。
 
 ```css
-body {
-  font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
-}
+.btn { color: blue; }
+.btn { color: red; }   /* これが勝つ。ボタンは赤色 */
 ```
 
-- フォント名にスペースが入るものは `" "` で囲む（`"Hiragino Sans"` など）。
-- 最後に必ず **汎用フォント名**（`sans-serif` / `serif` / `monospace` のいずれか）を置く。どれもなければシステム既定のフォントが使われる。
+詳細度が **同じ** なので、書かれた順で後の方が採用されます。
 
-汎用フォント名の意味:
+### デモ: 詳細度が高い方が勝つ
 
-- `sans-serif`: ゴシック体。サイト本文に使われることが多い。
-- `serif`: 明朝体。
-- `monospace`: 等幅フォント。プログラムコード表示に使う。
+下のデモでは、3 つのルールが同じ `<p>` にマッチしますが、詳細度の高いルールが勝ちます。
 
-### システムフォントスタック
+<LiveDemo
+  height="180px"
+  :html="`
+<div id='main'>
+  <p class='note'>3 つのルールが当たるが、勝つのは 1 つだけ</p>
+</div>
+  `"
+  :css="`
+body { padding: 16px; font-family: system-ui; color: #111; background: #fff; }
+/* (0, 0, 1) */
+p { color: gray; }
+/* (0, 1, 1) */
+.note { color: blue; }
+/* (1, 0, 1)  ← これが勝つ */
+#main p { color: crimson; font-weight: bold; }
+  `"
+  :js="``"
+/>
 
-最近はどの OS でも読みやすい既定のフォントが入っているので、「各 OS の既定フォントを使う」という指定もよく見ます。本コースではシンプルに行きますが、参考として紹介します。
+詳細度の比較順は **左から**: id が 1 のものが、class 1 のものに勝つ。class 1 のものが、要素のみに勝つ。
+
+### `!important` は最後の手段
+
+ルールの末尾に `!important` を付けると、**詳細度を無視して最強** になります。
 
 ```css
-body {
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    "Hiragino Sans",
-    "Yu Gothic",
-    sans-serif;
-}
+.btn { color: blue !important; }
 ```
 
-`system-ui` はそのシステムが「UI 用」に用意している既定フォントを使う指定です。
+これは強力すぎて、後でスタイルを上書きしたくなったときに **更に `!important` を重ねる** という悪循環を生みます。本コースでは原則 `!important` を書きません。
 
-### 継承
+例外的に許される場面:
+- フレームワークのスタイルを上書きする最終手段
+- ユーザースタイルシート（個人設定）
 
-`color` や `font-size`、`font-family` は **子要素に継承** されます。つまり `body` にフォントを設定すれば、その中のすべてのテキストにも同じフォントが（上書きしない限り）適用されます。便利な性質ですが、「あれ？ 効いているのに見た目が違う」と感じたら、親から継承されたスタイルがあるかを DevTools の Styles パネルで確認してみます。
+普段の CSS では使わない、と覚えておけば十分です。
+
+### `:hover` などの擬似クラスは詳細度 (0, 1, 0)
+
+「クラスと状態」で扱った `:hover` / `:focus` などは、**クラスと同じ重み** です。
+
+| セレクタ | 詳細度 |
+|---|---|
+| `a` | (0, 0, 1) |
+| `a:hover` | (0, 1, 1) |
+| `.link` | (0, 1, 0) |
+| `.link:hover` | (0, 2, 0) |
+
+「`.link:hover` が `.link` に勝つ」と覚えれば、ホバーのときだけ色が変わるのが当然だと納得できます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`styles.css` は新規作成してください。
+これまでのレッスンで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -148,97 +215,50 @@ body {
 <html lang="ja">
   <head>
     <meta charset="UTF-8" />
-    <title>自己紹介</title>
+    <title>セレクタと詳細度</title>
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
     <header>
-      <h1>オザキの自己紹介</h1>
+      <h1>セレクタの組み合わせと詳細度</h1>
       <nav>
         <ul class="nav-list">
-          <li><a class="nav-link" href="#profile">プロフィール</a></li>
-          <li><a class="nav-link" href="#likes">好きなもの</a></li>
-          <li><a class="nav-link" href="#goals">今年やりたいこと</a></li>
-          <li><a class="nav-link" href="#links">お気に入りサイト</a></li>
-          <li><a class="nav-link" href="#contact">お問い合わせ</a></li>
+          <li><a class="nav-link" href="#a">A</a></li>
+          <li><a class="nav-link" href="#b">B</a></li>
         </ul>
       </nav>
     </header>
 
     <main>
-      <section id="profile">
-        <h2>プロフィール</h2>
-        <img
-          src="https://placehold.co/200x200.png"
-          alt="オザキのプロフィール画像(仮)"
-          width="200"
-          height="200"
-        />
-        <p>はじめまして。Web フロントエンドを勉強中です。</p>
-        <p>
-          いまは <strong>HTML の基礎</strong> を学んでいます。読むだけでなく、<em>自分でも手を動かして</em> 覚えていきたいです。
-        </p>
+      <section id="card-area">
+        <article class="card">
+          <h2>タイトル A</h2>
+          <p>子セレクタの対象になる段落。</p>
+          <div class="body">
+            <p>子孫だが直接の子ではない段落。</p>
+          </div>
+        </article>
+
+        <article class="card">
+          <h2>タイトル B</h2>
+          <p>2 つ目のカード。</p>
+        </article>
       </section>
 
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <ul>
-          <li>コーヒー</li>
-          <li>散歩</li>
-          <li>本</li>
-        </ul>
-      </section>
-
-      <section id="goals">
-        <h2>今年やりたいこと</h2>
-        <ol>
-          <li>Next.js で小さなアプリを作る</li>
-          <li>毎週 1 本ブログを書く</li>
-          <li>早起きする</li>
-        </ol>
-      </section>
-
-      <section id="links">
-        <h2>お気に入りサイト</h2>
-        <ul>
-          <li>
-            <a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs（日本語）</a>
-          </li>
-          <li>
-            <a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式（日本語）</a>
-          </li>
-          <li>
-            <a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js 公式</a>
-          </li>
-        </ul>
-      </section>
-
-      <section id="contact">
-        <h2>お問い合わせ</h2>
-        <p>ご連絡はこちらのフォームから。</p>
+      <section id="form-area">
+        <h2>フォーム</h2>
         <form>
           <p>
             <label for="name">お名前</label>
-            <input type="text" id="name" name="name" required />
+            <input type="text" id="name" name="name" />
           </p>
           <p>
-            <label for="email">メールアドレス</label>
-            <input type="email" id="email" name="email" required />
-          </p>
-          <p>
-            <label for="message">メッセージ</label>
-            <textarea id="message" name="message" rows="5" required></textarea>
-          </p>
-          <p>
-            <button class="btn primary" type="submit">送信</button>
+            <label for="email">メール</label>
+            <input type="email" id="email" name="email" />
           </p>
         </form>
       </section>
     </main>
-
-    <footer>
-      <p>&copy; 2026 オザキ</p>
-    </footer>
   </body>
 </html>
 ```
@@ -246,88 +266,17 @@ body {
 **`styles.css`**
 
 ```css
-h1 {
-  color: steelblue;
-}
-
-h2 {
-  color: #555555;
-}
-
-p {
+body {
+  font-family: system-ui, sans-serif;
   color: #333333;
   line-height: 1.7;
+  padding: 16px;
 }
 
-a {
-  color: #1a73e8;
-}
-
-li {
-  color: #555555;
-}
-
-.nav-link {
-  color: #1a73e8;
-  text-decoration: none;
-}
-
-.nav-link:hover {
-  text-decoration: underline;
-  color: #0d47a1;
-}
-
-.nav-link:focus {
-  outline: 2px solid #1a73e8;
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-.btn {
-  padding: 8px 16px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 16px;
-}
-
-.primary {
-  color: white;
-  background-color: #0d47a1;
-}
-
-.primary:hover {
-  background-color: #3a6ea5;
-}
-
-.btn:focus {
-  outline: 2px solid #ffa726;
-  outline-offset: 2px;
-}
-
-/* ダークモード対応 */
 @media (prefers-color-scheme: dark) {
-  h2 {
-    color: #cccccc;
-  }
-  p {
-    color: #dddddd;
-  }
-  a {
-    color: #8ab4f8;
-  }
-  .nav-link {
-    color: #8ab4f8;
-  }
-  .nav-link:hover {
-    color: #c7d7ff;
-  }
-  .primary {
-    background-color: #3e6fb5;
-    color: #ffffff;
-  }
-  .primary:hover {
-    background-color: #5780c4;
+  body {
+    color: #eaeaea;
+    background-color: #1a1a1a;
   }
 }
 ```
@@ -336,175 +285,75 @@ li {
 
 ### これまで作ったプロジェクトを使う
 
-これまでのレッスンで作った `index.html` と `styles.css` を開きます。HTML はナビとボタンにクラスが付いた状態、CSS はリンク・ボタンの擬似クラスを含んだ状態です。
+これまでのレッスンで作った `index.html` と `styles.css` を開きます。
 
 ### コピペで動かす
 
-`styles.css` を次のように書き換えます（既存ルールの一部を変更 + 追加）。HTML 側は変更なしで進めます。
+`styles.css` の末尾に、次のルールを **そのままの順** で追加します。
 
 ```css
-body {
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    "Hiragino Sans",
-    "Yu Gothic",
-    sans-serif;
-  color: #333333;
-  line-height: 1.7;
+/* (1) 子孫セレクタ: card の中の p すべて */
+.card p {
+  color: #555;
 }
 
-h1 {
-  font-size: 2.25rem;
-  color: #0d47a1;
-}
-
-h2 {
-  font-size: 1.5rem;
-  color: #333333;
-  border-bottom: 2px solid #e0e0e0;
-  padding-bottom: 4px;
-}
-
-p {
-  font-size: 1rem;
-}
-
-a {
-  color: #1a73e8;
-}
-
-li {
-  color: #555555;
-}
-
-.nav-list {
-  list-style: none;
-  padding: 0;
-}
-
-.nav-link {
-  color: #1a73e8;
-  text-decoration: none;
-}
-
-.nav-link:hover {
-  text-decoration: underline;
-  color: #0d47a1;
-}
-
-.nav-link:focus {
-  outline: 2px solid #1a73e8;
-  outline-offset: 2px;
-  border-radius: 2px;
-}
-
-.nav-link.active {
+/* (2) 子セレクタ: card の直接の子の p だけ太字 */
+.card > p {
   font-weight: bold;
-  color: #0d47a1;
 }
 
-.btn {
-  padding: 8px 16px;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 1rem;
+/* (3) 隣接セレクタ: h2 の直後の p の上余白を詰める */
+h2 + p {
+  margin-top: 0;
 }
 
-.primary {
-  color: #ffffff;
-  background-color: #0d47a1;
+/* (4) 属性セレクタ: type="email" だけ背景を変える */
+input[type="email"] {
+  background-color: #f0f9ff;
+  border: 1px solid #2563eb;
 }
 
-.primary:hover {
-  background-color: #3a6ea5;
-}
-
-.btn:focus {
-  outline: 2px solid #ffa726;
-  outline-offset: 2px;
-}
-
-footer {
-  color: #666666;
-  font-size: 0.875rem;
-}
-
-/* ダークモード対応 */
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #dddddd;
-    background-color: #1a1a1a;
-  }
-  h1 {
-    color: #e0e0e0;
-  }
-  h2 {
-    color: #c0c0c0;
-  }
-  p {
-    color: #d0d0d0;
-  }
-  a {
-    color: #8ab4f8;
-  }
-  footer {
-    color: #999999;
-  }
-}
+/* (5) 詳細度のデモ: 3 つのルールが同じ p に当たる */
+.card p { color: #555; }                 /* (0, 1, 1) */
+.card .body p { color: #c2410c; }        /* (0, 2, 1) ← 勝つ */
+#card-area .card p { color: #16a34a; }   /* (1, 1, 1) ← さらに勝つ */
 ```
-
-追加・変更点の解説:
-
-- `body` にフォント・文字色・行間を設定。ここに書けばページ全体に継承される。
-- `h1` のサイズを `2.25rem`（通常 36px）に、色を深い青 `#0d47a1` に。
-- `h2` に下線風の装飾を `border-bottom` で追加（border については「ボックスモデルで余白を作る」で詳しく扱う。ここでは「下に 2px の薄いグレーの線」くらいの認識で OK）。
-- `li` を少し薄いグレーに。
-- `.nav-list` の `list-style: none;` で `<ul>` のマーカー（黒丸）を消す。ナビはリストだが、黒丸は見た目上邪魔なので消すことが多い。`padding: 0;` は「ボックスモデルで余白を作る」で詳しく説明する。
-- `footer` 内の文字を少し小さく、少し薄いグレーに。
 
 ### 期待出力
 
-- ページ全体のフォントが、OS のシステムフォント（Mac なら San Francisco、Windows なら Segoe UI、日本語は Hiragino Sans / Yu Gothic）に切り替わり、本文が前より読みやすくなる。
-- `<h1>` が大きく深い青で表示される。
-- 各 `<h2>` の下に薄いグレーの水平線が入る。
-- `<nav>` のリストから黒丸マーカーが消え、リンクだけが並ぶ見た目になる（並びは縦のまま。横並びは「Flexbox とレスポンシブ」で扱う）。
-- ページ末尾のフッター（`© 2026 オザキ`）が、本文より小さく・薄めのグレーで表示される。
+- 1 枚目のカードの 1 段落目: **太字**（`.card > p` が当たる）
+- 1 枚目のカードの `.body` 内の段落: **緑色**（`#card-area .card p` が最強）
+- 2 枚目のカードの段落: **太字**（`.card > p` が当たる）
+- メール欄: **薄い水色の背景に青枠**
+- 名前欄: 何も装飾されていない
 
 ### DevTools で確認
 
-1. Elements で `<p>` を選び、Styles パネルで「Computed」タブを開く。
-2. `font-family` の欄に、実際に採用されているフォント（OS によって違う）が太字で示される。ここで「優先順位のうち自分の環境ではどれが当たっているか」が分かる。
-3. 同じ `<p>` で `line-height` の欄を見て、`1.7` と表示される（または実際のピクセル値）ことを確認。
-4. 親要素から継承されているスタイルは、Styles パネルで「Inherited from ...」の見出しで区切られて表示される。
+DevTools の Elements パネルで `.body` の中の `<p>` をクリックします。右の Styles パネルに当てはまるルールが **詳細度の高い順に** 並びます。一番上が「実際に効いているルール」、下のほうは「上書きされたルール」（取り消し線で表示されます）。
+
+色のルールが 3 つ並んでいて、上の `#card-area .card p` だけ生きていて、下の 2 つが取り消し線になっていることを確認します。
 
 ### 変えてみる
 
-1. `h1` の `font-size` を `3rem` / `1.5rem` に変えて、見出しの大きさが変わることを確認する。
-2. `body` の `line-height` を `1.2` に下げてみると、本文が詰まって読みづらくなるのを体感する。確認後は `1.7` に戻す。
-3. `body` の `font-family` の先頭を `serif` に書き換えると、本文が明朝体になる。確認後は元に戻す。
-4. `footer` の `color` を `#222` に戻してみると、文字が濃くなって「フッター感」が減ることを確認する。
+1. `(5)` のブロックの 3 行目（`#card-area .card p`）を **コメントアウト** すると、`.body` 内の段落が **オレンジ**（`.card .body p`）に変わる。さらに 2 行目もコメントアウトすると **灰色**（`.card p`）に戻る。詳細度の階層が逆向きに崩れていく様子を確認。
+2. `(2)` の `.card > p` を `.card p` に変えると、`.body` 内の段落も太字になる。`>` の有無で範囲が変わることを確認。
+3. `input[type="email"]` を `input[type="text"]` に変えると、装飾が名前欄に移る。
 
 ### 自分で書く
 
-自分の好みの 1 色を選び、`h2` の色と `h2` の `border-bottom` の色を、統一感のある配色に書き換えてみます。たとえば緑系でまとめたい場合:
+- ナビのリンク（`.nav-link`）の **直接の子の `<a>`** だけに `text-decoration: underline` を当てる（実際は `<li>` の中の `<a>` なので、子セレクタを使うと当たらない。これは「子セレクタが直下にしか当たらない」を体感する課題）。
+- `<a>` の中で **`href` が `https://` で始まる外部リンクだけ** 色を `#16a34a` にするルールを書く（属性セレクタ + 前方一致 `^=`）。
 
-```css
-h2 {
-  font-size: 1.5rem;
-  color: #1b5e20;
-  border-bottom: 2px solid #c8e6c9;
-  padding-bottom: 4px;
-}
-```
+### よくあるつまずき
 
-選んだ色が白背景で読めるか、DevTools のカラーピッカー（Styles パネルで `color` の値の左の四角をクリック）でコントラスト比を確認してみます。カラーピッカー下部にコントラスト比（`Contrast ratio`）が表示されます。4.5 以上が本文向けの目安です。
+- **子孫セレクタと子セレクタを混同**: `.card p` と `.card > p` で挙動が違う。階層深く当てたければ前者、直下だけなら後者。
+- **詳細度が低くて効かない**: 「書いたのに反映されない」場合、DevTools の Styles で取り消し線が付いていないか確認。付いていれば詳細度が他のルールに負けている。
+- **`!important` で殴る誘惑**: 詳細度が低いだけなら、セレクタを少し詳しく書く（クラスを 1 つ足す等）方が健全。
 
 ## まとめ
 
-- `color` / `background-color` / `font-size` / `line-height` / `font-family` は文字まわりの基本。
-- フォントは優先順位のリストで指定し、最後に汎用名（`sans-serif` など）を置く。
-- `font-size` は `rem` を基本に、必要に応じて `px`。`line-height` は数値だけの指定で OK（1.5〜1.8 が目安）。
-- `color` や `font-family` は子要素に継承されるので、`body` にまとめて書いておくと見通しが良い。
+- セレクタは組み合わせられる。子孫（`a b`）/ 子（`a > b`）/ 隣接（`a + b`）/ 属性（`[type="email"]`）。
+- 詳細度は **(id, class, element)** の 3 つで数える。左から比較して大きい方が勝つ。
+- 同じ詳細度なら **後勝ち**。
+- `!important` は最強だが、上書き合戦の温床なので原則使わない。
+- DevTools の Styles パネルで取り消し線を見ると、どのルールが勝っているかを目で確認できる。

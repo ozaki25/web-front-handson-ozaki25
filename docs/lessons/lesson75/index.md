@@ -1,314 +1,216 @@
-# lesson75: `next/image` で画像最適化
+# lesson75: Server Component でデータを取得する
 
 ## ゴール
 
-- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できます。
-- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を覚えます。
-- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを押さえます。
-- 5 章 の「ページを増やしてリンクで移動する」で `/about` に貼った `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
+- `async` な Server Component を書けるようになります。
+- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
+- `loading.tsx` でローディング UI を挟めるようになります。
+- Next.js 16 の Server Component での fetch は **既定でキャッシュしない** ことを知り、キャッシュしたいときの書き方（`"use cache"` ディレクティブ / `fetch` オプション）を見分けられます。
 
 ## 解説
 
-### なぜ `<img>` のままでは駄目なのか
+### Server Component は `async` にできる
 
-HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
-
-- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送されます。
-- **形式が古い**: JPG / PNG のまま配ると、WebP や AVIF に対応するブラウザでもその恩恵を受けられません。
-- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に全部読みに行きます（CLS や LCP の悪化）。
-- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動きます（CLS）。
-
-`next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
-
-- 表示サイズに応じた解像度を自動生成（`srcset`）
-- WebP / AVIF に自動変換（ブラウザが対応していれば）
-- 画面内に入ったときだけ読み込み（遅延読み込み）
-- `width` / `height` 必須にすることでレイアウトのガタつきを防ぐ
-
-### 最小の使い方
+4 章 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
 
 ```tsx
-import Image from "next/image";
-
-export default function Page() {
-  return (
-    <Image
-      src="/coffee.jpg"
-      alt="コーヒーの写真"
-      width={300}
-      height={200}
-    />
-  );
+export default async function Page() {
+  const data = await fetch("https://...").then((r) => r.json());
+  return <div>{data.title}</div>;
 }
 ```
 
-- `import Image from "next/image"` でコンポーネントを読み込みます。
-- `src` はプロジェクト内の `public/` 直下のパス、または **登録済み** の外部 URL です。
-- `alt` は必須です。読み上げソフトと、画像が読み込めなかったときの代替テキストになります。
-- `width` と `height` はピクセル数を **数値** で書きます（CSS 単位の `px` は付けません）。
+- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
+- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
 
-### `width` / `height` は原則必須。ただし省略できる 2 つのケース
+ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（4 章 の「useEffect の基本」末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
 
-`<Image>` は `width` / `height` を **原則必須** にします。レイアウトのガタつき（CLS）を防ぐためです。ただし、次の 2 ケースだけは省略できます。
+### `loading.tsx` でローディング UI
 
-1. **静的 import の場合**
-   プロジェクト内の画像を `import` すると、Next.js がビルド時に画像のサイズを読み取って自動で埋めてくれます。
-   ```tsx
-   import heroImg from "./hero.png";
-
-   <Image src={heroImg} alt="ヒーロー画像" />
-   ```
-2. **`fill` を使う場合**
-   親要素いっぱいに広げる使い方です。親に `position: relative` と明示的なサイズが要ります。
-   ```tsx
-   <div style={{ position: "relative", width: 300, height: 200 }}>
-     <Image src="/coffee.jpg" alt="コーヒー" fill />
-   </div>
-   ```
-
-外部 URL を `src` に指定する場合は **静的 import できないので `width` / `height` を明示するか、`fill` で親サイズに従わせる** ことになります。
-
-### 外部ホストを使うには `remotePatterns`
-
-`<Image>` はセキュリティとキャッシュの都合で、**どの外部ホストからの画像を許可するか** を事前に宣言する必要があります。これが `next.config.ts` の `images.remotePatterns` です。
-
-未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
+`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
 
 ```
-Invalid src prop (https://placehold.co/...) on `next/image`,
-hostname "placehold.co" is not configured under images in your `next.config.js`
+app/
+└── posts/
+    ├── page.tsx       ← データ取得込みのページ
+    └── loading.tsx    ← 取得中に表示される
 ```
 
-書き方は次の通りです。
+`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
 
-```ts
+### Next.js 16 のキャッシュは「明示的に opt-in」
+
+Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったため、Next.js 15 以降は **fetch のデフォルトがキャッシュしない** 動作に切り替わっています。毎リクエストで取り直します。
+
+キャッシュしたい場合は明示的に指定します。書き方は 2 系統あります。
+
+#### 従来の方法: `fetch` のオプション
+
+第 2 引数で挙動を切り替える、以前から使える書き方です。
+
+```tsx
+// (1) 強くキャッシュ: 一度取ったらずっと使い回す
+await fetch(url, { cache: "force-cache" });
+
+// (2) 一定時間ごとに再取得: 60 秒間はキャッシュ、60 秒経ったら次のアクセスで新しく取る
+await fetch(url, { next: { revalidate: 60 } });
+
+// (3) タグ単位で無効化: Server Actions から revalidateTag('posts') を呼ぶとこのキャッシュが切れる
+await fetch(url, { next: { tags: ["posts"] } });
+```
+
+#### 新しい方法: `"use cache"` ディレクティブ（Cache Components）
+
+Next.js 16 で導入された **Cache Components** のパターンです。コンポーネントや関数の先頭に `"use cache"` と書くと、その結果全体をキャッシュ対象にします。`next.config.ts` で `cacheComponents: true` を有効にしたときに使えます。
+
+```tsx
 // next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
-    ],
-  },
+const nextConfig = {
+  cacheComponents: true, // Cache Components を有効化
 };
-
 export default nextConfig;
 ```
 
-Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書いて 1 ファイルだけ許可することもできます。
-
-### `sizes` でレスポンシブ対応
-
-`<Image>` は可変サイズ（`width` が CSS で `100%` のような動的な値）で使うときに `sizes` を付けると、もっとも賢く `srcset` を切り替えてくれます。詳細は本レッスンの範囲外ですが、1 行だけ雰囲気を見せておきます。
-
 ```tsx
-<Image
-  src="/coffee.jpg"
-  alt="コーヒー"
-  width={600}
-  height={400}
-  sizes="(max-width: 640px) 100vw, 300px"
-/>
+// 関数単位: fetch をまとめてキャッシュ
+import { cacheLife, cacheTag } from "next/cache";
+
+async function getPosts() {
+  "use cache";
+  cacheLife("hours"); // 1 時間単位でキャッシュ
+  cacheTag("posts");  // 'posts' タグで無効化対象にする
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  return res.json();
+}
 ```
 
-スマホ幅では 100vw、それ以外では 300px で表示される、という意味です。本演習では使いませんが、覚えておくと役立ちます。
+```tsx
+// コンポーネント単位: 描画結果ごとキャッシュ
+async function PostList() {
+  "use cache";
+  const posts = await fetch("https://jsonplaceholder.typicode.com/posts").then((r) => r.json());
+  return <ul>{posts.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+}
+```
+
+- **`"use cache"` を書いた関数 / コンポーネント全体** がキャッシュされる
+- `cacheLife("minutes" | "hours" | "days" | "weeks" | ...)` でキャッシュ寿命を設定
+- `cacheTag("...")` で `revalidateTag` から無効化できるタグを付ける
+- 書く場所はファイル先頭（ファイル全体）/ 関数先頭 / コンポーネント先頭のいずれか
+
+> **補足: `cacheComponents` を有効にしていない状態で `"use cache"` を書くとビルドエラー**: `next.config.ts` で `cacheComponents: true` を入れていないファイルに `"use cache"` を書くと、`Error: "use cache" requires the cacheComponents experimental flag to be enabled` のようなエラーで **ビルドが落ちます**。本レッスンの演習では `cacheComponents` を有効にしないので、キャッシュしたい場合は `fetch` オプション（`force-cache` / `next.revalidate` / `next.tags`）の方を使います。
+
+本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。「キャッシュしたいときに 2 系統の選択肢がある」ことだけ頭に入れておけば十分です。本格的に使うのは実務に入ってからで構いません。
+
+ここで話しているキャッシュは **Server Component のデータ取得** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。`/about` の画像を差し替える演習なので、最低限 `/about` ページと `<img>` が存在すれば構いません。
-
-<details>
-<summary>出発点のファイル（`/about` 最小形）</summary>
-
-**`app/about/page.tsx`**
-
-```tsx
-export default function AboutPage() {
-  return (
-    <>
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-    </>
-  );
-}
-```
-
-Route Groups を使っていない出発点なので、本文中で `app/(public)/about/page.tsx` と書かれている箇所は `app/about/page.tsx` に読み替えてください。
-
-</details>
+このレッスンの記事一覧演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/posts/page.tsx` と `app/posts/loading.tsx` の新規作成が中心です。手順 3 のヘッダーリンク追加は `app/layout.tsx` にナビがあれば足せますが、無ければスキップして構いません）。
 
 ### 前回のプロジェクトを開く
 
-5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順 1: `next.config.ts` に `remotePatterns` を追加
+### 手順 1: `/posts` ページを作る
 
-プロジェクト直下に `next.config.ts`（または `next.config.mjs`）があります。StackBlitz テンプレートでは既に存在するはずです。なければ新規作成します。
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
-    ],
-  },
-};
-
-export default nextConfig;
-```
-
-保存すると、Next.js が設定を再読み込みします（StackBlitz ではターミナルに再起動のログが流れます）。
-
-### 手順 2: `/about` の `<img>` を `<Image>` に置き換える
-
-`app/(public)/about/page.tsx`（「Route Groups で整理する」以前のままなら `app/about/page.tsx`）を開きます。「ページを増やしてリンクで移動する」で貼った 3 枚のカードの `<img>` を、`<Image>` に置き換えます。
-
-ファイル全体はこうなります。
+`app/posts/page.tsx` を新規作成します。
 
 ```tsx
-import Image from "next/image";
-import "./about.css";
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
 
-export default function AboutPage() {
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
   return (
     <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="コーヒーのプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="本のプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="散歩のプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
 ```
 
-変更点:
+- `async function` で書いています（Server Component だから許されます）。
+- `fetch` も `response.json()` も `await` が必要です（2 章 で学んだ fetch と同じです）。
+- `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
+- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
 
-- 1 行目に `import Image from "next/image";` を追加しました。
-- `<img src="..." alt="..." />` を 3 箇所とも `<Image ... width={300} height={200} />` に置き換えました。
-- `<Image>` は `width` と `height` を **数値**（中括弧） で書くことに注意してください（HTML の `<img width="300">` のような文字列ではありません）。
+> **補足: `Post[]` への型キャストは「信頼している」だけ**: `await res.json()` の戻り値は実際は `unknown` で、上のコードは「外部 API は約束通りの形を返してくる」と **信じている** 状態です。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように **実行時に形をチェック** します。
 
-### 手順 3: 画像サイズの CSS を見直す
+### 手順 2: `loading.tsx` を置く
 
-「ページを増やしてリンクで移動する」の `about.css` には次のような指定が入っていました。
+`app/posts/loading.tsx` を新規作成します。
 
-```css
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
 }
 ```
 
-`<Image>` も内部的には `<img>` を生成するので、このスタイルはそのまま効きます。`width: 100%` でカードの幅に合わせて縮みます。`height: auto` を入れておくと、縮んでも縦横比が崩れません。
+- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
+- ファイル名は `loading.tsx` 固定です。
 
-ダークモードでの `filter` 調整などは不要です。「ページを増やしてリンクで移動する」時点の CSS のままで構いません。
+### 手順 3: ヘッダーにリンクを追加
+
+`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
+
+```tsx
+<li>
+  <Link href="/posts">Posts</Link>
+</li>
+```
 
 ### 期待出力
 
-1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
-2. **DevTools → Network タブ** を開いて再読み込みします。
-3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
-4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
-5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
+1. ブラウザで `/posts` を開きます。
+2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
+3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
+4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
 
 ### 変えてみる
 
-1. 3 枚目のカードの `<Image>` に `priority` プロパティを付けて、遅延読み込みを止めてみましょう（`<Image src="..." alt="..." width={300} height={200} priority />`）。ページ表示のタイミングが少しだけ速くなる可能性があります（体感差は小さい）。
-2. `width={300} height={200}` を `width={600} height={400}` に変えると、同じ見た目のまま 2 倍の解像度のソースが配信されるようになります（ネットワークタブで URL の `w=` が変わるのを確認）。
-3. `public/` フォルダに自分の PNG 画像を 1 枚置いて、`import myImg from "../../../../public/my.png"` のように静的 import で `<Image src={myImg} alt="..." />` を書いてみましょう。`width` / `height` を **省略しても** 動くはずです（静的 import なので Next.js が自動でサイズを取る）。
+1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
+2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
+3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
 
-### スコープ外
+### キャッシュ指定を試す（任意）
 
-- LCP 最適化の深掘り、`priority` の本格活用、`placeholder="blur"` の `blurDataURL` 自動生成は本コースでは扱いません。
-- `localPatterns`（Next.js 15.3 で追加）などの発展設定は扱いません。
-- カスタムローダー（CDN 連携）も扱いません。
+`fetch` の第 2 引数に以下を指定して挙動の違いを見てみましょう。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良いです。
+
+```tsx
+const res = await fetch(
+  "https://jsonplaceholder.typicode.com/posts",
+  { next: { revalidate: 60 } },
+);
+```
 
 ### 自分で書く
 
-`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.co/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
+`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
 
 ## まとめ
 
-- `import Image from "next/image"` で `<Image>` コンポーネントを使えます。素の `<img>` より賢い画像表示ができます。
-- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
-- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
-- 「ページを増やしてリンクで移動する」の `<img>` を `<Image>` に差し替えたことで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられるようになりました。
+- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
+- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
+- Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ**（Cache Components） を使います。
+- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
+
+### コラム: `loading.tsx` の裏で動く Suspense
+
+`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
+
+本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。

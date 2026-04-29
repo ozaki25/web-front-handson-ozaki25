@@ -1,255 +1,167 @@
-# lesson13: Position と z-index
+# lesson13: CSS Grid で二次元レイアウト
 
-ここまでは要素を「通常の流れ」の中で並べてきました。上から順に積まれたり、Flexbox や Grid で行・列に整列したりする並びです。今回は、**通常の流れから要素を切り離して、画面の好きな位置に配置する** ための `position` プロパティを学びます。
+「Flexbox とレスポンシブ」で Flexbox を使って要素を横並びにしました。Flexbox は「一方向」に並べるのが得意な仕組みです。今回は、**行と列を同時に扱う「二次元レイアウト」** を書くための **CSS Grid** を学びます。
 
 ## ゴール
 
-- `position: static` / `relative` / `absolute` / `fixed` / `sticky` の違いを説明できる。
-- `top` / `right` / `bottom` / `left` で位置を指定できる。
-- `z-index` で要素の前後の重なりを制御できる。
-- 「ページトップに戻る」ボタンを画面右下に固定表示できる。
-- カードの右上に「NEW」バッジを重ねて表示できる。
+- Flexbox（一次元）と Grid（二次元）の使い分けを説明できる。
+- `display: grid` と `grid-template-columns` / `grid-template-rows` で列と行を定義できる。
+- `fr` 単位と `repeat()` で列の並びを簡潔に書ける。
+- `minmax()` と `auto-fit` を組み合わせて、画面幅に応じてカード数が自動で折り返すレイアウトを作れる。
 
 ## 解説
 
-### `position` とは何か
+### Flexbox と Grid の使い分け
 
-要素の配置方法を決めるプロパティです。値は 5 つ覚えれば十分です。
+どちらも「子要素を並べる」ための仕組みですが、得意分野が違います。
 
-| 値 | 意味 |
-|---|---|
-| `static` | 初期値。通常の流れで配置される（`top` などは効かない） |
-| `relative` | 通常の位置を基準にズラせる。子の `absolute` の基準にもなる |
-| `absolute` | **親で最も近い `relative` / `absolute` / `fixed`** を基準に浮く |
-| `fixed` | **画面**（ビューポート） を基準に固定。スクロールしても動かない |
-| `sticky` | 親の中で、スクロール位置に応じて `relative` ↔ 固定を切り替わる |
+| 仕組み | 得意な形 | 典型例 |
+|---|---|---|
+| Flexbox | 一次元（横 **または** 縦） | ヘッダーの左右配置、ナビのリンク並び |
+| Grid | 二次元（横 **かつ** 縦） | カードを N 列 × M 行に敷き詰める、ページ全体のレイアウト |
 
-### 位置指定の 4 つ: `top` / `right` / `bottom` / `left`
+「行と列の両方を同時に考えたい」ときは Grid が向きます。「Flexbox とレスポンシブ」でカード 3 枚を横並びにしたのは一次元なので Flexbox で十分でしたが、**画面幅が狭くなったら 2 列、もっと狭くなったら 1 列に自動で折り返したい**、というのは Grid の方が自然に書けます。
 
-`position` を `static` 以外にすると、`top` / `right` / `bottom` / `left` で **基準からの距離** を指定できます。
+### 今どきの使い分けの目安
 
-```css
-.badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-}
-```
+現代の CSS の実務では、ざっくり次のような役割分担が主流です。
 
-「基準の上端から 8px、右端から 8px」の位置に配置されます。値は負の数も OK です（`top: -10px` で基準の外にはみ出す）。
+- **レイアウト（ページ骨格、カード一覧、ギャラリー、ダッシュボード）は Grid**
+- **コンポーネント内の整列（ロゴとナビの左右、ボタン列、アイコン+テキスト、中央寄せ 1 つ）は Flex**
 
-### `relative`: 通常の位置を基準にズラす
+カードを画面幅に応じて綺麗に敷き詰めたいような「行と列の両方」を扱う場面では、Flex を無理に使うより Grid の `repeat(auto-fit, minmax(...))` の方が記述も挙動も素直です。迷ったら **レイアウト → Grid、部品内の整列 → Flex** を最初の選択肢にしてください。
 
-```css
-.note {
-  position: relative;
-  top: 10px;
-  left: 20px;
-}
-```
+### Grid の最小形
 
-通常の位置から下に 10px、右に 20px ズレて表示されます。周囲のレイアウトには影響を与えず（元の場所は空けたまま）、見た目だけズレるのが特徴です。
-
-**より重要な使い方**: 子要素の `absolute` の基準点になる、という役割です。次の `absolute` で解説します。
-
-### `absolute`: 親を基準に浮かせる
+並べたい要素たちを包む親要素に `display: grid` を付け、`grid-template-columns` で列の並びを定義します。
 
 ```html
-<div class="card">
-  <span class="badge">NEW</span>
-  <h3>カードのタイトル</h3>
+<div class="grid">
+  <div class="cell">A</div>
+  <div class="cell">B</div>
+  <div class="cell">C</div>
 </div>
 ```
 
 ```css
-.card {
-  position: relative;
-}
-
-.badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
+.grid {
+  display: grid;
+  grid-template-columns: 100px 100px 100px;
+  gap: 16px;
 }
 ```
 
-`.badge` は通常の流れから抜けて、**最も近い `position: relative` / `absolute` / `fixed` の祖先を基準に** 浮きます。この例では親の `.card` が基準なので、カードの右上に重なります。
+`grid-template-columns: 100px 100px 100px` は「100px の列を 3 つ並べる」という意味です。`gap` で子要素同士の間隔を指定できます（Flexbox と同じ `gap` が使えます）。
 
-ここで **親に `position: relative` を書き忘れると**、`.badge` は更に上の祖先（もしくは `<body>`）を基準にしてしまい、カードの右上ではなくページ全体の右上に飛んでしまいます。これは非常によく起きる事故なので、「絶対配置の子がいる親には `position: relative`」と覚えます。
+### `fr` 単位
 
-また、`absolute` の要素は通常の流れから抜けるため、**元の場所は詰められる**（他の兄弟要素が詰めて配置される）点が `relative` と違います。
-
-下のデモは、カードの右上に「NEW」バッジを `absolute` で重ねた例です。親に `position: relative` を入れてあるので、バッジはカードの角を基準にきれいに配置されます。CSS から `.card` の `position: relative` を外すと、バッジがページの角へ飛んでいく挙動も確認できます。
-
-<LiveDemo
-  height="200px"
-  :html="`
-<div class='card'>
-  <span class='badge'>NEW</span>
-  <h3>カードのタイトル</h3>
-  <p>本文のテキスト</p>
-</div>
-  `"
-  :css="`
-body { padding: 16px; }
-.card {
-  position: relative;
-  padding: 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  background: white;
-  max-width: 320px;
-}
-.card h3 { margin: 0 0 8px; }
-.card p { margin: 0; color: #555; }
-.badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  background: crimson;
-  color: white;
-  padding: 2px 8px;
-  border-radius: 4px;
-  font-size: 12px;
-  font-weight: bold;
-}
-  `"
-  :js="``"
-/>
-
-### `fixed`: 画面に固定
+ピクセルで固定すると画面幅に合いません。Grid では **`fr`**（fraction、利用可能な幅を何分の何で分け合うか） という便利な単位が使えます。
 
 ```css
-.to-top {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
 }
 ```
 
-親が何であっても **ビューポート**（ブラウザの表示領域） を基準に固定されます。ページをスクロールしても、画面内の同じ位置に居続けます。「ページトップに戻る」ボタン、チャットの吹き出し、Cookie バナーなどの定番の使い方です。
+これは「親の幅を 3 等分する 3 列」という意味です。`1fr 2fr 1fr` と書けば「左:中央:右 = 1:2:1 の比率で分ける」になります。
 
-下のデモは長めの本文と、画面右下に `position: fixed` で配置した「↑ Top」ボタンの組み合わせです。プレビュー内をスクロールしても、ボタンが画面右下にとどまり続けるのを確認できます。
+### `repeat()` で繰り返し
 
-<LiveDemo
-  height="280px"
-  :html="`
-<h3>長い本文のサンプル</h3>
-<p>1 段落目のテキスト。スクロールしてみてください。</p>
-<p>2 段落目のテキスト。</p>
-<p>3 段落目のテキスト。</p>
-<p>4 段落目のテキスト。</p>
-<p>5 段落目のテキスト。</p>
-<p>6 段落目のテキスト。</p>
-<p>7 段落目のテキスト。</p>
-<p>8 段落目のテキスト。</p>
-<p>9 段落目のテキスト。</p>
-<p>10 段落目のテキスト。ここまで来てもボタンは右下に居続けます。</p>
-<button class='to-top'>↑ Top</button>
-  `"
-  :css="`
-body { margin: 0; padding: 16px; font-family: system-ui; }
-p { margin: 0 0 12px; }
-.to-top {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-  padding: 8px 14px;
-  background: #2563eb;
-  color: white;
-  border: none;
-  border-radius: 999px;
-  font: inherit;
-  cursor: pointer;
-  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.2);
-}
-  `"
-  :js="``"
-/>
-
-### `sticky`: 途中までは普通、そこから固定
+同じ幅の列を何個も並べたいとき、毎回書くのは面倒です。`repeat()` を使うとまとめられます。
 
 ```css
-.section-title {
-  position: sticky;
-  top: 0;
-  background-color: #ffffff;
+.grid {
+  grid-template-columns: repeat(3, 1fr);
 }
 ```
 
-最初は通常の流れで配置されますが、スクロールして指定位置（`top: 0`）に達すると、そこから固定されます。親要素をはみ出ると、また元の流れに戻ります。本のインデックスや表のヘッダーで使われます。今回の演習では使いませんが、存在だけ覚えます。
+`repeat(3, 1fr)` は `1fr 1fr 1fr` と同じ意味です。
 
-### `z-index` で重なりを制御
+### `minmax()` で最小幅と最大幅を指定
 
-要素同士が重なったとき、**どちらが前か** を `z-index` で決めます。
+`minmax(最小, 最大)` は「この範囲の中で幅を決める」という関数です。
 
 ```css
-.badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-  z-index: 2;
+.grid {
+  grid-template-columns: repeat(3, minmax(200px, 1fr));
 }
 ```
 
-- `z-index` は **数字が大きいほど前** に出る。
-- `z-index` が効くのは **`position` が `static` 以外の要素だけ**。
-- 負の値（`-1` など）も使えるが、思わぬ要素の裏に回るので最初は正の値だけでよい。
+これは「200px を下回らないようにしつつ、余った幅は均等に伸ばす 3 列」です。親が狭すぎて 200px × 3 に収まらないときは、子要素が親からはみ出すこともあります。
 
-下のデモは 3 枚のカードが重なった状態です。ボタンを押すと青いカードの `z-index` が `1` ↔ `5` で切り替わり、最前面に出たり隠れたりするのを確認できます。
+### `auto-fit` でカード数を自動調整
+
+ここまで「3 列」「4 列」と数を決めていましたが、画面幅に応じて列数そのものを自動で増減させたい場合があります。その用途に作られたのが **`auto-fit`** です。
+
+```css
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
+}
+```
+
+意味を分解します。
+
+- `auto-fit`: 列数をブラウザに任せる。
+- `minmax(250px, 1fr)`: 1 列の幅は最低 250px、余った幅は均等配分。
+
+これで画面が広ければ多くの列、狭ければ少ない列に自動で切り替わります。**`@media` を書かなくてもレスポンシブになる** のが強みです。
+
+下のデモは `repeat(auto-fit, minmax(120px, 1fr))` の典型です。プレビューの幅を広げ狭めする（右上の Open in New Tab で試すと変化が分かりやすい）と、列数が自動で変わります。
 
 <LiveDemo
   height="220px"
   :html="`
-<div class='stack'>
-  <div class='card red'>red (z-index: 3)</div>
-  <div class='card blue' id='blue'>blue (z-index: 1)</div>
-  <div class='card green'>green (z-index: 2)</div>
+<div class='grid'>
+  <div>1</div><div>2</div><div>3</div>
+  <div>4</div><div>5</div><div>6</div>
 </div>
-<button id='toggle'>blue を最前面に切り替え</button>
   `"
   :css="`
-body { padding: 16px; font-family: system-ui; }
-.stack { position: relative; height: 120px; margin-bottom: 16px; }
-.card {
-  position: absolute;
-  width: 130px;
-  height: 80px;
-  padding: 10px;
-  color: white;
-  font-weight: bold;
-  border-radius: 6px;
+body { padding: 16px; }
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+  gap: 8px;
 }
-.red   { background: crimson;     top: 0;    left: 0;   z-index: 3; }
-.blue  { background: dodgerblue;  top: 24px; left: 60px; z-index: 1; }
-.green { background: seagreen;    top: 48px; left: 120px; z-index: 2; }
-button { padding: 6px 12px; cursor: pointer; }
+.grid > div {
+  background: #1f4e79;
+  color: white;
+  padding: 24px 0;
+  text-align: center;
+  border-radius: 4px;
+}
   `"
-  :js="`
-const blue = document.getElementById('blue');
-const btn = document.getElementById('toggle');
-let high = false;
-btn.onclick = () => {
-  high = !high;
-  blue.style.zIndex = high ? '5' : '1';
-  btn.textContent = high
-    ? 'blue を z-index: 1 に戻す'
-    : 'blue を最前面に切り替え';
-};
-  `"
+  :js="``"
 />
 
-### stacking context（重なりの文脈）の最小知識
+### `grid-template-rows` と行の指定
 
-「`z-index: 9999` を付けたのに何故か前に出ない」場面に将来出会います。原因は **stacking context** という仕組みです。ざっくり言うと、**ある要素に `position` + `z-index` を指定すると、その要素の内部で「独立した重なりの世界」が作られ、外側の `z-index` と直接比較できなくなる** というものです。
+行を明示したい場合は `grid-template-rows` を使います。
 
-今回の演習では起きないので、「いつか `z-index` が効かないことがあるらしい」とだけ頭の隅に置いておきます。
+```css
+.grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  grid-template-rows: 100px 200px;
+  gap: 16px;
+}
+```
+
+ただし、今回の演習のように「カードを敷き詰める」ときは、行の高さは中身に任せるのが普通なので `grid-template-rows` を省くことが多いです。
+
+### 特定のセルをまたぐ（発展、今回は使わない）
+
+`grid-column: span 2` で「このセルは 2 列ぶんの幅を取る」のように、個別のセルを大きくもできます。ページ全体のレイアウトで「サイドバーは 1 列、メインは 3 列ぶん」のような指定に便利ですが、今回の演習では使いません。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください。
+これまでのレッスンで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスンから1 章 統合版では `style.css` というファイル名を使います）。
 
 <details>
 <summary>出発点のコード</summary>
@@ -299,21 +211,6 @@ btn.onclick = () => {
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="音楽のプレースホルダ画像" />
-            <h3>音楽</h3>
-            <p>作業中はインストゥルメンタル。</p>
-          </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="写真のプレースホルダ画像" />
-            <h3>写真</h3>
-            <p>スマホで散歩の途中に。</p>
-          </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="料理のプレースホルダ画像" />
-            <h3>料理</h3>
-            <p>凝らない、続ける。</p>
-          </article>
         </div>
       </section>
 
@@ -334,16 +231,6 @@ btn.onclick = () => {
           </div>
           <button type="submit">送信</button>
         </form>
-      </section>
-
-      <section id="gallery">
-        <h2>ギャラリー</h2>
-        <div class="gallery">
-          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 1" />
-          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 2" />
-          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 3" />
-          <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 4" />
-        </div>
       </section>
     </main>
 
@@ -437,21 +324,12 @@ main {
 }
 
 .cards {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  display: flex;
   gap: 16px;
 }
 
-.gallery {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 12px;
-}
-
-.gallery img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
+.cards .card {
+  flex: 1;
 }
 
 .site-footer {
@@ -472,6 +350,10 @@ main {
     margin-right: 0;
     margin-top: 4px;
     display: inline-block;
+  }
+
+  .cards {
+    flex-direction: column;
   }
 }
 
@@ -520,143 +402,120 @@ form button:focus {
 
 ### やること
 
-これまでのレッスンで作った自己紹介ページに、次の 2 つを追加します。
+これまでのレッスンで作った自己紹介ページの「好きなもの」カード部分を、**Flexbox から Grid に書き換え**、画面幅に応じて 3 列 → 2 列 → 1 列と **自動で折り返す** ようにします。`@media` を自分で書く必要はありません。
 
-1. 画面右下に **「ページトップに戻る」ボタン** を `position: fixed` で常時表示する。
-2. 「好きなもの」の最初のカードの右上に **「NEW」バッジ** を `position: absolute` で重ねる。
+### ステップ 1: これまでのプロジェクトを開く
 
-### ステップ 1: 「ページトップに戻る」ボタンを追加
+StackBlitz でこれまでのプロジェクトを開きます。`index.html` と `style.css` があり、カード 3 枚が Flexbox で横並びに表示されている状態です。
 
-`index.html` の `</main>` の直後、`<footer>` の直前に、次のリンクを追加します。
+### ステップ 2: HTML を少し増やす
 
-```html
-<a class="to-top" href="#">ページトップへ</a>
-```
-
-`href="#"` はページの先頭へのアンカーです。これで、クリックするとページ先頭にジャンプします。
-
-次に、ボタンの位置を `style.css` の末尾に追加します。
-
-```css
-.to-top {
-  position: fixed;
-  right: 16px;
-  bottom: 16px;
-
-  padding: 12px 16px;
-  background-color: #2563eb;
-  color: #ffffff;
-  text-decoration: none;
-  border-radius: 24px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
-  z-index: 10;
-}
-
-.to-top:focus {
-  outline: 3px solid #60a5fa;
-  outline-offset: 2px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .to-top {
-    background-color: #3b82f6;
-    color: #ffffff;
-  }
-}
-```
-
-### 期待出力（ステップ 1）
-
-- プレビュー画面の **右下** に青い丸いボタンが常に見える。
-- ページをスクロールしても、ボタンはその場に留まる。
-- ボタンをクリックすると、ページの一番上に戻る。
-- Tab キーでフォーカスを当てると、青い太いアウトライン（フォーカスリング）が出る。
-
-### ステップ 2: 「NEW」バッジを重ねる
-
-`index.html` の「好きなもの」セクションの **最初のカード**（コーヒー）に、`<span class="badge">` を追加します。
+Grid の効果が分かりやすいよう、カードを 3 枚から 6 枚に増やします。`index.html` の `<section id="likes">` を次のように書き換えます。
 
 ```html
-<article class="card card-new">
-  <span class="badge">NEW</span>
-  <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-  <h3>コーヒー</h3>
-  <p>朝の 1 杯が欠かせない。</p>
-</article>
+<section id="likes">
+  <h2>好きなもの</h2>
+  <div class="cards">
+    <article class="card">
+      <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+      <h3>コーヒー</h3>
+      <p>朝の 1 杯が欠かせない。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+      <h3>本</h3>
+      <p>技術書からエッセイまで。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+      <h3>散歩</h3>
+      <p>行き先を決めずに歩く。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.co/300x200.png" alt="音楽のプレースホルダ画像" />
+      <h3>音楽</h3>
+      <p>作業中はインストゥルメンタル。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.co/300x200.png" alt="写真のプレースホルダ画像" />
+      <h3>写真</h3>
+      <p>スマホで散歩の途中に。</p>
+    </article>
+    <article class="card">
+      <img src="https://placehold.co/300x200.png" alt="料理のプレースホルダ画像" />
+      <h3>料理</h3>
+      <p>凝らない、続ける。</p>
+    </article>
+  </div>
+</section>
 ```
 
-`<article>` に `card-new` クラスを追加しているのは、後で「親に `position: relative` が効く目印」として使うためです。ただし `.card` 自体に `position: relative` を付けても同じ効果になります（今回はシンプルにカード全体に付ける書き方にします）。
+### ステップ 3: `.cards` を Grid に書き換える
 
-`style.css` の末尾に以下を追加します。
+`style.css` の `.cards` と `.cards .card` の 2 つのブロックを、次のように書き換えます。「Flexbox とレスポンシブ」で追加した `@media (max-width: 600px)` 内の `.cards { flex-direction: column; }` は **削除** してください（Grid 側で自動折り返しを扱うため不要になります）。
 
 ```css
-.card {
-  position: relative;
-}
-
-.badge {
-  position: absolute;
-  top: 8px;
-  right: 8px;
-
-  padding: 2px 8px;
-  background-color: #dc2626;
-  color: #ffffff;
-  font-size: 12px;
-  font-weight: bold;
-  border-radius: 4px;
-  z-index: 1;
-}
-
-@media (prefers-color-scheme: dark) {
-  .badge {
-    background-color: #ef4444;
-    color: #ffffff;
-  }
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 16px;
 }
 ```
 
-`.card` に `position: relative` を付けるのがポイントです。これで、子の `.badge` の `absolute` が **親カードを基準に** 浮くようになります。
+`.cards .card` の `flex: 1` は **削除** します。Grid では列幅を `grid-template-columns` 側で決めるので、子要素に個別の幅指定は不要です。
 
-### 期待出力（ステップ 2）
+### 期待出力
 
-- 最初のカード（コーヒー）の **右上** に赤い「NEW」バッジが乗っている。
-- バッジの位置は、カードの上端から 8px、右端から 8px。
-- カードの幅を変えてもバッジは常にカードの右上に追従する。
-- DevTools の Elements パネルで `.badge` をクリックすると、カード右上の小さな領域がハイライトされる。
+- プレビューを広く表示: カード 6 枚が **3 列 × 2 行** に並ぶ。
+- プレビューを中くらいに縮める: カードが **2 列 × 3 行** になる。
+- プレビューをスマホ幅まで縮める: カードが **1 列 × 6 行** になる。
+- DevTools の「デバイスツールバー」（Chrome では `Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE（375px）などに切り替えても、カードが 1 列に並ぶことを確認できる。
+- `@media` を書いていないのにレスポンシブになっていることに注目する。
 
-### 失敗を体験する（重要）
+### Flexbox 版と見比べる
 
-`.card { position: relative; }` の 1 行を **一時的に削除** してみてください。`.badge` はカードを基準にできなくなり、**ページ全体の右上**（ビューポートではなく `<body>` の端）に飛びます。これが `absolute` の親基準ルールです。確認できたら、`position: relative` を戻します。
+「Flexbox とレスポンシブ」では Flexbox で 3 枚を `flex: 1` で等分していました。あのやり方だと、**カードを 10 枚に増やしても 1 行に 10 枚並んでしまい**（それぞれが細くなる）、手動で `flex-wrap: wrap` と個々の `flex-basis` を調整する必要がありました。
+
+Grid の `auto-fit + minmax()` は、この「折り返しと列幅の調整」をまとめて面倒見てくれるので、**カードが増えても減ってもコードを変える必要がありません**。
 
 ### 変えてみる
 
-1. `.to-top` の `bottom: 16px` を `bottom: 100px` に変えて、ボタンの位置が上に動くことを確認する。
-2. `.badge` の `top: 8px; right: 8px;` を `top: -8px; right: -8px;` に変えて、バッジがカードから「はみ出す」位置に重なることを確認する（負の値が使えるのが `position` の強み）。
-3. `z-index: 10` と `z-index: 1` を入れ替えてみる。`.to-top` が `.badge` より後ろに行ってもページ上では重ならないが、スクロールして重なる瞬間があれば前後関係の違いが分かる。
+1. `minmax(250px, 1fr)` の `250px` を `180px` や `320px` に変えてみる。それぞれ「1 列の最小幅」が変わり、結果として折り返すタイミングが変わることを確認する。
+2. `repeat(auto-fit, ...)` を `repeat(3, 1fr)` に変えてみる。これだとカード 6 枚が **常に 3 列** になり、スマホ幅に縮めるとはみ出してしまう（自動折り返ししない）ことを確認する。その後、元の `auto-fit` に戻す。
+3. `gap: 16px` を `gap: 4px` / `gap: 32px` に変えて、見た目の印象の変化を確認する。
 
 ### 自分で書く
 
-自己紹介ページの `<header>` を **画面上部に固定**（`position: fixed`）して、スクロールしても常にヘッダーが見える状態にしてみます。
+手元の `<section id="contact">` の下に、新しい `<section id="gallery">` を追加します。
 
-ヒント:
+```html
+<section id="gallery">
+  <h2>ギャラリー</h2>
+  <div class="gallery">
+    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 1" />
+    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 2" />
+    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 3" />
+    <img src="https://placehold.co/300x200.png" alt="ギャラリー画像 4" />
+  </div>
+</section>
+```
 
-- `.site-header` に `position: fixed; top: 0; left: 0; right: 0;` を足す
-- ヘッダーが固定されると `<main>` の一部が裏に隠れるので、`main` に `padding-top: 80px` などを足して、ヘッダーぶんの隙間を作る
-- `.site-header` には `z-index: 20`（`.to-top` より前）を足して、スクロール中に他の要素の前に出るようにする
+そして `style.css` に、`.gallery` を Grid で組むスタイルを **自分で書いて** みます。条件:
 
-やってみて、動作を確認できたら、ヘッダー固定は **本コース内では以後使わない** ので元に戻しておきます（`.site-header` から `position: fixed` 系の指定を削除、`main` の `padding-top` も元に戻す）。練習のため一度試すだけです。
+- 画像が幅 200px を下回らないようにする
+- `gap` は 12px
+- `auto-fit` で列数は自動
+
+ヒントは `.cards` のコードをなぞること。完成したら、`.gallery` 内の画像が画面幅に応じて 4 列 → 3 列 → 2 列 → 1 列と折り返されることを確認します。
 
 ### よくあるつまずき
 
-- 子要素を `absolute` で浮かせたのに、親ではなく `<body>` 基準になる → 親に `position: relative` を付け忘れている。
-- `z-index` が効かない → そもそも `position` が `static`（初期値）のまま。`z-index` は `position` が `static` 以外でないと効かない。
-- `fixed` したボタンがスクロールすると動いてしまう → 祖先要素のどこかに `transform` や `filter` が指定されていると、`fixed` の **基準** （containing block）がその祖先に変わる仕様がある。**containing block** とは「位置決めの基準になる箱」のことで、通常 `fixed` ではビューポート（画面）が基準になるが、上記の場合は祖先に切り替わる。今回の演習では起きないが、将来遭遇したら思い出す。
+- `grid-template-columns` を親ではなく子要素に書いてしまう。Grid の指定は **並べたい要素を包む親** に付けます。
+- `auto-fit` と `auto-fill` を混同する。今回は `auto-fit`（余った幅を既存の列で分け合う）を使います。`auto-fill` だと「空の列を作って詰める」挙動になり、1〜2 個しかカードがないときに妙に細く見えることがあります。
+- `gap` が効かない → 親に `display: grid` が付いていない。まず親のセレクタに `display: grid` があるか確認する。
 
 ## まとめ
 
-- `position` は要素を「通常の流れ」から切り離して配置するプロパティ。
-- `relative` は通常の位置を基準にズラし、子の `absolute` の基準点にもなる。
-- `absolute` は最も近い `relative` / `absolute` / `fixed` の祖先を基準に浮く。
-- `fixed` は画面（ビューポート）を基準に固定。スクロールしても動かない。
-- `z-index` で前後の重なりを制御できる（`position` が `static` 以外のときだけ効く）。
+- Flexbox は一次元、Grid は二次元のレイアウトに向く。**レイアウトは Grid、コンポーネント内の整列は Flex** が現代の目安。
+- `display: grid` と `grid-template-columns` で列を定義する。`fr` 単位で比率、`repeat()` で繰り返し、`minmax()` で最小幅を指定できる。
+- `repeat(auto-fit, minmax(250px, 1fr))` は「画面幅に応じて列数が自動で切り替わる」定番パターン。`@media` なしでレスポンシブになる。

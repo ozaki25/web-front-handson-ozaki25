@@ -1,163 +1,136 @@
-# lesson10: ボックスモデルで余白を作る
+# lesson10: 色と文字を整える
 
 ## ゴール
 
-- すべての要素が「コンテンツ + padding + border + margin」でできていることを、ボックスモデルとして説明できる。
-- `margin` / `padding` / `border` / `width` を使い分けて、要素のまわりに余白と枠を作れる。
-- `box-sizing: border-box` の意味と、なぜ必要なのかを説明できる。
+- 文字色（`color`）・背景色（`background-color`）を指定できる。
+- 文字サイズ（`font-size`）・行間（`line-height`）を指定できる。
+- `font-family` で使用フォントの優先順位を指定できる。
 
 ## 解説
 
-### すべての要素は「四角い箱」
+### このレッスンで扱うプロパティ
 
-HTML の各要素は、画面上では四角い箱として配置されます。その箱には、内側から順に 4 つの層があります。これを **ボックスモデル** と呼びます。
+| プロパティ | 役割 |
+| --- | --- |
+| `color` | 文字色 |
+| `background-color` | 背景色 |
+| `font-size` | 文字サイズ |
+| `line-height` | 行の高さ（実質的な行間） |
+| `font-family` | 使用するフォントの優先順位リスト |
 
-<div style="display:inline-block; padding:20px 28px; background:#fde68a; color:#7c2d12; border-radius:6px; font-family:system-ui, sans-serif; margin:8px 0;">
-  <div style="font-size:0.8em; margin-bottom:8px;">margin</div>
-  <div style="padding:20px 28px; background:#fff; border:4px solid #1f2937; border-radius:4px;">
-    <div style="font-size:0.8em; color:#1f2937; margin-bottom:8px;">border</div>
-    <div style="padding:20px 28px; background:#bbf7d0; color:#065f46; border-radius:4px;">
-      <div style="font-size:0.8em; margin-bottom:8px;">padding</div>
-      <div style="padding:16px 32px; background:#dbeafe; color:#1e3a8a; text-align:center; border-radius:4px;">コンテンツ</div>
-    </div>
-  </div>
-</div>
+「CSS を当てる」で `color` と `line-height` は先出ししていましたが、ここでまとめて扱います。
 
-- **コンテンツ**: 中身（文字や画像）そのもの。
-- **padding**: コンテンツと枠線（border）のあいだの余白。**内側の余白**。
-- **border**: 要素の枠線。太さ・種類・色を指定できる。
-- **margin**: 枠線の外側の余白。他の要素とのあいだを空ける **外側の余白**。
+### 色の指定（復習 + 少し追加）
 
-この 4 つを組み合わせて「要素の大きさ」と「要素同士の距離」が決まります。
-
-### プロパティの書き方
-
-#### `padding` / `margin`
-
-1 方向だけ指定する書き方と、まとめて指定する書き方（ショートハンド）があります。
+「CSS を当てる」で色名（`steelblue`）と 16 進数（`#333333`）を使いました。16 進数は 6 桁のほかに 3 桁の短縮形も書けます。
 
 ```css
-/* 1 方向ずつ */
-.card {
-  padding-top: 16px;
-  padding-right: 16px;
-  padding-bottom: 16px;
-  padding-left: 16px;
-}
-
-/* まとめて: すべての方向に同じ値 */
-.card {
-  padding: 16px;
-}
-
-/* まとめて: 上下 / 左右 */
-.card {
-  padding: 16px 24px; /* 上下 16px、左右 24px */
-}
-
-/* まとめて: 上 / 右 / 下 / 左（時計回り） */
-.card {
-  padding: 8px 16px 12px 16px;
+.example {
+  color: #333; /* #333333 と同じ */
+  background-color: #fff; /* #ffffff と同じ */
 }
 ```
 
-`margin` も書き方は同じです。値にマイナスを指定することもできますが、使い所は限られるので本コースでは正の値のみ扱います。
+見やすさのため、本コースでは 6 桁で統一することが多いです。
 
-#### `border`
+### `font-size` の単位
 
-`border` は「太さ 種類 色」の 3 つをまとめて書くのが基本です。
+文字サイズには複数の単位があります。覚えておきたいのは次の 3 つ。
+
+- `px`（ピクセル）: 絶対的な大きさ。ブラウザの文字サイズ設定に影響されない。ピッタリ合わせたいときに使う。
+- `rem`: ルート要素（`<html>`）の `font-size` を基準にした相対値。`1rem` がふつう `16px`。ユーザーがブラウザの文字サイズを変えたとき、一緒に拡大縮小されるので親切。
+- `em`: 親要素の `font-size` を基準にした相対値。入れ子で影響が連鎖するため、使い所が難しい。
+
+本コースでは、基本は `rem` を推奨しつつ、小さな調整には `px` も使っていきます。
 
 ```css
-.card {
-  border: 1px solid #e0e0e0;
+h1 {
+  font-size: 2rem; /* 通常 32px */
+}
+
+p {
+  font-size: 1rem; /* 16px */
 }
 ```
 
-- 太さ: `1px` / `2px` など。
-- 種類: `solid`（実線）/ `dashed`（破線）/ `dotted`（点線）など。普段は `solid`。
-- 色: 「CSS を当てる」で扱ったのと同じ色の書き方。
+### `line-height`（行間）
 
-1 方向だけ指定するなら `border-top` / `border-right` / `border-bottom` / `border-left` を使います。
-
-### `width` と `height`
-
-要素の幅・高さは `width` / `height` で指定します。指定しなければ、`<p>` や `<div>` など **ブロック要素** は親の幅いっぱいに広がる（幅 100%）のが既定の挙動です。
+`line-height` は、その要素の 1 行分の高さを指定します。数字だけ書く書き方（単位なし）がよく使われます。
 
 ```css
-.card {
-  width: 300px;
+p {
+  line-height: 1.7;
 }
 ```
 
-`height` は中身の分だけ縦に伸びるので、普段は指定しません。指定すると中身が溢れたときに切れたりはみ出したりするためです。
+`1.7` は「その要素の `font-size` の 1.7 倍」の意味。本文の読みやすさは 1.5〜1.8 くらいが目安です。狭すぎると行同士がくっついて読みづらく、広すぎると段落がまとまって見えません。
 
-### 落とし穴: `width` は「どこまでの幅」？
-
-既定の CSS では、`width: 300px` と書いたとき、この `300px` は **コンテンツ部分の幅** だけを指します。`padding` や `border` はその外側に追加されるため、実際に画面上で占める幅は「300 + padding + border」になります。
-
-```
-width: 300px
-padding: 16px
-border: 1px
-
-実際の画面上の幅: 300 + 16 + 16 + 1 + 1 = 334px
-```
-
-これは直感に反するので、レイアウトの計算がすぐ狂います。
-
-### 解決策: `box-sizing: border-box`
-
-これを解決するのが `box-sizing: border-box` です。`border-box` を指定すると、`width` は **border までを含んだ幅** として扱われます。
-
-```
-box-sizing: border-box
-width: 300px
-padding: 16px
-border: 1px
-
-実際の画面上の幅: 300px（内側を padding と border が食っていく）
-```
-
-ほとんどすべてのモダンな CSS プロジェクトで、**すべての要素に `border-box` を適用する** のが標準作法になっています。本コースでも冒頭で次のルールを入れておきます。
-
-```css
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-```
-
-`*` は全要素にマッチする特殊なセレクタです。`*::before` / `*::after` は CSS で生成する擬似要素を指します（詳しい使い方はコース外）。とりあえず「このおまじないは必ず入れる」と覚えておけば十分です。
-
-下のデモで、同じ `width: 200px` のカードが `box-sizing: content-box`（既定）と `border-box` でどう違うかを見比べてください。左は padding と border の分だけ実寸が膨らんでしまうのに対し、右は 200px ぴったりに収まります。
+下のデモで `line-height: 1.2`（狭い）と `line-height: 1.8`（読みやすい）を並べて比べられます。3 行以上の段落ほど差が大きいのが分かります。
 
 <LiveDemo
-  height="200px"
+  height="300px"
   :html="`
-<div class='card content-box'>content-box（既定）</div>
-<div class='card border-box'>border-box</div>
+<h3>line-height: 1.2（狭い）</h3>
+<p class='tight'>
+  Web フロントエンドを学んでいます。まずは HTML と CSS から始めて、
+  次に JavaScript、それから React、Next.js の順に進めていきます。
+  1 日 1 レッスンを目安にのんびり進めます。
+</p>
+
+<h3>line-height: 1.8（読みやすい）</h3>
+<p class='loose'>
+  Web フロントエンドを学んでいます。まずは HTML と CSS から始めて、
+  次に JavaScript、それから React、Next.js の順に進めていきます。
+  1 日 1 レッスンを目安にのんびり進めます。
+</p>
   `"
   :css="`
-body { padding: 16px; }
-.card {
-  width: 200px;
-  padding: 16px;
-  border: 4px solid #1f4e79;
-  background: #e3f2fd;
-  margin-bottom: 16px;
-}
-.content-box { box-sizing: content-box; }
-.border-box  { box-sizing: border-box; }
+.tight { line-height: 1.2; }
+.loose { line-height: 1.8; }
   `"
   :js="``"
 />
 
-### `margin` の重なり
+### `font-family`（フォントの優先順位）
 
-縦方向に並んだ要素の上下 `margin` は **重なって大きい方だけ** が有効になる、というクセがあります（マージン相殺）。たとえば `<p>` 同士を縦に並べて、両方に `margin-bottom: 16px` / `margin-top: 16px` を指定しても、合計 32px ではなく 16px 分しか空きません。
+使うフォントは `font-family` で指定します。「OS によって入っているフォントが違う」ので、**カンマで区切って優先順位リスト** を書くのが定石です。左から順に「このフォントがあればこれ、なければ次」とブラウザが探します。
 
-本コースでは深追いしませんが、「縦に並んだ要素の `margin-top` と `margin-bottom` は重なる」と頭の片隅に置いておくと、後でレイアウトが崩れたときの原因に気付けます。
+```css
+body {
+  font-family: "Hiragino Sans", "Yu Gothic", sans-serif;
+}
+```
+
+- フォント名にスペースが入るものは `" "` で囲む（`"Hiragino Sans"` など）。
+- 最後に必ず **汎用フォント名**（`sans-serif` / `serif` / `monospace` のいずれか）を置く。どれもなければシステム既定のフォントが使われる。
+
+汎用フォント名の意味:
+
+- `sans-serif`: ゴシック体。サイト本文に使われることが多い。
+- `serif`: 明朝体。
+- `monospace`: 等幅フォント。プログラムコード表示に使う。
+
+### システムフォントスタック
+
+最近はどの OS でも読みやすい既定のフォントが入っているので、「各 OS の既定フォントを使う」という指定もよく見ます。本コースではシンプルに行きますが、参考として紹介します。
+
+```css
+body {
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Hiragino Sans",
+    "Yu Gothic",
+    sans-serif;
+}
+```
+
+`system-ui` はそのシステムが「UI 用」に用意している既定フォントを使う指定です。
+
+### 継承
+
+`color` や `font-size`、`font-family` は **子要素に継承** されます。つまり `body` にフォントを設定すれば、その中のすべてのテキストにも同じフォントが（上書きしない限り）適用されます。便利な性質ですが、「あれ？ 効いているのに見た目が違う」と感じたら、親から継承されたスタイルがあるかを DevTools の Styles パネルで確認してみます。
 
 ## 演習
 
@@ -273,6 +246,103 @@ body { padding: 16px; }
 **`styles.css`**
 
 ```css
+h1 {
+  color: steelblue;
+}
+
+h2 {
+  color: #555555;
+}
+
+p {
+  color: #333333;
+  line-height: 1.7;
+}
+
+a {
+  color: #1a73e8;
+}
+
+li {
+  color: #555555;
+}
+
+.nav-link {
+  color: #1a73e8;
+  text-decoration: none;
+}
+
+.nav-link:hover {
+  text-decoration: underline;
+  color: #0d47a1;
+}
+
+.nav-link:focus {
+  outline: 2px solid #1a73e8;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.btn {
+  padding: 8px 16px;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-size: 16px;
+}
+
+.primary {
+  color: white;
+  background-color: #0d47a1;
+}
+
+.primary:hover {
+  background-color: #3a6ea5;
+}
+
+.btn:focus {
+  outline: 2px solid #ffa726;
+  outline-offset: 2px;
+}
+
+/* ダークモード対応 */
+@media (prefers-color-scheme: dark) {
+  h2 {
+    color: #cccccc;
+  }
+  p {
+    color: #dddddd;
+  }
+  a {
+    color: #8ab4f8;
+  }
+  .nav-link {
+    color: #8ab4f8;
+  }
+  .nav-link:hover {
+    color: #c7d7ff;
+  }
+  .primary {
+    background-color: #3e6fb5;
+    color: #ffffff;
+  }
+  .primary:hover {
+    background-color: #5780c4;
+  }
+}
+```
+
+</details>
+
+### これまで作ったプロジェクトを使う
+
+これまでのレッスンで作った `index.html` と `styles.css` を開きます。HTML はナビとボタンにクラスが付いた状態、CSS はリンク・ボタンの擬似クラスを含んだ状態です。
+
+### コピペで動かす
+
+`styles.css` を次のように書き換えます（既存ルールの一部を変更 + 追加）。HTML 側は変更なしで進めます。
+
+```css
 body {
   font-family:
     system-ui,
@@ -386,186 +456,55 @@ footer {
 }
 ```
 
-</details>
+追加・変更点の解説:
 
-### これまで作ったプロジェクトを使う
-
-これまでのレッスンで作った `index.html` と `styles.css` を開きます。HTML はフォーム含む自己紹介ページ、CSS には文字まわりと色のルールが入っている状態です。
-
-### HTML の変更: `<section>` にクラスを付ける
-
-カード風にしたいので、`<main>` 内の各 `<section>` に `card` クラスを付け、`<main>` 自体にもクラスを付けます。変更するのは `<main>` 開始タグと各 `<section>` 開始タグだけ。
-
-```html
-<main class="main">
-  <section id="profile" class="card">
-    <h2>自己紹介</h2>
-    <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に進めています。</p>
-  </section>
-  <section id="likes" class="card">
-    <h2>好きなもの</h2>
-    <ul>
-      <li>コーヒー</li>
-      <li>本</li>
-      <li>散歩</li>
-    </ul>
-  </section>
-  <section id="goals" class="card">
-    <h2>目標</h2>
-    <p>小さな Next.js アプリを自分で作れるようになる。</p>
-  </section>
-  <section id="links" class="card">
-    <h2>リンク</h2>
-    <p><a href="https://example.com">お気に入りのサイト</a></p>
-  </section>
-  <section id="contact" class="card">
-    <h2>問い合わせ</h2>
-    <form>
-      <label for="name">お名前</label>
-      <input id="name" name="name" type="text" required />
-      <button type="submit">送信</button>
-    </form>
-  </section>
-</main>
-```
-
-（これまでに書いた各 `<section>` の中身をそのまま維持すれば OK です。上は中身の一例として掲載しています。）
-
-### CSS の変更
-
-`styles.css` の **先頭** に次の 2 ルールを追加します。全体リセットの `*` セレクタと、ページ全体のレイアウト整えです。
-
-```css
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  padding: 24px;
-  font-family:
-    system-ui,
-    -apple-system,
-    "Segoe UI",
-    "Hiragino Sans",
-    "Yu Gothic",
-    sans-serif;
-  color: #333333;
-  line-height: 1.7;
-}
-```
-
-（これまでの `body` ルールは上で置き換えました。`margin: 0` と `padding: 24px` が追加されている点に注意。）
-
-そしてファイルの末尾に、`main` と `card` のルールを追加します。
-
-```css
-.main {
-  max-width: 800px;
-  margin: 0 auto; /* 左右 auto で水平方向に中央寄せ */
-}
-
-.card {
-  background-color: #ffffff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 24px;
-  margin-bottom: 16px;
-}
-
-.card h2 {
-  margin-top: 0; /* カード上端との余白がダブらないように */
-}
-
-header {
-  max-width: 800px;
-  margin: 0 auto 24px;
-}
-
-footer {
-  max-width: 800px;
-  margin: 24px auto 0;
-  color: #666666;
-  font-size: 0.875rem;
-  text-align: center;
-}
-
-/* ダークモード対応: カードの白背景・枠色を上書き */
-@media (prefers-color-scheme: dark) {
-  .card {
-    background-color: #202020;
-    border-color: #3a3a3a;
-    color: #e0e0e0;
-  }
-  footer {
-    color: #999999;
-  }
-}
-```
-
-補足:
-
-- `max-width: 800px;`: 要素の幅の上限を 800px にする。画面が狭ければそれより小さくなる（伸縮する）。「Flexbox とレスポンシブ」のレスポンシブに繋がる考え方。
-- `margin: 0 auto;`: 上下 0、左右 auto。親の幅が要素より広ければ、左右の余白が均等に振り分けられて中央寄せになる。
-- `border-radius: 8px;`: 角を少し丸くする。カードらしさが出る。
-- `.card h2` は「`.card` の中にある `<h2>`」を指すセレクタ（**子孫セレクタ**）。セレクタをスペースで区切ると「この中の」の意味になる。
+- `body` にフォント・文字色・行間を設定。ここに書けばページ全体に継承される。
+- `h1` のサイズを `2.25rem`（通常 36px）に、色を深い青 `#0d47a1` に。
+- `h2` に下線風の装飾を `border-bottom` で追加（border については「ボックスモデルで余白を作る」で詳しく扱う。ここでは「下に 2px の薄いグレーの線」くらいの認識で OK）。
+- `li` を少し薄いグレーに。
+- `.nav-list` の `list-style: none;` で `<ul>` のマーカー（黒丸）を消す。ナビはリストだが、黒丸は見た目上邪魔なので消すことが多い。`padding: 0;` は「ボックスモデルで余白を作る」で詳しく説明する。
+- `footer` 内の文字を少し小さく、少し薄いグレーに。
 
 ### 期待出力
 
-- ページ全体の左右に 24px の余白が付き、中身が画面中央寄り（最大 800px 幅）に整列する。
-- `<header>`、各 `<section>`（カード）、`<footer>` がそれぞれ独立した箱のように見える。
-- カードは白背景、薄いグレーの枠、少し丸い角で、内側に 24px の余白がある。
-- カード同士は 16px の隙間が空いて縦に並ぶ。
-- `<footer>` は中央揃えで表示される。
-- DevTools の Elements パネルで `.card` を選ぶと、右側「Computed」タブの下に **ボックスモデル図** が表示される。content / padding / border / margin の大きさが数値付きで確認できる。
+- ページ全体のフォントが、OS のシステムフォント（Mac なら San Francisco、Windows なら Segoe UI、日本語は Hiragino Sans / Yu Gothic）に切り替わり、本文が前より読みやすくなる。
+- `<h1>` が大きく深い青で表示される。
+- 各 `<h2>` の下に薄いグレーの水平線が入る。
+- `<nav>` のリストから黒丸マーカーが消え、リンクだけが並ぶ見た目になる（並びは縦のまま。横並びは「Flexbox とレスポンシブ」で扱う）。
+- ページ末尾のフッター（`© 2026 オザキ`）が、本文より小さく・薄めのグレーで表示される。
 
-### DevTools のボックスモデル図
+### DevTools で確認
 
-1. Elements で `<section class="card">` を 1 つ選ぶ。
-2. Styles パネルを下までスクロール、または「Computed」タブを開く。
-3. ボックスモデル図（青・緑・黄色・オレンジの入れ子の四角）が見える。
-4. 一番外がオレンジの `margin`、黄色が `border`、緑が `padding`、青が `content` の領域。それぞれの値が数値で書かれている。
-5. カードのなかをクリックすると、プレビュー側にも同じ配色でレイアウトオーバーレイが出る。
+1. Elements で `<p>` を選び、Styles パネルで「Computed」タブを開く。
+2. `font-family` の欄に、実際に採用されているフォント（OS によって違う）が太字で示される。ここで「優先順位のうち自分の環境ではどれが当たっているか」が分かる。
+3. 同じ `<p>` で `line-height` の欄を見て、`1.7` と表示される（または実際のピクセル値）ことを確認。
+4. 親要素から継承されているスタイルは、Styles パネルで「Inherited from ...」の見出しで区切られて表示される。
 
 ### 変えてみる
 
-1. `.card` の `padding` を `8px` に下げて保存すると、文字が枠に近づいて窮屈に見える。`40px` に上げると中身がゆったりする。好みの値を探す。
-2. `.card` の `margin-bottom` を `0` にするとカード同士がくっつく。`32px` にするとゆとりが出る。
-3. 試しに、ファイル先頭の `box-sizing: border-box;` のルールを **一時的に削除** して保存する。`.card` の `padding: 24px` が加算されて、800px の制限を超える幅になる（横スクロールが出る場合あり）。確認後は必ず戻す。これが `border-box` の効果を体感する瞬間。
-4. `.card` の `border-radius` を `0` / `24px` / `50px` と変えて、カードの角の表情が変わるのを楽しむ。
+1. `h1` の `font-size` を `3rem` / `1.5rem` に変えて、見出しの大きさが変わることを確認する。
+2. `body` の `line-height` を `1.2` に下げてみると、本文が詰まって読みづらくなるのを体感する。確認後は `1.7` に戻す。
+3. `body` の `font-family` の先頭を `serif` に書き換えると、本文が明朝体になる。確認後は元に戻す。
+4. `footer` の `color` を `#222` に戻してみると、文字が濃くなって「フッター感」が減ることを確認する。
 
 ### 自分で書く
 
-`<header>` にもカード風の装飾を付けてみます。`header` ルールを追加してください。
-
-ヒント:
+自分の好みの 1 色を選び、`h2` の色と `h2` の `border-bottom` の色を、統一感のある配色に書き換えてみます。たとえば緑系でまとめたい場合:
 
 ```css
-header {
-  max-width: 800px;
-  margin: 0 auto 24px;
-  background-color: #ffffff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 24px;
+h2 {
+  font-size: 1.5rem;
+  color: #1b5e20;
+  border-bottom: 2px solid #c8e6c9;
+  padding-bottom: 4px;
 }
 ```
 
-保存すると、`<header>` も白いカードとして表示されます。
-
-また、`header h1` に `margin-top: 0;` を追加して、見出しがカードの上に張り付くようにしてもよいでしょう。
-
-```css
-header h1 {
-  margin-top: 0;
-}
-```
+選んだ色が白背景で読めるか、DevTools のカラーピッカー（Styles パネルで `color` の値の左の四角をクリック）でコントラスト比を確認してみます。カラーピッカー下部にコントラスト比（`Contrast ratio`）が表示されます。4.5 以上が本文向けの目安です。
 
 ## まとめ
 
-- 要素は「content + padding + border + margin」の 4 層の箱（ボックスモデル）で構成される。
-- `padding` は内側の余白、`margin` は外側の余白、`border` は枠線。ショートハンドで上下左右を一度に指定できる。
-- `width` の既定の計算方式は直感に反するので、`box-sizing: border-box` を全要素に適用する。
-- `margin: 0 auto;` と `max-width` の組み合わせで、要素を水平方向に中央寄せしつつ画面幅に合わせて縮められる。
+- `color` / `background-color` / `font-size` / `line-height` / `font-family` は文字まわりの基本。
+- フォントは優先順位のリストで指定し、最後に汎用名（`sans-serif` など）を置く。
+- `font-size` は `rem` を基本に、必要に応じて `px`。`line-height` は数値だけの指定で OK（1.5〜1.8 が目安）。
+- `color` や `font-family` は子要素に継承されるので、`body` にまとめて書いておくと見通しが良い。

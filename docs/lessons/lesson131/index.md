@@ -1,368 +1,497 @@
-# lesson131: AI を前提にした開発（Copilot / Cursor / Claude Code）
+# lesson131: OGP と SEO 実践
 
 ## ゴール
 
-- 2026 年の **AI コーディングツール** の主要 3 種類を区別できる
-- ツールに **コンテキストを渡す** 仕組み（`CLAUDE.md` / `.cursorrules` / `.github/copilot-instructions.md`）が分かる
-- AI 生成コードの **典型的な落とし穴** を見抜けるようになる
-- 「**AI に任せる仕事 / 人間がやる仕事**」の境界を持てる
-- 学習者として AI を **学習補助** に活かす方法を持つ
+- OGP（Open Graph）タグと Twitter Card で **シェアされた時の見栄え** を制御できる
+- Next.js の Metadata API（**Metadata API のレッスン**の発展）で OGP を動的に生成できる
+- `sitemap.xml` と `robots.txt` の役割と Next.js での生成方法を知る
+- JSON-LD（構造化データ）でリッチリザルトを狙える
+- Google Search Console の使い方が分かる
 
 ## 解説
 
-### 2026 年の前提
+### OGP（Open Graph Protocol）
 
-「AI を **使うか / 使わないか**」の議論は 2024〜2025 年で終わりました。**使うのが前提** で、その上で **どう付き合うか** が問われる時代です。
+Twitter（X）/ Facebook / LINE / Slack / Discord などで URL を共有した時、**タイトル + 説明 + 画像** がカード形式で表示されます。これを制御するのが OGP です。
 
-職場でも:
+```html
+<head>
+  <title>記事のタイトル</title>
+  <meta property="og:title" content="記事のタイトル" />
+  <meta property="og:description" content="この記事は OGP の使い方について書きます" />
+  <meta property="og:image" content="https://example.com/og.png" />
+  <meta property="og:url" content="https://example.com/post/1" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="My Blog" />
 
-- **個人開発**: AI で初動 1〜2 倍速
-- **小規模チーム**: AI レビュー / テスト生成が定常化
-- **エンタープライズ**: 社内ガードレール付きで全員に配布
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@my_handle" />
+</head>
+```
 
-新人エンジニアがコードを書く時、隣に「**経験 10 年の同僚が常時付いている**」状態が AI ツールの実態に近い。
+ポイント:
 
-### 主要なツール
+- `og:image` は **絶対 URL** を渡す（相対パスは効かない）
+- 画像サイズは **1200 x 630px** が推奨（Twitter / Facebook 共通）
+- `og:type` は `website` / `article` / `book` / `profile` などから選ぶ
+- Twitter Card は OGP を補完する。`summary_large_image` で大きく表示
 
-#### GitHub Copilot
+### Next.js の Metadata API（おさらい + 発展）
 
-GitHub / OpenAI が提供する **エディタ補完型** AI。
+**Metadata API のレッスン** で `metadata` を export する書き方を扱いました。OGP も同じ仕組みで書けます。
 
-特徴:
+```ts
+// app/blog/[slug]/page.tsx
+import type { Metadata } from "next";
 
-- **VS Code / JetBrains / Neovim** などにプラグイン
-- **エディタ内の Tab 補完** が中核
-- **Copilot Chat** で質問もできる
-- GitHub の workflow（PR レビュー / Issue 提案）に統合
+type Props = { params: Promise<{ slug: string }> };
 
-価格: 個人 月 10 USD 程度、Business / Enterprise プランあり。
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPost(slug);
+  return {
+    title: post.title,
+    description: post.excerpt,
+    openGraph: {
+      title: post.title,
+      description: post.excerpt,
+      url: `https://example.com/blog/${slug}`,
+      siteName: "My Blog",
+      images: [
+        {
+          url: post.coverImage,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+      type: "article",
+      publishedTime: post.publishedAt,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.excerpt,
+      images: [post.coverImage],
+      creator: "@my_handle",
+    },
+  };
+}
+```
 
-#### Cursor
+### `metadataBase` を必ず指定
 
-[Cursor](https://www.cursor.com/) は **VS Code フォークの AI ファースト IDE**。
+OGP の画像 URL を相対パスで書きたい時は、**ルートで `metadataBase`** を指定します。
 
-特徴:
+```ts
+// app/layout.tsx
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+};
+```
 
-- VS Code 拡張がそのまま動く
-- **複数ファイルにまたがるリファクタ** が得意
-- **エージェント機能**（Composer）でタスクを自律実行
-- **モデル選択**（Claude / GPT / Gemini）が可能
+これがないと相対パスが効かず、開発時のローカル URL（`http://localhost:3000`）が混入する事故が起きます。
 
-「**コードを書く専用 IDE**」として人気。
+### 動的 OGP 画像（`opengraph-image.tsx`）
 
-#### Claude Code
+Next.js 13.3+ から、**ファイルベースで OGP 画像を生成** できます。
 
-[Claude Code](https://www.anthropic.com/claude-code) は Anthropic 公式の **CLI / IDE / Web 版** の AI コーディング環境。
+```tsx
+// app/blog/[slug]/opengraph-image.tsx
+import { ImageResponse } from "next/og";
 
-特徴:
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
 
-- **CLI**（ターミナル） で動くのが原型
-- **長いコンテキスト**（100 万トークン）と **計画 → 実行** の 2 段階
-- **Agent SDK** でカスタムエージェントを書ける
-- **Hooks** / **Skills** / **MCP** で拡張
-- VS Code 拡張 / Web UI / モバイル / API がそろう
+export default async function OG({ params }: { params: { slug: string } }) {
+  const post = await getPost(params.slug);
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: 60,
+          background: "linear-gradient(135deg, #1e3a8a, #06b6d4)",
+          color: "white",
+        }}
+      >
+        <div style={{ fontSize: 64, fontWeight: 700 }}>{post.title}</div>
+        <div style={{ fontSize: 32, marginTop: 24, opacity: 0.85 }}>
+          {post.excerpt}
+        </div>
+      </div>
+    ),
+    { ...size },
+  );
+}
+```
 
-このコース自体も **Claude Code を使って書かれて** います（CLAUDE.md がそのコンテキスト）。
+これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動き、軽量。
 
-#### その他
+### `sitemap.xml`
 
-| ツール | 特徴 |
+検索エンジンに「**このサイトにこういう URL があるよ**」と教えるファイル。Google は基本クロールで見つけてくれますが、**サイトが大きい / 内部リンクが少ない** 場合は sitemap が大事です。
+
+#### Next.js の `app/sitemap.ts`
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const posts = await getAllPosts();
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    ...posts.map((p) => ({
+      url: `https://example.com/blog/${p.slug}`,
+      lastModified: p.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
+  ];
+}
+```
+
+ビルド時に `/sitemap.xml` が自動生成されます。
+
+#### 巨大サイトでは分割
+
+URL が 50,000 件 / 50MB を超える場合は **sitemap index** に分割します。Next.js では `app/sitemap.ts` を `[id]/sitemap.ts` 配列で複数 export することで対応できます。
+
+### `robots.txt`
+
+クローラーへの指示。`/admin` などをクロールから除外します。
+
+#### Next.js の `app/robots.ts`
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin/", "/api/"],
+      },
+    ],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
+
+ビルドで `/robots.txt` が自動生成されます。
+
+::: warning robots.txt は「お願い」
+robots.txt は **善意のクローラーが従う** だけで、強制力はありません。本当に隠したい URL は **認証で守る** / **`X-Robots-Tag: noindex` ヘッダ** / **`<meta name="robots" content="noindex">`** を使います。
+:::
+
+### 構造化データ（JSON-LD）
+
+検索結果に **リッチリザルト**（評価星 / レシピ写真 / FAQ アコーディオンなど）を出すための仕組み。Schema.org のスキーマを **JSON-LD** で埋め込みます。
+
+#### 記事（Article）
+
+```tsx
+// app/blog/[slug]/page.tsx
+export default async function Page({ params }: Props) {
+  const { slug } = await params;
+  const post = await getPost(slug);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.excerpt,
+    image: post.coverImage,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt,
+    author: { "@type": "Person", name: post.author },
+  };
+
+  return (
+    <article>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>{post.title}</h1>
+      {/* ... */}
+    </article>
+  );
+}
+```
+
+#### よく使うスキーマ
+
+| `@type` | 用途 |
 |---|---|
-| **Cody**（Sourcegraph） | コードベース検索を強みに |
-| **Codeium / Windsurf** | 無料枠が手厚い、IDE フォーク版 Windsurf も |
-| **Tabnine** | プライバシー重視 |
-| **JetBrains AI Assistant** | JetBrains 系 IDE と統合 |
-| **Aider** | CLI 寄り、Git ベースの差分管理 |
-| **Replit Agent** | ブラウザ完結で MVP を作る |
+| `Article` / `BlogPosting` / `NewsArticle` | 記事 |
+| `Product` | EC 商品（価格 / 在庫） |
+| `Recipe` | レシピ |
+| `FAQPage` | よくある質問（手風琴 UI で出る） |
+| `Organization` | 会社情報 |
+| `BreadcrumbList` | パンくず |
 
-「**Copilot で補完、Cursor / Claude Code で実装、Aider / Replit でプロトタイプ**」のような **使い分け** が浸透しています。
+#### 検証
 
-### コンテキストを渡す仕組み
+[Google リッチリザルトテスト](https://search.google.com/test/rich-results) で URL を入れると、認識される構造化データが見られます。
 
-AI に **プロジェクトの方針** を伝える定型ファイルが各ツールにあります。
+### Google Search Console
 
-#### `CLAUDE.md`（Claude Code）
+「Google の目線で自分のサイトがどう見えているか」を見るツール。
 
-リポジトリのルートに置きます。プロジェクトの目的 / 命名規則 / アーキテクチャ / **やってはいけないこと** を書きます。
+#### できること
 
-```markdown
-# CLAUDE.md
+- どの検索クエリで何位に出ているか
+- どのページがインデックスされているか / エラーがあるか
+- Core Web Vitals の実フィールドデータ
+- `sitemap.xml` の登録 / クロール状況確認
+- モバイルユーザビリティの問題検出
 
-## 概要
-- Next.js (App Router) 16
-- TypeScript strict、tsconfig は `@tsconfig/strictest`
-- パッケージマネージャは pnpm
+#### 設定
 
-## コーディング規約
-- React のクラスコンポーネントは使わない
-- メモ化（useMemo / useCallback）は React Compiler に任せる
-- API は tRPC（公開 API は別途 OpenAPI）
+1. Search Console にプロパティを追加（ドメインまたは URL プレフィックス）
+2. 所有権の確認（DNS TXT レコード / HTML タグ / Google Analytics アカウント連携）
+3. **`sitemap.xml` を登録**
+4. 数日待つとデータが集まり始める
 
-## やってはいけない
-- グローバル CSS の追加
-- `any` の使用
-- `git push --force` を main に
+### canonical URL
+
+「同じ内容のページが複数 URL で見える」場合、検索エンジンに **正規 URL** を伝えるのが `<link rel="canonical">`。
+
+```ts
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/blog/post-1",
+  },
+};
 ```
 
-このコースの `CLAUDE.md` を見ると、**執筆原則 / レッスン構成テンプレート / 避けたい書き方** が書かれています。
+クエリパラメータ違い / 大文字小文字違いで重複インデックスされないように。
 
-#### `.cursorrules`（Cursor）
+### hreflang（多言語サイト）
 
-Cursor の旧形式（`.cursor/rules` の YAML / MD ファイルが新形式）。
+同じコンテンツを複数言語で出す場合の指定。
 
-```
-- TypeScript で書く
-- React Server Components を優先
-- import path は `@/` のエイリアス
-- テストは Vitest + React Testing Library
-```
-
-#### `.github/copilot-instructions.md`（Copilot）
-
-GitHub Copilot Workspace / Pull Request 用の指示。
-
-#### Cursor / Claude / Copilot 共通の発想
-
-「**良いプロンプト** ではなく、**良いコンテキスト**」が結果を決めます:
-
-- README / ARCHITECTURE.md を整備しておく
-- ファイル名と関数名で **意図を伝える**
-- **PR テンプレート** に「変更の意図」「影響範囲」を書く
-
-「AI に分かりやすいコード」と「人間に分かりやすいコード」は **同じ方向** です。
-
-### MCP（Model Context Protocol）
-
-[MCP](https://modelcontextprotocol.io/) は Anthropic が公開した「**AI に外部ツールを繋ぐ標準**」。
-
-```
-[ Claude / GPT / Cursor ] ←→ [ MCP サーバー ] ←→ [ 外部システム ]
-                                          ├ GitHub
-                                          ├ Slack
-                                          ├ Datadog
-                                          └ 自社 DB / API
+```ts
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/en/about",
+    languages: {
+      "en": "https://example.com/en/about",
+      "ja": "https://example.com/ja/about",
+      "x-default": "https://example.com/en/about",
+    },
+  },
+};
 ```
 
-OpenAI / Google / Anthropic などが採用し、2025〜2026 年で **共通プロトコル** として定着。Claude Code / Cursor / VS Code Copilot などから同じ MCP サーバーを呼べる。
+これがあると Google が「英語ユーザーには英語版、日本語ユーザーには日本語版」を出してくれます。
 
-「自社の DB / 監視 / Slack を **AI から触れる** ようにする」のは MCP サーバーを書くだけ。
+### Core Web Vitals と SEO
 
-### AI 生成コードの落とし穴
+Google は **Core Web Vitals**（**パフォーマンス計測のレッスン**で扱う指標）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せない**。
 
-#### 1. **存在しない API を呼ぶ**（ハルシネーション）
+### よくある事故
 
-例: 「Next.js の `getServerSideProps` を App Router で...」のような **古い API の混入**、または **まったく実在しない関数**。
-
-対策:
-
-- **公式ドキュメントで確認**
-- **TypeScript の型** を信じる（赤字が出るなら間違い）
-- **テストを走らせる**
-
-#### 2. **古い慣習** で書く
-
-学習データのカットオフが原因で、**Pages Router 時代** / **React 17 時代** のコードを出すことがある。
-
-対策:
-
-- `CLAUDE.md` に **「Next.js 16 / React 19 を前提に」** と明記
-- 新機能（Server Actions / Cache Components）を **使うように指示**
-- 出力後に「**最新の構文に書き換えて**」と再依頼
-
-#### 3. **過度な抽象化**
-
-「使いまわせるように」と **早すぎる抽象化** をしがち。
-
-対策:
-
-- 「**3 回出てから抽象化**」をルール化
-- 「**この関数は今 1 回しか使わない、シンプルに**」と明示
-
-#### 4. **エラーハンドリングが過剰**
-
-存在しないエラーケースに **try / catch** を撒く。
-
-対策:
-
-- 「**入力は信頼してよい**」「**バリデーションは別レイヤで**」と伝える
-- 出力後に **不要な try / catch を削る**
-
-#### 5. **テストが抜ける**
-
-「動く」コードを優先して、テストを書かないことがある。
-
-対策:
-
-- 「**実装と一緒にテストも**」と毎回伝える
-- CI で **カバレッジ低下** を検知
-
-#### 6. **セキュリティの抜け**
-
-`.env` の値をログ出力 / SQL インジェクション可能な文字列連結など。
-
-対策:
-
-- **コードレビューで人間が必ず見る**
-- セキュリティ Lint（gitleaks / Snyk）を CI に
-- AI に「**ユーザー入力は信頼しない**」と明示
-
-### 「AI に任せる / 人間がやる」の境界
-
-#### AI が得意
-
-- **定型的なコード**（CRUD / フォーム / バリデーション）
-- **テストの追加**（既存仕様から想定）
-- **リファクタリング**（変数名一括 / 抽象化候補）
-- **ドキュメント生成**（既存コードからの README）
-- **エラーメッセージの読み解き**
-- **学習補助**（「`Promise.allSettled` って何？」）
-
-#### 人間が得意 / 必須
-
-- **要件の合意**（顧客と話してスコープを決める）
-- **アーキテクチャの選択**（Server Component を使うか / DB を選ぶか）
-- **セキュリティ設計**（権限 / 認証フロー）
-- **パフォーマンス計測 → 改善**（実測しないと分からない）
-- **コードレビュー**（生成コードを **本当に動かして** 検証）
-- **倫理 / コンプライアンス**
-
-「**AI が下書き、人間が最終判断**」は今後も変わりません。
-
-### 学習者としての AI 活用
-
-#### 良い使い方
-
-- **「これは何？」** を聞く（古い記事を読むより速い）
-- **コードを写経 → AI に解説** してもらう
-- **エラーメッセージ** を貼って原因を尋ねる
-- **テストデータ** を作ってもらう
-- **逆方向の質問**「この設計の弱点は？」
-
-#### 避けたい使い方
-
-- **「全部書いて」** で投げる（**学びがゼロ**）
-- **理解せずコピペ**（**動いていてもバグの種**）
-- **「最新の React で〜」だけで詳細を書かない**（**期待値が伝わらない**）
-- **AI のコードを **「公式」と扱う**（**間違いはある**）
-
-「**自分で 7 割書く → AI で 3 割補強 → 全部読んで理解**」のサイクルが学びを最大化します。
-
-### Vibe Coding
-
-Andrej Karpathy が広めた **Vibe Coding**（2025 年）= 「**雰囲気でプロンプト → AI 実装 → 動けば OK**」のスタイル。プロトタイピングや個人プロジェクトで広く実践されています。
-
-注意:
-
-- **本番の品質には届かない**（テスト / セキュリティ / 性能の検証が抜ける）
-- 個人プロジェクト / MVP には **超有効**
-- 仕事のコードベースに持ち込む時は **必ず人間レビュー**
-
-### コミュニティ / チームへの影響
-
-- **ペアプロは AI と** が増える
-- **PR レビューは AI が一次** で、**人間が二次** で深掘り
-- **「AI 不要な深いスキル」** に価値が集中する: 設計 / 仕様詰め / 検証 / コーチング
-
-「**AI で代替できる仕事**」と「**できない仕事**」の境界が動き続けるので、**継続的に試して感覚を更新** するしかありません。
+- `og:image` が **相対パス** で実体が読めない → `metadataBase` を設定する
+- `noindex` を本番に持ち込んでしまう → 環境変数で制御する習慣を
+- `sitemap.xml` に **404 の URL** が残る → 動的生成にする
+- 構造化データにスキーマと合わない値を入れる → リッチリザルトテストで検証
+- `canonical` が **自分自身を指していない** → 正しい URL に揃える
 
 ## 演習
 
 ### ゴール
 
-- 自分のプロジェクトに `CLAUDE.md` / `.cursorrules` を整える
-- AI 生成コードを **意図的にレビュー** してミスを発見する
-- 学習補助として AI に質問する練習
+- Next.js プロジェクトに OGP / sitemap / robots / JSON-LD を一通り入れる
+- リッチリザルトテストで構造化データが認識されるところまで持っていく
 
-### 手順 1: `CLAUDE.md` を書く
+### 手順 1: 新規プロジェクト
 
-任意の既存プロジェクトに `CLAUDE.md` を追加します。雛形:
-
-```markdown
-# CLAUDE.md
-
-## プロジェクト概要
-- 簡単な説明
-- 想定ユーザー
-
-## 技術スタック
-- フレームワーク: Next.js 16
-- 言語: TypeScript（strict）
-- スタイル: Tailwind CSS v4
-- パッケージマネージャ: pnpm
-
-## コーディング規約
-- React Server Components を優先
-- 状態管理は最小限（必要なら Zustand）
-- API は tRPC
-
-## ファイル構成
-- src/app/* : App Router
-- src/components/* : 再利用コンポーネント
-- src/lib/* : ユーティリティ
-
-## してはいけない
-- pages/ ディレクトリ（古い）
-- グローバル CSS の追加
-- any の使用
-- console.log を本番に残す
+```bash
+npx create-next-app@latest seo-sample --ts --app
+cd seo-sample
 ```
 
-### 手順 2: AI に「Todo リストを作って」と頼んで観察
+### 手順 2: ルートに metadataBase と OGP
 
-Claude Code / Cursor / Copilot Chat に依頼:
+`app/layout.tsx`:
 
-> Todo を CRUD できる Next.js のページを作ってください
+```tsx
+import type { Metadata } from "next";
 
-出てきたコードを **読み込んで** 評価:
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: { default: "Demo Blog", template: "%s | Demo Blog" },
+  description: "Next.js Metadata API の演習",
+  openGraph: {
+    type: "website",
+    siteName: "Demo Blog",
+    locale: "ja_JP",
+  },
+  twitter: { card: "summary_large_image" },
+};
 
-- [ ] App Router で書かれているか？
-- [ ] Server Component / Client Component の境界は妥当か？
-- [ ] Server Actions を使っているか？
-- [ ] バリデーション（Zod など）はあるか？
-- [ ] 不要な try / catch はないか？
-- [ ] アクセシビリティ（label / role）は考慮されているか？
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="ja"><body>{children}</body></html>;
+}
+```
 
-### 手順 3: 「最新の API で書き直して」と再依頼
+### 手順 3: 動的 OGP 画像
 
-最初の出力が古い API を使っていたら、`CLAUDE.md` を引用しながら依頼:
+`app/opengraph-image.tsx`:
 
-> CLAUDE.md に従って、Server Actions / useActionState を使う形に書き直してください
+```tsx
+import { ImageResponse } from "next/og";
 
-差分を見比べて、**何が変わったか** を確認します。
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
 
-### 手順 4: AI を学習補助に使う
+export default function OG() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          fontSize: 64,
+          background: "linear-gradient(135deg,#1e3a8a,#06b6d4)",
+          color: "white",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        Demo Blog
+      </div>
+    ),
+    { ...size },
+  );
+}
+```
 
-学習中の任意のトピックで:
+### 手順 4: sitemap と robots
 
-> React の useTransition と useDeferredValue の違いを、コード例つきで教えてください
+`app/sitemap.ts`:
 
-説明を読み、**自分で書き直して動かしてみる**。動かしてから「**この実装の弱点は？**」と再質問すると深まります。
+```ts
+import type { MetadataRoute } from "next";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+  ];
+}
+```
+
+`app/robots.ts`:
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [{ userAgent: "*", allow: "/", disallow: "/admin/" }],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
+
+### 手順 5: JSON-LD
+
+`app/page.tsx`:
+
+```tsx
+export default function Home() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Demo Blog",
+    url: "https://example.com",
+  };
+
+  return (
+    <main style={{ padding: 24 }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>Demo Blog</h1>
+      <p>SEO 演習</p>
+    </main>
+  );
+}
+```
+
+### 手順 6: 確認
+
+```bash
+npm run dev
+```
+
+ブラウザで以下にアクセス:
+
+- `http://localhost:3000/sitemap.xml` → XML が出る
+- `http://localhost:3000/robots.txt` → robots テキストが出る
+- `http://localhost:3000/opengraph-image` → 画像が出る
+- ページのソースを表示すると `<meta property="og:image" content="..." />` や `<script type="application/ld+json">` が含まれている
 
 ### 期待出力
 
-- `CLAUDE.md` を読み込んだ AI が、**自分のプロジェクトに合わせた** コードを出すようになる
-- レビューチェックリストで生成コードの **問題点** を 1〜2 個見つけられる
-- 学習補助で「**自分の知識の 1 段深い穴**」が見える
+| パス | 内容 |
+|---|---|
+| `/sitemap.xml` | 2 URL を含む sitemap |
+| `/robots.txt` | `Disallow: /admin/` を含む |
+| `/opengraph-image` | 1200x630 の PNG |
+| ページソース | OGP / Twitter Card / JSON-LD のタグが入る |
 
 ### 変える
 
-- `.cursor/rules/` に YAML 形式のルールを書いて、Cursor で同じことを試す
-- Copilot Chat で同じ依頼をして、**モデル別の差** を観察
-- AI に **テストケースだけ** 作ってもらい、実装は自分で書く
+- `app/blog/[slug]/page.tsx` を作って `generateMetadata` で記事ごとに OGP を変える
+- 動的 OGP 画像で記事タイトルを反映する
+- JSON-LD を `Article` に変えて、リッチリザルトテストで認識されるか試す
 
 ### 自分で書く（任意）
 
-- 自分のリポジトリに **MCP サーバー**（Notion / Slack / 自社 API）を 1 つ繋いでみる
-- AI に PR を作ってもらって、人間レビューで **改善点** を出す
-- AI 生成コードを **テストカバレッジ 100% にする** までレビューを繰り返す
+- `BreadcrumbList` の JSON-LD を作って、検索結果のパンくずを狙う
+- `FAQPage` を作って、よくある質問アコーディオンの表示を狙う
+- 多言語サイトを `hreflang` で構成し、Search Console で確認する
 
 ## まとめ
 
-- **2026 年は AI 前提**。Copilot / Cursor / Claude Code が主要 3 種
-- **コンテキスト**（`CLAUDE.md` / `.cursorrules`）が結果を大きく変える
-- **MCP** で AI と外部システムを標準的に接続
-- 落とし穴: **ハルシネーション / 古い API / 過度な抽象化 / テスト抜け / セキュリティ抜け**
-- AI に任せるのは **定型 / 学習補助 / 一次レビュー**、人間がやるのは **要件 / 設計 / 最終判断**
-- 学習者は「**自分で書く → AI で補強 → 全部読む**」のサイクルが最大の学び
-- **Vibe Coding** はプロトタイプには有効だが、本番には人間レビュー必須
-- このハンズオンの執筆そのものが **Claude Code との協働** で、`CLAUDE.md` がその知恵
+- **OGP / Twitter Card** で SNS シェア時の見栄えを制御。`og:image` は **絶対 URL / 1200x630**
+- Next.js は **Metadata API** に OGP / Twitter Card / canonical / hreflang が揃っている
+- **`metadataBase`** を必ず設定する（相対パス事故防止）
+- `app/opengraph-image.tsx` で **動的 OGP 画像** を JSX で生成
+- `app/sitemap.ts` / `app/robots.ts` でファイルベースに `sitemap.xml` / `robots.txt` を生成
+- **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
+- **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
+- Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない

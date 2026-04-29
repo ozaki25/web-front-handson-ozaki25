@@ -1,146 +1,169 @@
-# lesson11: Flexbox とレスポンシブ
+# lesson11: ボックスモデルで余白を作る
 
 ## ゴール
 
-- Flexbox（`display: flex`）で要素を横並びにできる。
-- `gap` / `justify-content` / `align-items` で間隔や揃え方を指定できる。
-- `@media` メディアクエリで「画面幅が狭いときだけ別のスタイルを当てる」ができる。
+- すべての要素が「コンテンツ + padding + border + margin」でできていることを、ボックスモデルとして説明できる。
+- `margin` / `padding` / `border` / `width` を使い分けて、要素のまわりに余白と枠を作れる。
+- `box-sizing: border-box` の意味と、なぜ必要なのかを説明できる。
 
 ## 解説
 
-### Flexbox とは何か
+### すべての要素は「四角い箱」
 
-ブロック要素は上から下に縦に積まれます。横に並べたいときには、昔はいろいろな技（`float`、`display: inline-block`）が使われていましたが、現代の CSS では **Flexbox**（フレックスボックス）が標準です。
+HTML の各要素は、画面上では四角い箱として配置されます。その箱には、内側から順に 4 つの層があります。これを **ボックスモデル** と呼びます。
 
-Flexbox の使い方は、**並べたい要素たちを包む親要素に `display: flex` を付ける** だけです。これだけで子要素が自動で横並びになります。
-
-```html
-<div class="row">
-  <div class="card">A</div>
-  <div class="card">B</div>
-  <div class="card">C</div>
+<div style="display:inline-block; padding:20px 28px; background:#fde68a; color:#7c2d12; border-radius:6px; font-family:system-ui, sans-serif; margin:8px 0;">
+  <div style="font-size:0.8em; margin-bottom:8px;">margin</div>
+  <div style="padding:20px 28px; background:#fff; border:4px solid #1f2937; border-radius:4px;">
+    <div style="font-size:0.8em; color:#1f2937; margin-bottom:8px;">border</div>
+    <div style="padding:20px 28px; background:#bbf7d0; color:#065f46; border-radius:4px;">
+      <div style="font-size:0.8em; margin-bottom:8px;">padding</div>
+      <div style="padding:16px 32px; background:#dbeafe; color:#1e3a8a; text-align:center; border-radius:4px;">コンテンツ</div>
+    </div>
+  </div>
 </div>
-```
+
+- **コンテンツ**: 中身（文字や画像）そのもの。
+- **padding**: コンテンツと枠線（border）のあいだの余白。**内側の余白**。
+- **border**: 要素の枠線。太さ・種類・色を指定できる。
+- **margin**: 枠線の外側の余白。他の要素とのあいだを空ける **外側の余白**。
+
+この 4 つを組み合わせて「要素の大きさ」と「要素同士の距離」が決まります。
+
+### プロパティの書き方
+
+#### `padding` / `margin`
+
+1 方向だけ指定する書き方と、まとめて指定する書き方（ショートハンド）があります。
 
 ```css
-.row {
-  display: flex;
+/* 1 方向ずつ */
+.card {
+  padding-top: 16px;
+  padding-right: 16px;
+  padding-bottom: 16px;
+  padding-left: 16px;
+}
+
+/* まとめて: すべての方向に同じ値 */
+.card {
+  padding: 16px;
+}
+
+/* まとめて: 上下 / 左右 */
+.card {
+  padding: 16px 24px; /* 上下 16px、左右 24px */
+}
+
+/* まとめて: 上 / 右 / 下 / 左（時計回り） */
+.card {
+  padding: 8px 16px 12px 16px;
 }
 ```
 
-`.row` に `display: flex` を付けると、`.card` 3 つが横に並びます。並びの主軸（デフォルトは左から右）と、主軸に直交する方向（交差軸、デフォルトは上から下）があります。
+`margin` も書き方は同じです。値にマイナスを指定することもできますが、使い所は限られるので本コースでは正の値のみ扱います。
 
-### 間隔を空ける: `gap`
+#### `border`
 
-子要素同士に間隔を空けたいときは、親に `gap` を指定します。
+`border` は「太さ 種類 色」の 3 つをまとめて書くのが基本です。
 
 ```css
-.row {
-  display: flex;
-  gap: 16px;
+.card {
+  border: 1px solid #e0e0e0;
 }
 ```
 
-これで `.card` 同士の間に 16px の空間が入ります。`margin` でも同じことはできますが、端に余分な余白ができないので Flexbox では `gap` が基本です。
+- 太さ: `1px` / `2px` など。
+- 種類: `solid`（実線）/ `dashed`（破線）/ `dotted`（点線）など。普段は `solid`。
+- 色: 「CSS を当てる」で扱ったのと同じ色の書き方。
 
-下のデモで、親の `display: flex` と `gap` の効果を確認できます。`display: flex` を外すと子要素が縦積みに戻り、`gap` を増減すると隙間が変わります。
+1 方向だけ指定するなら `border-top` / `border-right` / `border-bottom` / `border-left` を使います。
+
+### `width` と `height`
+
+要素の幅・高さは `width` / `height` で指定します。指定しなければ、`<p>` や `<div>` など **ブロック要素** は親の幅いっぱいに広がる（幅 100%）のが既定の挙動です。
+
+```css
+.card {
+  width: 300px;
+}
+```
+
+`height` は中身の分だけ縦に伸びるので、普段は指定しません。指定すると中身が溢れたときに切れたりはみ出したりするためです。
+
+### 落とし穴: `width` は「どこまでの幅」？
+
+既定の CSS では、`width: 300px` と書いたとき、この `300px` は **コンテンツ部分の幅** だけを指します。`padding` や `border` はその外側に追加されるため、実際に画面上で占める幅は「300 + padding + border」になります。
+
+```
+width: 300px
+padding: 16px
+border: 1px
+
+実際の画面上の幅: 300 + 16 + 16 + 1 + 1 = 334px
+```
+
+これは直感に反するので、レイアウトの計算がすぐ狂います。
+
+### 解決策: `box-sizing: border-box`
+
+これを解決するのが `box-sizing: border-box` です。`border-box` を指定すると、`width` は **border までを含んだ幅** として扱われます。
+
+```
+box-sizing: border-box
+width: 300px
+padding: 16px
+border: 1px
+
+実際の画面上の幅: 300px（内側を padding と border が食っていく）
+```
+
+ほとんどすべてのモダンな CSS プロジェクトで、**すべての要素に `border-box` を適用する** のが標準作法になっています。本コースでも冒頭で次のルールを入れておきます。
+
+```css
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+```
+
+`*` は全要素にマッチする特殊なセレクタです。`*::before` / `*::after` は CSS で生成する擬似要素を指します（詳しい使い方はコース外）。とりあえず「このおまじないは必ず入れる」と覚えておけば十分です。
+
+下のデモで、同じ `width: 200px` のカードが `box-sizing: content-box`（既定）と `border-box` でどう違うかを見比べてください。左は padding と border の分だけ実寸が膨らんでしまうのに対し、右は 200px ぴったりに収まります。
 
 <LiveDemo
-  height="180px"
+  height="200px"
   :html="`
-<div class='row'>
-  <div class='item'>A</div>
-  <div class='item'>B</div>
-  <div class='item'>C</div>
-</div>
+<div class='card content-box'>content-box（既定）</div>
+<div class='card border-box'>border-box</div>
   `"
   :css="`
 body { padding: 16px; }
-.row { display: flex; gap: 16px; }
-.item {
-  flex: 1;
-  padding: 24px;
-  background: #1f4e79;
-  color: white;
-  text-align: center;
-  border-radius: 4px;
+.card {
+  width: 200px;
+  padding: 16px;
+  border: 4px solid #1f4e79;
+  background: #e3f2fd;
+  margin-bottom: 16px;
 }
+.content-box { box-sizing: content-box; }
+.border-box  { box-sizing: border-box; }
   `"
   :js="``"
 />
 
-### 主軸の揃え方: `justify-content`
+### `margin` の重なり
 
-```css
-.row {
-  display: flex;
-  justify-content: center;
-}
-```
+縦方向に並んだ要素の上下 `margin` は **重なって大きい方だけ** が有効になる、というクセがあります（マージン相殺）。たとえば `<p>` 同士を縦に並べて、両方に `margin-bottom: 16px` / `margin-top: 16px` を指定しても、合計 32px ではなく 16px 分しか空きません。
 
-主な値:
-
-| 値 | 意味 |
-|---|---|
-| `flex-start` | 左寄せ（デフォルト） |
-| `center` | 中央寄せ |
-| `flex-end` | 右寄せ |
-| `space-between` | 両端ぴったり、間を均等 |
-| `space-around` | 両端にも半分の余白、間は均等 |
-
-### 交差軸の揃え方: `align-items`
-
-子要素の高さが違うとき、縦方向の揃え方を指定します。
-
-```css
-.row {
-  display: flex;
-  align-items: center;
-}
-```
-
-主な値:
-
-| 値 | 意味 |
-|---|---|
-| `stretch` | 親の高さまで引き伸ばす（デフォルト） |
-| `flex-start` | 上揃え |
-| `center` | 中央揃え |
-| `flex-end` | 下揃え |
-
-### メディアクエリで画面幅に応じて変える
-
-スマホでも PC でも同じ HTML を使いますが、見た目は画面幅によって変えたい場合があります。例えば **「PC では横並び、スマホでは縦並び」** と切り替えたい、といったケースです。これを実現するのが **メディアクエリ**（`@media`）です。
-
-```css
-/* 画面幅 600px 以下のときだけ適用される */
-@media (max-width: 600px) {
-  .row {
-    flex-direction: column;
-  }
-}
-```
-
-`flex-direction: column` は「主軸を縦方向にする」という指定です。これで子要素が縦に積まれます。
-
-メディアクエリは CSS ファイルのどこにでも書けますが、**同じ要素のスタイルは `@media` より前（= PC 用）に書き、`@media` 内に上書きを書く**（= スマホ用）の順にすると読みやすくなります。
-
-### 配置をうまくやる 3 つの質問
-
-Flexbox で迷ったら自分に 3 つ聞いてみましょう。
-
-1. **何を並べたい？** → 親要素をどれにするか決める（例: カードを包む `.cards`）
-2. **横並び？ 縦並び？** → `flex-direction: row`（デフォルト）か `column` か
-3. **主軸のどの位置に寄せる？** → `justify-content`
-4. **交差軸のどの位置に寄せる？** → `align-items`
-
-最初は `display: flex` と `gap` だけで十分です。`justify-content` / `align-items` は必要になったときに足してください。
+本コースでは深追いしませんが、「縦に並んだ要素の `margin-top` と `margin-bottom` は重なる」と頭の片隅に置いておくと、後でレイアウトが崩れたときの原因に気付けます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。なお、このレッスンでは HTML と CSS を大きく書き直すため、ステップ 1 以降で示す新しいコードで上書きして進めます。手元が無い場合はこの出発点を貼った上でステップ 1 に進んでください。
+これまでのレッスンで作った `index.html` / `styles.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`styles.css` は新規作成してください。
 
 <details>
 <summary>出発点のコード</summary>
@@ -169,8 +192,8 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
       </nav>
     </header>
 
-    <main class="main">
-      <section id="profile" class="card">
+    <main>
+      <section id="profile">
         <h2>プロフィール</h2>
         <img
           src="https://placehold.co/200x200.png"
@@ -184,7 +207,7 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
         </p>
       </section>
 
-      <section id="likes" class="card">
+      <section id="likes">
         <h2>好きなもの</h2>
         <ul>
           <li>コーヒー</li>
@@ -193,7 +216,7 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
         </ul>
       </section>
 
-      <section id="goals" class="card">
+      <section id="goals">
         <h2>今年やりたいこと</h2>
         <ol>
           <li>Next.js で小さなアプリを作る</li>
@@ -202,7 +225,7 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
         </ol>
       </section>
 
-      <section id="links" class="card">
+      <section id="links">
         <h2>お気に入りサイト</h2>
         <ul>
           <li>
@@ -217,7 +240,7 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
         </ul>
       </section>
 
-      <section id="contact" class="card">
+      <section id="contact">
         <h2>お問い合わせ</h2>
         <p>ご連絡はこちらのフォームから。</p>
         <form>
@@ -250,15 +273,7 @@ Flexbox で迷ったら自分に 3 つ聞いてみましょう。
 **`styles.css`**
 
 ```css
-*,
-*::before,
-*::after {
-  box-sizing: border-box;
-}
-
 body {
-  margin: 0;
-  padding: 24px;
   font-family:
     system-ui,
     -apple-system,
@@ -347,36 +362,6 @@ footer {
   font-size: 0.875rem;
 }
 
-.main {
-  max-width: 800px;
-  margin: 0 auto;
-}
-
-.card {
-  background-color: #ffffff;
-  border: 1px solid #e0e0e0;
-  border-radius: 8px;
-  padding: 24px;
-  margin-bottom: 16px;
-}
-
-.card h2 {
-  margin-top: 0;
-}
-
-header {
-  max-width: 800px;
-  margin: 0 auto 24px;
-}
-
-footer {
-  max-width: 800px;
-  margin: 24px auto 0;
-  color: #666666;
-  font-size: 0.875rem;
-  text-align: center;
-}
-
 /* ダークモード対応 */
 @media (prefers-color-scheme: dark) {
   body {
@@ -398,350 +383,189 @@ footer {
   footer {
     color: #999999;
   }
-  .card {
-    background-color: #202020;
-    border-color: #3a3a3a;
-    color: #e0e0e0;
-  }
 }
 ```
 
 </details>
 
-### 到達する完成形のイメージ
+### これまで作ったプロジェクトを使う
 
-PC 幅（600px より広い）:
+これまでのレッスンで作った `index.html` と `styles.css` を開きます。HTML はフォーム含む自己紹介ページ、CSS には文字まわりと色のルールが入っている状態です。
 
-<div style="font-family:system-ui, sans-serif; max-width:520px; margin:8px 0;">
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937; display:flex; justify-content:space-between;">
-    <span>ヘッダー: 私の名前</span>
-    <span>ナビゲーション</span>
-  </div>
-  <div style="display:grid; grid-template-columns:1fr 1fr 1fr; gap:12px; margin:12px 0;">
-    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
-      <div style="font-size:0.85em; color:#475569;">カード 1</div>
-      <div>画像 / 見出し / 本文</div>
-    </div>
-    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
-      <div style="font-size:0.85em; color:#475569;">カード 2</div>
-      <div>画像 / 見出し / 本文</div>
-    </div>
-    <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937;">
-      <div style="font-size:0.85em; color:#475569;">カード 3</div>
-      <div>画像 / 見出し / 本文</div>
-    </div>
-  </div>
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937;">
-    フッター: © 私の名前
-  </div>
-</div>
+### HTML の変更: `<section>` にクラスを付ける
 
-スマホ幅（600px 以下）:
-
-<div style="font-family:system-ui, sans-serif; max-width:220px; margin:8px 0;">
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937;">
-    <div>私の名前</div>
-    <div>ナビゲーション</div>
-  </div>
-  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 1</div>
-  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 2</div>
-  <div style="border:1px solid #64748b; padding:12px; background:#fff; color:#1f2937; margin-top:8px;">カード 3</div>
-  <div style="border:1px solid #64748b; padding:10px 14px; background:#f1f5f9; color:#1f2937; margin-top:8px;">© 私の名前</div>
-</div>
-
-### ステップ 1: HTML の骨格を作る
-
-StackBlitz で新しい Vanilla プロジェクトを作ります（これまでのプロジェクトの続きでも構いません）。`index.html` を以下の内容にしてください。
+カード風にしたいので、`<main>` 内の各 `<section>` に `card` クラスを付け、`<main>` 自体にもクラスを付けます。変更するのは `<main>` 開始タグと各 `<section>` 開始タグだけ。
 
 ```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>私の自己紹介</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <header class="site-header">
-      <h1>私の名前</h1>
-      <nav class="site-nav">
-        <a href="#about">自己紹介</a>
-        <a href="#likes">好きなもの</a>
-        <a href="#contact">問い合わせ</a>
-      </nav>
-    </header>
-
-    <main>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div class="cards">
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label for="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label for="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label for="message">メッセージ</label>
-            <textarea id="message" name="message" rows="4" required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </main>
-
-    <footer class="site-footer">
-      <p>&copy; 私の名前</p>
-    </footer>
-  </body>
-</html>
+<main class="main">
+  <section id="profile" class="card">
+    <h2>自己紹介</h2>
+    <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に進めています。</p>
+  </section>
+  <section id="likes" class="card">
+    <h2>好きなもの</h2>
+    <ul>
+      <li>コーヒー</li>
+      <li>本</li>
+      <li>散歩</li>
+    </ul>
+  </section>
+  <section id="goals" class="card">
+    <h2>目標</h2>
+    <p>小さな Next.js アプリを自分で作れるようになる。</p>
+  </section>
+  <section id="links" class="card">
+    <h2>リンク</h2>
+    <p><a href="https://example.com">お気に入りのサイト</a></p>
+  </section>
+  <section id="contact" class="card">
+    <h2>問い合わせ</h2>
+    <form>
+      <label for="name">お名前</label>
+      <input id="name" name="name" type="text" required />
+      <button type="submit">送信</button>
+    </form>
+  </section>
+</main>
 ```
 
-ポイント:
+（これまでに書いた各 `<section>` の中身をそのまま維持すれば OK です。上は中身の一例として掲載しています。）
 
-- `<section>` を `<main>` の中に 3 つ並べています（`about` / `likes` / `contact`）。
-- `<nav>` にはアンカー `#about` などで同一ページ内移動を入れています。
-- カード 3 枚は `<div class="cards">` で包み、各カードは `<article class="card">` にしています（意味的に「独立した記事のかたまり」なので `<article>` が向いています）。
-- 画像は [placehold.co](https://placehold.co) のプレースホルダを使っています。自分の好きな画像に差し替えても構いません。
+### CSS の変更
 
-### ステップ 2: ベースの CSS を書く
-
-`style.css` を新規作成し、次の内容を書きます。Flexbox はまだ使わず、文字色・背景色・余白だけを整えます。
+`styles.css` の **先頭** に次の 2 ルールを追加します。全体リセットの `*` セレクタと、ページ全体のレイアウト整えです。
 
 ```css
-/* リセットに近い最低限の初期化 */
-* {
+*,
+*::before,
+*::after {
   box-sizing: border-box;
 }
 
 body {
   margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.6;
-  color: #1f2937; /* ダークグレー、白背景との対比で読みやすい */
-  background-color: #f9fafb;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb; /* ライトグレー */
-    background-color: #0b1220; /* ダークネイビー */
-  }
-}
-
-a {
-  color: #2563eb;
-}
-
-a:focus {
-  outline: 3px solid #60a5fa; /* フォーカスリングは消さない */
-  outline-offset: 2px;
-}
-
-h1,
-h2,
-h3 {
-  margin-top: 0;
-}
-
-main {
-  max-width: 960px;
-  margin: 0 auto;
   padding: 24px;
+  font-family:
+    system-ui,
+    -apple-system,
+    "Segoe UI",
+    "Hiragino Sans",
+    "Yu Gothic",
+    sans-serif;
+  color: #333333;
+  line-height: 1.7;
 }
+```
 
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-}
+（これまでの `body` ルールは上で置き換えました。`margin: 0` と `padding: 24px` が追加されている点に注意。）
 
-.site-header h1 {
-  margin: 0;
-}
+そしてファイルの末尾に、`main` と `card` のルールを追加します。
 
-.site-nav a {
-  color: #f9fafb;
-  margin-right: 16px;
+```css
+.main {
+  max-width: 800px;
+  margin: 0 auto; /* 左右 auto で水平方向に中央寄せ */
 }
 
 .card {
   background-color: #ffffff;
-  border: 1px solid #d1d5db;
+  border: 1px solid #e0e0e0;
   border-radius: 8px;
-  padding: 16px;
+  padding: 24px;
+  margin-bottom: 16px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .card {
-    background-color: #111827;
-    border-color: #374151;
-  }
+.card h2 {
+  margin-top: 0; /* カード上端との余白がダブらないように */
 }
 
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
+header {
+  max-width: 800px;
+  margin: 0 auto 24px;
 }
 
-.site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
+footer {
+  max-width: 800px;
+  margin: 24px auto 0;
+  color: #666666;
+  font-size: 0.875rem;
   text-align: center;
 }
-```
 
-ここまでの **期待出力**: 自己紹介ページが、カードも含めて「縦に積まれた」状態で表示されます。ヘッダーとフッターはダークブルー背景、本文は薄いグレー背景です。ダークモードでも読めることを DevTools の「デバイスツールバー」→「メディアを確認」で確認できます。
-
-### ステップ 3: ヘッダーを Flexbox で左右に分ける
-
-`.site-header` に `display: flex` を付け、`<h1>` を左、`<nav>` を右に配置します。`style.css` の `.site-header` のブロックを次のように書き換えます。
-
-```css
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-```
-
-**期待出力**: ヘッダーの `<h1>` が左端、`<nav>` の 3 リンクが右端に寄ります。中央は空きます。`align-items: center` のおかげで縦中央で揃います。
-
-### ステップ 4: カード 3 枚を Flexbox で横並びにする
-
-`.cards` に `display: flex` と `gap` を付けます。
-
-```css
-.cards {
-  display: flex;
-  gap: 16px;
-}
-
-.cards .card {
-  flex: 1;
-}
-```
-
-`flex: 1` は「利用可能な幅を子要素で等分する」という指定です。これで 3 枚のカードが同じ幅で並びます。
-
-**期待出力**: カード 3 枚が横並び、間に 16px の隙間、幅は均等になります。
-
-::: tip 補足: 「カードを敷き詰める」レイアウトは本来 Grid が自然
-本レッスンではまず Flexbox の使い方を体験するために、カードも Flex で横並びにしています。ただし「カードを画面幅に応じて折り返しながら敷き詰める」のは **2 次元レイアウト** なので、実務では CSS Grid を使うのが自然です。「CSS Grid で二次元レイアウト」で、この `.cards` 部分を Grid に書き換え、`@media` を書かなくても自動で折り返す形に育てます。
-:::
-
-### ステップ 5: スマホ幅で縦並びに切り替える
-
-`style.css` の末尾に次を追加します。
-
-```css
-@media (max-width: 600px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+/* ダークモード対応: カードの白背景・枠色を上書き */
+@media (prefers-color-scheme: dark) {
+  .card {
+    background-color: #202020;
+    border-color: #3a3a3a;
+    color: #e0e0e0;
   }
-
-  .site-nav a {
-    margin-right: 0;
-    margin-top: 4px;
-    display: inline-block;
-  }
-
-  .cards {
-    flex-direction: column;
+  footer {
+    color: #999999;
   }
 }
 ```
 
-- ヘッダーも `flex-direction: column` で縦並びにします（`<h1>` の下にナビが並びます）。
-- カードも縦並びにします。
+補足:
 
-StackBlitz のプレビュー画面を左右に縮めて、幅が 600px を切った瞬間にレイアウトが切り替わることを確認してください。DevTools の「デバイスツールバー」（Chrome では `Ctrl+Shift+M` / `Cmd+Shift+M`）でスマホサイズに切り替えても同じ挙動になります。
+- `max-width: 800px;`: 要素の幅の上限を 800px にする。画面が狭ければそれより小さくなる（伸縮する）。「Flexbox とレスポンシブ」のレスポンシブに繋がる考え方。
+- `margin: 0 auto;`: 上下 0、左右 auto。親の幅が要素より広ければ、左右の余白が均等に振り分けられて中央寄せになる。
+- `border-radius: 8px;`: 角を少し丸くする。カードらしさが出る。
+- `.card h2` は「`.card` の中にある `<h2>`」を指すセレクタ（**子孫セレクタ**）。セレクタをスペースで区切ると「この中の」の意味になる。
 
-### ステップ 6: フォーム欄を少し整える
+### 期待出力
 
-最後に、`<form>` の入力欄を見やすく整えます。`style.css` に次を足してください。
+- ページ全体の左右に 24px の余白が付き、中身が画面中央寄り（最大 800px 幅）に整列する。
+- `<header>`、各 `<section>`（カード）、`<footer>` がそれぞれ独立した箱のように見える。
+- カードは白背景、薄いグレーの枠、少し丸い角で、内側に 24px の余白がある。
+- カード同士は 16px の隙間が空いて縦に並ぶ。
+- `<footer>` は中央揃えで表示される。
+- DevTools の Elements パネルで `.card` を選ぶと、右側「Computed」タブの下に **ボックスモデル図** が表示される。content / padding / border / margin の大きさが数値付きで確認できる。
+
+### DevTools のボックスモデル図
+
+1. Elements で `<section class="card">` を 1 つ選ぶ。
+2. Styles パネルを下までスクロール、または「Computed」タブを開く。
+3. ボックスモデル図（青・緑・黄色・オレンジの入れ子の四角）が見える。
+4. 一番外がオレンジの `margin`、黄色が `border`、緑が `padding`、青が `content` の領域。それぞれの値が数値で書かれている。
+5. カードのなかをクリックすると、プレビュー側にも同じ配色でレイアウトオーバーレイが出る。
+
+### 変えてみる
+
+1. `.card` の `padding` を `8px` に下げて保存すると、文字が枠に近づいて窮屈に見える。`40px` に上げると中身がゆったりする。好みの値を探す。
+2. `.card` の `margin-bottom` を `0` にするとカード同士がくっつく。`32px` にするとゆとりが出る。
+3. 試しに、ファイル先頭の `box-sizing: border-box;` のルールを **一時的に削除** して保存する。`.card` の `padding: 24px` が加算されて、800px の制限を超える幅になる（横スクロールが出る場合あり）。確認後は必ず戻す。これが `border-box` の効果を体感する瞬間。
+4. `.card` の `border-radius` を `0` / `24px` / `50px` と変えて、カードの角の表情が変わるのを楽しむ。
+
+### 自分で書く
+
+`<header>` にもカード風の装飾を付けてみます。`header` ルールを追加してください。
+
+ヒント:
 
 ```css
-form div {
-  margin-bottom: 12px;
+header {
+  max-width: 800px;
+  margin: 0 auto 24px;
+  background-color: #ffffff;
+  border: 1px solid #e0e0e0;
+  border-radius: 8px;
+  padding: 24px;
 }
+```
 
-form label {
-  display: block;
-  margin-bottom: 4px;
-  font-weight: bold;
-}
+保存すると、`<header>` も白いカードとして表示されます。
 
-form input,
-form textarea {
-  width: 100%;
-  padding: 8px;
-  border: 1px solid #9ca3af;
-  border-radius: 4px;
-  font: inherit;
-}
+また、`header h1` に `margin-top: 0;` を追加して、見出しがカードの上に張り付くようにしてもよいでしょう。
 
-form input:focus,
-form textarea:focus {
-  outline: 3px solid #60a5fa;
-  outline-offset: 1px;
-}
-
-form button {
-  padding: 8px 16px;
-  background-color: #2563eb;
-  color: #ffffff;
-  border: none;
-  border-radius: 4px;
-  font-weight: bold;
-  cursor: pointer;
-}
-
-form button:focus {
-  outline: 3px solid #60a5fa;
-  outline-offset: 2px;
+```css
+header h1 {
+  margin-top: 0;
 }
 ```
 
 ## まとめ
 
-- Flexbox（`display: flex`）で要素を横並びにできる
-- `gap` / `justify-content` / `align-items` で間隔や揃え方を指定できる
-- `@media (max-width)` で画面幅に応じて Flex 方向を切り替えられる
+- 要素は「content + padding + border + margin」の 4 層の箱（ボックスモデル）で構成される。
+- `padding` は内側の余白、`margin` は外側の余白、`border` は枠線。ショートハンドで上下左右を一度に指定できる。
+- `width` の既定の計算方式は直感に反するので、`box-sizing: border-box` を全要素に適用する。
+- `margin: 0 auto;` と `max-width` の組み合わせで、要素を水平方向に中央寄せしつつ画面幅に合わせて縮められる。

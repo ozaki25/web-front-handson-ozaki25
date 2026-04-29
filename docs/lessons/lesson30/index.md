@@ -1,160 +1,119 @@
-# lesson30: try / catch でエラー処理
+# lesson30: 非同期処理の基本
 
 <script setup>
 const demoJs = `
-const output = document.getElementById('output');
-
-function run() {
-  const raw = '{ broken json';
-  try {
-    const data = JSON.parse(raw);
-    output.textContent = '成功: ' + JSON.stringify(data);
-  } catch (error) {
-    output.textContent =
-      'catch しました: ' + error.name + ' / ' + error.message;
-  } finally {
-    output.textContent += ' (finally まで到達)';
-  }
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-document.getElementById('btn').addEventListener('click', run);
+async function main() {
+  console.log('start');
+  await wait(1000);
+  console.log('1 秒後');
+  await wait(1000);
+  console.log('さらに 1 秒後（計 2 秒）');
+  console.log('end');
+}
+
+main();
 `
 </script>
 
 ## ゴール
 
-- プログラムが途中で止まってしまう原因を知り、例外処理が必要な場面を言葉にできる
-- `try` / `catch` / `finally` の構文と実行順を書ける
-- `Error` オブジェクトから `message` や `name` を取り出せる
-- `throw new Error(...)` で自分でエラーを投げられる
-- 壊れた JSON を `JSON.parse` に渡して例外を受け止められる
+- 「時間がかかる処理」と「すぐ終わる処理」の違いを理解する
+- `async` / `await` を使って「結果を待ってから続ける」書き方ができる
+- Promise を「まだ完了していない結果を表す箱」として直感的に理解する
 
 ## 解説
 
-### なぜエラー処理が必要か
+### 同期と非同期
 
-普段書いている JS は、処理の途中で **例外**（Exception） が飛ぶことがあります。例外が飛ぶと、その行より下は実行されず、キャッチされなければ以降の全処理が止まります。
-
-例外が飛ぶ代表的な場面は次のようなものです。
-
-- 壊れた文字列を `JSON.parse` に渡す（構文エラー）
-- ネットワークが切れた状態で `fetch` する（通信エラー）
-- 想定外の入力（`undefined` のプロパティを読む、ゼロ除算以外の不整合など）
-- 自分で `throw` したカスタムエラー
-
-ここで **例外をちゃんと受け止める** 仕組みが `try` / `catch` です。
-
-### `try` / `catch` / `finally` の構文
-
-基本形は次のとおりです。
+ここまで書いてきた処理は、上から順にすぐ実行されていました。これを **同期処理** と呼びます。
 
 ```js
-try {
-  // 例外が起きるかもしれない処理
-} catch (error) {
-  // 例外が起きたときだけ実行される
-} finally {
-  // 例外の有無に関係なく最後に実行される
+console.log("A");
+console.log("B");
+console.log("C");
+// 出力: A → B → C
+```
+
+一方で、「ネットワーク通信」「一定時間待つ」など、**時間がかかる処理** もあります。こうした処理は、途中で止まらず後続のコードを先に進めておく仕組みになっています。これを **非同期処理** と呼びます。
+
+```js
+console.log("A");
+setTimeout(() => {
+  console.log("B");
+}, 1000);
+console.log("C");
+// 出力: A → C → （1秒後に）B
+```
+
+`setTimeout(関数, ミリ秒)` は「指定時間後に関数を呼ぶ」ブラウザの機能です。1 秒待っている間に `C` が先に出る、というのが非同期の挙動です。
+
+### Promise というもの
+
+非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise**（プロミス） という仕組みがあります。
+
+- `fetch` は「結果そのもの」ではなく「Promise」を返す
+- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
+- Promise は「いつか結果が入る箱」
+- 結果を取り出すには「箱が埋まるのを待つ」必要がある
+
+本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
+
+> **補足: 本レッスンで Promise を返すのは `wait(ms)` だけ**: 「Promise を返す処理」がどれかを今この時点で見分ける必要はありません。本レッスンの演習では `wait(ms)` 1 つだけが Promise を返すと覚えれば十分です。
+
+### `async` / `await`
+
+関数の前に `async` と書き、Promise を返す処理の前に `await` と書くと、「結果が返ってくるのを待ってから続きを実行」できます。
+
+```js
+async function main() {
+  console.log("start");
+  await wait(1000);   // 1 秒待つ
+  console.log("end"); // 1 秒後に実行される
+}
+
+main();
+```
+
+- `async function` は「中で `await` を使える関数」
+- `await Promise` は「その Promise の結果が返るまで待つ」
+- `await` は `async function` の中でしか使えない
+
+### `wait(ms)` 関数（コピペで使う）
+
+「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
+
+```js
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 ```
 
-- `try` ブロックの中で例外が飛んだ瞬間、実行は `catch` に飛びます
-- `catch` の引数 `error` には **投げられた値**（通常は `Error` オブジェクト）が入ります
-- `finally` は例外があろうとなかろうと最後に必ず走ります
-- `catch` と `finally` は **どちらかだけでも OK** です
+この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
 
-### `Error` オブジェクト
-
-例外としてよく投げられるのは `Error` オブジェクトです。次のプロパティを持ちます。
-
-- `error.message`: 人間向けのエラーメッセージ
-- `error.name`: エラーの種類（`"SyntaxError"` / `"TypeError"` など）
-- `error.stack`: スタックトレース（どのファイルの何行目で起きたかの情報、デバッグ用）
-
-```js
-try {
-  JSON.parse("{ broken");
-} catch (error) {
-  console.log(error.name);    // "SyntaxError"
-  console.log(error.message); // "Unexpected token ..." など
-}
-```
-
-### `throw` で自分でエラーを投げる
-
-関数の中で「この引数はおかしいので、呼び出し元に決めてもらう」ときは、`throw` を使います。
-
-```js
-function divide(a, b) {
-  if (b === 0) {
-    throw new Error("0 で割ることはできません");
-  }
-  return a / b;
-}
-
-try {
-  const result = divide(10, 0);
-  console.log(result);
-} catch (error) {
-  console.log("失敗:", error.message); // "失敗: 0 で割ることはできません"
-}
-```
-
-- `throw new Error("メッセージ")` がお作法です
-- `throw "文字列"` のように文字列をそのまま投げることもできますが、スタックトレースが取れないので `Error` オブジェクトを投げるのが基本です
-
-### 実行順を目で追う
-
-`try` / `catch` / `finally` の実行順を 1 回見ておくと誤解しません。
-
-```js
-function safeParse(raw) {
-  try {
-    console.log("A: parse を試す");
-    const data = JSON.parse(raw);
-    console.log("B: parse 成功");
-    return data;
-  } catch (error) {
-    console.log("C: parse 失敗", error.message);
-    return null;
-  } finally {
-    console.log("D: 片付け処理");
-  }
-}
-
-safeParse('{"ok":true}'); // A → B → D
-safeParse("{ broken");     // A → C → D
-```
-
-成功時も失敗時も `finally` は必ず走ります。ファイルを閉じる / ローディング表示を消すなど、**片付けたいこと** を書く場所です。
-
-### 壊れた JSON を受け止める最小例
-
-実際に壊れた JSON を `try` / `catch` で受ける様子を下のデモで見てください。ボタンを押すと、パースに失敗したエラーをキャッチして表示します。
+下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
 
 <LiveDemo
-  height="180px"
-  :html="`
-<button id='btn'>壊れた JSON をパースする</button>
-<p id='output'>（ここに結果が出ます）</p>
-  `"
-  :css="`
-body { padding: 16px; font-family: system-ui; }
-button { padding: 8px 16px; font-size: 1rem; cursor: pointer; }
-p { margin-top: 12px; }
-  `"
+  height="240px"
+  :html="`<p>await が実際に時間を待つ様子:</p>`"
+  :css="``"
   :js="demoJs"
 />
 
-### catch しなかったらどうなるか
+### 次への橋渡し
 
-`try` / `catch` を書かずに例外を投げると、ブラウザ Console に赤字で「Uncaught ...」と表示され、そこから下の処理が **一切走らなくなります**。ページ全体の JS が止まってしまうので、**ユーザー入力や外部データを扱う場所では必ず囲む** のが鉄則です。
+**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+
+「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` / `storage.js` の 3 ファイル構成で進めます。「import / export でモジュール化」で作った `storage.js` を出発点にして、壊れた JSON に強くする流れです。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「これまでに作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
 
 <details>
 <summary>出発点のコード</summary>
@@ -167,12 +126,12 @@ p { margin-top: 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson30</title>
+    <title>lesson29</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson30: try / catch</h1>
-    <pre id="log"></pre>
+    <h1>lesson29: import / export</h1>
+    <ul id="list"></ul>
   </body>
 </html>
 ```
@@ -180,49 +139,78 @@ p { margin-top: 12px; }
 **`storage.js`**
 
 ```js
-const STORAGE_KEY = "try-catch-demo";
+const STORAGE_KEY = "module-todos";
 
-export function loadValue() {
+export function loadTodos() {
   const raw = localStorage.getItem(STORAGE_KEY);
   if (raw === null) {
-    return null;
+    return [];
   }
-  return JSON.parse(raw);
+  try {
+    const parsed = JSON.parse(raw);
+    if (Array.isArray(parsed)) {
+      return parsed;
+    }
+    return [];
+  } catch (error) {
+    console.log("保存データの読み込みに失敗しました");
+    console.log(error);
+    return [];
+  }
 }
 
-export function saveValue(value) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
+export function saveTodos(todos) {
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
+}
+```
+
+**`render.js`**
+
+```js
+export function renderTodos(listElement, todos) {
+  listElement.textContent = "";
+  for (const todo of todos) {
+    const li = document.createElement("li");
+    li.textContent = todo.text;
+    listElement.appendChild(li);
+  }
 }
 ```
 
 **`main.js`**
 
 ```js
-import { loadValue, saveValue } from "./storage.js";
+import { loadTodos, saveTodos } from "./storage.js";
+import { renderTodos } from "./render.js";
 
-saveValue({ name: "Alice", age: 20 });
+const list = document.querySelector("#list");
 
-const value = loadValue();
-console.log(value);
+let todos = loadTodos();
+
+if (todos.length === 0) {
+  todos = [
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "本を読む" },
+    { id: "a3", text: "掃除する" },
+  ];
+  saveTodos(todos);
+}
+
+renderTodos(list, todos);
 ```
 
 </details>
 
 ### ゴール
 
-- `storage.js` の `loadValue` を `try` / `catch` で保護し、壊れたデータのときは既定値（`null`）を返す
-- `main.js` から `divide(a, b)` という自作関数を呼び、`b === 0` のときは `throw` して `catch` で拾う
-- Console に「何が起きたか」が日本語で表示される
+- `wait` 関数をコピペで用意し、1 秒ごとにメッセージを表示するプログラムを作る
 
 ### 手順
 
-1. `storage.js` の `loadValue` を、例外に強い形へ書き換える
-2. `main.js` に `divide` 関数を追加し、呼び出しを `try` / `catch` で囲む
-3. わざと壊れた値を `localStorage.setItem` で入れてリロードし、既定値が返ることを確かめる
+1. `index.html` のタイトルを `lesson30` に変える
+2. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
 
-### 主要ファイルの完成形
-
-**`index.html`**
+### `index.html`
 
 ```html
 <!DOCTYPE html>
@@ -231,105 +219,70 @@ console.log(value);
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>lesson30</title>
-    <script type="module" src="./main.js"></script>
+    <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson30: try / catch</h1>
-    <pre id="log"></pre>
+    <h1>lesson30: 非同期処理の基本</h1>
   </body>
 </html>
 ```
 
-**`storage.js`**
+### `script.js`
 
 ```js
-const STORAGE_KEY = "try-catch-demo";
-
-export function loadValue() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return null;
-  }
-  try {
-    return JSON.parse(raw);
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error.name, error.message);
-    return null;
-  }
+function wait(ms) {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
-export function saveValue(value) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(value));
-}
-```
-
-**`main.js`**
-
-```js
-import { loadValue, saveValue } from "./storage.js";
-
-function divide(a, b) {
-  if (b === 0) {
-    throw new Error("0 で割ることはできません");
-  }
-  return a / b;
+async function main() {
+  console.log("start");
+  await wait(1000);
+  console.log("1 秒経過");
+  await wait(1000);
+  console.log("2 秒経過");
+  await wait(1000);
+  console.log("3 秒経過");
+  console.log("end");
 }
 
-// 1. 自作エラーを投げて受け取る
-try {
-  const result = divide(10, 0);
-  console.log("計算結果:", result);
-} catch (error) {
-  console.log("divide が失敗:", error.message);
-} finally {
-  console.log("divide の後処理");
-}
+main();
 
-// 2. 保存と読み出し（正常系）
-saveValue({ name: "Alice", age: 20 });
-const ok = loadValue();
-console.log("読み込み結果:", ok);
-
-// 3. わざと壊れたデータを入れてから読み出す
-localStorage.setItem("try-catch-demo", "{ broken");
-const broken = loadValue();
-console.log("壊れたとき:", broken);
+console.log("main を呼んだ後のコード");
 ```
 
 ### 期待出力
 
-Console に次のような行が出ます（エラーメッセージの文言はブラウザによって少し変わります）。
+Console に、1 秒ごとに以下が順に追加されます。
 
 ```
-divide が失敗: 0 で割ることはできません
-divide の後処理
-読み込み結果: {name: 'Alice', age: 20}
-保存データの読み込みに失敗しました
-SyntaxError <壊れた JSON のメッセージ>
-壊れたとき: null
+start
+main を呼んだ後のコード
+1 秒経過
+2 秒経過
+3 秒経過
+end
 ```
 
-- 赤字の「Uncaught ...」は **出ない**。出ていたら `try` / `catch` で囲み損ねている
-- `finally` の「divide の後処理」が、成功・失敗どちらでも表示される
+ポイント:
+
+- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
+- `main` の内部は `await` があるので、順番に待ちながら進む
+- 合計で「約 3 秒」かけて順番にログが出る
 
 ### 変える
 
-- `divide(10, 2)` に書き換える → `divide が失敗` の行が消え、`計算結果: 5` と出る。`finally` は変わらず出る
-- `throw new Error(...)` の引数メッセージを好きな日本語に変える → `catch` 側の `error.message` がそれになる
-- `storage.js` の `return null;` を `return [];` に変える → 壊れたときに空配列が返るようになる
+- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
+- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
+- `main()` の呼び出しを削除すると、何も実行されないことを確認
 
 ### 自分で書く
 
-次の 2 つを順にやってみる。慣れていないうちは 1 つだけでも構わない。
-
-- `main.js` に `parseNumber(text)` という関数を作る。`text` が数値に変換できないとき（`Number(text)` が `NaN`）は `throw new Error("数値ではありません")`。呼び出し側で `try` / `catch` する
-- `storage.js` の `saveValue` にも `try` / `catch` を入れる。`localStorage` の容量オーバーなどで失敗した場合に `console.log` で気付けるようにする
+- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
+- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
 
 ## まとめ
 
-- 例外は放置するとそこから先の処理が全部止まる
-- `try` / `catch` / `finally` で受け止められる。`finally` は成功・失敗どちらでも最後に走る
-- `Error` オブジェクトは `name` / `message` / `stack` を持つ
-- `throw new Error("...")` で自分でもエラーを投げられる
-- 外部データ（`localStorage` / `fetch` の結果 / ユーザー入力）を扱う場所は、ほぼ例外なく `try` / `catch` で囲む
+- 同期は「上から順にすぐ実行」、非同期は「時間がかかる処理を待たずに先へ進む」
+- 非同期処理の結果は Promise という「まだ完了していない結果を表す箱」で返る
+- `async` 関数の中で `await Promise` すると、結果が返るまで待てる
+- `new Promise(...)` は自作しない。`wait` などはコピペで用意して使う

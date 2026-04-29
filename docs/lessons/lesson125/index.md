@@ -1,389 +1,561 @@
-# lesson125: IndexedDB 入門
+# lesson125: Service Worker と PWA 深掘り
 
 ## ゴール
 
-- IndexedDB が `localStorage` と何が違うか説明できる
-- 生 API の用語（database / objectStore / transaction / cursor）を読める
-- `idb` ライブラリで Promise ベースの最小コードを書ける
-- `Dexie.js` のクラス指向 API の利点を理解する
-- ユースケース（オフライン作業 / 大量データキャッシュ）を判断できる
+- Service Worker の **ライフサイクル**（install / activate / fetch）を理解する
+- Workbox の **キャッシュ戦略**（CacheFirst / NetworkFirst / StaleWhileRevalidate）を選べる
+- オフライン対応（fallback ページ）の最小実装ができる
+- Web Push 通知の流れを大づかみに掴む
+- `manifest.webmanifest` の主要フィールドが分かる
 
 ## 解説
 
-### `localStorage` の限界
+### PWA とは
 
-lesson27 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+「**Progressive Web App**」= Web を **アプリのように扱う** ための仕組みの総称。本講座のドキュメントサイト自体も `@vite-pwa/vitepress` で PWA 化済みで、デスクトップ / モバイルから **インストール** できます。
 
-- **容量が小さい**（オリジン全体で 5〜10MB）
-- **値は文字列だけ**（オブジェクトは JSON 化が必要）
-- **同期 API**（読み書きで UI が止まる）
-- **検索 / インデックスがない**
-- **トランザクションがない**
+PWA の柱:
 
-「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
+1. **Service Worker**（バックグラウンドのスクリプト）
+2. **Web App Manifest**（インストール時のメタデータ）
+3. **HTTPS**（必須）
+4. インストール可能 / オフライン対応 / 通知
 
-### IndexedDB とは
+### Service Worker とは
 
-ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
+**ブラウザのバックグラウンドで動く、ネットワークプロキシ的な JavaScript**。ページから独立して動き、`fetch` イベントを **横取り** してキャッシュ応答 / カスタム応答ができます。
 
-- **容量は数十 MB 〜 GB クラス**（ブラウザによる）
-- **オブジェクトをそのまま** 保存（structured clone）
-- **完全に非同期**（イベント / Promise）
-- **インデックスでの検索** が可能
-- **トランザクション** でアトミック操作
-- **Service Worker からも使える**
+特徴:
 
-### 用語
+- **DOM にアクセスできない**（ワーカー）
+- **HTTPS 必須**（localhost は例外）
+- **同一オリジン** に限定
+- **永続的** に動き、ページが閉じても残る（バックグラウンドで通知 / 同期）
 
-| 用語 | 意味 |
-|---|---|
-| **Database** | 1 つの DB。複数の objectStore を持つ |
-| **Object Store** | テーブル / コレクションに相当 |
-| **Key Path** | レコードの主キーフィールド（`id` 等） |
-| **Index** | 検索を速くする補助インデックス |
-| **Transaction** | 読み書きをまとめる単位（`readonly` / `readwrite`） |
-| **Cursor** | 範囲走査するイテレータ |
+### ライフサイクル
 
-### 生 API の最小例
+3 つの状態を順に行き来します。
 
-```js
-const open = indexedDB.open("my-db", 1);
-
-open.onupgradeneeded = (event) => {
-  const db = event.target.result;
-  const store = db.createObjectStore("posts", { keyPath: "id" });
-  store.createIndex("by-author", "author");
-};
-
-open.onsuccess = (event) => {
-  const db = event.target.result;
-
-  const tx = db.transaction("posts", "readwrite");
-  const store = tx.objectStore("posts");
-  store.put({ id: "1", title: "Hello", author: "Alice" });
-
-  tx.oncomplete = () => console.log("保存完了");
-};
+```
+[ install ] → [ activate ] → [ idle / fetch / message ]
+                                       ↑
+                                       │（更新時）新 SW が install
 ```
 
-ポイント:
+#### `install`
 
-- `open` の **`onupgradeneeded`** でスキーマを定義（version を上げると再実行）
-- `transaction(name, mode)` で操作する store を選ぶ
-- `put` / `get` / `delete` / `getAll` などのメソッドはイベントハンドラで結果を受ける
+「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
 
-**生 API は冗長で書きづらい** ので、ラッパーを使うのが普通です。
+```js
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((cache) =>
+      cache.addAll(["/", "/index.html", "/styles.css", "/app.js"]),
+    ),
+  );
+});
+```
 
-### `idb`（Promise ラッパー）
+#### `activate`
 
-[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
+「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
+
+```js
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== "v1").map((k) => caches.delete(k))),
+    ),
+  );
+});
+```
+
+#### `fetch`
+
+「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
+
+```js
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((res) => res || fetch(event.request)),
+  );
+});
+```
+
+### キャッシュ戦略（Workbox 風）
+
+リソース別に **どんな順序でキャッシュ / ネットワークを使うか** を決める戦略。
+
+| 戦略 | 流れ | 適切なリソース |
+|---|---|---|
+| **CacheFirst** | キャッシュ → なければネット | フォント / 画像 / 不変アセット |
+| **NetworkFirst** | ネット → 失敗したらキャッシュ | API レスポンス / HTML（最新優先） |
+| **StaleWhileRevalidate** | キャッシュ即返却 + 裏でネット更新 | 一覧 / プロフィール画像（やや古くて OK） |
+| **NetworkOnly** | ネットのみ | POST / 認証など |
+| **CacheOnly** | キャッシュのみ | 完全オフライン専用ページ |
+
+#### CacheFirst の例
+
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.destination === "image") {
+    event.respondWith(
+      caches.match(event.request).then((res) =>
+        res || fetch(event.request).then((networkRes) => {
+          const clone = networkRes.clone();
+          caches.open("images").then((c) => c.put(event.request, clone));
+          return networkRes;
+        }),
+      ),
+    );
+  }
+});
+```
+
+#### NetworkFirst の例
+
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open("api").then((c) => c.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+  }
+});
+```
+
+### Workbox
+
+Google が出している **キャッシュ戦略のヘルパー** ライブラリ。生で書くと冗長な処理を **数行で** 表現できます。
+
+```js
+// sw.js
+import { precacheAndRoute } from "workbox-precaching";
+import { registerRoute } from "workbox-routing";
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from "workbox-strategies";
+import { ExpirationPlugin } from "workbox-expiration";
+
+precacheAndRoute(self.__WB_MANIFEST);
+
+registerRoute(
+  ({ request }) => request.destination === "image",
+  new CacheFirst({
+    cacheName: "images",
+    plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 3600 })],
+  }),
+);
+
+registerRoute(
+  ({ url }) => url.pathname.startsWith("/api/"),
+  new NetworkFirst({ cacheName: "api", networkTimeoutSeconds: 3 }),
+);
+
+registerRoute(
+  ({ request }) => request.destination === "script" || request.destination === "style",
+  new StaleWhileRevalidate({ cacheName: "assets" }),
+);
+```
+
+### Vite / Next.js での導入
+
+#### Vite + `vite-plugin-pwa`
 
 ```bash
-npm install idb
+npm install -D vite-plugin-pwa
 ```
 
 ```ts
-import { openDB, DBSchema } from "idb";
+// vite.config.ts
+import { VitePWA } from "vite-plugin-pwa";
 
-interface MyDB extends DBSchema {
-  posts: {
-    key: string;
-    value: { id: string; title: string; author: string };
-    indexes: { "by-author": string };
-  };
-}
+export default defineConfig({
+  plugins: [
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "My App",
+        short_name: "App",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+      },
+    }),
+  ],
+});
+```
 
-const db = await openDB<MyDB>("my-db", 1, {
-  upgrade(db) {
-    const store = db.createObjectStore("posts", { keyPath: "id" });
-    store.createIndex("by-author", "author");
-  },
+#### Next.js + `@ducanh2912/next-pwa` / `serwist`
+
+Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
+
+```bash
+npm install @serwist/next serwist
+```
+
+`next.config.ts`:
+
+```ts
+import withSerwistInit from "@serwist/next";
+
+const withSerwist = withSerwistInit({
+  swSrc: "src/sw.ts",
+  swDest: "public/sw.js",
 });
 
-await db.put("posts", { id: "1", title: "Hello", author: "Alice" });
-const post = await db.get("posts", "1");
-const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
+export default withSerwist({});
 ```
 
-`DBSchema` を使うと **型付きの API** になり、IDE 補完が効きます。
-
-### `Dexie.js`（クラス指向）
-
-[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
-
-```bash
-npm install dexie
-```
+`src/sw.ts`:
 
 ```ts
-import Dexie, { Table } from "dexie";
+import { defaultCache } from "@serwist/next/worker";
+import { Serwist } from "serwist";
 
-interface Post {
-  id?: number;
-  title: string;
-  author: string;
-  createdAt: number;
-}
+declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
 
-class MyDB extends Dexie {
-  posts!: Table<Post, number>;
-  constructor() {
-    super("my-db");
-    this.version(1).stores({
-      posts: "++id, author, createdAt",
-    });
-  }
-}
-
-const db = new MyDB();
-
-await db.posts.add({ title: "Hello", author: "Alice", createdAt: Date.now() });
-
-const aliceLatest = await db.posts
-  .where("author").equals("Alice")
-  .reverse()
-  .sortBy("createdAt");
+new Serwist({
+  precacheEntries: self.__SW_MANIFEST,
+  skipWaiting: true,
+  clientsClaim: true,
+  navigationPreload: true,
+  runtimeCaching: defaultCache,
+}).addEventListeners();
 ```
 
-ポイント:
+### オフライン対応
 
-- `++id` は **自動採番** の主キー
-- `stores` の文字列で **インデックスを宣言**
-- `where().equals().reverse().sortBy()` のような **チェーン** が書ける
-- React 用 hooks（`useLiveQuery`）も提供される
+最小例: ネットが切れた時に「オフライン画面」を出す。
 
-```tsx
-import { useLiveQuery } from "dexie-react-hooks";
+```js
+const OFFLINE_URL = "/offline.html";
 
-function PostList() {
-  const posts = useLiveQuery(() => db.posts.toArray(), []);
-  return (
-    <ul>
-      {posts?.map((p) => <li key={p.id}>{p.title}</li>)}
-    </ul>
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((c) => c.add(OFFLINE_URL)),
   );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
+    );
+  }
+});
+```
+
+`/offline.html` は静的に **「オフラインです」** と書かれた HTML を置きます。
+
+### Web Push 通知
+
+ブラウザを閉じている時でも **プッシュ通知** が届く仕組み。
+
+#### 仕組み
+
+1. **クライアント** が **VAPID 鍵** を使って通知を購読
+2. ブラウザが **Push Service**（Apple / Google / Mozilla）に **endpoint** を発行
+3. クライアントが **endpoint をサーバーに送る**
+4. サーバーが **endpoint に POST**（VAPID 秘密鍵で署名）
+5. Push Service が **ブラウザに配信**
+6. Service Worker の `push` イベントが発火 → `showNotification`
+
+#### クライアント側の最小例
+
+```js
+// 通知の許可
+const permission = await Notification.requestPermission();
+if (permission !== "granted") return;
+
+const reg = await navigator.serviceWorker.ready;
+const subscription = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+});
+
+// サーバーに endpoint を保存
+await fetch("/api/push/subscribe", {
+  method: "POST",
+  body: JSON.stringify(subscription),
+  headers: { "Content-Type": "application/json" },
+});
+```
+
+#### Service Worker 側
+
+```js
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "通知", {
+      body: data.body ?? "",
+      icon: "/icon-192.png",
+      badge: "/badge.png",
+      data: { url: data.url ?? "/" },
+    }),
+  );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data.url));
+});
+```
+
+#### サーバー側
+
+`web-push` パッケージで送信:
+
+```ts
+import webpush from "web-push";
+
+webpush.setVapidDetails(
+  "mailto:admin@example.com",
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+);
+
+await webpush.sendNotification(subscription, JSON.stringify({
+  title: "新しい通知",
+  body: "メッセージが届きました",
+  url: "/inbox",
+}));
+```
+
+#### iOS Safari の状況
+
+iOS 16.4+ では **PWA をホーム画面に追加した時のみ** Push 通知が動くようになりました。要件:
+
+- ホーム画面に **インストール済み**
+- HTTPS
+- ユーザーの明示的な購読
+
+通常の Safari ブラウザではまだ Push が動かないので注意。
+
+### Background Sync
+
+「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組み。
+
+```js
+self.addEventListener("sync", (event) => {
+  if (event.tag === "send-message") {
+    event.waitUntil(sendQueuedMessages());
+  }
+});
+```
+
+クライアント側:
+
+```js
+const reg = await navigator.serviceWorker.ready;
+await reg.sync.register("send-message");
+```
+
+`Periodic Background Sync` は **定期的にバックグラウンドで実行** する仕組み（権限の関係で制限あり）。
+
+### `manifest.webmanifest` の詳細
+
+```json
+{
+  "name": "My PWA App",
+  "short_name": "PWA",
+  "description": "サンプル PWA アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "scope": "/",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshot1.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow" }
+  ],
+  "shortcuts": [
+    { "name": "新規作成", "url": "/new", "icons": [{ "src": "/new.png", "sizes": "96x96" }] }
+  ]
 }
 ```
 
-`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
-
-### `localStorage` / `sessionStorage` / IndexedDB の使い分け
-
-| 用途 | 推奨 |
+| フィールド | 役割 |
 |---|---|
-| ユーザー設定（ダークモード / 言語） | `localStorage` |
-| タブ単位の一時状態 | `sessionStorage` |
-| 認証トークン | **どちらも使わない**。HttpOnly Cookie に |
-| Todo / 下書き / オフライン編集データ | **IndexedDB** |
-| 画像 / 動画 / Blob | **IndexedDB**（Cache API も候補） |
-| API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
-| ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
+| `display: standalone` | ブラウザ UI を消してアプリ風に |
+| `theme_color` | 上部バーの色 |
+| `background_color` | スプラッシュ画面の背景 |
+| `icons` | ホーム画面のアイコン |
+| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
+| `screenshots` | インストール画面（form_factor で広 / 狭を区別） |
+| `shortcuts` | アプリ長押しでのクイックメニュー |
 
-「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
-
-### 容量とクォータ
-
-ブラウザは「**クォータ**」というオリジン単位の上限を割り当てます。`navigator.storage.estimate()` で確認できます。
-
-```js
-const { quota, usage } = await navigator.storage.estimate();
-console.log(`使用 ${usage} / クォータ ${quota}`);
-```
-
-ChromeBook / iOS / 容量不足時に **自動退去**（eviction）されることがあります。**消えても困らない設計** にする / `navigator.storage.persist()` で **退去耐性** をリクエスト:
-
-```js
-const granted = await navigator.storage.persist();
-if (granted) console.log("永続化 OK");
-```
-
-ただしユーザーの Bookmark / インストール等の条件次第。
-
-### `Cache API` との違い
-
-Service Worker と一緒に出てくる **`Cache API`**（lesson124）と IndexedDB は **別物**:
-
-| | Cache API | IndexedDB |
-|---|---|---|
-| 単位 | Request / Response | 任意のオブジェクト |
-| 用途 | HTTP リソースの保存 | アプリのデータ保存 |
-| クエリ | URL マッチ | インデックス検索 |
-| トランザクション | なし | あり |
-
-「画像や HTML を保存 → Cache API」、「ユーザーが編集中の下書き → IndexedDB」と覚えればよいです。
-
-### IndexedDB のオフライン同期パターン
-
-```
-[ユーザー操作] → IndexedDB に保存（pending）
-                       ↓
-              [ネットがある時]
-                       ↓
-              バックエンドに POST
-                       ↓
-            成功したら IndexedDB のフラグを更新
-```
-
-- 書き込みは **常にローカルに保存**（UI が即座に反応）
-- バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
-- 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
-
-ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+> **補足: `theme_color` をダーク/ライトで切り替える**: マニフェストの `theme_color` は単一値ですが、HTML の `<meta name="theme-color">` には `media` 属性を付けて **OS のテーマ設定に応じて切り替え** できます。
+>
+> ```html
+> <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+> <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
+> ```
+>
+> こうすると iOS / Android のダークモード利用者には暗い `theme_color` が、ライトモード利用者には明るい色が反映されます。マニフェストの `theme_color` はインストール後のフォールバックとして残り、`<meta>` が上書きする形になります。
 
 ### よくある罠
 
-- **transaction が auto-commit する**: `await` を別の Promise で挟むと **トランザクションが終わってしまう**。同じ tx の中ではすべての操作を **同期的に並べる**
-- **構造化クローンの制約**: 関数 / シンボル / DOM ノードは保存できない
-- **大量レコード**: `cursor` で逐次処理する。`getAll()` でメモリ爆発に注意
-- **iOS Safari**: 古いバージョンで挙動が不安定。最新版（17 / 18 系）はかなり改善
-- **マイグレーション**: `version` を上げて `upgrade` 内で `objectStoreNames` をチェックして差分を当てる
+- **HTTPS でないと動かない**（localhost 以外）
+- **Service Worker は更新が反映されない問題**（古い SW がキャッシュを返し続ける）→ `skipWaiting()` + `clientsClaim()` を使う / **更新確認 UI** を入れる
+- **キャッシュが暴走** → `ExpirationPlugin` で件数 / 期間を制限
+- **ローカルテストで Notification 権限が出ない** → ブラウザ設定でリセット
+- **iOS で通知が来ない** → ホーム画面追加が必要
+
+### 確認ツール
+
+- Chrome DevTools → **Application** タブ
+  - **Manifest**: マニフェストの内容
+  - **Service Workers**: 登録状態 / 更新ボタン
+  - **Cache Storage**: キャッシュの中身
+  - **Storage**: クォータと使用量
+- **Lighthouse** → PWA カテゴリ（インストール可能性 / オフライン動作のチェック）
+- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
 
 ## 演習
 
 ### ゴール
 
-- Dexie.js で **オフラインメモアプリ** を作る
-- `localStorage` 比較で「容量 / 非同期 / 検索」の差を体感する
+- Vite プロジェクトに `vite-plugin-pwa` を入れて PWA 化
+- 自前の Service Worker を書いて **オフライン fallback** を実装
+- ホーム画面追加 / Lighthouse の PWA 診断を通す
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest indexeddb-sample -- --template react-ts
-cd indexeddb-sample
+npm create vite@latest pwa-sample -- --template react-ts
+cd pwa-sample
 npm install
-npm install dexie dexie-react-hooks
+npm install -D vite-plugin-pwa
 ```
 
-### 手順 2: DB の定義
-
-`src/db.ts`:
+### 手順 2: vite.config.ts
 
 ```ts
-import Dexie, { Table } from "dexie";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
-export interface Memo {
-  id?: number;
-  title: string;
-  body: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-class MemoDB extends Dexie {
-  memos!: Table<Memo, number>;
-  constructor() {
-    super("memo-app");
-    this.version(1).stores({
-      memos: "++id, updatedAt",
-    });
-  }
-}
-
-export const db = new MemoDB();
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "PWA Sample",
+        short_name: "PWA",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        background_color: "#ffffff",
+        icons: [
+          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png}"],
+        navigateFallback: "/offline.html",
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "google-fonts-stylesheets" },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+    }),
+  ],
+});
 ```
 
-### 手順 3: メモ一覧 + 追加
+### 手順 3: オフラインページ
 
-`src/App.tsx`:
+`public/offline.html`:
 
-```tsx
-import { useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, Memo } from "./db";
-
-export default function App() {
-  const memos = useLiveQuery(
-    () => db.memos.orderBy("updatedAt").reverse().toArray(),
-    [],
-  );
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-
-  const add = async () => {
-    if (!title.trim()) return;
-    await db.memos.add({
-      title,
-      body,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    setTitle("");
-    setBody("");
-  };
-
-  const remove = (id: number) => db.memos.delete(id);
-
-  return (
-    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>オフラインメモ</h1>
-      <div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="タイトル" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="本文" />
-        <button onClick={add}>追加</button>
-      </div>
-      <ul>
-        {memos?.map((m) => (
-          <li key={m.id}>
-            <strong>{m.title}</strong> — {new Date(m.updatedAt).toLocaleString()}
-            <p>{m.body}</p>
-            <button onClick={() => remove(m.id!)}>削除</button>
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
-}
+```html
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8"><title>オフライン</title></head>
+  <body>
+    <h1>オフラインです</h1>
+    <p>ネットワークに接続してください</p>
+  </body>
+</html>
 ```
 
-### 手順 4: 確認
+`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
+
+### 手順 4: ビルドとプレビュー
 
 ```bash
-npm run dev
+npm run build
+npm run preview
 ```
 
-メモを追加し、**ブラウザを閉じて再度開いて** も残っていることを確認。DevTools の Application → IndexedDB → `memo-app` → `memos` で実データが見られる。
+`http://localhost:4173` で開いて DevTools の Application タブを確認。
 
-### 手順 5: ストレージ使用量を表示
+1. **Service Workers**: SW が登録されている
+2. **Manifest**: フィールドが反映されている
+3. ネットを **Offline** に切り替えて再読込 → `offline.html` が表示される
 
-`App` 末尾に追加:
+### 手順 5: Lighthouse で PWA 診断
 
-```tsx
-import { useEffect, useState } from "react";
-
-const [usage, setUsage] = useState("");
-useEffect(() => {
-  navigator.storage.estimate().then(({ usage, quota }) => {
-    setUsage(`使用 ${Math.round((usage ?? 0) / 1024)}KB / クォータ ${Math.round((quota ?? 0) / 1024 / 1024)}MB`);
-  });
-}, [memos]);
-```
-
-`<p>{usage}</p>` を画面に出す。メモを増やすと使用量が増えていくのが見えます。
+DevTools → Lighthouse → PWA カテゴリで実行。**インストール可能性** が緑になっていることを確認。
 
 ### 期待出力
 
-- メモがブラウザを閉じても残る
-- `Application → IndexedDB` でストアの中身が見られる
-- ストレージ使用量が表示され、メモ追加で増える
+- アドレスバーに **インストールアイコン** が出る
+- ホーム画面 / アプリ一覧から起動可能
+- オフラインで `/offline.html` が表示される
+- Lighthouse の PWA カテゴリが緑
 
 ### 変える
 
-- `useLiveQuery(() => db.memos.where("title").startsWithIgnoreCase("a").toArray())` のような **検索** を追加
-- DB の `version(2)` で `body` にインデックスを追加し、マイグレーション挙動を観察
-- 大量データ（1 万件）を一括追加して **`getAll` の遅さ** と **`each` cursor の差** を比較
+- `runtimeCaching` で API URL を `NetworkFirst` でキャッシュ
+- `manifest.shortcuts` を追加して **長押しメニュー** を作る
+- `purpose: "maskable"` のアイコンを追加して、Android で円形にトリミングされる挙動を確認
 
 ### 自分で書く（任意）
 
-- API と同期する Memo アプリを作る（**ローカルに保存 → サーバーに同期**）
-- 画像（Blob）を添付できるようにする
-- `localStorage` から IndexedDB に乗り換えるマイグレーションスクリプトを書く
+- `web-push` で Push 通知を送る最小サーバーを書く
+- iOS Safari で **ホーム画面追加 → 通知許可** の流れを試す
+- `IndexedDB` を使って、オフラインで作成したデータを再接続時に同期する
 
 ## まとめ
 
-- `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
-- 用語: **database / objectStore / transaction / cursor**
-- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
-- React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
-- 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
-- クォータ / 退去 / `navigator.storage.persist()` を意識する
-- オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番
+- **Service Worker** は **install / activate / fetch** のライフサイクルで動く
+- キャッシュ戦略は **CacheFirst / NetworkFirst / StaleWhileRevalidate / NetworkOnly / CacheOnly** から選ぶ
+- **Workbox** で戦略の記述が劇的に短くなる
+- Vite は `vite-plugin-pwa`、Next.js は `@serwist/next` が定番
+- **`navigateFallback`** で **オフラインページ** を出せる
+- **Web Push 通知** は VAPID 鍵 + Push Service の流れ。iOS は **インストール後限定**
+- **`manifest.webmanifest`** の `display` / `icons` / `shortcuts` でアプリ体験を整える
+- DevTools の Application タブと **Lighthouse PWA** で診断

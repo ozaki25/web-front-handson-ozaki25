@@ -1,210 +1,343 @@
-# lesson58: フォームと制御コンポーネント
+# lesson58: useReducer で複雑な state
 
 ## ゴール
 
-- `value` と `onChange` を使って、入力値を state と同期できる（制御コンポーネント）
-- 1 章 の「フォームを作る」の HTML フォーム（`name` 属性で値を集める形）と、React の書き方との違いを説明できる
-- `<form action={fn}>` にも触れ、5 章 の「Server Actions の最小形」で本格的に使うことを予告として受け取る
+- `useReducer` で複数の操作をまとめた state 管理が書ける
+- reducer 関数の形 `(state, action) => newState` を理解する
+- action の型を判別共用体で書ける
+- reducer は純粋関数でなければならないことを理解する
 
 ## 解説
 
-### 1 章 の「フォームを作る」の HTML フォームとの対比
+### 最初に: 再接続
 
-1 章 の「フォームを作る」の自己紹介フォームを思い出してください。次のような形でした。
+この `Action` 型は3 章 の「判別共用体」で学んだ **判別共用体** そのものです。`type` プロパティで種類を見分ける形、`switch` での分岐、網羅性チェック、すべてそのまま使います。3 章 の「判別共用体」で書いた `TodoState` の代わりに、今回は「どういう更新をしたいか」を表すオブジェクトを同じ仕組みで表現します。
 
-```html
-<form action="/contact" method="POST">
-  <label for="email">メール</label>
-  <input id="email" name="email" type="email" required />
-  <button type="submit">送信</button>
-</form>
-```
+### なぜ useState だけだと辛くなるか
 
-- `name="email"` が「この入力欄はメールです」という目印
-- 送信ボタンを押すと、ブラウザが `name` 属性をキーにして値を集め、`action` に指定された URL に送る
-- 値の持ち主は **ブラウザ**
-
-React の**制御コンポーネント**はこの形と少し違います。
-
-- 値の持ち主は **React の state**
-- `<input>` には「今の state の値」を `value` として渡す
-- 入力するたびに `onChange` で state を更新する
-- `<input>` は常に state と同期している
-
-どちらも「フォームを作る」ことには違いありません。使い分けの現場感としては、HTML ネイティブで十分なら前者、入力値を**その場で JS から使いたい**（リアルタイムプレビュー、バリデーション、条件付き無効化など）なら後者です。React では制御コンポーネントが基本です。
-
-### 制御コンポーネントの最小形
+「イベントと配列のイミュータブル更新」で作った TODO は、`setTodos` を呼ぶパターンが 3 種類ありました。
 
 ```tsx
-import { useState } from "react";
+// 追加
+setTodos((prev) => [...prev, newTodo]);
 
-function NameInput() {
-  const [name, setName] = useState("");
+// 削除
+setTodos((prev) => prev.filter((t) => t.id !== id));
 
-  return (
-    <div>
-      <input
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-        placeholder="名前"
-      />
-      <p>こんにちは、{name} さん</p>
-    </div>
-  );
+// 完了切替（今回追加したい）
+setTodos((prev) =>
+  prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+);
+```
+
+今はまだ読めますが、操作が増えるにつれて「`setTodos` の書き方が画面のあちこちに散る」「同じ処理を別の場所でも書きたくなる」という問題が出てきます。
+
+`useReducer` は、**state の更新ロジックを 1 箇所に集める** 仕組みです。画面側は「こういう操作をしたい」という **action** を投げるだけになります。
+
+### useReducer の形
+
+```tsx
+import { useReducer } from "react";
+
+const [state, dispatch] = useReducer(reducer, initialState);
+```
+
+- 第 1 引数: **reducer 関数** `(state, action) => newState`
+- 第 2 引数: **初期 state**
+- 戻り値: `[今の state, dispatch 関数]`
+
+`dispatch(action)` を呼ぶと、React が内部で `reducer(現在の state, action)` を実行し、その戻り値を新しい state として保持します。
+
+### reducer 関数の中身
+
+reducer は「今の state」と「action」を受け取って「次の state」を返すだけの関数です。
+
+```tsx
+function reducer(state: State, action: Action): State {
+  switch (action.type) {
+    case "increment":
+      return { count: state.count + 1 };
+    case "decrement":
+      return { count: state.count - 1 };
+    case "reset":
+      return { count: 0 };
+  }
 }
 ```
 
-- `value={name}` で「いま表示する値」を指定
-- `onChange={(e) => setName(e.target.value)}` で「入力されたら state を更新」
-- これで `<input>` と `name` state がつねに一致する
+ポイントは 3 つです。
 
-ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。つまり、**見た目の真実は state 側にある**。
+1. **新しいオブジェクト / 配列を返す**（イミュータブル更新、これまでと同じ原則）
+2. **副作用を起こさない**（ログ出力、`localStorage`、`fetch` などは書かない）
+3. **同じ入力には同じ出力**（乱数や `Date.now()` も使わない）
 
-### `e.target.value`
+これを **純粋関数** と呼びます。reducer は純粋関数でなければなりません。
 
-`onChange` が受け取る `e`（イベント）の中に、変化があった要素（`target`）が入っています。`<input>` の value は常に文字列型です。
+### 純粋関数の原則と Strict Mode
 
-```tsx
-<input
-  type="number"
-  value={age}
-  onChange={(e) => setAge(Number(e.target.value))}
-/>
+React の Strict Mode は、開発時に reducer を **意図的に 2 回呼びます**。副作用を書いてしまうと 2 回走って気づけるようにする仕組みです。「reducer 内で `console.log` したら 2 回出た」ときは、Strict Mode が純粋関数違反を検出している合図です。
+
+### action の型は判別共用体で
+
+action は「操作の種類」を表すオブジェクトです。`type` というプロパティで種類を見分けます。3 章 の「判別共用体」で学んだ判別共用体が、そのまま action の型になります。
+
+```ts
+type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
 ```
 
-数値で扱いたいときは、`Number()` で変換する必要があります。HTML 的には `type="number"` でも、JS から見えるのは文字列です。
+`switch (action.type)` で分岐すると、TypeScript は各ブランチで「この action にはどのプロパティがあるか」を正確に絞り込んでくれます。`case "add"` の中では `action.text` が見え、`case "delete"` の中では `action.id` が見える、という形です。
 
-### textarea と select も同じ形
+### dispatch を呼ぶ側
 
-HTML では `<textarea>入る文字</textarea>` のように子要素として書いていましたが、React では `<input>` と同じく `value` と `onChange` を使います。
-
-```tsx
-<textarea value={memo} onChange={(e) => setMemo(e.target.value)} />
-<select value={category} onChange={(e) => setCategory(e.target.value)}>
-  <option value="home">家事</option>
-  <option value="work">仕事</option>
-</select>
-```
-
-### `<form>` の送信
-
-送信ボタンを押したときの動作は 2 通り書き方があります。
-
-#### (a) `onSubmit` で書く（本コースの4 章 はこれ）
+画面側（コンポーネントの JSX）からは `dispatch(action)` を呼ぶだけです。
 
 ```tsx
-<form
-  onSubmit={(e) => {
-    e.preventDefault();
-    // state をもとに処理する
-  }}
->
-  {/* ... */}
-</form>
+dispatch({ type: "add", text: "牛乳を買う" });
+dispatch({ type: "delete", id: "abc" });
+dispatch({ type: "toggle", id: "abc" });
 ```
 
-- `e.preventDefault()` で、ブラウザ既定の送信（ページ遷移）を止める
-- その後は自分で `fetch` なり state 更新なりをする
-- 「親子コンポーネントの連携」「TODO アプリを React で作る」で使う形
+「追加ロジック」「削除ロジック」は reducer 側に集まっているので、画面側は「何をしたいか」だけを伝えれば済みます。
 
-#### (b) `<form action={fn}>`（紹介のみ、5 章 で本格使用）
+### useState と useReducer の使い分け
 
-React 19 では、`<form>` の `action` 属性に **関数** も渡せるようになりました。
+| 状況 | おすすめ |
+| --- | --- |
+| 値が 1 つの単純な state | `useState` |
+| 複数の関連する更新パターン | `useReducer` |
+| 次の state が前の state に強く依存する | `useReducer` |
 
-```tsx
-<form action={submitTodo}>
-  <input name="text" />
-  <button type="submit">送信</button>
-</form>
-```
-
-- `action` が関数なら、React は **既定の送信動作（ページ遷移）を抑止し、`FormData` を引数に関数を呼ぶ**
-- 結果として、自分で `e.preventDefault()` を書かなくて済む
-- 従来どおり `action="/contact"` のように **URL 文字列** を渡すこともできる（普通の HTML 送信）
-
-本コースでは4 章 の段階では **紹介のみ**です。5 章 の「Server Actions の最小形」の Server Actions でこの形を使うときに「関数を渡すパターン」を詳しく学びます。「4 章 は `onSubmit` 形、5 章 で `action={fn}` 形に乗り換える」という流れを予告として覚えておいてください。
+画面の中で「いくつも `setX` を並べる」のがしんどくなったら `useReducer` の出番です。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` を新しい形（`done` 付き + `Action` 型）に書き換えて進めます。
 
-### ゴール
+<details>
+<summary>出発点のファイル</summary>
 
-- 名前とメモの入力欄を作り、入力内容がリアルタイムに下に表示されるプレビュー画面を作る
-- 送信ボタンを押したら（`onSubmit` で）入力内容をまとめて表示する
+**`src/types.ts`**
 
-### 手順
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
-2. `src/App.tsx` を書き換える
-3. `src/App.css` を書き換える
-
-### `src/App.tsx`
+**`src/App.tsx`**
 
 ```tsx
 import { useState } from "react";
-import type { FormEvent } from "react";
+import type { Todo } from "./types";
 import "./App.css";
 
 function App() {
-  const [name, setName] = useState("");
-  const [memo, setMemo] = useState("");
-  const [submitted, setSubmitted] = useState<{ name: string; memo: string } | null>(
-    null
-  );
+  const [count, setCount] = useState(0);
+  const [todos, setTodos] = useState<Todo[]>([
+    { id: "a1", text: "牛乳を買う" },
+    { id: "a2", text: "原稿を書く" },
+  ]);
 
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    setSubmitted({ name, memo });
+  function handlePlus() {
+    setCount((c) => c + 1);
+  }
+  function handleMinus() {
+    setCount((c) => c - 1);
+  }
+  function handleReset() {
+    setCount(0);
+  }
+
+  function addToEnd() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `末尾 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function addToTop() {
+    const newTodo: Todo = {
+      id: crypto.randomUUID(),
+      text: `先頭 ${todos.length + 1}`,
+    };
+    setTodos((prev) => [newTodo, ...prev]);
+  }
+
+  function removeById(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
   }
 
   return (
     <>
-      <h1>入力プレビュー</h1>
-
-      <form onSubmit={handleSubmit} className="box">
-        <div className="row">
-          <label htmlFor="name">名前</label>
-          <input
-            id="name"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-          />
-        </div>
-
-        <div className="row">
-          <label htmlFor="memo">メモ</label>
-          <textarea
-            id="memo"
-            value={memo}
-            onChange={(e) => setMemo(e.target.value)}
-          />
-        </div>
-
-        <button type="submit">送信</button>
-      </form>
-
       <section className="box">
-        <h2>リアルタイムプレビュー</h2>
-        <p>名前: {name}</p>
-        <p>メモ: {memo}</p>
+        <h2>カウンター</h2>
+        <p>現在: {count}</p>
+        <button onClick={handlePlus}>+1</button>
+        <button onClick={handleMinus}>-1</button>
+        <button onClick={handleReset}>リセット</button>
       </section>
 
-      {submitted !== null && (
-        <section className="box">
-          <h2>送信結果</h2>
-          <p>名前: {submitted.name}</p>
-          <p>メモ: {submitted.memo}</p>
-        </section>
-      )}
+      <section className="box">
+        <h2>TODO</h2>
+        <div className="row">
+          <button onClick={addToEnd}>末尾に追加</button>
+          <button onClick={addToTop}>先頭に追加</button>
+        </div>
+        <ul>
+          {todos.map((todo) => (
+            <li key={todo.id}>
+              {todo.text}
+              <button onClick={() => removeById(todo.id)}>削除</button>
+            </li>
+          ))}
+        </ul>
+      </section>
     </>
   );
 }
 
 export default App;
 ```
+
+本レッスンでは `types.ts` を書き換え、`src/todosReducer.ts` を新規作成し、`App.tsx` を `useReducer` 版に入れ替えて進めます。
+
+</details>
+
+### ゴール
+
+- これまでの TODO（`id` と `text` の配列）に `done` プロパティを足して、`useReducer` で管理する
+- 3 種類の action `add` / `delete` / `toggle` を実装する
+- 完了済みの TODO は見た目（取り消し線）で区別する
+
+### 手順
+
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/types.ts` を作成
+3. `src/todosReducer.ts` を作成
+4. `src/App.tsx` を書き換える
+5. `src/App.css` を書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+
+export type Action =
+  | { type: "add"; text: string }
+  | { type: "delete"; id: string }
+  | { type: "toggle"; id: string };
+```
+
+`Todo` の `done` プロパティで「完了済みかどうか」を表します。`Action` は 3 種類の操作を判別共用体で列挙しています。
+
+### `src/todosReducer.ts`
+
+```ts
+import type { Todo, Action } from "./types";
+
+export function todosReducer(state: Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add": {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        done: false,
+      };
+      return [...state, newTodo];
+    }
+    case "delete": {
+      return state.filter((todo) => todo.id !== action.id);
+    }
+    case "toggle": {
+      return state.map((todo) =>
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
+      );
+    }
+  }
+}
+```
+
+- `case` ごとに新しい配列を返しています（イミュータブル更新）
+- `toggle` は該当 `id` の行だけ新しいオブジェクトで差し替え、それ以外はそのまま
+- ブロック `{ ... }` で囲っているのは、`case` の中で `const` を宣言するためです（変数のスコープを閉じる慣習）
+
+### `src/App.tsx`
+
+```tsx
+import { useReducer, useState } from "react";
+import type { FormEvent } from "react";
+import { todosReducer } from "./todosReducer";
+import type { Todo } from "./types";
+import "./App.css";
+
+function App() {
+  const [todos, dispatch] = useReducer(todosReducer, [] as Todo[]);
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    dispatch({ type: "add", text: trimmed });
+    setText("");
+  }
+
+  return (
+    <>
+      <h1>useReducer 版 TODO</h1>
+
+      <form onSubmit={handleSubmit} className="box">
+        <input
+          value={text}
+          onChange={(e) => setText(e.target.value)}
+          placeholder="やることを入力"
+        />
+        <button type="submit">追加</button>
+      </form>
+
+      <ul className="todo-list">
+        {todos.map((todo) => (
+          <li key={todo.id} className={todo.done ? "done" : ""}>
+            <label>
+              <input
+                type="checkbox"
+                checked={todo.done}
+                onChange={() => dispatch({ type: "toggle", id: todo.id })}
+              />
+              {todo.text}
+            </label>
+            <button
+              type="button"
+              onClick={() => dispatch({ type: "delete", id: todo.id })}
+            >
+              削除
+            </button>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+
+export default App;
+```
+
+- `useReducer(todosReducer, [] as Todo[])` で、初期値は空配列
+- `dispatch({ type: "add", text })` で追加
+- `dispatch({ type: "toggle", id })` でチェックの切替
+- `dispatch({ type: "delete", id })` で削除
+- 画面側には更新ロジックが一切なく、「どういう操作をしたいか」だけを書いています
 
 ### `src/App.css`
 
@@ -218,26 +351,37 @@ export default App;
   background-color: #fff;
 }
 
-.row {
-  margin-bottom: 8px;
-  display: flex;
-  flex-direction: column;
-}
-
-.row label {
-  margin-bottom: 4px;
-  font-weight: bold;
-}
-
-.row input,
-.row textarea {
+.box input {
   padding: 6px;
-  border: 1px solid #999;
-  border-radius: 4px;
+  margin-right: 8px;
 }
 
-button {
-  padding: 6px 12px;
+.box button {
+  padding: 4px 10px;
+  cursor: pointer;
+}
+
+.todo-list {
+  list-style: none;
+  padding-left: 0;
+  color: #222;
+}
+
+.todo-list li {
+  padding: 4px 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.todo-list li.done label {
+  text-decoration: line-through;
+  color: #888;
+}
+
+.todo-list li button {
+  margin-left: auto;
+  padding: 2px 8px;
   cursor: pointer;
 }
 
@@ -247,54 +391,94 @@ button {
     background-color: #202020;
     border-color: #555;
   }
-  .row input,
-  .row textarea {
+  .todo-list {
     color: #eee;
-    background-color: #2a2a2a;
-    border-color: #666;
+  }
+  .todo-list li.done label {
+    color: #888;
   }
 }
 ```
 
 ### 期待出力
 
-- 画面に「名前」入力欄と「メモ」テキストエリア、「送信」ボタン
-- 「リアルタイムプレビュー」セクションに、入力内容が**打つたびに**反映される
-- 「送信」を押すと、「送信結果」セクションが現れて、押した時点の入力内容が固定表示される
-- その後もリアルタイムプレビューは入力に追従するが、「送信結果」は次に押すまで変わらない
+- 画面に入力欄と「追加」ボタン、その下に TODO 一覧
+- 入力して「追加」を押すと、一覧末尾に行が追加される（`done: false` の状態）
+- 各行のチェックボックスを押すと取り消し線が付き、もう一度押すと戻る
+- 「削除」ボタンでその行だけが消える
+- 空文字のまま「追加」を押しても何も起きない
 
 ### 変える
 
-- `onChange` を消して `value={name}` だけ残すと、**入力できなくなる**（読み取り専用扱い）。確認したら戻す
-- `<input>` のラベル `<label htmlFor="name">` の `htmlFor` を `for` に書き換えると、ブラウザのコンソールに警告が出る（JSX では `htmlFor`）
-- `handleSubmit` から `e.preventDefault()` を消すと、送信時にページがリロードされてプレビューが消える。**なぜリロードされるのか** を自分の言葉で説明してみる
+- `todosReducer` の `case "toggle"` を、意図的に壊してみます。次のように書き換えると、`toggle` を押しても画面が更新されません。
+  ```ts
+  case "toggle": {
+    const todo = state.find((t) => t.id === action.id);
+    if (todo) todo.done = !todo.done; // NG: 元のオブジェクトを書き換えている
+    return state; // 同じ配列参照を返している
+  }
+  ```
+  確認したら元に戻します。reducer も **新しい配列・新しいオブジェクトを返す** 原則は守ります。
+- `case "add"` の中に `console.log("added")` を入れて、Strict Mode が有効なとき（`main.tsx` で `<StrictMode>` に包まれているとき）に 2 回出力されることを確認します。reducer は純粋関数として扱われるため、開発時に 2 回呼ばれても副作用は出ないはず、という検査です。
 
 ### 自分で書く
 
-- カテゴリ選択用の `<select>` を追加し、`state.category` と同期させる
-- 選択肢: `"家事"` / `"仕事"` / `"趣味"`
-- プレビューと送信結果にカテゴリも表示する
+- 「全部完了にする」「全部未完了に戻す」を action として追加します。
+  - `type: "completeAll"` と `type: "uncompleteAll"` を `Action` 型に足す
+  - reducer にそれぞれの `case` を書く（`state.map((t) => ({ ...t, done: true }))` など）
+  - 画面にボタンを 2 つ追加して `dispatch` する
+- 「完了済みだけ一括削除」も追加してみてください（`type: "deleteCompleted"`）。
 
-ヒント:
+### 発展: 網羅性チェック（折りたたみ）
 
-```tsx
-const [category, setCategory] = useState("家事");
-// ...
-<select value={category} onChange={(e) => setCategory(e.target.value)}>
-  <option value="家事">家事</option>
-  <option value="仕事">仕事</option>
-  <option value="趣味">趣味</option>
-</select>;
+::: details never を使った網羅性チェック
+
+3 章 の「unknown と never」で登場した `never` 型を使うと、**action の case を書き忘れたときにコンパイルエラーにできます**。
+
+`todosReducer.ts` の `switch` に `default` を足します。
+
+```ts
+import type { Todo, Action } from "./types";
+
+export function todosReducer(state: Todo[], action: Action): Todo[] {
+  switch (action.type) {
+    case "add": {
+      const newTodo: Todo = {
+        id: crypto.randomUUID(),
+        text: action.text,
+        done: false,
+      };
+      return [...state, newTodo];
+    }
+    case "delete": {
+      return state.filter((todo) => todo.id !== action.id);
+    }
+    case "toggle": {
+      return state.map((todo) =>
+        todo.id === action.id ? { ...todo, done: !todo.done } : todo,
+      );
+    }
+    default: {
+      // すべての case を処理していれば、ここに来る action は never 型になる
+      const _exhaustive: never = action;
+      return _exhaustive;
+    }
+  }
+}
 ```
 
-### 末尾予告
+試しに `Action` 型に新しいケース（例: `{ type: "clear" }`）を足してみてください。`default` の `_exhaustive: never = action` の行で「`action` が `{ type: "clear" }` 型で never に代入できない」というエラーが出ます。これを **網羅性チェック** と呼びます。
 
-- 4 章 内では `<form onSubmit={(e) => { e.preventDefault(); ... }}>` の形を「親子コンポーネントの連携」「TODO アプリを React で作る」で使い続ける
-- `<form action={fn}>` 形は5 章 の「Server Actions の最小形」の Server Actions で登場する。そこで `preventDefault` が不要になる理由とあわせて扱う
+action の種類が増えたとき、対応を忘れた場所を TypeScript に教えてもらえるようになります。実務では必ず付けると言ってよい定型です。
+
+:::
 
 ## まとめ
 
-- 制御コンポーネントは `value={state}` + `onChange` の組み合わせ。値の持ち主は state
-- `e.target.value` は常に文字列。数値で扱いたいなら `Number()` で変換
-- `<label>` の `for` は JSX では **`htmlFor`**
-- フォーム送信は当面 `onSubmit` + `e.preventDefault()`。`<form action={fn}>` は5 章 でフル活用
+- `useReducer(reducer, initialState)` で state の更新ロジックを 1 箇所にまとめられる
+- reducer は `(state, action) => newState` の形、**純粋関数**（副作用禁止、イミュータブル更新）
+- action は判別共用体で型付け（`type` プロパティで見分ける、3 章 の「判別共用体」の形）
+- 画面からは `dispatch(action)` を呼ぶだけ
+- 複数の関連更新があるとき、`useState` より見通しが良くなる
+- Strict Mode では reducer が 2 回呼ばれる。純粋関数なら結果は同じになる
+- ここで身につけた **「reducer = 状態を 1 箇所に集めて変える」** の発想は、5 章 の **「送信状態とエラー表示」** で出てくる **`useActionState`**（Server Actions と reducer を組み合わせるフック）にそのまま生きる伏線
