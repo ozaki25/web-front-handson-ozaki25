@@ -93,7 +93,7 @@ function handleClick() {
 
 ### React 19 の ref: 普通の props として渡せる
 
-React 18 以前は、自作コンポーネントに `ref` を渡したいとき `forwardRef()` という API でコンポーネントをラップする必要があり、コードが煩雑になりがちでした。React 19 以降はこの制限がなくなり、`ref` を **普通の props と同じ書き方で** 受け取れます。
+React 18 以前は、自作コンポーネントに `ref` を渡したいとき `React.forwardRef(...)` という API でコンポーネントをラップする必要があり、コードが煩雑になりがちでした。React 19 以降はこの制限がなくなり、`ref` を **普通の props と同じ書き方で** 受け取れます。既存コードや古いチュートリアルで `forwardRef` を見かけたら「昔のやり方だ」と思えれば十分で、本コースでは扱いません。
 
 ```tsx
 import type { Ref } from "react";
@@ -134,12 +134,6 @@ if (inputRef.current) {
 Props として ref を受け取る側の型 `Ref<HTMLInputElement>` は、内部的にはこの `RefObject<HTMLInputElement | null>` または「ref をセットする関数」のユニオンです（callback ref と呼ばれる別形式があるため）。本コースでは **オブジェクト形式の ref のみ扱います**。
 
 > **TS strict 前提**: 本コースは `tsconfig.json` の `"strict": true` を前提にしています（3 章「tsconfig.json を読む」参照）。strict が無効だと `current` の null チェックを忘れても型エラーが出ず、実行時に「`Cannot read property 'focus' of null`」で落ちます。strict を切らないでください。
-
-### 過去形（`forwardRef`）は扱わない
-
-React 18 までは、自作コンポーネントで `ref` を受け取るために `React.forwardRef(...)` という特別な関数で包む必要がありました。
-
-**本コースでは `forwardRef` を扱いません**。React 19 以降は不要になった書き方です。ただし既存コードや古いチュートリアルで `forwardRef` を見かけることはあるので、「昔のやり方だ」と認識できれば十分です。
 
 ## 演習
 
