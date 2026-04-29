@@ -1,4 +1,4 @@
-# lesson38: デバッグに効く Console API
+# lesson39: デバッグに効く Console API
 
 <script setup>
 const demoJs = `
@@ -231,7 +231,7 @@ button { margin: 4px 6px 4px 0; padding: 6px 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson38</title>
+    <title>lesson39</title>
     <script defer src="./script.js"></script>
   </head>
   <body>

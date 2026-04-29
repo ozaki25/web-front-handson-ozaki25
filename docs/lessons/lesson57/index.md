@@ -1,4 +1,4 @@
-# lesson56: state で状態を持つ
+# lesson57: state で状態を持つ
 
 ## ゴール
 

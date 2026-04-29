@@ -1,4 +1,4 @@
-# lesson122: OAuth / OIDC / JWT の概念
+# lesson123: OAuth / OIDC / JWT の概念
 
 ## ゴール
 

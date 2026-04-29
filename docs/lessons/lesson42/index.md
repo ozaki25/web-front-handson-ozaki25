@@ -1,4 +1,4 @@
-# lesson41: TypeScript ってなに？
+# lesson42: TypeScript ってなに？
 
 ## ゴール
 

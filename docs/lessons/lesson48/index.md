@@ -1,4 +1,4 @@
-# lesson47: 型ガード（`typeof` / `in` / カスタム）
+# lesson48: 型ガード（`typeof` / `in` / カスタム）
 
 ## ゴール
 

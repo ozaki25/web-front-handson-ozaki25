@@ -1,4 +1,4 @@
-# lesson125: Service Worker と PWA 深掘り
+# lesson126: Service Worker と PWA 深掘り
 
 ## ゴール
 

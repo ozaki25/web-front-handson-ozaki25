@@ -1,4 +1,4 @@
-# lesson50: Utility Types で仕上げる
+# lesson51: Utility Types で仕上げる
 
 ## ゴール
 

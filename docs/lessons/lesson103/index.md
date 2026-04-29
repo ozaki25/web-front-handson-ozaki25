@@ -1,4 +1,4 @@
-# lesson102: Core Web Vitals の 3 つの指標と Lighthouse
+# lesson103: Core Web Vitals の 3 つの指標と Lighthouse
 
 ## ゴール
 

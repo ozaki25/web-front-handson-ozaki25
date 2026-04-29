@@ -1,4 +1,4 @@
-# lesson68: TODO アプリを React で作る
+# lesson69: TODO アプリを React で作る
 
 2 章 の「TODO アプリを作る」で素の JS + DOM で作った TODO アプリを、4 章 で学んだ React + TS に移植します。同時に **localStorage で保存・復元** する形を React で書き直し、**オブジェクト state のイミュータブル更新** も扱います。
 

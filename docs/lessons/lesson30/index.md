@@ -1,4 +1,4 @@
-# lesson29: import / export でモジュール化
+# lesson30: import / export でモジュール化
 
 ## ゴール
 
@@ -157,11 +157,11 @@ import { add } from "./math";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson29</title>
+    <title>lesson30</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson29: import / export の出発点</h1>
+    <h1>lesson30: import / export の出発点</h1>
   </body>
 </html>
 ```
@@ -229,11 +229,11 @@ console.log(missing);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson29</title>
+    <title>lesson30</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson29: import / export</h1>
+    <h1>lesson30: import / export</h1>
     <ul id="list"></ul>
   </body>
 </html>

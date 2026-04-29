@@ -1,4 +1,4 @@
-# lesson64: useEffect の基本
+# lesson65: useEffect の基本
 
 ## ゴール
 

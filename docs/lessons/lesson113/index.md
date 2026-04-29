@@ -1,4 +1,4 @@
-# lesson112: CI/CD パイプラインの設計
+# lesson113: CI/CD パイプラインの設計
 
 ## ゴール
 
@@ -9,7 +9,7 @@
 - Vercel の **Preview Deployment** とテストを連携できる
 
 ::: tip 前提
-このレッスンは lesson111「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson111 を参照してください。
+このレッスンは lesson112「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson112 を参照してください。
 :::
 
 ## 解説

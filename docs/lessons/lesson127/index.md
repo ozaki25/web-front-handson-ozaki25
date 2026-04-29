@@ -1,4 +1,4 @@
-# lesson126: IndexedDB 入門
+# lesson127: IndexedDB 入門
 
 ## ゴール
 
@@ -12,7 +12,7 @@
 
 ### `localStorage` の限界
 
-lesson28 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+lesson29 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
 - **容量が小さい**（オリジン全体で 5〜10MB）
 - **値は文字列だけ**（オブジェクトは JSON 化が必要）
@@ -201,7 +201,7 @@ if (granted) console.log("永続化 OK");
 
 ### `Cache API` との違い
 
-Service Worker と一緒に出てくる **`Cache API`**（lesson125）と IndexedDB は **別物**:
+Service Worker と一緒に出てくる **`Cache API`**（lesson126）と IndexedDB は **別物**:
 
 | | Cache API | IndexedDB |
 |---|---|---|

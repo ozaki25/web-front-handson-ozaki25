@@ -1,4 +1,4 @@
-# lesson51: tsconfig.json を読む
+# lesson52: tsconfig.json を読む
 
 ## ゴール
 

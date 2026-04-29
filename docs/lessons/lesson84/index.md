@@ -1,4 +1,4 @@
-# lesson83: Proxy で認証前処理
+# lesson84: Proxy で認証前処理
 
 ## ゴール
 

@@ -1,4 +1,4 @@
-# lesson33: JSON を読み書きする
+# lesson34: JSON を読み書きする
 
 <script setup>
 const demoJs = `
@@ -199,11 +199,11 @@ pre { white-space: pre-wrap; font-size: 14px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson33</title>
+    <title>lesson34</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson33: JSON</h1>
+    <h1>lesson34: JSON</h1>
     <ul id="list"></ul>
     <pre id="raw"></pre>
   </body>
@@ -253,11 +253,11 @@ for (const todo of todos) {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson33</title>
+    <title>lesson34</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson33: JSON</h1>
+    <h1>lesson34: JSON</h1>
     <ul id="list"></ul>
     <h2>保存されている JSON</h2>
     <pre id="raw"></pre>
@@ -325,7 +325,7 @@ render(todos);
 画面に次の内容が表示されます。
 
 ```
-lesson33: JSON
+lesson34: JSON
 
 - 牛乳を買う
 - [済] 本を読む

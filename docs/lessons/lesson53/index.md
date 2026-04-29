@@ -1,4 +1,4 @@
-# lesson52: React ってなに？
+# lesson53: React ってなに？
 
 ## ゴール
 

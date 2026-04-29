@@ -1,4 +1,4 @@
-# lesson65: `useMemo` で計算のメモ化
+# lesson66: `useMemo` で計算のメモ化
 
 ## ゴール
 

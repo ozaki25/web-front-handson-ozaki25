@@ -1,4 +1,4 @@
-# lesson70: Next.js ってなに？
+# lesson71: Next.js ってなに？
 
 ## ゴール
 

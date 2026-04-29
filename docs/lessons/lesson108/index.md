@@ -1,4 +1,4 @@
-# lesson107: ESLint / Prettier / Biome
+# lesson108: ESLint / Prettier / Biome
 
 ## ゴール
 

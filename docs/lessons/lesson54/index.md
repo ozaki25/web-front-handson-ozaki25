@@ -1,4 +1,4 @@
-# lesson53: JSX を書く
+# lesson54: JSX を書く
 
 <script setup>
 const closeScript = '<' + '/script>'

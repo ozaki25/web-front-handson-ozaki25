@@ -1,4 +1,4 @@
-# lesson35: イベントで画面を動かす
+# lesson36: イベントで画面を動かす
 
 <script setup>
 const demoJs = `
@@ -117,12 +117,12 @@ function handleClick() { ... }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson34</title>
+    <title>lesson35</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1 id="title">lesson34</h1>
+    <h1 id="title">lesson35</h1>
     <p id="box">このボックスのクラスが切り替わります</p>
     <ul id="list">
       <li>既存の項目 1</li>
@@ -216,12 +216,12 @@ list.appendChild(newLi);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson35</title>
+    <title>lesson36</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson35: カウンター</h1>
+    <h1>lesson36: カウンター</h1>
 
     <section>
       <p id="count-label">カウント: 0</p>

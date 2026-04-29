@@ -1,4 +1,4 @@
-# lesson40: Intl API で国際化の基礎
+# lesson41: Intl API で国際化の基礎
 
 ## ゴール
 

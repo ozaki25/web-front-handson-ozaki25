@@ -1,4 +1,4 @@
-# lesson54: コンポーネントと props
+# lesson55: コンポーネントと props
 
 ## ゴール
 

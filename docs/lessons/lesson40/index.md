@@ -1,4 +1,29 @@
-# lesson39: 監視系 API（Intersection Observer / ResizeObserver / MutationObserver）
+# lesson40: 監視系 API（Intersection Observer / ResizeObserver / MutationObserver）
+
+<script setup>
+const fadeDemoJs = `
+const items = document.querySelectorAll('.fade-in');
+const observer = new IntersectionObserver((entries) => {
+  entries.forEach((entry) => {
+    if (entry.isIntersecting) {
+      entry.target.classList.add('visible');
+      observer.unobserve(entry.target);
+    }
+  });
+}, { threshold: 0.3 });
+
+items.forEach((el) => observer.observe(el));
+
+const resetBtn = document.getElementById('reset');
+resetBtn.addEventListener('click', () => {
+  items.forEach((el) => {
+    el.classList.remove('visible');
+    observer.observe(el);
+  });
+  document.getElementById('scroll-area').scrollTop = 0;
+});
+`
+</script>
 
 ## ゴール
 
@@ -154,6 +179,39 @@ document.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
 ```
 
 スクロールアニメーションの定番パターン。
+
+下のデモでスクロール領域を下に動かしてください。各カードがビューポートに 30% 入ったタイミングでフェードインします。`unobserve` しているので一度フェードしたカードは再観測されません。
+
+<!-- textlint-disable ja-technical-writing/sentence-length -->
+
+<LiveDemo
+  height="320px"
+  :html="`
+<button id='reset' type='button'>リセット</button>
+<div id='scroll-area'>
+  <div class='spacer'>↓ 下にスクロール ↓</div>
+  <div class='fade-in'>カード 1</div>
+  <div class='fade-in'>カード 2</div>
+  <div class='fade-in'>カード 3</div>
+  <div class='fade-in'>カード 4</div>
+</div>
+  `"
+  :css="`
+button { padding: 6px 12px; margin-bottom: 8px; }
+#scroll-area { height: 220px; overflow-y: auto; border: 1px solid #ccc; border-radius: 4px; padding: 12px; background: #fafafa; }
+.spacer { height: 200px; display: flex; align-items: flex-end; justify-content: center; color: #999; }
+.fade-in { opacity: 0; transform: translateY(30px); transition: opacity 0.6s, transform 0.6s; padding: 32px; margin: 24px 0; background: #e0e7ff; color: #1e1b4b; border-radius: 8px; text-align: center; font-weight: 600; }
+.fade-in.visible { opacity: 1; transform: translateY(0); }
+@media (prefers-color-scheme: dark) {
+  #scroll-area { background: #1a1a1a; border-color: #555; }
+  .spacer { color: #777; }
+  .fade-in { background: #312e81; color: #e0e7ff; }
+}
+  `"
+  :js="fadeDemoJs"
+/>
+
+<!-- textlint-enable ja-technical-writing/sentence-length -->
 
 ### ResizeObserver
 

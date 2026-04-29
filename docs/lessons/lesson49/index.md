@@ -1,4 +1,4 @@
-# lesson48: 判別共用体（discriminated union）
+# lesson49: 判別共用体（discriminated union）
 
 ## ゴール
 

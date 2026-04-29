@@ -1,4 +1,4 @@
-# lesson117: 環境変数とシークレット管理
+# lesson118: 環境変数とシークレット管理
 
 ## ゴール
 
@@ -124,7 +124,7 @@ console.log(import.meta.env.VITE_API_URL);  // OK
 console.log(import.meta.env.SECRET_KEY);    // undefined
 ```
 
-詳細は lesson106 でも触れた通り。
+詳細は lesson107 でも触れた通り。
 
 ### 環境ごとの設定
 

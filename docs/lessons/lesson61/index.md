@@ -1,4 +1,4 @@
-# lesson60: 条件で出し分ける
+# lesson61: 条件で出し分ける
 
 <script setup>
 const closeScript = '<' + '/script>'

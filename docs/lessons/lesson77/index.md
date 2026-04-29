@@ -1,4 +1,4 @@
-# lesson76: `next/image` で画像最適化
+# lesson77: `next/image` で画像最適化
 
 ## ゴール
 

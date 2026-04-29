@@ -1,4 +1,4 @@
-# lesson74: Server Component と Client Component
+# lesson75: Server Component と Client Component
 
 ## ゴール
 

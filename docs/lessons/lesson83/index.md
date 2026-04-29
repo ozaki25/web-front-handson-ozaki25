@@ -1,4 +1,4 @@
-# lesson82: Route Handlers（`app/api/.../route.ts`）
+# lesson83: Route Handlers（`app/api/.../route.ts`）
 
 ## ゴール
 

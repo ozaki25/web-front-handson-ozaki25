@@ -1,4 +1,4 @@
-# lesson130: Web Analytics（Vercel Analytics / GA4）
+# lesson131: Web Analytics（Vercel Analytics / GA4）
 
 ## ゴール
 
@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ### Vercel Speed Insights
 
-実ユーザーの **Core Web Vitals**（lesson102）を集めるツールです。
+実ユーザーの **Core Web Vitals**（lesson103）を集めるツールです。
 
 ```bash
 npm install @vercel/speed-insights

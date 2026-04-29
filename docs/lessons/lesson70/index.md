@@ -1,4 +1,4 @@
-# lesson69: Error Boundary と Suspense
+# lesson70: Error Boundary と Suspense
 
 ## ゴール
 
@@ -155,7 +155,7 @@ createRoot(document.getElementById("root")!).render(
 export default function App() {
   return (
     <div>
-      <h1>lesson69</h1>
+      <h1>lesson70</h1>
     </div>
   );
 }
@@ -250,7 +250,7 @@ export default function App() {
 
   return (
     <div style={{ fontFamily: "system-ui", padding: 16 }}>
-      <h1>lesson69: ErrorBoundary と Suspense</h1>
+      <h1>lesson70: ErrorBoundary と Suspense</h1>
 
       <section>
         <h2>1. ErrorBoundary</h2>

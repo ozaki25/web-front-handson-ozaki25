@@ -1,4 +1,4 @@
-# lesson46: `unknown` と `never`
+# lesson47: `unknown` と `never`
 
 ## ゴール
 

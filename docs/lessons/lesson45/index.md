@@ -1,4 +1,4 @@
-# lesson44: `interface` と `type` の使い分け
+# lesson45: `interface` と `type` の使い分け
 
 ## ゴール
 

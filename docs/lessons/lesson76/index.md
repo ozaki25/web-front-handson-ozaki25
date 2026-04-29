@@ -1,4 +1,4 @@
-# lesson75: Server Component でデータを取得する
+# lesson76: Server Component でデータを取得する
 
 ## ゴール
 

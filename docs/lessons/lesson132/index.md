@@ -1,4 +1,4 @@
-# lesson131: OGP と SEO 実践
+# lesson132: OGP と SEO 実践
 
 ## ゴール
 

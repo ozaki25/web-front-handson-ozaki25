@@ -1,4 +1,4 @@
-# lesson73: Route Groups で整理する
+# lesson74: Route Groups で整理する
 
 ## ゴール
 

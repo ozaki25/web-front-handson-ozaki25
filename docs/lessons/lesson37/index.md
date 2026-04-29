@@ -1,4 +1,4 @@
-# lesson36: TODO アプリを作る
+# lesson37: TODO アプリを作る
 
 <script setup>
 // LiveDemo の :js に渡す JS コード。
@@ -30,38 +30,16 @@ render();
 
 ## 解説
 
-ここまでのレッスンで積み上げてきた道具で、実際に動く小さなアプリを組み立てます。新しい概念は 1 つだけ: **`localStorage`** です。
+このレッスンは JS 章の **シンセシス** です。ここまでで学んだ道具を組み合わせて、実際に動く小さなアプリを組み立てます。使う道具は次のとおり、いずれも本コースで扱い済みです。
 
-### `localStorage` とは
+- **DOM** で `<input>` / `<ul>` / `<li>` を取得 / 生成
+- **イベント** で「追加ボタンを押す」「削除ボタンを押す」を拾う
+- **配列メソッド**（`filter` / `map` / `find`）で TODO 一覧を加工
+- **`localStorage`** に配列を保存し、リロード後に読み戻す
+- **`JSON.stringify` / `JSON.parse`** で配列を文字列にして保存・復元
+- **`try` / `catch`** で壊れた `localStorage` の値を握りつぶして起動を続ける
 
-ブラウザが提供する「文字列を保存しておける箱」です。ページを閉じてもデータは残り、次に同じページを開いたときに読み出せます。
-
-```js
-localStorage.setItem("key", "value"); // 保存
-const v = localStorage.getItem("key"); // 取り出し（なければ null）
-```
-
-- 保存できるのは **文字列だけ**
-- 配列やオブジェクトをそのまま入れることはできない
-
-### `JSON.stringify` / `JSON.parse`
-
-配列やオブジェクトを文字列に変換 / 戻すための道具です。
-
-```js
-const todos = [{ id: "1", text: "A" }, { id: "2", text: "B" }];
-
-const str = JSON.stringify(todos);
-// '[{"id":"1","text":"A"},{"id":"2","text":"B"}]'
-
-const back = JSON.parse(str);
-// [{ id: "1", text: "A" }, { id: "2", text: "B" }]
-```
-
-- `JSON.stringify(値)`: JS のデータを JSON 文字列に
-- `JSON.parse(文字列)`: JSON 文字列を JS のデータに戻す
-
-`JSON.parse` は「壊れた文字列」を渡されると例外を投げます。localStorage の値を誰かが手動で書き換えていた場合など、失敗しうるので **「fetch で API から取得する」で学んだ `try` / `catch` で囲む** のが安全です。
+新しく出てくる API は **`crypto.randomUUID()` だけ** です。次の節で説明します。
 
 ### id をユニークに作る
 
@@ -111,12 +89,12 @@ const id = crypto.randomUUID();
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson35</title>
+    <title>lesson36</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson35: カウンター</h1>
+    <h1>lesson36: カウンター</h1>
 
     <section>
       <p id="count-label">カウント: 0</p>
@@ -238,7 +216,7 @@ form.addEventListener("submit", (event) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson36 TODO</title>
+    <title>lesson37 TODO</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>

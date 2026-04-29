@@ -1,4 +1,4 @@
-# lesson127: React Compiler
+# lesson128: React Compiler
 
 ## ゴール
 
@@ -9,7 +9,7 @@
 - 既存コードでハマらないための注意点（Rules of React）を押さえる
 
 ::: tip 前提
-このレッスンは lesson65「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson65 / 55 を確認してください。
+このレッスンは lesson66「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson66 / 55 を確認してください。
 :::
 
 ## 解説
@@ -458,7 +458,7 @@ export default function CompiledComponent() { /* ... */ }
 
 ### 変える
 
-- 既存コード（lesson65 / lesson68 の React アプリなど）に Compiler を入れる
+- 既存コード（lesson66 / lesson69 の React アプリなど）に Compiler を入れる
 - React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
 - 大量レンダリング（1000 行のリスト）で差を観察
 
@@ -478,7 +478,7 @@ export default function CompiledComponent() { /* ... */ }
 ### 単独の任意課題
 
 - `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
-- ベンチマーク（lesson102 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
+- ベンチマーク（lesson103 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 
 ## まとめ
 

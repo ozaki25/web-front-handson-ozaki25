@@ -1,4 +1,4 @@
-# lesson129: エラートラッキング（Sentry）
+# lesson130: エラートラッキング（Sentry）
 
 ## ゴール
 
@@ -95,7 +95,7 @@ Sentry.captureMessage("ユーザーが何度もログインに失敗");
 
 ### React の Error Boundary と統合
 
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson69 と相性 ◎）。
+Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson70 と相性 ◎）。
 
 ```tsx
 import * as Sentry from "@sentry/react";

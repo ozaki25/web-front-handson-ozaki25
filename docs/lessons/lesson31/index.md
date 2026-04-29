@@ -1,4 +1,4 @@
-# lesson30: 非同期処理の基本
+# lesson31: 非同期処理の基本
 
 <script setup>
 const demoJs = `

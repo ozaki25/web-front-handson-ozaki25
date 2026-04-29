@@ -1,4 +1,4 @@
-# lesson58: useReducer で複雑な state
+# lesson59: useReducer で複雑な state
 
 ## ゴール
 

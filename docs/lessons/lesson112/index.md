@@ -1,4 +1,4 @@
-# lesson111: GitHub Actions で CI
+# lesson112: GitHub Actions で CI
 
 ## ゴール
 

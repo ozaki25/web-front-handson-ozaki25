@@ -1,4 +1,4 @@
-# lesson80: Server Actions の最小形
+# lesson81: Server Actions の最小形
 
 ## ゴール
 

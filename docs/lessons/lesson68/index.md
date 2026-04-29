@@ -1,4 +1,4 @@
-# lesson67: React DevTools（Components / Profiler）
+# lesson68: React DevTools（Components / Profiler）
 
 ## ゴール
 

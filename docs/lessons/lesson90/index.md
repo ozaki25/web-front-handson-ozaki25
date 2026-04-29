@@ -1,4 +1,4 @@
-# lesson89: Vercel にデプロイする
+# lesson90: Vercel にデプロイする
 
 「小さなアプリを統合する」で組み上げた TODO アプリを、SNS で共有できる本番 URL として公開します。
 

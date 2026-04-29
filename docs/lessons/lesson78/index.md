@@ -1,4 +1,4 @@
-# lesson77: `next/font` でフォント
+# lesson78: `next/font` でフォント
 
 ## ゴール
 

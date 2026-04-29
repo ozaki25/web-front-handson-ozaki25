@@ -1,4 +1,4 @@
-# lesson92: HTTP キャッシュ
+# lesson93: HTTP キャッシュ
 
 ## ゴール
 

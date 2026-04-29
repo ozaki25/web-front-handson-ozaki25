@@ -1,4 +1,4 @@
-# lesson28: Web Storage で値をブラウザに保存する
+# lesson29: Web Storage で値をブラウザに保存する
 
 <script setup>
 const demoJs = `
@@ -202,7 +202,7 @@ button { margin-right: 6px; padding: 6px 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson28</title>
+    <title>lesson29</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>

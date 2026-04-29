@@ -1,4 +1,4 @@
-# lesson87: Metadata API で SEO を整える
+# lesson88: Metadata API で SEO を整える
 
 ## ゴール
 
