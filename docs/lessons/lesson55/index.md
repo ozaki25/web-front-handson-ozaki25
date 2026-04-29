@@ -1,164 +1,127 @@
-# lesson55: コンポーネントと props
+# lesson55: 配列を描画する
 
 ## ゴール
 
-- コンポーネントを分けて再利用できる
-- `type` で props の型を定義し、`import type` して使える
-- `children` を受け取って自由な中身を差し込めるコンポーネントが書ける
+- 配列を `.map` で JSX の配列に変換し、`<ul>` の中に並べられる
+- `key` prop に何を渡すべきかを説明できる
+- 素の JS での DOM 追加と React の描画の違いを説明できる
 
 ## 解説
 
-### 2 章 の「分割代入とスプレッド」と同じ書き方
+### 2 章 の「繰り返し処理」+ DOM 操作 との対比
 
-本題の前に、1 行で接続しておきます。
+2 章 で `<ul>` に項目を並べたいとき、素の JS では次のように書いていました。
 
-2 章 の「分割代入とスプレッド」で学んだオブジェクトの分割代入を思い出してください。
+```js
+// 素の JS での描画イメージ
+const ul = document.querySelector("#list");
+for (const todo of todos) {
+  const li = document.createElement("li");
+  li.textContent = todo.text;
+  ul.appendChild(li);
+}
+```
+
+「1 件ずつ DOM を作って `appendChild`」。数が増えても手順は同じです。
+
+React では、**配列を JSX の配列に変換するだけ**です。`return` に書いた JSX を見て、React が前回のツリーとの差分を計算し、必要な DOM だけを更新してくれます。
+
+```tsx
+<ul>
+  {todos.map((todo) => (
+    <li key={todo.id}>{todo.text}</li>
+  ))}
+</ul>
+```
+
+`for` ループで `appendChild` を呼ぶ必要はありません。配列（`todos`）から配列（JSX の `<li>` の並び）への**変換**だけを書きます。
+
+### `map` は2 章 の「配列の変換」の続き
+
+2 章 の「配列の変換」で `map` / `filter` を学びました。`map` は配列の各要素を別の値に変換して、新しい配列を返すメソッドです。
 
 ```ts
-const user = { name: "Alice", age: 20 };
-const { name, age } = user; // 取り出す
+const numbers = [1, 2, 3];
+const doubled = numbers.map((n) => n * 2); // [2, 4, 6]
 ```
 
-React コンポーネントの props も、**全く同じ書き方**で値を取り出します。「2 章 の「分割代入とスプレッド」の再登場」と思ってください。
+React の配列描画は、この `map` で **JSX の要素に変換する** ことに他なりません。
 
 ```tsx
-function Greeting({ name }: GreetingProps) {
-  return <p>こんにちは、{name} さん</p>;
+const items = ["りんご", "みかん", "ぶどう"];
+const listItems = items.map((item) => <li>{item}</li>);
+// listItems は [<li>りんご</li>, <li>みかん</li>, <li>ぶどう</li>]
+
+<ul>{listItems}</ul>;
+```
+
+実際は変数に入れずに、JSX の中で直接書きます。
+
+```tsx
+<ul>
+  {items.map((item) => (
+    <li>{item}</li>
+  ))}
+</ul>
+```
+
+### `key` prop は「誰がどれか」を React に伝える
+
+上のコードを実際に書くと、ブラウザのコンソールに**警告**が出ます。
+
+```
+Warning: Each child in a list should have a unique "key" prop.
+```
+
+「リストの各要素に `key` prop を付けてね」という警告です。
+
+React は状態が変わるたびに、前回のツリーと新しいツリーを比べて差分を反映します。このとき、配列で並んでいる要素のうち「どれが前回と同じ要素なのか」を判断する材料が必要です。その材料が `key` です。
+
+```tsx
+<ul>
+  {todos.map((todo) => (
+    <li key={todo.id}>{todo.text}</li>
+  ))}
+</ul>
+```
+
+- `key` には **配列内でユニークな値** を渡す
+- TODO のように `id` を持つデータなら、`id` をそのまま使う
+- 「配列のインデックス（`map((todo, i) => ...)` の `i`）を渡す」のは**避ける**。並び替えや途中削除で挙動が怪しくなるため
+
+`key` は props 扱いですが、コンポーネント側で受け取れる値ではなく、**React 内部だけが使う特別な prop** です。
+
+### 空の配列でも動く
+
+`todos` が空配列 `[]` の場合、`map` の結果も空配列になるので、`<ul>` の中身は空になります。エラーにはなりません。
+
+「0 件のとき専用のメッセージを出したい」場合は、条件表示と組み合わせます。
+
+### 要素の中で `{式}` は 1 つだけ書けばよい
+
+JSX の中の `{ ... }` には、式を 1 つだけ書きます。`for` 文や `if` 文は書けません。配列の `map` の戻り値はれっきとした「式」（値を返す）なので、そのまま書けます。
+
+```tsx
+{
+  /* OK: map は式 */
+  todos.map((t) => <li key={t.id}>{t.text}</li>);
+}
+{
+  /* NG: for 文は式ではない */
+  for (const t of todos) {
+    /* ... */
+  }
 }
 ```
-
-### props とは
-
-コンポーネントを関数として見たとき、props は **引数** です。呼び出し側から値を渡し、コンポーネントの中で使います。HTML タグに属性を付ける感覚で書けます。
-
-```tsx
-<Greeting name="Alice" />
-<Greeting name="Bob" />
-```
-
-同じ `Greeting` コンポーネントを、`name` を変えながら何回でも使い回せます。
-
-### 型付き props
-
-TypeScript で書くときは、props の形を型で表します。3 章 の「オブジェクトの型と type エイリアス」で学んだ `type` エイリアスをそのまま使います。
-
-```tsx
-type GreetingProps = {
-  name: string;
-};
-
-function Greeting({ name }: GreetingProps) {
-  return <p>こんにちは、{name} さん</p>;
-}
-```
-
-- `GreetingProps` は「`name` という string を持つオブジェクト」の型
-- `function Greeting({ name }: GreetingProps)` は「props（`GreetingProps`）を受け取り、その中の `name` を取り出して使う関数」
-
-オブジェクト分割代入と同じ書き方がそのまま効きます。
-
-### `import type` で型を別ファイルから持ってくる
-
-3 章 の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
-
-```ts
-// src/types.ts
-import type { ReactNode } from "react";
-
-export type GreetingProps = {
-  name: string;
-  age?: number;
-  children?: ReactNode;
-};
-```
-
-```tsx
-// src/Greeting.tsx
-import type { GreetingProps } from "./types";
-```
-
-- `import type { ... }` は「**型だけ** を持ってくる」という書き方
-- ビルド後の JS には残らない（実行時のコストはゼロ）
-- `ReactNode` は `react` パッケージから import する。`React.ReactNode` のように名前空間経由で書くこともできるが、新しい Vite テンプレート（自動 JSX ランタイム前提）では名前空間経由だと「`React` が見つからない」エラーが出やすいので、**個別に import する形に統一する**
-
-### オプショナルプロパティ `?`
-
-`age?: number` は「`age` は省略しても OK」という意味です。書く側は `<Greeting name="Alice" />` でも `<Greeting name="Alice" age={20} />` でも動きます。省略された場合、`age` の値は `undefined` になります。
-
-### `children`（コピペで与える `ReactNode`）
-
-コンポーネントのタグの**中身**を受け取りたいことがあります。例えばこう書きたい。
-
-```tsx
-<Card>
-  <h2>タイトル</h2>
-  <p>本文</p>
-</Card>
-```
-
-`Card` の中身（`<h2>` と `<p>`）を、`Card` の中の好きな場所にはめ込みたい。この「中身」を受け取る特別な props の名前が **`children`** です。
-
-型は `ReactNode` を使います（`react` パッケージから `import type` する）。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
-
-```tsx
-import type { ReactNode } from "react";
-
-type CardProps = {
-  title: string;
-  children?: ReactNode;
-};
-
-function Card({ title, children }: CardProps) {
-  return (
-    <div className="card">
-      <h2>{title}</h2>
-      <div className="card-body">{children}</div>
-    </div>
-  );
-}
-```
-
-使う側は、タグの中に何でも書けます。
-
-```tsx
-<Card title="お知らせ">
-  <p>本日は休業です。</p>
-</Card>
-```
-
-### コンポーネントの作り方（ファイル分割）
-
-コンポーネントが増えてきたら、1 ファイル 1 コンポーネントに分けます。
-
-```tsx
-// src/Greeting.tsx
-import type { GreetingProps } from "./types";
-
-export function Greeting({ name, age, children }: GreetingProps) {
-  return (
-    <div>
-      <p>こんにちは、{name} さん</p>
-      {age !== undefined && <p>{age} 歳です</p>}
-      {children}
-    </div>
-  );
-}
-```
-
-- ファイル名はコンポーネント名に合わせる（大文字始まり）
-- **コンポーネント名は必ず大文字始まり**（`Greeting` / `Card`）。小文字で書くと JSX が通常の HTML タグとして解釈されてしまう
-- `export function ...` で名前付きエクスポートするのが本コースの基本形
-
-`{age !== undefined && <p>{age} 歳です</p>}` の `&&` は「左が真なら右を表示」。ここでは「`age` が省略されたら `<p>` は出ない」と読み取れれば OK です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
-<summary>出発点のファイル（3 章 の <code>types.ts</code> を再掲）</summary>
+<summary>出発点のファイル</summary>
 
 **`src/types.ts`**
 
@@ -169,47 +132,50 @@ export type Todo = {
 };
 ```
 
-このレッスン本体では `Todo` 型自体は使いませんが、以降のレッスンで再利用するのでここで用意しておいても構いません。
+本レッスンの演習でこのファイルを `import type { Todo } from "./types"` の形で利用します。
 
 </details>
 
 ### ゴール
 
-- `Greeting` コンポーネントを別ファイルに切り出し、`App` から 3 パターンで呼び出す
-- 型 `GreetingProps` を `types.ts` に置き、`import type` で使う
-- `children` に JSX を差し込めることを確認する
+- ハードコードした `todos` 配列を `<ul>` で描画する
+- `Todo` 型を3 章 の `types.ts` から `import type` して再利用する
+- 各 `<li>` に `key={todo.id}` を付ける
 
 ### 手順
 
-1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る（これまでのを使い回しても OK）
-2. `src/types.ts` を新規作成
-3. `src/Greeting.tsx` を新規作成
+1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
+2. `src/types.ts` を作成（3 章 の「オブジェクトの型と type エイリアス」「配列・ユニオン・リテラル型・オプショナル」で作ったものを持ってくる想定）
+3. `src/TodoList.tsx` を作成
 4. `src/App.tsx` を書き換える
 
 ### `src/types.ts`
 
 ```ts
-import type { ReactNode } from "react";
-
-export type GreetingProps = {
-  name: string;
-  age?: number;
-  children?: ReactNode;
+export type Todo = {
+  id: string;
+  text: string;
 };
 ```
 
-### `src/Greeting.tsx`
+3 章 で `status` や `memo` を足した版を書いた場合はそちらを使っても OK です。このレッスンは `id` と `text` しか使いません。
+
+### `src/TodoList.tsx`
 
 ```tsx
-import type { GreetingProps } from "./types";
+import type { Todo } from "./types";
 
-export function Greeting({ name, age, children }: GreetingProps) {
+type TodoListProps = {
+  todos: Todo[];
+};
+
+export function TodoList({ todos }: TodoListProps) {
   return (
-    <div className="greeting">
-      <p>こんにちは、{name} さん</p>
-      {age !== undefined && <p>{age} 歳です</p>}
-      {children}
-    </div>
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>{todo.text}</li>
+      ))}
+    </ul>
   );
 }
 ```
@@ -217,24 +183,21 @@ export function Greeting({ name, age, children }: GreetingProps) {
 ### `src/App.tsx`
 
 ```tsx
-import { Greeting } from "./Greeting";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
 import "./App.css";
+
+const sampleTodos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "原稿を書く" },
+  { id: "a3", text: "散歩する" },
+];
 
 function App() {
   return (
     <>
-      <h1>Greeting デモ</h1>
-
-      {/* (1) 名前のみ */}
-      <Greeting name="Alice" />
-
-      {/* (2) 名前 + 年齢 */}
-      <Greeting name="Bob" age={25} />
-
-      {/* (3) 名前 + children にメッセージ */}
-      <Greeting name="Carol">
-        <p>今日はよい天気ですね。</p>
-      </Greeting>
+      <h1>今日のタスク</h1>
+      <TodoList todos={sampleTodos} />
     </>
   );
 }
@@ -245,83 +208,50 @@ export default App;
 ### `src/App.css`
 
 ```css
-.greeting {
-  border: 1px solid #ccc;
-  padding: 8px 12px;
-  margin: 8px 0;
-  border-radius: 4px;
+.todo-list {
+  list-style: disc;
+  padding-left: 20px;
   color: #222;
-  background-color: #fff;
+}
+
+.todo-list li {
+  padding: 4px 0;
 }
 
 @media (prefers-color-scheme: dark) {
-  .greeting {
+  .todo-list {
     color: #eee;
-    background-color: #202020;
-    border-color: #555;
   }
 }
 ```
 
 ### 期待出力
 
-画面にカード風のブロックが 3 つ、縦に並びます。
+画面に次のような表示が出ます。
 
-1. `こんにちは、Alice さん`（1 行だけ）
-2. `こんにちは、Bob さん` / `25 歳です`（2 行）
-3. `こんにちは、Carol さん` / `今日はよい天気ですね。`（2 行、2 行目は `children` として渡した `<p>`）
+```
+今日のタスク
+  ・ 牛乳を買う
+  ・ 原稿を書く
+  ・ 散歩する
+```
+
+ブラウザのコンソールに `key` に関する警告が **出ない** ことも確認してください。
 
 ### 変える
 
-- `<Greeting name="Bob" age={25} />` の `age` を消して `<Greeting name="Bob" />` にすると、2 枚目のカードが 1 行だけになることを確認
-- `<Greeting name="Carol">` の中身を `<ul><li>りんご</li><li>みかん</li></ul>` に変えると、`children` がリストとして表示される
-- `name` を消して `<Greeting age={30} />` と書くと、TypeScript が赤線で「`name` が足りない」と教えてくれる（`name` は必須のため）
+- `sampleTodos` に要素を 2, 3 件追加して、画面が 1 行ずつ増えることを確認
+- `<li key={todo.id}>` の `key={todo.id}` を削除して、コンソールに警告が出ることを確認（確認できたら戻す）
+- `sampleTodos` を空配列 `[]` にすると `<ul>` が空になる。エラーにはならないことを確認
 
 ### 自分で書く
 
-- `types.ts` に `type CardProps = { title: string; children?: ReactNode }` を追加（`ReactNode` は `react` から `import type`）
-- `src/Card.tsx` を作って、`title` を `<h2>` で、`children` を `<div>` で包んで表示する `Card` コンポーネントを実装
-- `App.tsx` で `Card` を 2 個使ってみる（中身は自由）
-
-### もう一歩: 既存の HTML 要素 props を再利用する
-
-ボタンや input をラップして「色だけ変えた `<Button>`」のようなコンポーネントを作るとき、**HTML 要素の標準 props**（`type` / `disabled` / `onClick` / `aria-*` など全部）を一から型定義し直すのは大変です。React は次の 2 つのヘルパーを用意しています。
-
-```tsx
-import type { ComponentProps, PropsWithChildren } from "react";
-
-// (A) <button> の全 props を継承し、color だけ追加
-type ButtonProps = ComponentProps<"button"> & {
-  color?: "primary" | "danger";
-};
-
-function Button({ color = "primary", ...rest }: ButtonProps) {
-  return <button className={`btn btn-${color}`} {...rest} />;
-}
-
-// (B) children を受け取る型を 1 行で
-type CardProps = PropsWithChildren<{ title: string }>;
-
-function Card({ title, children }: CardProps) {
-  return (
-    <article>
-      <h2>{title}</h2>
-      <div>{children}</div>
-    </article>
-  );
-}
-```
-
-- `ComponentProps<"button">` は **`<button>` 要素のすべての props 型** を取り出します（`type`、`disabled`、`onClick` 等）。`<input>` / `<a>` 等にも同様に使えます
-- `PropsWithChildren<T>` は `T & { children?: ReactNode }` の省略形
-
-本コースで中心に扱うのは手書きの `type` エイリアスですが、**HTML 要素ラップ系コンポーネント** ではこれらが定型句として頻出するので、見たときに読めるように頭の片隅に置いておきます。
+- `src/TodoList.tsx` を少しだけ変えて、リストの頭に `<p>合計 N 件</p>` を表示する
+- ヒント: `<ul>` の外側を `<div>` やフラグメントで包み、`<p>合計 {todos.length} 件</p>` を足す
+- 期待出力: 「今日のタスク」の下に「合計 3 件」と出て、その下にリスト
 
 ## まとめ
 
-- props は「コンポーネントの引数」。オブジェクトの分割代入（2 章 の「分割代入とスプレッド」）で受け取る
-- 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
-- オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
-- `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
-- HTML 要素をラップするときは `ComponentProps<"button">` で標準 props を継承、`PropsWithChildren<T>` で children 付きを 1 行で書ける（補足）
-- コンポーネント名は必ず大文字始まり
+- 配列の描画は `配列.map((item) => <JSX />)` でおこなう
+- 各要素に **ユニークな `key`** を付ける（インデックスは避ける）
+- `for` / `appendChild` を書く素の JS と違い、React は「前のツリーとの差分」を自分で計算して DOM を更新する

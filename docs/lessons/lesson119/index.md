@@ -1,419 +1,339 @@
-# lesson119: フィーチャーフラグ
+# lesson119: 依存性セキュリティ（npm audit / Dependabot）
 
 ## ゴール
 
-- フィーチャーフラグが「**デプロイ** と **機能公開** を分離する」考え方であることを説明できる
-- 環境変数ベースの最小実装ができる
-- ロールアウト（10% → 50% → 100%）の意義を理解する
-- LaunchDarkly / GrowthBook / Vercel Edge Config / Statsig の位置付けが分かる
-- A/B テストとフィーチャーフラグの違いと重なりを説明できる
+- 「依存パッケージ経由で攻撃される」という **サプライチェーン** リスクを理解する
+- `npm audit` のレポートを読み、優先度を判断できる
+- **Dependabot / Renovate** で更新を自動化できる
+- パッケージを採用する時の判断軸（DL 数 / メンテナンス / 依存の深さ）を持つ
+- ロックファイル / 整合性検証 / SBOM の役割を知る
 
 ## 解説
 
-### 背景: 「リリース」と「公開」を切り離したい
+### サプライチェーン攻撃とは
 
-新機能をリリースすると、次の不安が常に付きまといます。
+「自分のコードは安全」でも、**依存している npm パッケージ** が改ざんされると、そのまま自分のサイトに **攻撃コードが配布** されます。実際に過去:
 
-- **本番で初めて壊れたら？**
-- **想定外のトラフィックで重くなったら？**
-- **特定ユーザーだけが踏むバグがあったら？**
+- `event-stream` 事件（2018）: 人気ライブラリの管理権限を譲り受けた攻撃者が暗号通貨ウォレット狙いのコードを混入
+- `colors.js` / `faker.js` 事件（2022）: 作者本人が抗議で暴走コードを混入
+- typosquatting: `react-doom`（react-dom の typo）のような偽パッケージ
 
-従来の「**ビルドして本番にデプロイ → 全ユーザーに公開**」は、不具合が出た瞬間に **ロールバックしか選択肢がない** という弱さがあります。
+これらは npm 公式に公開されたパッケージ経由で広がります。**依存ツリー** が深くなるほど面が広がり、リスクも増す。
 
-フィーチャーフラグ（Feature Flag、Feature Toggle）は **「コードはデプロイ済み、機能は OFF」の状態を作る** 仕組みです。
+### npm audit
 
-```
-[ デプロイ ]──────────────[ 機能公開 ]
-     │                         │
-     ↓                         ↓
-  GitHub で merge          管理画面で ON
-   = 全ユーザーに            = 特定の人 / %
-     コードが届く              に出す
+`npm audit` は **既知の脆弱性 DB**（GitHub Advisory Database） に対し、現在の依存ツリーをチェックします。
+
+```bash
+npm audit
 ```
 
-これによって:
+出力例:
 
-- **5% に出してから様子を見る**
-- **問題が出たら 1 クリックで戻す**（ビルド不要）
-- **社内ユーザーだけ先行公開**
-- **A/B テスト**（バリアント A と B の効果を比較）
+```
+# npm audit report
 
-### 最小実装: 環境変数で
+semver  <5.7.2
+Severity: high
+ReDoS in semver - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
+fix available via `npm audit fix`
+node_modules/semver
 
-「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。Server Component で評価する形がもっとも安全です。
-
-```ts
-// .env.production
-NEW_CHECKOUT=false
+5 vulnerabilities (2 high, 3 moderate)
 ```
 
-```tsx
-// app/checkout/page.tsx (Server Component)
-export default function CheckoutPage() {
-  if (process.env.NEW_CHECKOUT === "true") {
-    return <NewCheckout />;
+### 重要度（Severity）
+
+| レベル | 対応の目安 |
+|---|---|
+| **critical** | 即座に対応。本番が止まっても直す |
+| **high** | 計画的に修正、長くて 1 週間 |
+| **moderate** | 月次でまとめて対応 |
+| **low** | 余力で対応 |
+
+### `npm audit fix`
+
+```bash
+npm audit fix
+```
+
+semver の範囲内で **自動アップデート** します。安全だが、メジャーバージョン更新が必要なケースは手動。
+
+```bash
+npm audit fix --force
+```
+
+`--force` で **メジャーアップデート込み** で直してくれますが、**破壊的変更** が混じる可能性があります。CI / 動作確認とセットでないと危険。
+
+### 「audit だけ」では足りない
+
+`npm audit` の限界:
+
+- **devDependencies の脆弱性** がノイズになりやすい（本番に届かないものまで警告）
+- **fix なし** の脆弱性は手動で対処するしかない
+- **新しい脆弱性** は DB に登録された後に通知される（ゼロデイには無力）
+
+→ **audit + 自動アップデート + パッケージ選定** の三本柱で守る。
+
+### Dependabot
+
+GitHub の純正サービス。**依存パッケージのバージョンを自動で PR 作成** してくれます。
+
+`.github/dependabot.yml`:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      production:
+        dependency-type: "production"
+      development:
+        dependency-type: "development"
+```
+
+挙動:
+
+- **毎週月曜** に依存をチェック
+- 更新があれば PR を作る（`production` / `development` でグループ化）
+- セキュリティ脆弱性は **常時監視** され、即時 PR
+
+GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
+
+### Renovate
+
+[Renovate](https://docs.renovatebot.com/) は OSS の代替。Dependabot より **設定が柔軟** で、Bot が活発に開発されています。
+
+`renovate.json`:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "schedule": ["before 9am on monday"],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^@types/"],
+      "groupName": "type definitions"
+    },
+    {
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    }
+  ]
+}
+```
+
+特徴:
+
+- **Group で複数パッケージをまとめて** PR
+- `automerge: true` で **CI 通過すれば自動マージ**（patch だけなど安全範囲）
+- Dependency Dashboard の Issue で **全更新を一覧** できる
+- monorepo / 言語 / Docker などへの対応が広い
+
+「Dependabot は標準、Renovate はもっと管理したい場合」の使い分け。
+
+### Socket と OSV-Scanner
+
+audit では拾えない攻撃を補う 2 つのツール。
+
+#### Socket
+
+[socket.dev](https://socket.dev/) は **疑わしいパッケージの挙動** を静的解析で検知。`postinstall` でネットに繋いだ / 環境変数を読んだ / shell を起動した、などのフラグを立てます。
+
+```bash
+npx @socketsecurity/cli scan
+```
+
+GitHub Actions で **PR 単位** に新規依存をスキャンする運用も可能。
+
+#### OSV-Scanner（Google）
+
+```bash
+npx osv-scanner -L package-lock.json
+```
+
+OSV.dev という横断的脆弱性 DB を参照。Python / Go / Rust などにも使えます。
+
+### 整合性検証
+
+`package-lock.json` には各パッケージの **`integrity`** フィールドがあり、ハッシュで完全性を確認します。
+
+```json
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "integrity": "sha512-...",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz"
   }
-  return <LegacyCheckout />;
 }
 ```
 
-> **補足: `NEXT_PUBLIC_` プレフィックスはクライアントに丸見え**: `NEXT_PUBLIC_` で始まる環境変数は **ビルド時にクライアントバンドルに埋め込まれます**。ブラウザの DevTools で JS を眺めれば値も変数名もそのまま見えます。`NEXT_PUBLIC_NEW_CHECKOUT` のようにフラグ名を `NEXT_PUBLIC_` で出すと「未公開機能の存在」「フラグ名の命名規則」がエンドユーザーに漏れる事故になります。**Server Component で評価できる場合はプレフィックスなしの `process.env.NEW_CHECKOUT`** を使い、どうしても Client Component で参照したい場合だけ `NEXT_PUBLIC_` を付けます。
+`npm ci` は **lock の通りにそのままインストール** し、ハッシュが合わなければエラー。CI ではこれを使って改ざんを検知。
 
-メリット:
+### SBOM（Software Bill of Materials）
 
-- 何も足さずに始められる
-- ビルド時に値が **インライン** されるので実行時オーバーヘッドゼロ
-
-デメリット:
-
-- 切り替えに **再ビルド + デプロイ** が必要（瞬時には変えられない）
-- ユーザー単位で出し分けできない
-- A/B テストには使えない
-
-「**動作確認用 / 開発中の機能を本番に隠す**」程度なら環境変数で十分。**運用で柔軟に切り替えたい** なら次のステップへ。
-
-### 中規模実装: 設定をリモート管理
-
-ビルドし直さずに切り替えたいなら、**フラグの値を外部から取得** します。
-
-```ts
-// utils/flags.ts
-type Flags = { newCheckout: boolean; aiSummary: boolean };
-
-let cached: Flags | null = null;
-
-export async function getFlags(): Promise<Flags> {
-  if (cached) return cached;
-  const res = await fetch("https://api.example.com/flags", { cache: "no-store" });
-  cached = await res.json();
-  return cached!;
-}
-```
-
-```tsx
-// app/page.tsx
-import { getFlags } from "@/utils/flags";
-
-export default async function Home() {
-  const flags = await getFlags();
-  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
-}
-```
-
-API のバックエンドは:
-
-- 自前のテーブル（Postgres / Redis）
-- **Vercel Edge Config**（Vercel 公式の超低遅延 KV）
-- Cloudflare KV / R2
-
-Vercel Edge Config の例:
-
-```ts
-import { get } from "@vercel/edge-config";
-
-const newCheckout = await get<boolean>("newCheckout");
-```
-
-**ms 単位で読める** ので、ページレンダリングの先頭で読んでも遅くなりません。
-
-### ユーザーに紐付くロールアウト
-
-「10% に出す」「特定の社員だけに出す」を実現するには **ユーザー識別子** が要ります。
-
-```ts
-function isFeatureEnabled(userId: string, percent: number): boolean {
-  // ユーザー ID をハッシュ → 0〜99 にマップ
-  const hash = simpleHash(userId) % 100;
-  return hash < percent;
-}
-
-const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
-```
-
-ハッシュベースだと、**同じユーザーは毎回同じ結果**（再現性）が得られます。「今回は ON、次回は OFF」を防げる。
-
-### SaaS の選択肢
-
-機能が複雑になると自前は辛いので SaaS を使います。
-
-| サービス | 特徴 |
-|---|---|
-| **LaunchDarkly** | エンタープライズ標準。機能フラグ + 実験機能 + 監査ログ。価格は高め |
-| **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
-| **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
-| **Flagsmith** | OSS / セルフホスト可能 |
-| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
-| **PostHog Feature Flags** | Analytics と統合 |
-
-#### LaunchDarkly の最小例
+「ソフトウェアの **部品表**」。何のパッケージをどのバージョンで使っているかを **機械可読な形式**（SPDX / CycloneDX） で出力します。
 
 ```bash
-npm install launchdarkly-react-client-sdk
+npm sbom --sbom-format=cyclonedx > sbom.json
 ```
 
-```tsx
-import { withLDProvider, useFlags } from "launchdarkly-react-client-sdk";
+なぜ必要:
 
-function App() {
-  const flags = useFlags();
-  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
-}
+- 新しい脆弱性が報告された時、**自社のどのプロダクトが影響を受けるか** を即座に確認できる
+- 米国の調達基準では SBOM の提出を求めるケースが増えている
 
-export default withLDProvider({
-  clientSideID: process.env.NEXT_PUBLIC_LD_CLIENT_ID!,
-  context: { kind: "user", key: "user-123", email: "user@example.com" },
-})(App);
-```
+GitHub には **Dependency Graph** が組み込みで、リポジトリの依存を可視化してくれます。
 
-管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
+### パッケージを採用する時の判断軸
 
-> **補足: 環境ごとに SDK key を分ける**: フラグ SaaS では **Production / Preview / Development それぞれに別の SDK key を発行** できます。同じ key を全環境で使い回すと、Preview デプロイの動作確認が **本番フラグの評価ログを汚す**、A/B テストの母数に開発者の挙動が混ざる、本番フラグを誤って Preview から ON にしてしまう、といった事故になります。Vercel なら `Settings → Environment Variables` で `NEXT_PUBLIC_LD_CLIENT_ID` を **Production / Preview / Development の 3 つに分けて設定する** のが定石です。
+新しい npm パッケージを入れる時、次を見る習慣を。
 
-#### GrowthBook の最小例
+#### 1. ダウンロード数
 
-```bash
-npm install @growthbook/growthbook-react
-```
+[npmtrends](https://npmtrends.com/) でダウンロード推移を確認。**月数百万 DL** あると安定。**急増** はバズ後で挙動が変わるかも、**減少** はメンテナンスが止まった可能性。
 
-```tsx
-import { GrowthBook, GrowthBookProvider, useFeatureIsOn } from "@growthbook/growthbook-react";
+#### 2. メンテナンスの頻度
 
-const gb = new GrowthBook({
-  apiHost: "https://cdn.growthbook.io",
-  clientKey: process.env.NEXT_PUBLIC_GB_CLIENT_KEY,
-  attributes: { id: currentUser.id },
-});
+GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** をチェック。**3 ヶ月コミットがない** と要注意。
 
-await gb.loadFeatures();
+#### 3. 依存の深さ
 
-function NewCheckoutGuard() {
-  const enabled = useFeatureIsOn("new-checkout");
-  return enabled ? <NewCheckout /> : <LegacyCheckout />;
-}
+`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
 
-<GrowthBookProvider growthbook={gb}>
-  <NewCheckoutGuard />
-</GrowthBookProvider>
-```
+#### 4. ライセンス
 
-### A/B テストとの関係
+MIT / Apache 2.0 / BSD は OK。**GPL** は公開要件があるので業務利用前に法務確認。
 
-フィーチャーフラグは「**ON か OFF か**」、A/B テストは「**A 案と B 案、どちらの効果が高いか**」を測るもの。
+#### 5. メンテナーの質
 
-実装は近く、フラグ系 SaaS は両方こなします。
+GitHub の **メンテナー一覧** / セキュリティポリシーの整備状況。**1 人メンテナンス** はリスクが集中する。
 
-```ts
-// バリアント割当
-const variant = useExperiment("checkout-flow"); // "control" or "v2"
+#### 6. 代替案
 
-return variant === "v2" ? <NewCheckout /> : <LegacyCheckout />;
-```
+「**標準で書ける** ことを依存追加で済ませていないか」を再検討。`Date.now()` / `fetch` / `Intl` / `Set` など、**ブラウザ / Node 標準で書ける** ものは依存を入れない方がよい。
 
-A/B テストは **統計的な有意差** の判定が必要なので、SaaS の機能（Bayesian / Frequentist のテスト統計）を活用します。
+### ゼロデイへの備え
 
-### Kill Switch（緊急停止）
+audit に載る前の脆弱性（ゼロデイ）への対処は限定的:
 
-フィーチャーフラグの **大きな価値** がこれ。本番で問題が起きた時に **コードを巻き戻さず** に機能を即 OFF にできる。
+- **GitHub Advisory** をウォッチ
+- **新パッケージの即採用は避ける**（少なくとも数日寝かせる）
+- **`postinstall` を実行しないインストール**（`--ignore-scripts`）を CI で
+- **lockfile を厳しく**（`npm ci`、`pnpm install --frozen-lockfile`）
 
-- 「決済 v2 を ON にしたら障害」→ 管理画面で OFF に
-- 「新検索が API を叩きすぎ」→ OFF に
+### おすすめの基本セット
 
-ロールバック（git revert + 再デプロイ）が **数分** かかるのに対し、フラグ OFF は **数秒**。これが本番運用の安心感に直結します。
+最小構成:
 
-### フラグの寿命管理
+1. **Dependabot Alerts ON**（GitHub の Security タブ）
+2. **Dependabot version updates** で週次 PR
+3. **CI で `npm audit --omit=dev`** を実行（本番依存だけチェック）
+4. **`npm ci`** で lockfile 通りインストール
+5. **SBOM をビルド成果物に含める**（後で照会できる）
 
-フラグは増えると **コードが if 地獄** になります。**寿命を管理** する習慣が大事。
-
-| フラグの種類 | 寿命の目安 |
-|---|---|
-| Release flag（新機能の段階公開） | 公開完了後すぐ削除 |
-| Experiment flag（A/B テスト） | 結果が出たら削除 |
-| Ops flag（緊急停止用） | 長期保存 |
-| Permission flag（権限による出し分け） | 永続 |
-
-「**Release flag は公開後 2 週間で削除**」のようなルールを決めて、定期清掃します。
-
-#### lint で検出
-
-GrowthBook / LaunchDarkly などの SaaS は「**コードに残っているフラグ一覧**」を検出する CLI を提供しています。CI で「3 ヶ月使われていないフラグ」を warning 出力するのが有効。
-
-### サーバー / クライアント / Edge
-
-Next.js のような SSR / RSC 環境では「**フラグをどこで評価するか**」が重要です。
-
-| 場所 | 例 |
-|---|---|
-| **Server Component** | `await getFlag()` を直接呼ぶ。SSR でフラグ反映 |
-| **Edge Middleware** | リクエストヘッダで分岐し、A/B 用に URL を書き換え |
-| **Client Component** | `useFlag()` フックでクライアントサイド分岐。**ハイドレーション後の表示揺れ** に注意 |
-
-クライアント側だけで分岐すると、ハイドレーションの瞬間に「**ON → OFF のチラつき**」が出ることがあります。なるべく **サーバー側で確定** させて RSC として配るのが安全。
-
-### よくある失敗
-
-#### 1. フラグの ON / OFF が複雑になりすぎる
-
-`if (flag1 && (flag2 || flag3) && !flag4) { ... }` のような状態は **テスト不可能**。フラグは独立に動かす設計を。
-
-#### 2. デフォルト値の事故
-
-ネットワークが落ちた時 / API 失敗時の **fallback 値** を必ず決める。
-
-```ts
-const enabled = (await getFlag("newCheckout")) ?? false; // 失敗時は OFF
-```
-
-#### 3. クライアント露出
-
-「管理画面用フラグ」をクライアントから読めるようにすると、**敵対的なユーザーが ON にしてしまう** 可能性がある。**サーバー側で評価** が原則。
-
-#### 4. 削除されないフラグ
-
-書いたまま忘れて、**コードが永遠に if で分岐**。定期的な清掃を。
+これで「**最低限** のサプライチェーン対策」になります。
 
 ## 演習
 
 ### ゴール
 
-- 環境変数ベースのフラグから始め、リモート管理ベースに育てる
-- ユーザー ID ベースの 10% ロールアウトを実装する
+- `npm audit` を読む
+- Dependabot を有効にして PR が来る状態を作る
+- 新しいパッケージを採用する判断材料を集める
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 既存プロジェクトで audit
 
 ```bash
-npx create-next-app@latest flags-sample --ts --app
-cd flags-sample
+cd /path/to/your-project
+npm audit
+npm audit --json | jq '.metadata.vulnerabilities'
 ```
 
-### 手順 2: 環境変数フラグ
+`.metadata.vulnerabilities` で重要度ごとの件数が JSON で見えます。
 
-`.env.local`:
+### 手順 2: 自動修正を試す
 
-```
-NEXT_PUBLIC_NEW_HOMEPAGE=true
-```
-
-`app/page.tsx`:
-
-```tsx
-export default function Home() {
-  const newHomepage = process.env.NEXT_PUBLIC_NEW_HOMEPAGE === "true";
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
-    </main>
-  );
-}
+```bash
+npm audit fix       # semver 範囲内で自動更新
+git diff package*.json
 ```
 
-`.env.local` の値を `false` に変えて再起動すると、表示が切り替わります。
+修正後は **必ず動作確認 + テスト**。
 
-### 手順 3: ユーザー ID ベースのロールアウト
+### 手順 3: Dependabot を有効化
 
-`utils/rollout.ts`:
+`.github/dependabot.yml`:
 
-```ts
-function hash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = (h * 16777619) >>> 0;
-  }
-  return h;
-}
-
-export function isInRollout(userId: string, percent: number): boolean {
-  return hash(userId) % 100 < percent;
-}
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 ```
 
-`app/page.tsx`:
+GitHub の **Settings → Code security → Dependabot alerts** を ON。`Settings → Code security → Dependabot security updates` も ON。
 
-```tsx
-import { isInRollout } from "@/utils/rollout";
+### 手順 4: パッケージ採用の練習
 
-const FAKE_USERS = ["user-1", "user-2", "user-3", "user-4", "user-5"];
+候補: `dayjs` / `date-fns` / `luxon`
 
-export default function Home() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>10% ロールアウトのデモ</h1>
-      <ul>
-        {FAKE_USERS.map((id) => (
-          <li key={id}>
-            {id}: {isInRollout(id, 10) ? "ON" : "OFF"}
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
-}
-```
+それぞれを次の観点で比較:
 
-10% に絞ると **ほとんどの user が OFF**、50% にすると半々、と **再現性** を持って分かれることを確認します。
+- npmtrends の DL 推移
+- GitHub のメンテナンス頻度
+- Bundlephobia のサイズと依存
+- TypeScript 型定義の有無
+- ライセンス
 
-### 手順 4: フラグを集約する
+採用する 1 つを決めて、`npm install` する。
 
-`utils/flags.ts`:
+### 手順 5: SBOM を出す
 
-```ts
-import { isInRollout } from "./rollout";
-
-export type Flags = {
-  newCheckout: boolean;
-  aiSummary: boolean;
-};
-
-export function getFlags(userId: string): Flags {
-  return {
-    newCheckout: process.env.NEXT_PUBLIC_NEW_CHECKOUT === "true" && isInRollout(userId, 10),
-    aiSummary: process.env.NEXT_PUBLIC_AI_SUMMARY === "true",
-  };
-}
-```
-
-`app/dashboard/page.tsx`:
-
-```tsx
-import { getFlags } from "@/utils/flags";
-
-export default function Dashboard() {
-  const flags = getFlags("user-current");
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Dashboard</h1>
-      {flags.newCheckout && <p>新チェックアウト ON</p>}
-      {flags.aiSummary && <p>AI 要約 ON</p>}
-    </main>
-  );
-}
+```bash
+npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json
+ls -la sbom.json
 ```
 
 ### 期待出力
 
-- `.env.local` の値を変えて再起動すると、`new` / `old` が切り替わる
-- ユーザー ID 別に ON / OFF が **再現性** を持って決まる
-- フラグを集約すると、ページごとの分岐が読みやすくなる
+- `npm audit` で脆弱性の表が出る（または `0 vulnerabilities`）
+- Dependabot を有効化すると **数時間〜1 日で初回の PR / Alert** が来る
+- パッケージ比較の表ができ、採用根拠を説明できる
+- SBOM の JSON が生成される
 
 ### 変える
 
-- 5%、25%、50%、100% に変えて、ロールアウトの比率を実感する
-- ハッシュ関数を `Math.random()` に変えると **同じユーザーで結果がバラつく** ことを確認（NG パターン）
-- フラグ評価を Server Component に閉じ込めて、クライアントには結果だけ渡す
+- `dependabot.yml` の `interval` を `daily` に変えて頻度を上げる
+- `automerge: true` のルールで patch 更新を自動マージにする
+- CI に `npm audit --omit=dev --audit-level=high` を追加して **high 以上で fail** にする
 
 ### 自分で書く（任意）
 
-- Vercel Edge Config を使ってフラグをリモート管理にする
-- GrowthBook の SDK を入れて、UI で % を変えて即時反映を体験する
-- A/B テスト用の variant 割当を実装し、analytics に variant をタグ付けして送る
+- Renovate を導入し、Dashboard Issue で全更新を一覧する
+- Socket / OSV-Scanner を CI に組み込む
+- 自社で許可するライセンスを決め、許可外があれば fail するルールを CI に書く
 
 ## まとめ
 
-- フィーチャーフラグは **デプロイと機能公開を分離** する仕組み
-- 最小実装は **環境変数 1 つ**。柔軟性を上げたければリモート管理（Edge Config / DB）
-- **ハッシュベース** のロールアウトで再現性を保つ
-- SaaS は LaunchDarkly / **GrowthBook** / Statsig / Flagsmith / Vercel + PostHog など
-- **Kill Switch** で本番障害をビルドなしに止められる価値が大きい
-- A/B テストはフラグの仲間。SaaS は両方こなす
-- フラグは増える → **寿命を管理して定期清掃**
-- Server / Edge で評価して **クライアントのチラつき** を避ける
+- 自分のコードが安全でも **依存パッケージ経由** で攻撃される（サプライチェーン）
+- **`npm audit`** で既知の脆弱性をチェック。Severity に従って対応
+- 自動修正は `npm audit fix`、メジャー込みなら `--force`（要動作確認）
+- **Dependabot / Renovate** で依存更新を自動 PR 化
+- `npm audit` の補完に **Socket / OSV-Scanner**
+- **lockfile + `npm ci` + integrity** で改ざん検知
+- **SBOM** で「自社の何が影響を受けるか」を素早く特定
+- 新しいパッケージは **DL 数 / メンテ頻度 / 依存の深さ / ライセンス** で判断
+- 「**標準で書けるなら依存しない**」が最大の防御

@@ -1,343 +1,334 @@
-# lesson104: バンドルサイズの最適化とコード分割
+# lesson104: Vite の仕組みを軽く
 
 ## ゴール
 
-- バンドルサイズが LCP や INP に効く理由を説明できる
-- Vite のビルド出力を **Visualizer** で可視化できる
-- `import("...")` の **動的インポート** でコードを分割できる
-- `React.lazy` + `<Suspense>` でルート / コンポーネント単位の遅延読み込みができる
-- 「最初の 1 画面で **必要なコードだけ** を送る」考え方を持てる
-- Tree shaking が効く / 効かない書き方を区別できる
+- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown を中核** に据えて esbuild が担っていた領域を順次置き換えていく方向に進んだ経緯が分かる
+- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
+- 本番ビルドでチャンク分割が起きる理由が言える
+- `import.meta.env` で環境変数を読み込める
+- Vite プラグインの位置付けを把握する
 
 ## 解説
 
-### バンドルサイズと CWV の関係
+### Vite の立ち位置
 
-ブラウザは JS を **ダウンロード → パース → 実行** してから初めて画面を描画できます。バンドルが大きいと:
+Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
 
-- ダウンロードに時間がかかる → **LCP 悪化**
-- パース・実行で **メインスレッドが詰まる** → **INP 悪化**
-- 大きな `<script>` が `<body>` を遮る → **First Paint も遅延**
+特徴:
 
-特にモバイル + 遅い回線では 100KB 違うだけで体感が劇的に変わります。**「送らないコードが最速」** が鉄則です。
+- **開発サーバーが速い**（数百 ms で起動）
+- **HMR が一瞬**（保存と同時にブラウザが追随）
+- **本番ビルドはツリーシェイク + 最適化** までやる
+- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
 
-### バンドル分析: rollup-plugin-visualizer
+### 2 段構成の歴史と Rolldown 統一
 
-Vite は **Rollup** をベースにビルドします。`rollup-plugin-visualizer` を入れると、ビルド成果物の中身を **木構造の図** で見られます。
+Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
 
-```bash
-npm install -D rollup-plugin-visualizer
-```
+| 局面 | 使うツール | 役割 |
+|---|---|---|
+| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
+| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
 
-`vite.config.ts`:
+開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
+
+#### Vite 8（2026 年 3 月）で Rolldown を中核に
+
+[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを **中核に据え**、Rollup ベースの本番ビルド経路を Rolldown ベース（`rolldown-vite`）に切り替える方向に進みました。esbuild が担当していた依存事前バンドルや TS/JSX 変換も段階的に Rolldown / Oxc に置き換わっていきますが、移行期では **既定として採用** されつつも esbuild が一部経路に残っており、将来の小バージョンで完全に 1 段化する見込みです。
+
+- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
+- **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
+- 結果として Vite はビルドが **最大 10〜30 倍速** になった
+- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
+
+「esbuild + Rollup の 2 段構成」から「Rolldown 中心」へ移っていく流れ、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
+
+### 開発サーバーの仕組み
+
+Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
+
+#### 古典的 webpack の流れ
+
+1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
+2. ブラウザに 1 つの大きな JS を渡す
+3. 一部修正されると **再バンドル**
+
+→ ファイル数が増えると線形に遅くなる。
+
+#### Vite の流れ
+
+1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
+2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
+3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
+
+→ ファイル数が増えても初回の起動が速い。
+
+#### 例: 何が起きているか
+
+ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
+
+ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
+
+### HMR（Hot Module Replacement）
+
+開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
+
+普通のブラウザリロードと違って:
+
+- フォームに入力した値が **保持** される
+- スクロール位置が保たれる
+- 状態（state）も保たれる（フレームワーク側が対応していれば）
+
+#### 仕組みを大づかみに
+
+1. Vite はファイル変更を **fs.watch** で監視
+2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
+3. **影響モジュールだけ** ブラウザに WebSocket で送る
+4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
+
+React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
+
+### 本番ビルドの仕組み
+
+`vite build` で行われること:
+
+1. **エントリポイント** から依存関係を辿る
+2. **ツリーシェイク** で使われない export を削除
+3. **チャンク分割** で複数ファイルに分ける
+4. **minify** でファイルサイズを削減
+5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
+
+#### チャンク分割（コード分割）
+
+すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
+
+- **ベンダー**（`node_modules`）を別チャンクに
+- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
+
+を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson101 のバンドルサイズ最適化と繋がる話）。
 
 ```ts
+// クリック時に初めて読み込む
+const handleClick = async () => {
+  const { showModal } = await import("./modal");
+  showModal();
+};
+```
+
+#### ハッシュ付きファイル名
+
+`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
+
+### `import.meta.env` で環境変数
+
+Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
+
+```bash
+# .env
+VITE_API_URL=https://api.example.com
+SECRET_KEY=do_not_expose
+```
+
+```ts
+console.log(import.meta.env.VITE_API_URL); // OK
+console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
+```
+
+ルール:
+
+- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
+- それ以外は Vite が **読み捨てる**（漏洩対策）
+- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
+
+組み込みで使える環境情報:
+
+```ts
+import.meta.env.MODE        // "development" / "production"
+import.meta.env.DEV         // true / false
+import.meta.env.PROD        // true / false
+import.meta.env.BASE_URL    // "/" など
+```
+
+### プラグイン
+
+Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
+
+```ts
+// vite.config.ts
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
-import { visualizer } from "rollup-plugin-visualizer";
+import svgr from "vite-plugin-svgr";
+import { VitePWA } from "vite-plugin-pwa";
 
 export default defineConfig({
   plugins: [
     react(),
-    visualizer({
-      open: true,        // ビルド後に自動でブラウザで開く
-      filename: "stats.html",
-      gzipSize: true,    // gzip 圧縮後のサイズも表示
-      brotliSize: true,  // brotli 圧縮後のサイズも表示
-    }),
+    svgr(),
+    VitePWA({ registerType: "autoUpdate" }),
   ],
 });
 ```
 
-`npm run build` を実行すると `dist/` 出力後に `stats.html` がブラウザで開き、各依存パッケージのサイズが視覚的に分かります。意外なほど大きいライブラリ（例: `moment`、`lodash` 全部）が見つかることがあります。
+代表的なプラグイン:
 
-### よくある肥大化パターン
+- `@vitejs/plugin-react`: React の HMR + JSX 変換
+- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
+- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
+- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
+- `vitest`: テストランナー（lesson96）
 
-| パターン | 解決策 |
-|---|---|
-| `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
-| `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
-| `motion/react`（旧 `framer-motion`、2024 年に `motion` パッケージへ改称）を `import * as motion` で全部読み込み | `import { motion } from "motion/react"` の named import で必要分だけ |
-| Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
-| 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
-| アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
+Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
 
-「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
+### Vite と他ツールの関係
 
-### コード分割（Code Splitting）
+Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
 
-「最初の 1 画面で必要なコードだけ送る」を実現するのが **コード分割** です。アプリ全体を 1 つの大きなバンドルにせず、**画面 / 機能ごとに小さな chunk** に分けます。
+- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
+- **Remix v3 / React Router v7+**: 内部で Vite を採用
+- **Nuxt 3+**: 内部で Vite を採用
+- **Astro**: 内部で Vite を採用
+- **SvelteKit**: 内部で Vite を採用
 
-#### 1. 動的インポート `import("...")`
+つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
 
-JavaScript 標準の **動的 `import()`** を使うと、その行に到達するまでファイルを読み込みません。
+### 「ハマる」パターン
 
-```ts
-// 静的 import: ビルド時に main bundle に含まれる
-import { heavyFunction } from "./heavy";
+#### `process.env` が `undefined`
 
-// 動的 import: 実行時に必要になったら別 chunk として読み込む
-button.addEventListener("click", async () => {
-  const { heavyFunction } = await import("./heavy");
-  heavyFunction();
-});
-```
+→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
 
-ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
+#### 環境変数がクライアントに出てこない
 
-### 2. React.lazy + `<Suspense>`
+→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
 
-React コンポーネントを動的に読み込むには `React.lazy` を使います。
+#### CommonJS のパッケージで失敗
 
-```tsx
-import { lazy, Suspense } from "react";
+→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
 
-// 通常の import
-// import { HeavyChart } from "./HeavyChart";
+#### `node:fs` を import してエラー
 
-// 動的 import + lazy
-const HeavyChart = lazy(() => import("./HeavyChart"));
-
-function App() {
-  const [showChart, setShowChart] = useState(false);
-
-  return (
-    <div>
-      <button onClick={() => setShowChart(true)}>グラフを表示</button>
-      {showChart && (
-        <Suspense
-          fallback={
-            <p role="status" aria-live="polite">グラフ読み込み中...</p>
-          }
-        >
-          <HeavyChart />
-        </Suspense>
-      )}
-    </div>
-  );
-}
-```
-
-`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。fallback 要素には `role="status"` と `aria-live="polite"` を付けるのがおすすめです。スクリーンリーダーが「読み込み中」を発話してくれるようになり、何も無いまま黙って待たせる事故を防げます。
-
-#### 3. Next.js でのコード分割
-
-Next.js の App Router は **デフォルトで自動コード分割** をします。`app/posts/page.tsx` の中身は `/posts` を訪れた時だけ送られ、トップ `/` には含まれません。
-
-明示的に分割したい時は `next/dynamic` を使います:
-
-```tsx
-import dynamic from "next/dynamic";
-
-const Chart = dynamic(() => import("./Chart"), {
-  loading: () => <p>読み込み中...</p>,
-  ssr: false,  // クライアント側でだけ実行
-});
-
-export default function Page() {
-  return <Chart />;
-}
-```
-
-`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
-
-### Tree Shaking の落とし穴
-
-**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
-
-#### 効く書き方（named import）
-
-```ts
-import { format } from "date-fns";
-// 使うのは format だけ。他の関数はバンドルされない
-```
-
-#### 効きにくい書き方
-
-```ts
-import * as dateFns from "date-fns";
-dateFns.format(...);
-// すべての export を読み込む可能性が上がる
-```
-
-```ts
-import _ from "lodash";
-// CommonJS の lodash は tree shaking が効かない。lodash 全部が含まれる
-```
-
-代替策:
-
-- `lodash` → `lodash-es`（ESM 版） or 個別関数 import（`import debounce from "lodash/debounce"`）
-- `moment` → `dayjs` / `date-fns`
-- 大きな UI ライブラリ → 個別パッケージ化されているものを選ぶ（Chakra UI v3、Radix UI のように）
-
-### `package.json` の `sideEffects: false`
-
-ライブラリ作者向けですが、自作のライブラリで Tree Shaking を効かせるには `package.json` に `sideEffects: false` を書きます。
-
-```json
-{
-  "name": "my-lib",
-  "sideEffects": false
-}
-```
-
-「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
+→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
 
 ## 演習
 
 ### ゴール
 
-- 既存の Vite + React プロジェクトに `rollup-plugin-visualizer` を入れる
-- `stats.html` を見てバンドル内容を可視化する
-- `React.lazy` でページ単位のコード分割を体験する
-- ビルド前後でサイズの違いを比較する
+- Vite の開発サーバーで **HMR を体感** する
+- ビルド出力のチャンク分割を眺める
+- `import.meta.env` で環境変数を読む
 
-### 途中から始める場合
-
-新規 Vite + React + TypeScript テンプレートを作ります（StackBlitz でも可）。
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest perf-sample -- --template react-ts
-cd perf-sample
+npm create vite@latest vite-internals -- --template react-ts
+cd vite-internals
 npm install
-npm install -D rollup-plugin-visualizer
 ```
 
-### 手順 1: Visualizer を有効化
+### 手順 2: HMR を試す
 
-`vite.config.ts`:
-
-```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { visualizer } from "rollup-plugin-visualizer";
-
-export default defineConfig({
-  plugins: [
-    react(),
-    visualizer({
-      open: true,
-      filename: "dist/stats.html",
-      gzipSize: true,
-    }),
-  ],
-});
+```bash
+npm run dev
 ```
 
-### 手順 2: わざと大きなコンポーネントを作る
+ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
 
-`src/HeavyChart.tsx`:
+### 手順 3: ネットワークタブで個別配信を観察
+
+DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
+
+### 手順 4: 環境変数
+
+`.env` を作成:
+
+```bash
+# .env
+VITE_API_URL=https://api.example.com
+SECRET_TOKEN=xxxxx
+```
+
+`src/App.tsx` に追加:
 
 ```tsx
-export function HeavyChart() {
-  // 実際のグラフライブラリの代わりに、大きな配列を生成
-  const data = Array.from({ length: 1000 }, (_, i) => ({
-    label: `点 ${i}`,
-    value: Math.sin(i / 50) * 100 + 100,
-  }));
+console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
+console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
+console.log("MODE:", import.meta.env.MODE);
+```
+
+ブラウザのコンソールで:
+
+- `VITE_API_URL` は表示される
+- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
+- `MODE` は `"development"`
+
+### 手順 5: 本番ビルド
+
+```bash
+npm run build
+ls -la dist/assets
+npm run preview
+```
+
+`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
+
+### 手順 6: 動的 import でチャンクを分割
+
+`src/App.tsx`:
+
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [text, setText] = useState("");
+
+  const handleClick = async () => {
+    const mod = await import("./heavy");
+    setText(mod.heavyFunction());
+  };
 
   return (
     <div>
-      <h2>グラフ（モック）</h2>
-      <ul>
-        {data.slice(0, 20).map((d) => (
-          <li key={d.label}>
-            {d.label}: {d.value.toFixed(2)}
-          </li>
-        ))}
-      </ul>
+      <button onClick={handleClick}>重い処理</button>
+      <p>{text}</p>
     </div>
   );
 }
 ```
 
-### 手順 3: lazy で読み込む
+`src/heavy.ts`:
 
-`src/App.tsx`:
-
-```tsx
-import { lazy, Suspense, useState } from "react";
-
-const HeavyChart = lazy(() =>
-  import("./HeavyChart").then((m) => ({ default: m.HeavyChart }))
-);
-
-export default function App() {
-  const [show, setShow] = useState(false);
-
-  return (
-    <main>
-      <h1>パフォーマンス演習</h1>
-      <button onClick={() => setShow(true)}>グラフを表示</button>
-
-      {show && (
-        <Suspense fallback={<p>読み込み中...</p>}>
-          <HeavyChart />
-        </Suspense>
-      )}
-    </main>
-  );
+```ts
+export function heavyFunction() {
+  return "計算結果です";
 }
 ```
 
-`HeavyChart` は **named export** なので `lazy` の中で `default` に変換しています。`export default function HeavyChart() {...}` にすれば変換は不要です。
-
-### 手順 4: ビルドして可視化
-
-```bash
-npm run build
-```
-
-ビルド完了後、自動で `stats.html` がブラウザで開きます。
-
-- 中央の大きなブロックが React 本体
-- 別の小さな chunk として `HeavyChart` のコードが分かれているはず
-- **Initial bundle**（最初に送られる JS）から `HeavyChart` が外れている
+`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
 
 ### 期待出力
 
-`dist/assets/` を見ると、複数の `.js` ファイルがあるはずです。
-
-```
-dist/
-├── index.html
-├── assets/
-│   ├── index-XXXXX.js     ← Initial bundle (App.tsx + React)
-│   └── HeavyChart-XXXXX.js ← lazy でロードされる別 chunk
-└── stats.html
-```
-
-開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
-
-- 最初に index-XXXXX.js が読み込まれる
-- 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
-
-の流れが見えます。
+- HMR でファイル保存と同時に画面が更新（リロードなし）
+- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
+- `VITE_` プレフィックスの環境変数のみクライアントから読める
+- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
 
 ### 変える
 
-- `lazy` の動的 import を **静的 import** に戻してみる（`import { HeavyChart } from "./HeavyChart"`）。再ビルドすると `HeavyChart` のコードが Initial bundle に統合され、`stats.html` 上で 1 つの大きな塊になることを確認
-- `HeavyChart` の中身を増やしてみる（`Array.from({ length: 100000 }, ...)`）。バンドル内のサイズが目に見えて増える
-- `import * as dateFns from "date-fns"` を入れて、tree shaking が効いていない場合に何が起きるか観察（事前に `npm install date-fns`）
+- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
+- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
+- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
-- `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
-- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
-
-### Next.js での実例
-
-教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
-
-それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
+- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
+- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
 
 ## まとめ
 
-- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
-- **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
-- 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
-- **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
-- Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
-- Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意
+- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
+- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
+- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
+- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
+- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
+- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
+- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵

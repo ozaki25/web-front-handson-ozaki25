@@ -1,465 +1,186 @@
-# lesson90: Vercel にデプロイする
-
-「小さなアプリを統合する」で組み上げた TODO アプリを、SNS で共有できる本番 URL として公開します。
+# lesson90: HTTP キャッシュ
 
 ## ゴール
 
-- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できます。
-- そのリポジトリを Vercel に接続して、数十秒でデプロイできます。
-- 発行された `https://<project>.vercel.app` の URL をブラウザで開き、動作確認できます。
-- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえます。
+- ブラウザがリソースをキャッシュしている場所（メモリ / ディスク）を説明できる
+- `Cache-Control` の主要ディレクティブ（`public` / `private` / `max-age` / `no-cache` / `no-store` / `immutable`）の違いを説明できる
+- 強キャッシュ（期限内はサーバーに聞かない）と 弱キャッシュ（サーバーに聞くが中身は省略）の違いを説明できる
+- `ETag` / `Last-Modified` と `304 Not Modified` の関係を説明できる
+- キャッシュ起因で「新しいデプロイが反映されない」古典的なハマりを避ける実務パターンを知る
 
 ## 解説
 
-### 今までは「自分のブラウザでしか見えない」状態
+### そもそもキャッシュはなぜ要るか
 
-StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
+ブラウザがリソース（HTML / CSS / JS / 画像）を取りに行くのは、毎回遅くてトラフィックもかかります。一度取ったものを **同じなら再利用する** のがキャッシュです。効き方の強い順に、次の 3 段階があると覚えると整理しやすいです。
 
-Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
+1. **強キャッシュ**: サーバーに問い合わせもしない。ローカルのキャッシュから即配る
+2. **弱キャッシュ**（条件付きリクエスト）: サーバーに「変わってますか？」だけ聞く。変わってなければ `304 Not Modified` が返り、ボディは送られてこない
+3. **キャッシュなし**: 毎回フルで取りに行く
 
-### 3 ステップの全体像
+どのモードになるかは、レスポンスヘッダ `Cache-Control` / `ETag` / `Last-Modified` で決まります。
 
-以下の 3 つのサービスを繋ぎます。
+### `Cache-Control` の主要ディレクティブ
 
-1. **StackBlitz**: コードを書いている場所です。
-2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
-3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
+サーバーがレスポンスヘッダに **`Cache-Control: ...`** を付けて「このリソースはどう扱っていいか」をブラウザに伝えます。代表的なものを並べます。
 
-流れはこうです。
+| ディレクティブ | 意味 |
+|---|---|
+| `public` | 誰でも（ブラウザ / 中間キャッシュ / CDN）キャッシュしてよい |
+| `private` | ブラウザ本体だけキャッシュしてよい。CDN には持たせない |
+| `max-age=N` | N 秒間は新鮮。その間はサーバーに聞かない（強キャッシュ） |
+| `s-maxage=N` | 中間キャッシュ（CDN 等）向けの max-age。ブラウザは無視 |
+| `no-cache` | 毎回サーバーに問い合わせ（弱キャッシュは効く）。ボディは返ってこないこともある |
+| `no-store` | 一切キャッシュしない。毎回フルで取り直し |
+| `must-revalidate` | 期限が切れたら **必ず** 再検証（古いキャッシュを出さない） |
+| `immutable` | 期限内は絶対に変わらない。リロードでも再検証しない |
+| `stale-while-revalidate=N` | 期限切れから N 秒はそのまま返して、裏で再検証 |
+
+混乱しやすいのは `no-cache` と `no-store` です:
+
+- **`no-cache`**: キャッシュ **は** する。ただし使う前に毎回サーバーに聞く
+- **`no-store`**: キャッシュ **しない**
+
+名前と挙動が逆に見えるので、都度仕様を見に行く癖を付けるのが安全です。
+
+### 強キャッシュ: `max-age` の世界
+
+レスポンスにこういうヘッダが付いていたとします。
 
 ```
-StackBlitz → GitHub → Vercel → https://<project>.vercel.app
+Cache-Control: public, max-age=3600
 ```
 
-一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
+これは「このリソースを **1 時間**（3600 秒）は新鮮とみなす」という意味です。この間はブラウザは **サーバーに一切問い合わせずに** ローカルのキャッシュを使います。
 
-### アカウントが 2 つ必要
+DevTools の Network タブで見ると、`Size` 列が **`(memory cache)`** や **`(disk cache)`** になり、サーバーに行かなかったことが表示されます。
 
-- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
-- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
+```
+Size        Status
+(disk cache) 200
+```
+
+`max-age` が切れるまでは、コードをいじってデプロイし直しても **古いファイルが配られ続けます**。これがキャッシュ起因の「デプロイしたのに反映されない」問題の典型です。
+
+### 弱キャッシュ: `304 Not Modified` の世界
+
+`max-age` が切れた、または `no-cache` が付いているリソースは、ブラウザがサーバーに **「これ、まだ有効？」** と確認しに行きます。この確認のために使うのが `ETag` と `Last-Modified` です。
+
+レスポンスに `ETag` が付いていたら、ブラウザは次回のリクエストに `If-None-Match` ヘッダで同じ値を送ります。
+
+```
+# 初回レスポンス
+HTTP/1.1 200 OK
+Cache-Control: no-cache
+ETag: "abc123"
+Content-Type: image/png
+...（画像ボディ）
+
+# 2 回目のリクエスト
+GET /logo.png HTTP/1.1
+If-None-Match: "abc123"
+
+# サーバーのレスポンス
+HTTP/1.1 304 Not Modified
+（ボディは空）
+```
+
+サーバーは「変わってない」と分かれば **ボディを送らずに 304 だけ返す** ので、通信量はほぼゼロになります。ブラウザは手元のキャッシュを使います。
+
+`Last-Modified` の場合は `If-Modified-Since` ヘッダで日時を送り返します。考え方は同じです。`ETag` のほうが識別が厳密で、現代では主流です。
+
+### 実務での定番パターン: 「ハッシュ付きファイル名 + immutable」
+
+Web アプリの CSS / JS は「ビルドのたびに中身が変わる可能性があるが、変わったときは URL も変えておく」という運用が主流です。
+
+```
+/assets/main.CEDo5b9P.css
+/assets/main.8c29f6e4.js
+```
+
+`CEDo5b9P` のようなハッシュ（コード内容から計算した識別子）をファイル名に入れておき、**中身が変われば URL も変わる** ようにします。すると、サーバーは次のヘッダを安全に付けられます。
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+1 年間（31536000 秒）は絶対に変えないと宣言します。`immutable` は「リロードされても再検証しない」という追加の念押しです。
+
+中身を更新したければ、ビルド時にハッシュが変わって **別の URL** になるので、HTML から参照される URL もそれに合わせて書き換わります。古いキャッシュは持ち続けてもらってよく、新しい URL は新規リクエストとして取りに行くだけです。
+
+一方 **HTML 自体** は `no-cache` または短い `max-age` にしておきます。HTML が古いキャッシュを使うと、新しいハッシュ入りの `<link>` / `<script>` タグに切り替わらないためです。
+
+### Vercel / VitePress など現代のホスティングは既定が賢い
+
+Vercel を使うと、静的アセットには自動で `immutable` が付き、HTML には短いキャッシュが付く形になっています。VitePress のビルド出力もハッシュ付きファイル名です。本コースのような教材サイトでは **設定を触らなくてもキャッシュ運用は成立** しています。
+
+> **補足**: ブラウザキャッシュは「最も外側」のキャッシュです。1 つのリクエストには複数のキャッシュ層が関与しています。**ブラウザキャッシュ → CDN（Vercel Edge / Cloudflare 等）→ 中間プロキシ → オリジンサーバー** の順に問い合わせていき、どこかでヒットした時点で返ってきます。Next.js を使う場合はさらにアプリ内部にも **fetch のレスポンスキャッシュ**（`force-cache` / `revalidate`）と **Router Cache**（クライアント側のページ単位キャッシュ）があります。本レッスンで扱っているのは一番外側のブラウザキャッシュだけですが、「古い値が返ってくる」事故が起きたら **どの層で固まっているか** を切り分けるのが調査の入口です。
+
+とはいえ、仕組みを知らないと「トップだけ更新されて中ページが古い」「CSS だけ反映されない」といった症状に遭遇したときに原因が分からなくなるので、`Cache-Control` の値を読めるようになっておくことは重要です。
+
+### デバッグのコツ
+
+キャッシュまわりの調査では次を覚えておいてください。
+
+- **DevTools の Disable cache**: Network タブを開いているあいだ、キャッシュを無効化できる。開発中はオンにしておくと安心
+- **Hard reload**: `Ctrl+Shift+R` / `Cmd+Shift+R` で強制再読込（キャッシュを無視）
+- **Application → Clear storage**: 特定のサイトのキャッシュ・ストレージを一括削除
+- **Network タブの Size 列**: `(memory cache)` / `(disk cache)` / 実サイズ で、どこから来たか判断
+- **Network タブで行をクリック → Headers**: `Cache-Control` / `ETag` の実際の値を確認
 
 ## 演習
 
-### 途中から始める場合
+### ゴール
 
-「小さなアプリを仕上げる」で仕上げた Next.js プロジェクトを使います。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは完成品をそのまま Vercel に乗せるだけなので、TODO が動く状態であれば何でも構いません（素の hello-world テンプレートでも公開フローは体験できますが、画面の面白さのために「小さなアプリを仕上げる」の完成品を推奨します）。
+- 実際のサイトのレスポンスヘッダから `Cache-Control` / `ETag` を読み取る
+- 強キャッシュ・弱キャッシュ・キャッシュなしを切り替えたときの Network タブの見え方の違いを体感する
+- `curl` で条件付きリクエストを自分で送って `304` を取得する
 
-<details>
-<summary>出発点のファイル</summary>
+### 手順 1: DevTools で観察する
 
-**`app/layout.tsx`**
+1. 本教材サイト（または任意の Web サイト）を開きます
+2. DevTools の Network タブを開き、リロードします
+3. 1 行クリックして `Headers` → `Response Headers` を確認します
+4. `Cache-Control` と `ETag` の値をメモします
+5. もう一度リロードします。同じ行の `Status` が `304` になる（または `Size` が `(disk cache)` になる）ことを確認します
+6. `Disable cache` にチェックを入れてリロードします。全行が `200` に戻り、Size が実サイズになることを確認します
 
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import "./globals.css";
+### 手順 2: `curl` で条件付きリクエストを送る
 
-export const metadata = {
-  title: {
-    default: "TODO アプリ",
-    template: "%s | TODO アプリ",
-  },
-  description: "Next.js App Router の学習用 TODO アプリ",
-};
+`ETag` の挙動を手で確かめます。ターミナルで次を実行してください。
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 TODO アプリ</p>
-        </footer>
-      </body>
-    </html>
-  );
-}
+```bash
+# 1 回目: ETag を含むレスポンスヘッダを取る
+curl -I https://jsonplaceholder.typicode.com/posts/1
 ```
 
-**`app/page.tsx`**
+出力の中の `etag: "..."` の値をメモします。次にこの ETag を付けて 2 回目のリクエストを送ります。
 
-```tsx
-export default function Page() {
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
-    </>
-  );
-}
+```bash
+# 2 回目: 先ほどの ETag を If-None-Match で送り返す
+curl -I https://jsonplaceholder.typicode.com/posts/1 \
+  -H 'If-None-Match: "W/\"xxxxxxxxxxxx\""'
 ```
 
-**`app/types.ts`**
+`-H` で送る値は、1 回目の `etag:` の値をそのまま入れてください（バックスラッシュのエスケープが必要な場合もあります）。成功すると **`HTTP/2 304`** が返り、ボディは送られてきません。
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
+手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
 
-**`app/actions.ts`**
+### 変える
 
-> **`const todos: Todo[] = []` は学習用の擬似永続化**: 本物の DB を立てる手間を避けるため、ファイル先頭の配列に保存しています。Vercel のサーバーレス環境では **リクエストごとに別インスタンス** で動くことがあるため、追加した直後は見えても **しばらく経つと消えて見える** ことがあります。本番では DB / KV に置き換える前提で読んでください。
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function getTodo(id: string): Promise<Todo | undefined> {
-  return todos.find((t) => t.id === id);
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-
-export async function deleteTodo(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
-  const index = todos.findIndex((t) => t.id === id);
-  if (index >= 0) {
-    todos.splice(index, 1);
-  }
-  revalidatePath("/todos");
-}
-```
-
-**`app/todos/TodoForm.tsx`**
-
-```tsx
-"use client";
-
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { addTodo, type AddTodoState } from "../actions";
-
-const initialState: AddTodoState = {};
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
-
-export function TodoForm() {
-  const [state, formAction, isPending] = useActionState(addTodo, initialState);
-
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
-      {state.error && <p className="error">{state.error}</p>}
-      {isPending && <p>通信中...</p>}
-    </form>
-  );
-}
-```
-
-**`app/todos/page.tsx`**
-
-```tsx
-import { listTodos, deleteTodo } from "../actions";
-import { TodoForm } from "./TodoForm";
-import Link from "next/link";
-
-export default async function TodosPage({
-  searchParams,
-}: PageProps<"/todos">) {
-  const { highlight } = await searchParams;
-  const todos = await listTodos();
-
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul className="todo-list">
-        {todos.map((todo) => (
-          <li
-            key={todo.id}
-            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
-          >
-            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
-            <form action={deleteTodo} style={{ display: "inline" }}>
-              <input type="hidden" name="id" value={todo.id} />
-              <button type="submit">削除</button>
-            </form>
-          </li>
-        ))}
-      </ul>
-      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
-    </>
-  );
-}
-```
-
-**`app/todos/[id]/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { getTodo } from "../../actions";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/todos/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const todo = await getTodo(id);
-  return {
-    title: todo ? `Todo: ${todo.text}` : "Todo not found",
-  };
-}
-
-export default async function TodoDetailPage({
-  params,
-}: PageProps<"/todos/[id]">) {
-  const { id } = await params;
-  const todo = await getTodo(id);
-
-  if (!todo) {
-    notFound();
-  }
-
-  return (
-    <>
-      <h1>Todo 詳細</h1>
-      <p>ID: {todo.id}</p>
-      <p>内容: {todo.text}</p>
-      <p>
-        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
-      </p>
-      <p>
-        <Link href="/todos">一覧に戻る</Link>
-      </p>
-    </>
-  );
-}
-```
-
-**`app/todos/[id]/not-found.tsx`**
-
-```tsx
-import Link from "next/link";
-
-export default function TodoNotFound() {
-  return (
-    <>
-      <h1>Todo が見つからない</h1>
-      <p>指定された ID の Todo は存在しない（または削除された）。</p>
-      <Link href="/todos">一覧に戻る</Link>
-    </>
-  );
-}
-```
-
-**`app/globals.css`**（共通 CSS + `.error` + `.todo-list` / `.todo-item--highlight`）
-
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
-
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
-
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
-
-.error {
-  color: #c00;
-  background: #ffe8e8;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-.todo-list {
-  list-style: none;
-  padding: 0;
-}
-
-.todo-item {
-  padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.todo-item--highlight {
-  background: #fff3a3;
-}
-
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
-  }
-  .site-header a {
-    color: #4ea2ff;
-  }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-  .error {
-    color: #ffb0b0;
-    background: #4a1d1d;
-  }
-  .todo-item {
-    border-bottom-color: #333;
-  }
-  .todo-item--highlight {
-    background: #665c1e;
-    color: #fff;
-  }
-}
-```
-
-</details>
-
-なお、Vercel デプロイの手順自体（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。出発点の全量を貼らずに、素の hello-world テンプレートのまま手順 1〜5 を通して URL 発行まで体験するのも有効です。
-
-### 前回のプロジェクトを開く
-
-「小さなアプリを仕上げる」で仕上げた StackBlitz の Next.js プロジェクトを開きましょう。
-
-### 手順 1: GitHub アカウントを用意
-
-1. <https://github.com/> にアクセスします。
-2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
-
-### 手順 2: StackBlitz から GitHub に保存
-
-1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
-2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
-3. 保存先のリポジトリ名を指定します。例: `my-next-todo`。
-4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
-5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-todo` が出ているはずです。
-
-> うまく行かないとき: StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもある。本コース想定は前者。
-
-### 手順 3: Vercel アカウントを作る
-
-1. <https://vercel.com/> にアクセスします。
-2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
-3. 必要なら Vercel にメール認証を済ませましょう。
-
-### 手順 4: Vercel で新しいプロジェクトを作る
-
-1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
-2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-todo` を **「Import」** します。
-   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-todo` のみ選択）。
-3. 設定画面が出ます。
-   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
-   - **Root Directory**: デフォルトのままにします。
-   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
-   - **Environment Variables**: 本コースでは使いません。空で OK です。
-4. 画面下の **「Deploy」** をクリックします。
-5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
-
-### 手順 5: 公開 URL を確認
-
-1. Vercel の「Dashboard」→ プロジェクト名（`my-next-todo`）をクリックします。
-2. 画面上部に **`https://my-next-todo-xxxx.vercel.app`** のような URL が出ています。
-3. クリックして開きます。
-
-### 期待出力
-
-- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ TODO アプリが表示されます。
-- 「TODO 一覧」で追加・削除・詳細遷移が動きます。
-- `/about` にアクセスすると自己紹介ページが出ます。
-- ナビの `<Link>` でページ遷移ができます。
-- URL を別のブラウザや友人に送っても、同じアプリが見えます。
-
-### 更新を反映する
-
-GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
-
-1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
-2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
-3. 数十秒待ちます。
-4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
-5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
-
-### よくある躓き
-
-- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
-- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
-- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
-- TODO を追加してもリロードすると消える → 次項の通り、サーバーレス環境ではインメモリ配列が保持されません。
-
-### 注意: 本番ではデータが保持されない
-
-本コースでは `app/actions.ts` の `const todos: Todo[] = []` という **メモリ上の配列** でデータを持っていました。
-
-- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
-- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。結果として、追加した直後は見えてもしばらく経つと消えて見える、といった動きになります。
-
-本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。本コースでは扱いませんが、次のステップとして「`actions.ts` の配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
+- DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
+- `Hard reload`（`Ctrl+Shift+R` / `Cmd+Shift+R`）を試す。`Disable cache` と同様だが、開発者ツールが閉じていてもキャッシュを無視できる
+- Network タブで `Throttling` を `Slow 4G` に。キャッシュから取っているときはほぼ無影響だが、キャッシュを無効にして比較すると体感差が大きい
 
 ### 自分で書く
 
-1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。例: 「自己紹介 + TODO メモの練習アプリ」。
-2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
-3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
+- 「`no-cache` と `no-store` の違いを 2 行で説明する」文章を書いてみる（本文を隠した状態で挑戦）
+- `Cache-Control: public, max-age=31536000, immutable` が付いたリソースをリロードしたとき、Network タブでどう見えるか予想し、実際に本サイトの `/assets/*.css` などで確認する
 
 ## まとめ
 
-- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できます。
-- 初回の接続だけ手数がかかりますが、以後は Git に push すれば自動デプロイです。
-- 本コースの擬似永続化（インメモリ配列）は Vercel では保持されません。本番の永続化には DB が必要です（本コースでは扱いません）。
-- これでコースの本編は終わりです。Next.js（App Router）で「フォーム + データ表示 + ルーティング」の小さなアプリを作り、公開するところまでが本コースの完走ゴールです。
-- 次に進みたい学習者へのおすすめ:
-  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
-  - 認証（NextAuth、Clerk など）を足して「自分の TODO」を作る
-  - スタイリングを Tailwind CSS や CSS Modules に寄せる
-  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る
+- キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
+- `Cache-Control` でモードを指定。よく使うのは `max-age` / `no-cache` / `no-store` / `immutable`
+- `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
+- 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
+- DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く

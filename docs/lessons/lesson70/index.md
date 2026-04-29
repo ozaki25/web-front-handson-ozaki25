@@ -1,315 +1,474 @@
-# lesson70: Error Boundary と Suspense
+# lesson70: ページを増やしてリンクで移動する
 
 ## ゴール
 
-- コンポーネントツリーの中で起きた例外が、親の境界で受け止められる仕組みを説明できる
-- `ErrorBoundary` をクラスコンポーネントで最小実装できる（React 19 でも現状クラスが必要）
-- `<Suspense fallback={...}>` の役割を説明でき、最小の使い方を書ける
-- `<ErrorBoundary>` と `<Suspense>` を組み合わせるパターンを書ける
-- Next.js App Router の `error.tsx` / `loading.tsx` がこれを Route レベルで統合したものだと理解する
+- `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
+- `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
+- 既存の HTML を JSX に書き換えられます。
+- HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
 
 ## 解説
 
-### なぜ必要か: 1 箇所のエラーで全画面真っ白
+### 前回のプロジェクトを開く
 
-React は、レンダリング中にどこかで例外が飛ぶと **そのコンポーネントのツリー全体をアンマウント** します。本来関係ないヘッダーやフッターまで消えて、画面が真っ白になってしまいます。
+これまでのレッスンで作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
 
-たとえば「記事一覧」「記事本文」「関連記事」の 3 つを並べていて、本文取得に失敗しただけで全部消える、という状況は避けたいわけです。
+### 新しいページを作る手順
 
-ここで登場するのが **ErrorBoundary**。境界より内側で起きた例外を受け止めて、フォールバック UI（エラー表示）に差し替えます。境界の外側は無事なままです。
+App Router では、ディレクトリ名がそのまま URL になります。`/about` というページを作るには次の 2 ステップだけです。
 
-### `ErrorBoundary` は現状クラスコンポーネントが必要
+1. `app/` の下に `about/` ディレクトリを作ります。
+2. その中に `page.tsx` を作り、コンポーネントを `export default` します。
 
-React 19 でも、ErrorBoundary を **自分で書く** ときはクラスコンポーネントを使います。関数コンポーネントのフックだけでは用意できません。
+```
+app/
+├── page.tsx           → /
+├── about/
+│   └── page.tsx       → /about
+└── todos/
+    └── page.tsx       → /todos
+```
 
-ただし日常的にクラスを書く必要はなく、「この 1 ファイルだけクラスで書いて、以後は `<ErrorBoundary>` として JSX で使う」という運用でほぼ間に合います。
+`/todos` も同じ要領です。`app/todos/page.tsx` を作るだけで `/todos` でアクセスできます。
 
-最小の実装は次のとおりです。
+### HTML → JSX の違い 3 点
+
+1 章 で書いた HTML を Next.js に持ち込むと、そのままでは動きません。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要です。
+
+1. `class` → `className`
+   - JS の `class` 構文（クラス構文）と衝突するため、JSX では `className` を使います。
+   - 例: `<p class="lead">` → `<p className="lead">`
+2. `for`（`<label for="...">`）→ `htmlFor`
+   - `for` も JS の `for` 文と衝突するため、`htmlFor` に変えます。
+   - 例: `<label for="name">` → `<label htmlFor="name">`
+3. 自己閉じタグに `/` が必要
+   - HTML では `<img>` や `<br>` は終了タグなしで書けますが、JSX では必ず `/` で閉じます。
+   - 例: `<img src="..." alt="">` → `<img src="..." alt="" />`
+   - 例: `<br>` → `<br />`
+
+他にも細かい違いはありますが、当面はこの 3 点を意識すれば1 章 の HTML を移植できます。
+
+### `<Link>` でページ遷移する
+
+ブラウザの `<a href="...">` でもページは切り替わりますが、その都度ページ全体を再読み込みする重い動きになります。Next.js では `next/link` の `<Link>` を使うことで、必要な部分だけを差し替える軽い遷移ができます。
 
 ```tsx
-import { Component, type ReactNode } from "react";
+import Link from "next/link";
 
-type Props = {
-  fallback: ReactNode;
-  children: ReactNode;
-};
-
-type State = {
-  hasError: boolean;
-};
-
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(_error: Error): State {
-    // レンダリング中に例外が飛んだら、この戻り値で state を差し替える
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // ログ送信など副作用を行いたい場合に使う
-    console.log("ErrorBoundary がキャッチ:", error.message, info);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
+export default function Home() {
+  return (
+    <nav>
+      <Link href="/">Home</Link>
+      <Link href="/about">About</Link>
+      <Link href="/todos">Todos</Link>
+    </nav>
+  );
 }
 ```
 
-- **`getDerivedStateFromError`**: 例外を受け取って、エラー状態に切り替えるための **純粋な** メソッドです。ここで state を `{ hasError: true }` に差し替えます。
-- **`componentDidCatch`**: 副作用（ロギング / 通報）を走らせる場所です。ログ送信が要らなければ省略できます。
-- `fallback` と `children` は props で受け取る、シンプルなコンテナです。
-
-### 使い方
-
-守りたい範囲を囲むだけです。
-
-```tsx
-<ErrorBoundary fallback={<p>関連記事の読み込みに失敗しました</p>}>
-  <RelatedPosts />
-</ErrorBoundary>
-```
-
-`<RelatedPosts />` でどれだけ例外が飛んでも、境界の外にあるヘッダー / ナビ / 他セクションは生きたままです。
-
-### 拾える例外と拾えない例外
-
-ErrorBoundary が捕まえるのは「**レンダリング中** の例外」です。次は拾えません。
-
-- イベントハンドラの中で投げた例外（`onClick={() => { throw ... }}`）
-- 非同期処理（`setTimeout` / `Promise` の `.then` の中）
-- サーバーサイドで起きる例外（Next.js の Server Component は別の仕組みで拾う）
-
-イベントハンドラの例外は、普通の `try` / `catch`（「try / catch でエラー処理」）か、state を使って自分でフォールバックを出すのが基本です。
-
-### `<Suspense>`: ローディングの境界
-
-`<Suspense>` はエラーの兄弟です。**非同期なデータ / コンポーネントを待つ間、フォールバック UI を見せる** 仕組みです。
-
-```tsx
-<Suspense fallback={<p>読み込み中...</p>}>
-  <SlowComponent />
-</Suspense>
-```
-
-- 中のコンポーネントが読み込み待ち状態（Promise を投げている / lazy ロードの途中）になると、`fallback` が代わりに表示される
-- 待ちが終わると中身に切り替わる
-- `<Suspense>` は React 本体の機能で、ライブラリ（Next.js / Remix / lazy など）と組み合わせて使う
-
-日常的には、Next.js の App Router で Server Component と組み合わせて使うのが主戦場です。
-
-### 組み合わせパターン
-
-エラーとローディングは同時に起こりえます。両方を囲むのが基本形です。
-
-```tsx
-<ErrorBoundary fallback={<p>読み込みに失敗しました</p>}>
-  <Suspense fallback={<p>読み込み中...</p>}>
-    <RemoteContent />
-  </Suspense>
-</ErrorBoundary>
-```
-
-- **外側** が ErrorBoundary、**内側** が Suspense の順が定番です
-- 途中で Promise が投げられれば Suspense が受け取り、途中で例外が投げられれば ErrorBoundary が受け取ります
-
-### Next.js App Router での発展
-
-Next.js App Router では、**ルートごと** にこの 2 つを書けるようになっています。
-
-- `app/posts/[id]/error.tsx` → そのルート配下の ErrorBoundary
-- `app/posts/[id]/loading.tsx` → そのルート配下の Suspense
-
-ファイルを置くだけで境界が自動で入るので、毎回コンポーネントを囲む必要がなくなります。今回学ぶ「境界で区切って、フォールバックに差し替える」発想は、Next.js でそのまま生きます。
+- `import` は **`next/link`** からです（`next/router` ではありません。`next/router` は古い Pages Router 用です）。
+- `href` の値は `/about` のように **URL のパス** です。
+- `<Link>` は内部的には `<a>` タグを生成するので、見た目は普通のリンクと同じです。
 
 ## 演習
 
 ### 途中から始める場合
 
-「TODO アプリを React で作る」で作ったプロジェクトを使い回しても構いませんし、新しいプロジェクトで始めても構いません。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは **新規の小さな演習** として分離して進めるのが楽です。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で1 章 の「Flexbox とレスポンシブ」の自己紹介ページの HTML と CSS を参照するため、先に「Flexbox とレスポンシブ」のコードを手元にコピーしておくとスムーズです。
 
-<details>
-<summary>出発点のファイル</summary>
+### 手順 1: `/todos` の空ページを作る
 
-**`src/main.tsx`**
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
-```
-
-**`src/App.tsx`**
+StackBlitz のファイルツリーで、`app/` を右クリックして「New Folder」→ `todos` を作ります。その中に「New File」で `page.tsx` を作り、以下を貼ります。
 
 ```tsx
-export default function App() {
+export default function TodosPage() {
   return (
-    <div>
-      <h1>lesson70</h1>
-    </div>
+    <main>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
+    </main>
   );
 }
 ```
 
-</details>
+ブラウザのプレビュー URL に `/todos` を付けてアクセスし、この文言が出ることを確認しましょう。
 
-### ゴール
+### 手順 2: 1 章 の自己紹介ページを `/about` に移植
 
-- わざと例外を投げる子コンポーネント `Bomb` を `ErrorBoundary` で囲み、画面全体が死なずにフォールバックに切り替わる
-- `Suspense` で `lazy` 読み込みのコンポーネントを囲み、ロード中のフォールバックを確認する
-- 「爆発するボタンを押す前」は通常表示、「押した後」は ErrorBoundary のフォールバックが出ることを確認する
+1 章 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **「Flexbox とレスポンシブ」の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、「Flexbox とレスポンシブ」を開いて HTML / CSS をコピーしてから戻ってきてください。
 
-### 手順
+元の HTML（「Flexbox とレスポンシブ」の完成形の抜粋）:
 
-1. `src/ErrorBoundary.tsx` を新規作成して、クラスコンポーネントの ErrorBoundary を用意する
-2. `src/Bomb.tsx` を新規作成する。props で `shouldExplode` を受け取り、`true` のときは `throw new Error(...)` する
-3. `src/LazyGreeting.tsx` を作り、`App.tsx` から `lazy(() => import("./LazyGreeting"))` で読み込む
-4. `App.tsx` に 2 つのセクションを並べる。それぞれ境界で囲む
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>私の自己紹介</title>
+    <link rel="stylesheet" href="style.css" />
+  </head>
+  <body>
+    <header class="site-header">
+      <h1>私の名前</h1>
+      <nav class="site-nav">
+        <a href="#about">自己紹介</a>
+        <a href="#likes">好きなもの</a>
+        <a href="#contact">問い合わせ</a>
+      </nav>
+    </header>
 
-### 主要ファイルの完成形
+    <main>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
 
-**`src/ErrorBoundary.tsx`**
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div class="cards">
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像">
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像">
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article class="card">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像">
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
 
-```tsx
-import { Component, type ReactNode, type ErrorInfo } from "react";
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label for="name">お名前</label>
+            <input id="name" name="name" type="text" required>
+          </div>
+          <div>
+            <label for="email">メール</label>
+            <input id="email" name="email" type="email" required>
+          </div>
+          <div>
+            <label for="message">メッセージ</label>
+            <textarea id="message" name="message" rows="4" required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </main>
 
-type Props = {
-  fallback: ReactNode;
-  children: ReactNode;
-};
-
-type State = {
-  hasError: boolean;
-};
-
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(_error: Error): State {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.log("ErrorBoundary がキャッチ:", error.message);
-    console.log("発生場所:", info.componentStack);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
+    <footer class="site-footer">
+      <p>&copy; 私の名前</p>
+    </footer>
+  </body>
+</html>
 ```
 
-**`src/Bomb.tsx`**
+これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx` が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
+
+`app/about/page.tsx`:
 
 ```tsx
-type Props = {
-  shouldExplode: boolean;
-};
-
-export function Bomb({ shouldExplode }: Props) {
-  if (shouldExplode) {
-    throw new Error("Bomb が爆発しました");
-  }
-  return <p>Bomb はまだ安全です</p>;
-}
-```
-
-**`src/LazyGreeting.tsx`**
-
-```tsx
-export default function LazyGreeting() {
-  return <p>こんにちは！（遅れて読み込まれたコンポーネント）</p>;
-}
-```
-
-**`src/App.tsx`**
-
-```tsx
-import { lazy, Suspense, useState } from "react";
-import { ErrorBoundary } from "./ErrorBoundary";
-import { Bomb } from "./Bomb";
-
-const LazyGreeting = lazy(() => import("./LazyGreeting"));
-
-export default function App() {
-  const [exploded, setExploded] = useState(false);
-
+export default function AboutPage() {
   return (
-    <div style={{ fontFamily: "system-ui", padding: 16 }}>
-      <h1>lesson70: ErrorBoundary と Suspense</h1>
+    <>
+      <header className="site-header">
+        <h1>私の名前</h1>
+        <nav className="site-nav">
+          <a href="#about">自己紹介</a>
+          <a href="#likes">好きなもの</a>
+          <a href="#contact">問い合わせ</a>
+        </nav>
+      </header>
 
-      <section>
-        <h2>1. ErrorBoundary</h2>
-        <button onClick={() => setExploded(true)}>爆発させる</button>
-        <ErrorBoundary
-          fallback={
-            <div style={{ color: "red" }}>
-              ここだけエラーになりました（他のセクションは生きています）
+      <main>
+        <section id="about">
+          <h2>自己紹介</h2>
+          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+        </section>
+
+        <section id="likes">
+          <h2>好きなもの</h2>
+          <div className="cards">
+            <article className="card">
+              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+              <h3>コーヒー</h3>
+              <p>朝の 1 杯が欠かせない。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+              <h3>本</h3>
+              <p>技術書からエッセイまで。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+              <h3>散歩</h3>
+              <p>行き先を決めずに歩く。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="contact">
+          <h2>問い合わせ</h2>
+          <form>
+            <div>
+              <label htmlFor="name">お名前</label>
+              <input id="name" name="name" type="text" required />
             </div>
-          }
-        >
-          <Bomb shouldExplode={exploded} />
-        </ErrorBoundary>
-      </section>
+            <div>
+              <label htmlFor="email">メール</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+            <div>
+              <label htmlFor="message">メッセージ</label>
+              <textarea id="message" name="message" rows={4} required></textarea>
+            </div>
+            <button type="submit">送信</button>
+          </form>
+        </section>
+      </main>
 
-      <section>
-        <h2>2. Suspense</h2>
-        <Suspense fallback={<p>読み込み中...</p>}>
-          <LazyGreeting />
-        </Suspense>
-      </section>
+      <footer className="site-footer">
+        <p>&copy; 私の名前</p>
+      </footer>
+    </>
+  );
+}
+```
 
-      <section>
-        <h2>3. 組み合わせ</h2>
-        <ErrorBoundary fallback={<p>組み合わせでも守られています</p>}>
-          <Suspense fallback={<p>読み込み中 (組み合わせ)...</p>}>
-            <LazyGreeting />
-          </Suspense>
-        </ErrorBoundary>
-      </section>
-    </div>
+書き換えたのは **HTML → JSX の 3 点の違い** にほぼ収まります:
+
+- `class="..."` → `className="..."`（`.site-header` / `.site-nav` / `.cards` / `.card` / `.site-footer` すべて）
+- `<label for="...">` → `<label htmlFor="...">`（3 箇所）
+- `<input ...>` → `<input ... />`、`<img ...>` → `<img ... />` の自己閉じ
+- 追加で `<textarea rows="4">` の属性は **数値中括弧 `rows={4}`** に（JSX では数値属性は中括弧が慣例）
+
+ほぼ機械的な置換で済むのが JSX の嬉しいところです。1 章 で作った見た目・レイアウトがそのまま Next.js で動きます。
+
+### 手順 3: CSS を当てる
+
+1 章 の「Flexbox とレスポンシブ」の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
+
+`app/about/about.css`（「Flexbox とレスポンシブ」の CSS をそのまま貼る、抜粋）:
+
+```css
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+  line-height: 1.6;
+  color: #1f2937;
+  background-color: #f9fafb;
+}
+
+@media (prefers-color-scheme: dark) {
+  body {
+    color: #e5e7eb;
+    background-color: #0b1220;
+  }
+}
+
+main {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: 24px;
+}
+
+.site-header {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.site-nav a {
+  color: #f9fafb;
+  margin-right: 16px;
+}
+
+.cards {
+  display: flex;
+  gap: 16px;
+}
+
+.cards .card {
+  flex: 1;
+  background-color: #ffffff;
+  border: 1px solid #d1d5db;
+  border-radius: 8px;
+  padding: 16px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .cards .card {
+    background-color: #111827;
+    border-color: #374151;
+  }
+}
+
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+
+.site-footer {
+  padding: 16px 24px;
+  background-color: #1e3a8a;
+  color: #f9fafb;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .site-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .cards {
+    flex-direction: column;
+  }
+}
+```
+
+（フォームや hover など、「Flexbox とレスポンシブ」で書いた他のスタイルも一緒にコピーして構いません。）
+
+`app/about/page.tsx` の **1 行目に CSS の import を追加します**。ファイル全体は次のような形になります（関数本体はそのまま維持）。
+
+```tsx
+import "./about.css";
+
+export default function AboutPage() {
+  return (
+    <>
+      <header className="site-header">
+        <h1>私の名前</h1>
+        <nav className="site-nav">
+          <a href="#about">自己紹介</a>
+          <a href="#likes">好きなもの</a>
+          <a href="#contact">問い合わせ</a>
+        </nav>
+      </header>
+
+      <main>
+        <section id="about">
+          <h2>自己紹介</h2>
+          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+        </section>
+
+        <section id="likes">
+          <h2>好きなもの</h2>
+          <div className="cards">
+            <article className="card">
+              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+              <h3>コーヒー</h3>
+              <p>朝の 1 杯が欠かせない。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+              <h3>本</h3>
+              <p>技術書からエッセイまで。</p>
+            </article>
+            <article className="card">
+              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+              <h3>散歩</h3>
+              <p>行き先を決めずに歩く。</p>
+            </article>
+          </div>
+        </section>
+
+        <section id="contact">
+          <h2>問い合わせ</h2>
+          <form>
+            <div>
+              <label htmlFor="name">お名前</label>
+              <input id="name" name="name" type="text" required />
+            </div>
+            <div>
+              <label htmlFor="email">メール</label>
+              <input id="email" name="email" type="email" required />
+            </div>
+            <div>
+              <label htmlFor="message">メッセージ</label>
+              <textarea id="message" name="message" rows={4} required></textarea>
+            </div>
+            <button type="submit">送信</button>
+          </form>
+        </section>
+      </main>
+
+      <footer className="site-footer">
+        <p>&copy; 私の名前</p>
+      </footer>
+    </>
+  );
+}
+```
+
+**期待出力**: `/about` を開くと、1 章 の「Flexbox とレスポンシブ」で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
+
+### 手順 4: ナビを `/` に置く
+
+`app/page.tsx` を以下に書き換えます。これでトップページから 3 つのページに飛べるナビが完成します。
+
+```tsx
+import Link from "next/link";
+
+export default function Page() {
+  return (
+    <main>
+      <h1>ようこそ</h1>
+      <nav>
+        <ul>
+          <li>
+            <Link href="/">Home</Link>
+          </li>
+          <li>
+            <Link href="/about">About</Link>
+          </li>
+          <li>
+            <Link href="/todos">Todos</Link>
+          </li>
+        </ul>
+      </nav>
+    </main>
   );
 }
 ```
 
 ### 期待出力
 
-1. 最初の画面には 3 つのセクションが並び、Suspense セクションは一瞬「読み込み中...」が見えた後、グリーティングに置き換わる
-2. 「爆発させる」ボタンを押す → 1 番目のセクションだけ赤字のフォールバックに切り替わる。ページ全体は生きたまま、ヘッダー（`h1`）も他のセクションも残っている
-3. Console に `ErrorBoundary がキャッチ: Bomb が爆発しました` のログが出る
-4. **StrictMode の開発ビルドでは、キャッチされた後もブラウザ Console に赤字のエラーが表示されます**。これは開発時の二重警告で、本番ビルドでは出ません（ErrorBoundary のキャッチ自体は機能しています）。気にせず進めて大丈夫です。
+- `/` にアクセスすると「ようこそ」の見出しと 3 つのリンクが出ます。
+- 「About」をクリックすると1 章 と同じ見た目の自己紹介ページが表示されます（CSS が当たっています）。
+- 「Todos」をクリックすると「TODO 一覧はここに実装する。」が表示されます。
+- ブラウザのネットワークタブを開きながら遷移すると、ページ全体ではなくデータだけが追加で読み込まれます（フル再読み込みにはなりません）。
+- `class` や `for` をそのまま残すと、StackBlitz のターミナルやブラウザ Console に「Invalid DOM property `class`. Did you mean `className`?」のような警告が出ます。
 
-### 変える
+### 変えてみる
 
-- `fallback` の中身を絵文字なしの自由な HTML に差し替えて、見た目を変える（例: `<div><h3>読み込みエラー</h3><p>あとで試してください</p></div>`）
-- `Bomb` を 2 つ並べ、それぞれ別の ErrorBoundary で囲む → 片方だけ爆発させたときに、もう片方は生きたままになる
-- ErrorBoundary の外側に `Bomb` を置くと画面全体が落ちることを確認する（確認後、内側に戻す）
+1. 自己紹介ページに好きな見出しを 1 つ追加しましょう。
+2. `/about` のナビ内に「Top に戻る」`<Link>` を追加しましょう。
 
 ### 自分で書く
 
-- ErrorBoundary に **「再試行」ボタン** を付ける。`state` に `hasError` を持っているので、押したら `setState({ hasError: false })` 相当の処理でリセットできる（クラスの `this.setState({ hasError: false })` を使う）
-- `LazyGreeting` の読み込みをわざと遅らせる。トップに `await new Promise(r => setTimeout(r, 2000))` 相当の処理を入れるダミーを作り、Suspense のフォールバックが長く見えることを確認する
-- 複数の ErrorBoundary を入れ子にする。内側でキャッチしたエラーは外側に届かないことを確認する
+`/contact` という 3 つ目のページを、ディレクトリ作成 → `page.tsx` → ナビへの `<Link>` 追加、の手順だけを見ないで試してみましょう。中身は「Contact ページです」の 1 行で十分です。
 
 ## まとめ
 
-- ErrorBoundary は「レンダリング中の例外」を境界で受け止め、画面全体の崩壊を防ぐ
-- React 19 でも、ErrorBoundary を書くにはクラスコンポーネントが必要。ただし 1 回書いたら以降は JSX で使うだけ
-- `getDerivedStateFromError` で state を切り替え、`componentDidCatch` でログを残す
-- `<Suspense fallback={...}>` は非同期な待ちの間にフォールバック UI を出す
-- 外側に ErrorBoundary、内側に Suspense、が定番の組み合わせ
-- Next.js App Router では、この 2 つが `error.tsx` / `loading.tsx` としてルート単位で使えるようになる
+- `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになります。
+- ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
+- HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。

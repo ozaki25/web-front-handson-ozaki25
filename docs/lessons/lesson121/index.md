@@ -1,425 +1,437 @@
-# lesson121: CORS の詳細
+# lesson121: WebSocket と Server-Sent Events（SSE）
 
 ## ゴール
 
-- 同一オリジンポリシーと CORS（Cross-Origin Resource Sharing）の関係を説明できる
-- **シンプルリクエスト** と **プリフライト**（OPTIONS）の違いを区別できる
-- `Access-Control-Allow-Origin` / `Allow-Credentials` / `Allow-Headers` の使い分けが分かる
-- `credentials: "include"` と Cookie の絡みを理解する
-- よくある CORS エラーを **メッセージから即座に原因に到達** できる
+- リアルタイム通信の **選択肢** を整理して語れる
+- WebSocket と SSE の **使い分け** を判断できる
+- WebSocket クライアントの最小実装が書ける
+- SSE クライアント（`EventSource`）の最小実装が書ける
+- Next.js / 各サービス（Pusher / Ably / Supabase Realtime）の位置付けを把握する
 
 ## 解説
 
-### 同一オリジンポリシーの復習
+### リアルタイム通信の選択肢
 
-ブラウザは「**異なるオリジン** からの応答を JS に渡さない」という規則（同一オリジンポリシー）を持っています。
+「サーバーから **押し付けで** データを送りたい」場面の主な選択肢:
 
-オリジン = `スキーム + ホスト + ポート`。
-
-| URL A | URL B | 同一オリジン？ |
+| 方式 | 通信方向 | 用途 |
 |---|---|---|
-| `https://example.com` | `https://example.com/api` | はい |
-| `https://example.com` | `http://example.com` | **いいえ**（スキームが違う） |
-| `https://example.com` | `https://api.example.com` | **いいえ**（ホストが違う） |
-| `https://example.com:443` | `https://example.com:8080` | **いいえ**（ポートが違う） |
+| **ポーリング** | クライアント → サーバー（定期） | 単純だが効率悪い |
+| **ロングポーリング** | クライアント → サーバー（待機） | レガシー互換 |
+| **Server-Sent Events**（SSE） | サーバー → クライアントの **一方向** | 通知 / 株価 / AI ストリーム |
+| **WebSocket** | **双方向** | チャット / オンラインゲーム / 共同編集 |
+| **WebTransport** | UDP ベースの双方向（HTTP/3） | 低遅延が要る場面（実験的） |
 
-### CORS = 「異なるオリジンからの読み取りを **明示的に許可**」
+「**双方向か単方向か**」「**HTTP の上で済むか**」が選択の軸です。
 
-API がブラウザから直接呼ばれる現代では、別オリジンから読みたい場面が多発します。CORS は「**サーバー側がレスポンスヘッダで許可を出した時** に限り、ブラウザが JS にレスポンスを渡す」仕組みです。
+### Server-Sent Events（SSE）
 
-ポイント:
+「サーバーから **テキストイベントをストリーム** で送る」HTTP ベースの仕組み。
 
-- **送信は誰でもできる**（リクエスト自体はブラウザが送る）
-- **応答を JS が読めるかどうか** は CORS ヘッダ次第
-- だから **CSRF とは別問題**（CSRF は送信を防ぐ話）
+#### サーバー側
 
-### シンプルリクエスト
+レスポンスのヘッダを `Content-Type: text/event-stream` にし、本文を **特別なフォーマット** で書き続けます。
 
-GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエストは、ブラウザが直接送信します。
-
-条件（ざっくり）:
-
-- メソッドは GET / POST / HEAD
-- カスタムヘッダなし
-- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
-
-例:
-
-```js
-fetch("https://api.example.com/posts");
 ```
-
-サーバーは応答に CORS ヘッダを返す:
-
-```http
 HTTP/1.1 200 OK
-Access-Control-Allow-Origin: https://my-site.example
-Content-Type: application/json
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
+
+data: hello
+
+data: world
+
+event: chat
+data: {"user":"alice","msg":"こんにちは"}
 ```
 
-`Access-Control-Allow-Origin` がリクエスト元オリジンと一致 / `*` ならブラウザが JS に応答を渡す。一致しなければ **JS から読めずエラー**。
-
-### プリフライト（OPTIONS）
-
-メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
-
-```
-OPTIONS /posts HTTP/1.1
-Origin: https://my-site.example
-Access-Control-Request-Method: PUT
-Access-Control-Request-Headers: Content-Type, Authorization
-```
-
-サーバーが応答:
-
-```
-HTTP/1.1 204 No Content
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE
-Access-Control-Allow-Headers: Content-Type, Authorization
-Access-Control-Max-Age: 3600
-```
-
-OPTIONS の応答が **OK + 適切なヘッダ** ならブラウザは本リクエストを送る。NG なら本リクエストは飛ばない。
-
-#### `Access-Control-Max-Age`
-
-OPTIONS の結果を **キャッシュする秒数**。これがないとリクエストごとに OPTIONS が走って遅くなります。`3600`（1 時間）程度が目安。
-
-### 主要ヘッダ
-
-#### サーバー → ブラウザ（応答）
-
-| ヘッダ | 内容 |
-|---|---|
-| `Access-Control-Allow-Origin` | 許可するオリジン（または `*`） |
-| `Access-Control-Allow-Methods` | 許可するメソッド |
-| `Access-Control-Allow-Headers` | 許可するリクエストヘッダ |
-| `Access-Control-Allow-Credentials` | Cookie / Authorization を含むリクエストを許可するか |
-| `Access-Control-Expose-Headers` | JS から読めるレスポンスヘッダの追加リスト |
-| `Access-Control-Max-Age` | プリフライトのキャッシュ秒 |
-
-#### ブラウザ → サーバー（リクエスト）
-
-| ヘッダ | 内容 |
-|---|---|
-| `Origin` | リクエスト元オリジン（**ブラウザが自動付与、JS から偽装不能**） |
-| `Access-Control-Request-Method` | プリフライト時の本来のメソッド |
-| `Access-Control-Request-Headers` | プリフライト時の本来のヘッダ |
-
-### Cookie / 認証ヘッダを含めるには
-
-デフォルトで `fetch` は **クロスオリジンで Cookie を送らない**。送る場合は **両側に追加設定** が必要です。
+各イベントは **空行** で区切る。`data:` 以外に `event:`（イベント名）/ `id:`（ID）/ `retry:`（再接続秒）が指定可能。
 
 #### クライアント側
 
 ```js
-fetch("https://api.example.com/me", {
-  credentials: "include",   // Cookie / Authorization を送る
+const es = new EventSource("/api/stream");
+
+es.onmessage = (e) => {
+  console.log("受信:", e.data);
+};
+
+es.addEventListener("chat", (e) => {
+  console.log("chat:", JSON.parse(e.data));
+});
+
+es.onerror = (err) => {
+  console.error("エラー or 切断:", err);
+};
+```
+
+`EventSource` は:
+
+- **自動再接続**（切れても勝手につなぎ直す）
+- `id:` を覚えていて再接続時に `Last-Event-ID` ヘッダで送る
+- ブラウザ標準（IE 以外）でライブラリ不要
+
+#### Next.js での実装（Route Handler + ReadableStream）
+
+```ts
+// app/api/stream/route.ts
+export async function GET() {
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      let count = 0;
+      const id = setInterval(() => {
+        count++;
+        controller.enqueue(encoder.encode(`data: tick ${count}\n\n`));
+        if (count >= 10) {
+          clearInterval(id);
+          controller.close();
+        }
+      }, 1000);
+    },
+  });
+
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+    },
+  });
+}
+```
+
+::: tip AI ストリーミングと SSE
+ChatGPT のような **トークン単位の応答** にも SSE / `Streaming Responses` が広く使われています。Vercel の AI SDK / Anthropic の Stream / OpenAI Stream など、SaaS の SDK が SSE を内部で扱っています。
+:::
+
+### WebSocket
+
+「**双方向**、**バイナリも送れる**、**HTTP からアップグレード** して始まる」プロトコル（`ws://` / `wss://`）。
+
+#### サーバー側（ws ライブラリ）
+
+```bash
+npm install ws
+```
+
+```js
+import { WebSocketServer } from "ws";
+
+const wss = new WebSocketServer({ port: 4000 });
+
+wss.on("connection", (socket) => {
+  console.log("接続");
+  socket.on("message", (data) => {
+    // 全クライアントにブロードキャスト
+    for (const client of wss.clients) {
+      if (client.readyState === client.OPEN) {
+        client.send(data.toString());
+      }
+    }
+  });
 });
 ```
 
-`credentials` の値:
-
-- `"omit"`: 送らない（デフォルトのクロスオリジン）
-- `"same-origin"`: 同一オリジンの時だけ送る（デフォルトの同一オリジン）
-- `"include"`: 常に送る（クロスオリジンでも）
-
-#### サーバー側
-
-```
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Credentials: true
-```
-
-**重要な制約**:
-
-- `Allow-Credentials: true` の時、`Allow-Origin: *` は **使えない**。**具体的なオリジン** を返す必要がある
-- `Access-Control-Allow-Origin` に複数のオリジンは並べられない（`*` か **1 つだけ**）
-
-複数許可したい場合は **リクエストの Origin を見て動的に返す**:
-
-```ts
-const allowed = [
-  "https://my-site.example",
-  "https://staging.example",
-  "http://localhost:3000",
-];
-
-export async function GET(req: Request) {
-  const origin = req.headers.get("Origin") ?? "";
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (allowed.includes(origin)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Vary", "Origin");
-  }
-  return new Response(JSON.stringify({ ok: true }), { headers });
-}
-```
-
-`Vary: Origin` を入れると **CDN がオリジン別にキャッシュ** してくれます。これがないと、別オリジンのキャッシュを別の人に返してしまう事故が起きます。
-
-### Cookie 側の `SameSite`
-
-「クロスオリジンで Cookie を送る」には Cookie 側の **`SameSite`** 属性も `None`（+ `Secure`）でないといけません。
-
-```
-Set-Cookie: session=abc; SameSite=None; Secure; HttpOnly; Path=/
-```
-
-- `SameSite=Strict`: クロスサイトには絶対送らない
-- `SameSite=Lax`: トップレベルナビゲーションでは送る（デフォルト）
-- `SameSite=None`（+ Secure）: クロスサイトでも送る（同意必要）
-
-これをセットで考えないと、CORS 設定だけ整えても **Cookie が飛ばずログイン状態が維持されない** 事故になります。
-
-### Next.js / Express での設定例
-
-#### Next.js（Route Handler）
-
-```ts
-// app/api/posts/route.ts
-import { NextResponse } from "next/server";
-
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "https://my-site.example",
-];
-
-function corsHeaders(origin: string | null): HeadersInit {
-  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "3600",
-    "Vary": "Origin",
-  };
-  // 許可されていないオリジンには Allow-Origin ヘッダ自体を返さない
-  // （空文字を返すとブラウザは「許可なし」だがプロキシ / CDN のキャッシュ汚染源になる）
-  if (isAllowed) {
-    headers["Access-Control-Allow-Origin"] = origin!;
-  }
-  return headers;
-}
-
-export async function OPTIONS(req: Request) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
-
-export async function GET(req: Request) {
-  return NextResponse.json({ posts: [] }, {
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
-```
-
-#### Express の `cors` パッケージ
+#### クライアント側
 
 ```js
-import cors from "cors";
+const ws = new WebSocket("ws://localhost:4000");
 
-app.use(
-  cors({
-    origin: ["https://my-site.example", "http://localhost:3000"],
-    credentials: true,
-    maxAge: 3600,
-  }),
-);
+ws.addEventListener("open", () => {
+  console.log("接続成功");
+  ws.send("hello");
+});
+
+ws.addEventListener("message", (e) => {
+  console.log("受信:", e.data);
+});
+
+ws.addEventListener("close", () => {
+  console.log("切断");
+});
 ```
 
-### よくある CORS エラーと原因
+#### バイナリも送れる
 
-ブラウザのコンソールに出るメッセージ別の対処。
+```js
+const buffer = new Uint8Array([1, 2, 3, 4]);
+ws.binaryType = "arraybuffer";
+ws.send(buffer);
+```
 
-#### `No 'Access-Control-Allow-Origin' header is present on the requested resource`
+ゲーム / VoIP / ファイル転送など、テキストでは厳しい用途に向く。
 
-→ サーバーがそもそも CORS ヘッダを返していない / OPTIONS で 4xx を返している。サーバー側設定を見直す。
+### 切断と再接続
 
-#### `The 'Access-Control-Allow-Origin' header has a value 'X' that is not equal to the supplied origin`
+WebSocket は **自動再接続しない**。ネットワーク切断 / サーバー再起動で `close` イベントが飛びます。実装側で再接続を:
 
-→ `Allow-Origin` が **間違ったオリジン** を返している。動的に Origin を見て一致するものを返す。
+```js
+function connect() {
+  const ws = new WebSocket(url);
+  ws.addEventListener("close", () => {
+    setTimeout(connect, 1000); // 1 秒後に再接続
+  });
+  return ws;
+}
+```
 
-#### `The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'`
+実用では **指数バックオフ + 上限** にします（`socket.io` などのライブラリが内部で実装）。
 
-→ `credentials: "include"` の時は **`*` ではなく具体的オリジン** を返す。
+### SSE と WebSocket の使い分け
 
-#### `Method PUT is not allowed by Access-Control-Allow-Methods`
+| 観点 | SSE | WebSocket |
+|---|---|---|
+| 通信方向 | サーバー → クライアント（一方向） | 双方向 |
+| プロトコル | HTTP（追加設定不要） | 専用（プロキシ調整が必要） |
+| 自動再接続 | あり | なし（自前で実装） |
+| ブラウザサポート | 全主要 | 全主要 |
+| バイナリ | 不可 | 可 |
+| プッシュレート | 低〜中 | 低〜高 |
 
-→ `Allow-Methods` に PUT を追加。OPTIONS の応答に必ず含める。
+#### 選び方の指針
 
-#### `Request header 'X-Custom' is not allowed by Access-Control-Allow-Headers`
+- **通知 / ストック価格 / AI ストリーム / ライブニュース**: SSE で十分
+- **チャット / 共同編集 / リアルタイムゲーム / カーソル位置共有**: WebSocket
+- **「通知だけ」+ 既存 HTTP インフラを活かしたい**: SSE が楽
 
-→ `Allow-Headers` にカスタムヘッダを追加。
+### React / Next.js で扱う
 
-#### `Cookie が送られない`
+#### React Hook で WebSocket
 
-→ クライアント側 `credentials: "include"`、サーバー側 `Allow-Credentials: true`、Cookie の `SameSite=None; Secure` の **3 点セット** を確認。
+```tsx
+import { useEffect, useState } from "react";
 
-### CORS が要らないケース
+export function useWebSocket(url: string) {
+  const [messages, setMessages] = useState<string[]>([]);
+  const [ws, setWs] = useState<WebSocket | null>(null);
 
-- **同一オリジンへのリクエスト**（`/api/...` のような相対パス）
-- **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
-- **サーバー → サーバー**（fetch がブラウザを通らない）
+  useEffect(() => {
+    const socket = new WebSocket(url);
+    socket.addEventListener("message", (e) => {
+      setMessages((m) => [...m, e.data]);
+    });
+    setWs(socket);
+    return () => socket.close();
+  }, [url]);
 
-「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
+  const send = (msg: string) => ws?.send(msg);
+  return { messages, send };
+}
+```
 
-### CORB / CORP / COEP / COOP
+`useEffect` のクリーンアップで **必ず close** すること。React 19 / Strict Mode で **2 度マウント** されて接続が漏れる事故を防げます。
 
-似た名前の仕組みが他にもあります。混同しないように整理:
+#### Next.js の Route Handler で WebSocket を持つときの注意
 
-| 名前 | 役割 |
+Next.js の Route Handler は **Node.js Runtime / Edge Runtime** の 2 種類があり、`export const runtime` で切り替えられます。WebSocket をホストできるかは Runtime とデプロイ先で大きく変わります。
+
+- **Edge Runtime**（Vercel Edge / Cloudflare Workers）: WebSocket サーバー側はホストできない。ブラウザ向けの `WebSocket` クライアントとしての利用や SSE の配信は OK
+- **Node.js Runtime + 通常の Node プロセス**（`next start` 等）: 実験的な「Route Handler の WebSocket Upgrade」サポートが入りつつあるが、Vercel の **サーバーレス関数では長時間接続を保てない** ため実運用は不向き
+- **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実解
+
+SSE（一方向ストリーミング）は Vercel の Route Handler でも動きますが、Edge / Node どちらでも **接続時間の上限** に注意します（Vercel Hobby は 10〜60 秒程度）。
+
+### マネージドサービス
+
+「自前で WebSocket サーバーを書く」のは接続管理 / スケーリング / 切断検知が大変。次のサービスが定番:
+
+| サービス | 特徴 |
 |---|---|
-| **CORS** | クロスオリジンレスポンスを **JS に読ませるか** |
-| **CORB**（Cross-Origin Read Blocking） | ブラウザが Spectre 対策で内部的に行うレスポンス遮断 |
-| **CORP**（`Cross-Origin-Resource-Policy`） | リソース側が **誰に埋め込まれるか** を制限 |
-| **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
-| **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
+| **Pusher** | リアルタイム通信の老舗。チャンネル / イベントが分かりやすい |
+| **Ably** | エンタープライズ。再生 / 履歴 / メッセージ TTL |
+| **Supabase Realtime** | DB 変更 → クライアント通知が標準。Postgres 連携 |
+| **PartyKit** | エッジでの WebSocket / Durable Objects ベース |
+| **Liveblocks** | Figma / Notion 風の共同編集 UI ライブラリ |
+| **Cloudflare Durable Objects** | エッジで状態を持つ WebSocket。1 部屋 = 1 オブジェクト |
 
-通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
+「自前で WebSocket を実装する前に、これらで済まないか確認」が現代の判断軸。
+
+### Socket.IO の現在地
+
+長らく WebSocket のデファクトだった `socket.io` は、**2026 年も使えます** が、ブラウザの素の WebSocket / SSE が成熟したので **新規プロジェクトでは選ばない** ケースが増えています。古い案件 / Node.js のサーバー起動が確実な場合 / 低レベルな再接続をライブラリに任せたい場合に。
+
+### よくある罠
+
+- **`new EventSource(url)` の URL に Cookie を付けたい** → `withCredentials: true` を渡す。サーバーは CORS を通す
+- **WebSocket がプロキシ越しに切れる** → リバースプロキシで `Upgrade` / `Connection` ヘッダのフォワード設定
+- **アイドルタイムアウト**（CDN や LB が 60 秒で切る）→ **ハートビート**（Ping）を 30 秒ごとに送る
+- **`wss://`（HTTPS）を使う**（HTTP/2 のメリット + Mixed Content 対策）
 
 ## 演習
 
 ### ゴール
 
-- 自前 API に対して CORS エラーを **出してから直す** 流れを体験する
-- プリフライトの OPTIONS が飛ぶことを観察する
+- SSE と WebSocket をそれぞれ Next.js プロジェクトで触る
 
-### 手順 1: API サーバー（Hono）
+### 手順 1: 新規 Next.js
 
 ```bash
-mkdir cors-server
-cd cors-server
-npm init -y
-npm install hono @hono/node-server
+npx create-next-app@latest realtime-sample --ts --app
+cd realtime-sample
 ```
 
-`server.ts`:
+### 手順 2: SSE のサーバーとクライアント
+
+`app/api/clock/route.ts`:
 
 ```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
+export const dynamic = "force-dynamic";
 
-const app = new Hono();
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-
-serve({ fetch: app.fetch, port: 4000 });
-console.log("API on http://localhost:4000");
-```
-
-```bash
-npx tsx server.ts
-```
-
-### 手順 2: クライアント（別ポート）
-
-別ターミナルで:
-
-```bash
-npm create vite@latest cors-client -- --template vanilla-ts
-cd cors-client
-npm install
-npm run dev
-```
-
-`src/main.ts`:
-
-```ts
-async function load() {
-  const res = await fetch("http://localhost:4000/posts");
-  const data = await res.json();
-  document.body.textContent = JSON.stringify(data);
+export async function GET() {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const id = setInterval(() => {
+        const time = new Date().toISOString();
+        controller.enqueue(encoder.encode(`data: ${time}\n\n`));
+      }, 1000);
+      // 30 秒で終了
+      setTimeout(() => {
+        clearInterval(id);
+        controller.close();
+      }, 30000);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
 }
-load();
 ```
 
-ブラウザで `http://localhost:5173`（Vite のデフォルトポート）を開くと、コンソールに **CORS エラー** が出るはずです。
+`app/clock/page.tsx`:
 
-```
-Access to fetch at 'http://localhost:4000/posts' from origin 'http://localhost:5173' has been blocked by CORS policy:
-No 'Access-Control-Allow-Origin' header is present on the requested resource.
-```
+```tsx
+"use client";
+import { useEffect, useState } from "react";
 
-### 手順 3: サーバーで CORS を許可
-
-`server.ts`:
-
-```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-import { cors } from "hono/cors";
-
-const app = new Hono();
-
-app.use(
-  "*",
-  cors({
-    origin: ["http://localhost:5173"],
-    credentials: true,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    maxAge: 3600,
-  }),
-);
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-app.put("/posts/:id", (c) => c.json({ ok: true }));
-
-serve({ fetch: app.fetch, port: 4000 });
+export default function Clock() {
+  const [time, setTime] = useState("...");
+  useEffect(() => {
+    const es = new EventSource("/api/clock");
+    es.onmessage = (e) => setTime(e.data);
+    return () => es.close();
+  }, []);
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>SSE 時計</h1>
+      <p>{time}</p>
+    </main>
+  );
+}
 ```
 
-再起動するとクライアントから読めるようになります。
+`npm run dev` で `/clock` を開くと、毎秒時刻が更新されます。
 
-### 手順 4: プリフライトを観察
+### 手順 3: WebSocket チャットの最小サーバー
 
-PUT を呼ぶ:
+別ディレクトリで:
 
-```ts
-await fetch("http://localhost:4000/posts/1", {
-  method: "PUT",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ title: "updated" }),
+```bash
+mkdir ws-server && cd ws-server
+npm init -y
+npm install ws
+```
+
+`server.js`:
+
+```js
+import { WebSocketServer } from "ws";
+
+const wss = new WebSocketServer({ port: 4000 });
+
+wss.on("connection", (socket) => {
+  socket.on("message", (data) => {
+    for (const c of wss.clients) {
+      if (c.readyState === c.OPEN) c.send(data.toString());
+    }
+  });
 });
+
+console.log("ws://localhost:4000");
 ```
 
-DevTools の Network タブで:
+```bash
+node server.js
+```
 
-1. まず **OPTIONS** が飛ぶ
-2. 200 / 204 が返る
-3. その後 **PUT** が飛ぶ
+### 手順 4: チャットクライアント
 
-を確認します。
+Next.js の `app/chat/page.tsx`:
+
+```tsx
+"use client";
+import { useEffect, useRef, useState } from "react";
+
+export default function Chat() {
+  const [messages, setMessages] = useState<string[]>([]);
+  const [text, setText] = useState("");
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:4000");
+    ws.addEventListener("message", (e) => {
+      setMessages((m) => [...m, e.data]);
+    });
+    wsRef.current = ws;
+    return () => ws.close();
+  }, []);
+
+  const send = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    wsRef.current?.send(text);
+    setText("");
+  };
+
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>WebSocket チャット</h1>
+      <ul>
+        {messages.map((m, i) => (
+          <li key={i}>{m}</li>
+        ))}
+      </ul>
+      <form onSubmit={send}>
+        <input value={text} onChange={(e) => setText(e.target.value)} />
+        <button>送信</button>
+      </form>
+    </main>
+  );
+}
+```
+
+ブラウザを 2 つ開いて `http://localhost:3000/chat` にアクセスし、片方で送信したメッセージがもう片方に届くことを確認。
 
 ### 期待出力
 
-- 最初は CORS エラー
-- サーバーで許可してから読める
-- PUT 時に **OPTIONS → PUT** の 2 段階のリクエストが見える
+- `/clock` で 1 秒ごとに時刻が更新される
+- `/chat` で 2 つのブラウザの間でリアルタイムにメッセージが共有される
 
 ### 変える
 
-- `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
-- `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
-- `allowOrigins` に `*` を入れると、`credentials` を使う場合だけエラー（仕様違反）
+- SSE で `event: tick` / `event: alert` の **イベント名付きメッセージ** を送って、クライアントの `addEventListener` で受け分ける
+- WebSocket チャットに **ユーザー名** を持たせ、JSON で送受信する
+- 切断検知 + 再接続のロジックを追加
 
 ### 自分で書く（任意）
 
-- Next.js の Route Handler で同じ CORS 設定を再現する
-- `SameSite=None; Secure` の Cookie を使ってログインを成立させる
-- バックエンドプロキシ（Next.js の `/api/proxy`）を立てて、CORS を消す構成にする
+- AI ストリーミング: SSE で 1 文字ずつ送るデモを作る
+- Pusher / Ably / Supabase Realtime のいずれかを使って **SaaS で同じチャット** を実装し、自前との比較
+- PartyKit を試して、エッジで WebSocket を動かす
 
 ## まとめ
 
-- CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
-- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
-- 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
-- **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
-- **Cookie の `SameSite=None; Secure`** とセットで考える
-- 動的に Origin を見て返す時は **`Vary: Origin`** をつけて CDN を安全に
-- エラーメッセージから原因を特定できる定型パターンを覚える
-- 「バックエンドプロキシで CORS を消す」も実用解
+- リアルタイム通信は **ポーリング / SSE / WebSocket / WebTransport** から選ぶ
+- **SSE** はサーバー → クライアントの一方向。HTTP の上で動き、`EventSource` で扱う
+- **WebSocket** は双方向。バイナリも送れるが、自動再接続は自前
+- AI ストリーミングは **SSE** が定番
+- Vercel の **Edge Runtime は WebSocket をホストできない**。SaaS / 別サーバーが必要
+- マネージド: **Pusher / Ably / Supabase Realtime / PartyKit / Liveblocks**
+- React の `useEffect` で **必ずクリーンアップ** で接続を閉じる
+- アイドル切断対策に **ハートビート**、`wss://` を使う

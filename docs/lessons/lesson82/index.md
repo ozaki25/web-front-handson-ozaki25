@@ -1,367 +1,231 @@
-# lesson82: 送信状態とエラー表示
+# lesson82: Proxy で認証前処理
 
 ## ゴール
 
-- `useActionState` の正しいシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を覚えます。
-- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せます。
-- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書けます。
-- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を間違えずに使えます。
+- `proxy.ts` を使ってリクエストに割り込める
+- 認証状態（Cookie）に応じてリダイレクトできる
+- Node.js ランタイムで動くことと、軽量処理に留めるべき理由を理解する
+- `matcher` で適用範囲を絞れる
 
 ## 解説
 
-### なぜエラー用の別フックが必要か
+### Proxy とは
 
-「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
+**Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
 
-エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
+> Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
 
-### `useActionState` のシグネチャ（絶対に覚える）
+配置ルール:
 
-```tsx
-"use client";
+- ファイル名は **`proxy.ts`**（または `.js`） 固定
+- 配置は **プロジェクトルート直下** または `src/` 直下（`app/` や `pages/` の横に置く）
+- 1 つのプロジェクトに 1 ファイルのみ
 
-import { useActionState } from "react";
-import { addTodo } from "./actions";
-
-type AddTodoState = { error?: string };
-
-const initialState: AddTodoState = {};
-
-const [state, formAction, isPending] = useActionState(addTodo, initialState);
-```
-
-- 第 1 引数: **action**（Server Action の関数）
-- 第 2 引数: **初期状態**
-- 戻り値: `[state, formAction, isPending]` の 3 要素タプル
-
-引数の順に注意してください。**action が第 1 引数**、初期状態が第 2 引数です。逆にしないでください。
-
-戻り値の中身:
-
-- `state`: 現在のアクション戻り値（`action` が最後に `return` したもの）。初回は `initialState` です。
-- `formAction`: **`<form action={formAction}>` に渡す**、ラップ済みの関数です。元の action ではなくこちらを渡します。
-- `isPending`: 送信中かどうかの真偽値です。
-
-### Server Action のシグネチャを変える
-
-`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
+### 最小の proxy
 
 ```ts
-"use server";
+// proxy.ts
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
 
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {}; // 成功
+export function proxy(request: NextRequest) {
+  // ここに前処理を書く
+  return NextResponse.next(); // 通常通りページを表示
 }
 ```
 
-- 第 1 引数が `prevState`（前回のアクションの戻り値）です。使わなくても受け取る必要があります。
-- 第 2 引数が `FormData` です。
-- 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
+- 引数 `request` は `NextRequest`（通常の `Request` に Next.js 独自の機能を追加したもの）
+- export は **named `proxy` 関数** または **default export** のどちらかで書けます
+- 戻り値:
+  - `NextResponse.next()` → そのままページへ
+  - `NextResponse.redirect(url)` → リダイレクトする
+  - `NextResponse.rewrite(url)` → URL はそのままで別ページを表示（中身を差し替え）
 
-「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
+### `matcher` で適用範囲を絞る
 
-### `useFormStatus` は `<form>` の **子** で呼ぶ
+デフォルトでは **すべてのリクエスト** で proxy が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
 
-`useFormStatus` は「そのフォームが送信中かどうか」を取るフックです。重要な制約があります。
-
-- **import 元は `react-dom`** です（`react` ではありません）。
-- **`<form>` の子コンポーネント内で呼ぶ必要があります**。フォーム本体（`<form>` を return しているコンポーネント）の中では呼べません。
-
-```tsx
-"use client";
-
-import { useFormStatus } from "react-dom";
-
-export function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
+```ts
+export const config = {
+  matcher: ["/todos/:path*", "/admin/:path*"],
+};
 ```
 
-送信ボタンを別コンポーネントに切り出し、その中で `useFormStatus()` を呼びます。これが定番パターンです。
+- `/todos/:path*` は `/todos` と `/todos/*` の全部にマッチ
+- 静的アセット（画像・CSS）など余計なものを避ける
 
-### import 元の違い（詰まる人が多い）
+### Node.js ランタイムで動く
 
-両者は見た目が似ていますが import 元が違います。**太字で強調**:
+Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
 
-- **`useActionState` は `react` から**
-- **`useFormStatus` は `react-dom` から**
+重要な指針:
 
-間違えると「そんな export はない」というエラーが出ます。最初のうちは毎回見比べながら書くと良いです。
+- **重い処理は proxy に書かない**。ユーザー認証の JWT 署名検証や細かい権限チェックは Server Components / Server Actions に寄せる
+- proxy は「Cookie が無ければログインへ飛ばす」のような **トラフィック制御** に絞る
 
-### 冪等性と二重送信への備え
+「Route Handlers」と同じ Node.js ランタイム上で動きますが、**ページ本体の前に毎回走る** ぶん、オーバーヘッドが気になりやすい点に注意してください。
 
-`isPending` でボタンを `disabled` にすれば、ユーザーが送信中にもう一度ボタンを押すことは防げます。ただし、これはクライアント側の親切な UI でしかなく、本番では次のような事態に備えてサーバー側でも対策します。
+### 本コースの範囲
 
-- ユーザーが「送信」を押した直後に **ネットワーク切断** で結果が返ってこず、**手動でリロード後に再送信** する
-- ブラウザの戻る/進む / フォームの再送信ダイアログで **同じリクエストが 2 回飛ぶ**
+本レッスンでは **最小形の認証前処理** だけを扱います。
 
-「同じ操作が 2 回届いても結果が変わらない」という性質を **冪等性** と呼びます。Server Action / API を冪等にする実務の定番パターンは次のとおりです。
+- Cookie `auth` がある → 通す
+- Cookie `auth` が無い → `/login` にリダイレクト
 
-- **クライアントが `requestId`（ランダム UUID）を生成して送る**: サーバーは `requestId` を DB のユニーク制約付きで保存し、2 回目は無視する
-- **state machine**: TODO の `status` が `done` のときに再度 `done` 化する操作は no-op にする
-- **upsert / `ON CONFLICT DO NOTHING`**: 同じ ID の挿入を 2 回受けてもエラーにせず無視
-
-本コースでは扱いませんが、`useActionState` で `isPending` を見て disabled にする UI 側の対策と、Server 側の冪等性は **両方そろってはじめて安全** という前提を頭に入れておきます。
+本格的な認証（NextAuth、JWT 検証、セッション管理）は扱いません。「認証のガワを書く感じ」を体験するだけです。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Actions の最小形」の `addTodo` を前提にしています。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`proxy.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
 
-<details>
-<summary>出発点のファイル</summary>
+### ゴール
 
-**`app/types.ts`**
+- `/todos` にアクセスしたとき、Cookie `auth` が無ければ `/login` にリダイレクトする
+- `/login` ページで「ログイン」ボタンを押すと Cookie が立って `/todos` に戻れる
+
+### 手順
+
+1. これまでのプロジェクトを開く（5 章 のここまでの成果を引き継ぐ）
+2. `proxy.ts` をプロジェクトルート直下に新規作成
+3. `app/login/page.tsx` を新規作成
+
+### `proxy.ts`（プロジェクトルート直下）
 
 ```ts
-export type Todo = {
-  id: string;
-  text: string;
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function proxy(request: NextRequest) {
+  const auth = request.cookies.get("auth");
+
+  if (!auth) {
+    // /login にリダイレクト
+    const loginUrl = new URL("/login", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/todos/:path*"],
 };
 ```
 
-**`app/actions.ts`**
+ポイント:
 
-```ts
-"use server";
+- `request.cookies.get("auth")` で Cookie を読む
+- `NextResponse.redirect(loginUrl)` でリダイレクト
+- `matcher` で `/todos` 配下だけに適用（`/` や `/about` は素通り）
 
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export type AddTodoResult = { ok: true } | { ok: false; error: string };
-
-export async function addTodo(formData: FormData): Promise<AddTodoResult> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { ok: false, error: "空のままでは追加できません" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return { ok: true };
-}
-```
-
-**`app/todos/page.tsx`**
-
-```tsx
-import { addTodo, listTodos } from "../actions";
-
-export default async function TodosPage() {
-  const todos = await listTodos();
-
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <form action={addTodo}>
-        <input type="text" name="text" placeholder="やることを入力" />
-        <button type="submit">追加</button>
-      </form>
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
-  );
-}
-```
-
-</details>
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順の進め方（重要）
-
-本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全です。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進めましょう。
-
-順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短いです。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すと良いです:
-
-1. 新しいファイル `app/todos/TodoForm.tsx` を先に **作るだけ作る**（import する `addTodo` の型不一致でエラーが出るが、そのまま進めます）
-2. `app/todos/page.tsx` で `<form>` ブロックを `<TodoForm />` に差し替え
-3. 最後に `app/actions.ts` の `addTodo` を `(prevState, formData) => newState` 形に書き換え
-
-このドキュメント上の掲載は **「どれを書けばいいか」を最初に見せる** ために 手順 1（actions.ts）から順に並べていますが、手を動かす順番は上記の 1 → 2 → 3 でも構いません。どちらでも最終的には同じ形になります。
-
-### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
-
-`app/actions.ts` を書き換えます。
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-```
-
-- 戻り値を `AddTodoState` 型にし、成功時は `{}`、失敗時は `{ error: "..." }` を返します。
-- `prevState` は受け取りますが今回は使いません（それで OK です）。
-
-### 手順 2: フォームを Client Component に切り出す
-
-`useActionState` は Client Component のフックなので、フォーム部分だけを別ファイルに分離します。
-
-`app/todos/TodoForm.tsx`:
+### `app/login/page.tsx`（新規）
 
 ```tsx
 "use client";
 
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { addTodo, type AddTodoState } from "../actions";
+import { useRouter } from "next/navigation";
 
-const initialState: AddTodoState = {};
+export default function LoginPage() {
+  const router = useRouter();
 
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
-
-export function TodoForm() {
-  const [state, formAction, isPending] = useActionState(addTodo, initialState);
+  function handleLogin() {
+    // Cookie をその場で立てる（max-age 1 時間）
+    document.cookie = "auth=1; path=/; max-age=3600";
+    // /todos に遷移
+    router.push("/todos");
+  }
 
   return (
-    <form action={formAction}>
-      <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
-      {state.error && <p className="error">{state.error}</p>}
-      {isPending && <p>通信中...</p>}
-    </form>
+    <main>
+      <h1>ログイン</h1>
+      <p>
+        本格認証は本コースでは扱いません。下のボタンで Cookie を立てて `/todos`
+        にアクセスできるようにします。
+      </p>
+      <button type="button" onClick={handleLogin}>
+        ログイン
+      </button>
+    </main>
   );
 }
 ```
 
 ポイント:
 
-- 1 行目 `"use client"` です。
-- **`useActionState` は `react` から import** します。
-- **`useFormStatus` は `react-dom` から import** します。
-- `<form action={formAction}>` に渡すのは **`formAction`** です（`addTodo` ではありません）。
-- `SubmitButton` を別コンポーネントに切り出して、その中で `useFormStatus()` を呼びます。
-- `state.error` があるときだけ `<p>` に赤文字で表示します。
-- `isPending` でも「通信中...」を出します（冗長ですが違いを確認するためです）。
+- `"use client"` を付ける（`document.cookie` や `useRouter` を使うため）
+- ボタンクリックで `document.cookie` を直接書く
+- `useRouter().push("/todos")` で `/todos` に遷移
 
-### 手順 3: `/todos` ページで差し替える
+### この演習の Cookie は「学習用」（本物のログインではない）
 
-`app/todos/page.tsx` の `<form>` を `<TodoForm />` に差し替えます。
+上の `document.cookie = "auth=1; ..."` は **学習用の擬似ログイン** です。本物の認証では絶対にこの形にしません。理由は次の 3 点。
 
-```tsx
-import { listTodos } from "../actions";
-import { TodoForm } from "./TodoForm";
+1. **JavaScript から `document.cookie` で書ける Cookie は、ブラウザ側のすべての JS から読める**。XSS（任意の JS が走る攻撃）が成立すると即漏洩します。
+2. **`HttpOnly` フラグが付いていない**。本物の認証 Cookie には必ず `HttpOnly` を付けて、JS から読めないようにします。`HttpOnly` はサーバー側でしか付けられないため、`document.cookie` で立てた時点で「JS 可視」になっています。
+3. **`SameSite` / `Secure` が指定されていない**。CSRF / 中間者攻撃に対する基本防御が抜けています。
 
-export default async function TodosPage() {
-  const todos = await listTodos();
+実運用では、認証 Cookie はサーバー側（Server Action や Route Handler）で次のように発行します。
 
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
-  );
-}
+```ts
+// Server Action / Route Handler 内で（例）
+import { cookies } from "next/headers";
+
+(await cookies()).set("session", token, {
+  httpOnly: true,        // JS から読めない
+  secure: true,          // HTTPS のみ送信
+  sameSite: "lax",       // 別オリジンからの送信を制限（CSRF 対策）
+  maxAge: 60 * 60 * 24,  // 1 日
+  path: "/",
+});
 ```
 
-`page.tsx` は Server Component のままです。Client の `TodoForm` を呼ぶだけなので `"use client"` は不要です。
-
-### 手順 4: エラー用の CSS
-
-`app/globals.css` にエラー表示のスタイルを追加します。
-
-```css
-.error {
-  color: #c00;
-  background: #ffe8e8;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .error {
-    color: #ffb0b0;
-    background: #4a1d1d;
-  }
-}
-```
+本コースでは認証フローには深入りしないため、この演習では学習用の擬似 Cookie を使いますが、**実装するときは「JS から `document.cookie` を書く」を絶対にしない** と覚えてください。本格的な認証は Auth.js / NextAuth など専用ライブラリに任せます。
 
 ### 期待出力
 
-1. `/todos` を開いて、何も入力せずに「追加」を押す → 下に赤文字で「空のまま追加はできない」が表示されます（薄い赤背景）。
-2. 「買い物」と入力して「追加」を押す → エラー表示が消え、一覧に「買い物」が追加されます。
-3. 何度か連打する → 送信中はボタンが disabled（グレー）になり「送信中...」と表示されます。隣に「通信中...」も出ます。
-4. DevTools の Network タブを開いておくと、送信ごとに POST が飛んでいるのが見えます。
+1. Cookie が何もない状態で `/todos` にアクセス → `/login` にリダイレクトされる
+2. 「ログイン」ボタンを押す → `/todos` に遷移、一覧が見える
+3. DevTools → Application → Cookies で `auth=1` が登録されているのが確認できる
+4. Cookie を削除してから `/todos` にアクセスし直す → また `/login` に戻される
 
-### よくある間違い
+### 変える
 
-- `useActionState` を `react-dom` から import しようとして「export がない」エラーになる → `react` から import します。
-- `useFormStatus` を `<form>` を返しているコンポーネント自身で呼んでしまう → `pending` が常に `false` になります。子コンポーネントに切り出しましょう。
-- `useActionState(initialState, addTodo)` のように引数を逆にする → 型エラーです。**action が第 1 引数**、初期状態が第 2 引数です。
-- `<form action={addTodo}>` と元の関数を渡す → エラー状態がうまく繋がりません。`<form action={formAction}>` と **ラップ済み** の関数を渡しましょう。
-
-### 変えてみる
-
-1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちを」など）。
-2. エラーの種類を増やしましょう: 先頭の空白文字だけで追加しようとしたときは「空白だけでは追加できない」、5 文字以下のみ許可して「5 文字以内にする」など、`addTodo` 側の判定を足してみましょう。
-3. `useActionState` の初期状態を `{ error: "まずは何か入力" }` にして、初期表示でエラーが出る挙動を確認しましょう（確認したら `{}` に戻します）。
+- Cookie 名を `session` に変えて、`proxy.ts` と `login/page.tsx` の両方を追随する
+- `matcher` を `["/todos/:path*", "/admin/:path*"]` に増やして、`/admin/page.tsx` を作り、そちらでもリダイレクトが効くことを確認
+- `NextResponse.redirect` を `NextResponse.rewrite` に変えて挙動の違いを見る（URL が書き換わらないで表示が変わる）
+- `export function proxy(...)` を `export default function(...)` に書き換えて、どちらでも動くことを確認
 
 ### 自分で書く
 
-「Server Actions の最小形」の「自分で書く」で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
+- 「ログアウト」ボタンを `/login` に追加し、Cookie を消す:
+  ```ts
+  document.cookie = "auth=; path=/; max-age=0";
+  ```
+- `/todos` のページヘッダーに「ログイン中」と表示し、Cookie が無いとリダイレクトされるので逆に常に「ログイン中」しか出ないことを確認
+
+### Route Handlers との組み合わせ（発展）
+
+これまでのレッスンで作った `/api/todos` も、proxy で認証必須にできます。
+
+```ts
+export const config = {
+  matcher: ["/todos/:path*", "/api/todos/:path*"],
+};
+```
+
+これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「proxy で API も守れる」ことだけ押さえます。
+
+### Node.js ランタイムでの注意
+
+Next.js 16 から proxy は Node.js ランタイムで動くので、`fs` / `path` / ネイティブモジュールなどの Node API が使えます。ただし **proxy は毎リクエスト前に走る** ため、重い処理（DB 接続・大きな計算）は書かないでください。ファイル I/O や外部 API 呼び出しは Server Components / Server Actions / Route Handlers に寄せるのが原則です。
 
 ## まとめ
 
-- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚えましょう。
-- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
-- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
-- **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。
+- `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
+- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
+- `NextResponse.next` / `redirect` / `rewrite` で分岐
+- `matcher` で適用パスを絞る
+- Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
+- 本格認証は本コース外。擬似ログインで流れだけ掴む

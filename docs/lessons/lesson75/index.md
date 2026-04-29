@@ -1,304 +1,314 @@
-# lesson75: Server Component と Client Component
+# lesson75: `next/image` で画像最適化
 
 ## ゴール
 
-- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できます。
-- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子にも Client 扱いが伝播することを理解できます。
-- Client Component が Server Component を `import` はできませんが、`children` や props として受け取れることを知っています。
-- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを自分の目で確認できます。
+- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できます。
+- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を覚えます。
+- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを押さえます。
+- 5 章 の「ページを増やしてリンクで移動する」で `/about` に貼った `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
 
 ## 解説
 
-### 2 種類のコンポーネントがある
+### なぜ `<img>` のままでは駄目なのか
 
-App Router では、コンポーネントが 2 種類あります。
+HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
 
-- **Server Component**（デフォルト）
-  - サーバー側で React を実行します。
-  - `useState` / `useEffect` / `onClick` など、**ブラウザでしか動かないもの** は使えません。
-  - データベースアクセスや秘密情報を扱えます。
-  - 送り出されたあとはブラウザでは再実行されません。
-- **Client Component**
-  - ブラウザで動きます。4 章 までの React と同じ感覚で書けます。
-  - `useState` / `useEffect` / `onClick` が使えます。
-  - 先頭に `"use client"` を書いて明示します。
+- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送されます。
+- **形式が古い**: JPG / PNG のまま配ると、WebP や AVIF に対応するブラウザでもその恩恵を受けられません。
+- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に全部読みに行きます（CLS や LCP の悪化）。
+- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動きます（CLS）。
 
-4 章 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
+`next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
 
-### `"use client"` のルール
+- 表示サイズに応じた解像度を自動生成（`srcset`）
+- WebP / AVIF に自動変換（ブラウザが対応していれば）
+- 画面内に入ったときだけ読み込み（遅延読み込み）
+- `width` / `height` 必須にすることでレイアウトのガタつきを防ぐ
 
-Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
+### 最小の使い方
 
 ```tsx
-"use client";
-
-import { useState } from "react";
-
-export function Counter() {
-  // ...
-}
-```
-
-- 必ず **ファイル先頭 1 行目**（`import` より上）です。
-- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
-
-つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
-
-### 境界のイメージ
-
-ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
-
-```mermaid
-graph TD
-  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
-  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
-
-  Layout["RootLayout (Server)"]:::server
-  Page["page.tsx (Server)"]:::server
-  Nav["Nav (Server)"]:::server
-  Counter["Counter (Client)"]:::client
-  Form["TodoForm (Client)"]:::client
-
-  Layout --> Page
-  Page --> Nav
-  Page --> Counter
-  Page --> Form
-```
-
-- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
-- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
-- Client の部分は「葉」に配置します。ページ全体を Client にしません。
-
-上記図はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965`、枠 `#95d5b2` / `#62b6cb`、文字 `#ffffff`）を指定しています。
-
-### Client → Server の呼び出しルール
-
-ここがよく詰まるポイントです。
-
-- Client Component から Server Component を **`import` できません**。
-- ただし、`children` や props として **受け取ること** は可能です。
-
-つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
-
-```tsx
-// Server Component（親）
-import { ClientWrapper } from "./ClientWrapper";
-import { ServerInfo } from "./ServerInfo";
+import Image from "next/image";
 
 export default function Page() {
   return (
-    <ClientWrapper>
-      <ServerInfo />
-    </ClientWrapper>
+    <Image
+      src="/coffee.jpg"
+      alt="コーヒーの写真"
+      width={300}
+      height={200}
+    />
   );
 }
 ```
+
+- `import Image from "next/image"` でコンポーネントを読み込みます。
+- `src` はプロジェクト内の `public/` 直下のパス、または **登録済み** の外部 URL です。
+- `alt` は必須です。読み上げソフトと、画像が読み込めなかったときの代替テキストになります。
+- `width` と `height` はピクセル数を **数値** で書きます（CSS 単位の `px` は付けません）。
+
+### `width` / `height` は原則必須。ただし省略できる 2 つのケース
+
+`<Image>` は `width` / `height` を **原則必須** にします。レイアウトのガタつき（CLS）を防ぐためです。ただし、次の 2 ケースだけは省略できます。
+
+1. **静的 import の場合**
+   プロジェクト内の画像を `import` すると、Next.js がビルド時に画像のサイズを読み取って自動で埋めてくれます。
+   ```tsx
+   import heroImg from "./hero.png";
+
+   <Image src={heroImg} alt="ヒーロー画像" />
+   ```
+2. **`fill` を使う場合**
+   親要素いっぱいに広げる使い方です。親に `position: relative` と明示的なサイズが要ります。
+   ```tsx
+   <div style={{ position: "relative", width: 300, height: 200 }}>
+     <Image src="/coffee.jpg" alt="コーヒー" fill />
+   </div>
+   ```
+
+外部 URL を `src` に指定する場合は **静的 import できないので `width` / `height` を明示するか、`fill` で親サイズに従わせる** ことになります。
+
+### 外部ホストを使うには `remotePatterns`
+
+`<Image>` はセキュリティとキャッシュの都合で、**どの外部ホストからの画像を許可するか** を事前に宣言する必要があります。これが `next.config.ts` の `images.remotePatterns` です。
+
+未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
+
+```
+Invalid src prop (https://placehold.co/...) on `next/image`,
+hostname "placehold.co" is not configured under images in your `next.config.js`
+```
+
+書き方は次の通りです。
+
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
+    ],
+  },
+};
+
+export default nextConfig;
+```
+
+Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書けば 1 ファイルだけ許可するパターンも書けます。
+
+### `sizes` でレスポンシブ対応
+
+`<Image>` は可変サイズ（`width` が CSS で `100%` のような動的な値）で使うときに `sizes` を付けると、もっとも賢く `srcset` を切り替えてくれます。詳細は本レッスンの範囲外ですが、1 行だけ雰囲気を見せておきます。
 
 ```tsx
-// ClientWrapper.tsx
-"use client";
-
-import type { ReactNode } from "react";
-import { useState } from "react";
-
-export function ClientWrapper({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <button onClick={() => setOpen((o) => !o)}>開閉</button>
-      {open && children}
-    </div>
-  );
-}
+<Image
+  src="/coffee.jpg"
+  alt="コーヒー"
+  width={600}
+  height={400}
+  sizes="(max-width: 640px) 100vw, 300px"
+/>
 ```
 
-`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
-
-### Server → Client へ渡せる props は **シリアライズ可能なもの限定**
-
-Server Component から Client Component へ props を渡すとき、**シリアライズ可能** （JSON で表現できる）な値しか渡せません。具体的には次のとおりです。
-
-- **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
-- **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
-
-これは「Server で計算した結果を Client に渡す = ネットワーク越しに JSON で送る」ためです。`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーで詰まります。実務での回避パターン:
-
-- **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
-- **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
-- **コールバック関数**: 普通の関数は渡せないので、**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せます
-
-### `"use client"` を忘れたときのエラー
-
-`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
-
-```
-You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
-```
-
-このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
+スマホ幅では 100vw、それ以外では 300px で表示される、という意味です。本演習では使いませんが、覚えておくと役立ちます。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。`/about` の画像を差し替える演習なので、最低限 `/about` ページと `<img>` が存在すれば構いません。
 
-### 既存のプロジェクトを使う
+<details>
+<summary>出発点のファイル（`/about` 最小形）</summary>
 
-「共通レイアウトを作る」のレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順 1: Client Component の `Counter` を作る
-
-`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
-
-`app/components/Counter.tsx`:
+**`app/about/page.tsx`**
 
 ```tsx
-"use client";
-
-import { useState } from "react";
-
-export function Counter() {
-  const [count, setCount] = useState(0);
-  console.log("client render");
-  return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-    </div>
-  );
-}
-```
-
-- 1 行目に `"use client"` を書きます。
-- `useState` と `onClick` を使っています。
-- `console.log("client render")` をレンダリング中に仕掛けます。
-
-### 手順 2: Server Component の `page.tsx` に埋め込む
-
-`app/page.tsx` を次のように書き換えます。
-
-```tsx
-import { Counter } from "./components/Counter";
-
-export default function Page() {
-  console.log("server render");
+export default function AboutPage() {
   return (
     <>
-      <h1>ようこそ</h1>
-      <p>Counter は Client Component として動く。</p>
-      <Counter />
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
     </>
   );
 }
 ```
 
-- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
-- `console.log("server render")` を仕掛けます。
+Route Groups を使っていない出発点なので、本文中で `app/(public)/about/page.tsx` と書かれている箇所は `app/about/page.tsx` に読み替えてください。
 
-### 手順 3: 境界を確認する
+</details>
 
-1. ブラウザで `/` を開きます。
-2. ブラウザの DevTools → Console を開きます。
-3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
-4. ページを再読み込みします。
+### 前回のプロジェクトを開く
 
-#### 期待出力
+5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
 
-- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
-- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
-- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
+### 手順 1: `next.config.ts` に `remotePatterns` を追加
 
-これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
+プロジェクト直下に `next.config.ts`（または `next.config.mjs`）があります。StackBlitz テンプレートでは既に存在するはずです。なければ新規作成します。
 
-### 手順 4: `"use client"` を消してみる
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
 
-`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
+    ],
+  },
+};
 
-ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
-
+export default nextConfig;
 ```
-You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
-```
 
-このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
+保存すると、Next.js が設定を再読み込みします（StackBlitz ではターミナルに再起動のログが流れます）。
 
-### 手順 5: Server を Client の children として渡す
+### 手順 2: `/about` の `<img>` を `<Image>` に置き換える
 
-以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
+`app/(public)/about/page.tsx`（「Route Groups で整理する」以前のままなら `app/about/page.tsx`）を開きます。「ページを増やしてリンクで移動する」で貼った 3 枚のカードの `<img>` を、`<Image>` に置き換えます。
 
-`app/components/ClientBox.tsx`:
+ファイル全体はこうなります。
 
 ```tsx
-"use client";
+import Image from "next/image";
+import "./about.css";
 
-import type { ReactNode } from "react";
-import { useState } from "react";
-
-export function ClientBox({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div>
-      <button onClick={() => setOpen((o) => !o)}>
-        {open ? "閉じる" : "開く"}
-      </button>
-      {open && <div>{children}</div>}
-    </div>
-  );
-}
-```
-
-`app/components/ServerInfo.tsx`:
-
-```tsx
-export function ServerInfo() {
-  // Server Component なので、ここでサーバー時刻が取れる
-  const now = new Date().toISOString();
-  return <p>サーバー時刻: {now}</p>;
-}
-```
-
-`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
-
-```tsx
-import { Counter } from "./components/Counter";
-import { ClientBox } from "./components/ClientBox";
-import { ServerInfo } from "./components/ServerInfo";
-
-export default function Page() {
-  console.log("server render");
+export default function AboutPage() {
   return (
     <>
-      <h1>ようこそ</h1>
-      <Counter />
-      <ClientBox>
-        <ServerInfo />
-      </ClientBox>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <Image
+              src="https://placehold.co/300x200.png"
+              alt="コーヒーのプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <Image
+              src="https://placehold.co/300x200.png"
+              alt="本のプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <Image
+              src="https://placehold.co/300x200.png"
+              alt="散歩のプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
     </>
   );
 }
 ```
 
-#### 期待出力
+変更点:
 
-- 最初は `サーバー時刻: 2026-...` が見えています。
-- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
-- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
+- 1 行目に `import Image from "next/image";` を追加しました。
+- `<img src="..." alt="..." />` を 3 箇所とも `<Image ... width={300} height={200} />` に置き換えました。
+- `<Image>` は `width` と `height` を **数値**（中括弧） で書くことに注意してください（HTML の `<img width="300">` のような文字列ではありません）。
 
-もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
+### 手順 3: 画像サイズの CSS を見直す
+
+「ページを増やしてリンクで移動する」の `about.css` には次のような指定が入っていました。
+
+```css
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
+}
+```
+
+`<Image>` も内部的には `<img>` を生成するので、このスタイルはそのまま効きます。`width: 100%` でカードの幅に合わせて縮みます。`height: auto` を入れておくと、縮んでも縦横比が崩れません。
+
+ダークモードでの `filter` 調整などは不要です。「ページを増やしてリンクで移動する」時点の CSS のままで構いません。
+
+### 期待出力
+
+1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
+2. **DevTools → Network タブ** を開いて再読み込みします。
+3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
+4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
+5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
 
 ### 変えてみる
 
-1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
-2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
+1. 3 枚目のカードの `<Image>` に `priority` プロパティを付けて、遅延読み込みを止めてみましょう（`<Image src="..." alt="..." width={300} height={200} priority />`）。ページ表示のタイミングが少しだけ速くなる可能性があります（体感差は小さい）。
+2. `width={300} height={200}` を `width={600} height={400}` に変えると、同じ見た目のまま 2 倍の解像度のソースが配信されるようになります（ネットワークタブで URL の `w=` が変わるのを確認）。
+3. `public/` フォルダに自分の PNG 画像を 1 枚置いて、`import myImg from "../../../../public/my.png"` のように静的 import で `<Image src={myImg} alt="..." />` を書いてみましょう。`width` / `height` を **省略しても** 動くはずです（静的 import なので Next.js が自動でサイズを取る）。
+
+### スコープ外
+
+- LCP 最適化の深掘り、`priority` の本格活用、`placeholder="blur"` の `blurDataURL` 自動生成は本コースでは扱いません。
+- `localPatterns`（Next.js 15.3 で追加）などの発展設定は扱いません。
+- カスタムローダー（CDN 連携）も扱いません。
 
 ### 自分で書く
 
-「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
+`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.co/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
 
 ## まとめ
 
-- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
-- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
-- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
-- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。
+- `import Image from "next/image"` で `<Image>` コンポーネントを使えます。素の `<img>` より賢い画像表示ができます。
+- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
+- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
+- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられます。

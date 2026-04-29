@@ -1,486 +1,421 @@
-# lesson115: Zod でスキーマバリデーション
+# lesson115: 環境変数とシークレット管理
 
 ## ゴール
 
-- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
-- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
-- `parse` / `safeParse` の違いと使いどころを知る
-- `z.infer<typeof schema>` で型を自動導出できる
-- React Hook Form と組み合わせて型安全なフォームを作れる
-- API レスポンスの検証や Server Actions の入力検証にも応用できる
-- Valibot / Arktype など代替ライブラリの存在を知る
+- `.env` / `.env.local` / `.env.production` などのファイルの **使い分け** が分かる
+- Next.js / Vite の **`NEXT_PUBLIC_` / `VITE_`** プレフィックスの意味と公開範囲を説明できる
+- Vercel / GitHub / Doppler / 1Password などの **シークレット管理サービス** の役割を理解する
+- シークレットを **誤って Git にコミットしない** 仕組みを作れる
+- 漏洩した時の対応の流れを知る
 
 ## 解説
 
-### TypeScript の型だけでは足りない
+### 環境変数とは
 
-TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
+「**コードから見える値だが、コードと一緒に管理したくない**」値を入れる仕組みです。代表例:
 
-```ts
-type User = { id: number; name: string };
+- API のベース URL（環境ごとに違う）
+- データベース接続文字列
+- API キー / アクセストークン
+- フィーチャーフラグの ON / OFF
 
-async function getUser(): Promise<User> {
-  const res = await fetch("/api/user");
-  return res.json();   // 本当に User 型？
-}
+これらを **コードに直書き** すると:
+
+- 開発 / 本番の切り替えが面倒
+- **シークレットが Git に残る**（git history に永久保存）
+
+ので、環境変数で外に出します。
+
+### `.env` ファイルの種類
+
+Node.js / Next.js / Vite が読み込む慣習的なファイル名:
+
+| ファイル | 読み込まれる場面 | コミット |
+|---|---|---|
+| `.env` | すべての環境で読まれる（あれば） | 場合による |
+| `.env.local` | **ローカル開発時のみ**。同名キーを上書き | **NG**（gitignore） |
+| `.env.development` | `NODE_ENV=development` 時 | OK（ただし秘密は書かない） |
+| `.env.production` | `NODE_ENV=production` 時 | OK（ただし秘密は書かない） |
+| `.env.test` | テスト時 | OK |
+| `.env.example` | サンプル / テンプレート | **OK**（コミットする） |
+
+#### `.gitignore`
+
+```
+.env*.local
+.env
 ```
 
-`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
+`.env.local` と `.env` は **絶対にコミットしない**。一方 `.env.example` は **必ずコミット** する（チームメンバーが何を設定すべきかの目安になる）。
 
-実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
+#### `.env.example`
 
-### Zod とは
+```
+# データベース
+DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
 
-Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+# API キー（実値ではなくダミー）
+SENTRY_DSN=https://example@sentry.io/1234
 
-1. **実行時バリデーション**: 不正な値を弾く
-2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
-
-「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
-
-### インストール
-
-```bash
-npm install zod
+# 公開して問題ない値
+NEXT_PUBLIC_API_BASE=http://localhost:3000/api
 ```
 
-### 基本のスキーマ
+### Next.js の `NEXT_PUBLIC_` プレフィックス
 
-```ts
-import { z } from "zod";
+Next.js（および Vite の `VITE_`）には **「クライアントに公開する値」を明示するルール** があります。
 
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  email: z.email(),
-  age: z.number().int().min(0).max(150),
-  isAdmin: z.boolean(),
-});
-
-type User = z.infer<typeof UserSchema>;
-// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
+```
+DATABASE_URL=postgres://...               ← サーバーのみ（漏れない）
+SENTRY_AUTH_TOKEN=xxx                      ← サーバーのみ（漏れない）
+NEXT_PUBLIC_API_URL=https://api.example.com ← クライアントにも露出
+NEXT_PUBLIC_GA_ID=G-XXXX                    ← クライアントにも露出
 ```
 
-`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
+ルール:
 
-> **補足: `z.infer<typeof X>` の `typeof` は型レベルの取得**: ここでの `typeof UserSchema` は、JS の値レベル `typeof`（`typeof x === "string"` のような演算子）とは別物です。TypeScript には型を扱う専用の `typeof` があり、「**変数の型を取り出す**」役割を持ちます。`UserSchema` は値（オブジェクト）として存在しますが、その値の **型** を取り出して `z.infer<...>` に渡すことで「スキーマから型を自動導出」できます。`z.infer<typeof X>` という書き方をひとつのイディオムとして覚えてしまって構いません。
+- **`NEXT_PUBLIC_` で始まる値だけ** がクライアントの JS バンドルに **インライン** される
+- それ以外は **サーバー（API Route / Server Component / Middleware）でしか読めない**
+- ビルド時に **値が文字列として埋め込まれる**（実行時のフェッチではない）
 
-### 組み込み修飾メソッド
-
-```ts
-z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
-z.email("メール形式で")                                 // メール（v4 から top-level）
-z.url("URL 形式で")                                    // URL（v4 から top-level）
-z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
-z.number().int("整数で").positive("正の数で")           // 整数 + 正
-z.number().min(0).max(100)                             // 範囲
-z.string().optional()                                   // string | undefined
-z.string().nullable()                                   // string | null
-z.string().default("デフォルト")                        // デフォルト値
-```
-
-> **Zod v4（2025 リリース）の変更点**: `z.string().email()` / `.url()` / `.uuid()` / `.datetime()` は v4 で **top-level の `z.email()` / `z.url()` / `z.uuid()` / `z.iso.datetime()` に再編** されました。v3 系の書き方も互換のため動きますが、新規コードは v4 形式が推奨です。
-
-### 配列とユニオン
-
-```ts
-const TodoSchema = z.object({
-  id: z.uuid(),
-  title: z.string().min(1),
-  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
-  tags: z.array(z.string()),
-  createdAt: z.iso.datetime(),                // ISO 8601
-});
-
-type Todo = z.infer<typeof TodoSchema>;
-```
-
-### `parse` と `safeParse`
-
-スキーマで値を検証する 2 つの方法:
-
-#### `parse`: 失敗時に例外を投げる
-
-```ts
-try {
-  const user = UserSchema.parse(data);
-  console.log(user.name);  // 型は User
-} catch (err) {
-  if (err instanceof z.ZodError) {
-    console.log(err.issues);  // どこで失敗したかの詳細
-  }
-}
-```
-
-#### `safeParse`: 失敗時にも値を返す
-
-```ts
-const result = UserSchema.safeParse(data);
-if (result.success) {
-  console.log(result.data.name);
-} else {
-  console.log(result.error.issues);
-}
-```
-
-`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
-
-### React Hook Form と統合
-
-`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
-
-```bash
-npm install @hookform/resolvers
-```
+#### 露出する 例
 
 ```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+// app/page.tsx（Server Component でも Client Component でも）
+const apiBase = process.env.NEXT_PUBLIC_API_URL; // ブラウザでも読める
+```
 
-const ContactSchema = z.object({
-  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
-  email: z.email("メールアドレスの形式が正しくありません"),
-  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
-  message: z.string().min(10, "10 文字以上で入力してください"),
-});
+ビルド後の JS には **値そのもの** が入ります。**シークレットを `NEXT_PUBLIC_` に置くのは事故** の元。
 
-type ContactFormValues = z.infer<typeof ContactSchema>;
+#### 露出しない 例
 
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
-
-  function onSubmit(data: ContactFormValues) {
-    console.log("検証済みデータ:", data);
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <input {...register("name")} />
-      {errors.name && <p>{errors.name.message}</p>}
-
-      <input type="email" {...register("email")} />
-      {errors.email && <p>{errors.email.message}</p>}
-
-      <input type="number" {...register("age")} />
-      {errors.age && <p>{errors.age.message}</p>}
-
-      <textarea {...register("message")} />
-      {errors.message && <p>{errors.message.message}</p>}
-
-      <button type="submit" disabled={isSubmitting}>送信</button>
-    </form>
-  );
+```ts
+// app/api/users/route.ts（Route Handler）
+export async function GET() {
+  const dbUrl = process.env.DATABASE_URL; // サーバーのみ
+  // ...
 }
 ```
 
-利点:
+サーバー専用コードでは **プレフィックスなしの値** が読めます。クライアント側で同じコードを書くと `undefined` になる。
 
-- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
-- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
-- **エラーメッセージ** が日本語で出せる
+::: warning Server Component / Server Action の罠
+Server Component / Server Action のソースが **Client Component から間接的に import** されると、バンドラがクライアント側に持ち込みます。
 
-### `z.coerce` で型変換
-
-`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
+シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import します。これで **誤って client にバンドルされた場合に build が失敗** します。
 
 ```ts
-z.coerce.number()       // 文字列 → 数値
-z.coerce.boolean()      // 文字列 / 数値 → boolean
-z.coerce.date()         // 文字列 → Date
+import "server-only"; // クライアントから import するとエラー
+const dbUrl = process.env.DATABASE_URL;
 ```
+:::
 
-> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
->
-> ```ts
-> age: z.preprocess(
->   (v) => (v === "" || v === null ? undefined : v),
->   z.coerce.number().int("整数で").min(18, "18 歳以上")
-> )
-> ```
->
-> または `z.string().min(1, "必須です").transform(Number).pipe(z.number().int())` のように **string で受けてから変換** する書き方でも回避できます。
+### Vite の `VITE_` プレフィックス
 
-### API レスポンスの検証
+Vite は同じ仕組みで **`VITE_`** プレフィックス。
 
-サーバーから返ってきたデータが想定通りかを検証します。
+```
+VITE_API_URL=https://api.example.com   ← import.meta.env.VITE_API_URL で読める
+SECRET_KEY=do_not_expose                ← undefined（読めない）
+```
 
 ```ts
-async function fetchUser(id: number): Promise<User> {
-  const res = await fetch(`/api/users/${id}`);
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
-}
+console.log(import.meta.env.VITE_API_URL);  // OK
+console.log(import.meta.env.SECRET_KEY);    // undefined
 ```
 
-これで API 仕様変更による不正レスポンスを早期に検知できます。
+詳細は lesson104 でも触れた通り。
 
-### Server Actions / Route Handlers の入力検証
+### 環境ごとの設定
 
-**「Server Actions の最小形」「Route Handlers」** で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
+Vercel に Next.js をデプロイする場合、`.env.production` などのファイルは使わず **Vercel 管理画面で設定** するのが普通です。
 
-```ts
-"use server";
-
-import { z } from "zod";
-
-const AddTodoSchema = z.object({
-  text: z.string().min(1).max(200),
-});
-
-export async function addTodo(formData: FormData) {
-  const result = AddTodoSchema.safeParse({
-    text: formData.get("text"),
-  });
-  if (!result.success) {
-    return { ok: false as const, error: result.error.issues[0].message };
-  }
-  // 検証済みの result.data.text を使う
-  await db.insertTodo(result.data.text);
-  return { ok: true as const };
-}
-```
-
-### よくあるパターン
-
-#### refine: 複数フィールド間のチェック
-
-```ts
-const SignupSchema = z.object({
-  password: z.string().min(8),
-  passwordConfirm: z.string(),
-}).refine((data) => data.password === data.passwordConfirm, {
-  message: "パスワードが一致しません",
-  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
-});
-```
-
-#### transform: 値を加工
-
-```ts
-const TrimmedString = z.string().transform((s) => s.trim());
-
-TrimmedString.parse("  hello  "); // "hello"
-```
-
-### 代替ライブラリ
-
-| ライブラリ | 特徴 |
+| 設定箇所 | 主な役割 |
 |---|---|
-| **Zod** | デファクト。エコシステム最大 |
-| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
-| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
-| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
+| Vercel Dashboard → Settings → Environment Variables | Production / Preview / Development それぞれに値を設定 |
+| `.env.local` | ローカル開発の上書き |
 
-新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
+`vercel env pull .env.local` で **Vercel の値をローカルに引っ張ってくる** こともできます（同じ設定で動かしたい時に便利）。
+
+### GitHub Secrets と Actions
+
+GitHub Actions の workflow で使う API キーは **GitHub Settings → Secrets and variables → Actions** に登録。workflow からは `secrets.NAME` 構文（`$` と `{{ }}` の組合せ）で参照します。
+
+**ファイルにベタ書きしない、ログに出さない、Pull Request の workflow で使わない** が三原則。
+
+### シークレット管理の選択肢
+
+#### サービス別
+
+| サービス | 役割 |
+|---|---|
+| **Vercel Environment Variables** | Vercel デプロイのシークレット |
+| **GitHub Actions Secrets** | CI のシークレット |
+| **AWS Secrets Manager / Parameter Store** | AWS インフラ全体 |
+| **Doppler** | 複数環境のシークレットを一元管理する SaaS |
+| **1Password Connect / Secrets Automation** | 人と CI で同じシークレットを使う |
+| **HashiCorp Vault** | エンタープライズ標準。OSS |
+| **Infisical** | OSS のシークレット管理 |
+
+「**ローカル開発 + CI + 本番** で同じ値を 1 箇所から配信したい」場合に Doppler / 1Password / Vault が役立ちます。
+
+#### Doppler の最小例
+
+```bash
+doppler login
+doppler setup
+doppler run -- npm run dev   # .env を読まずに Doppler から値を流し込む
+```
+
+CI でも `doppler run --` 経由でビルドすれば、**GitHub Secrets を一切登録せずに** 動かせます。
+
+### 「シークレットをコミットしない」仕組み
+
+#### 1. `.gitignore` を整える
+
+```
+.env
+.env.local
+.env.*.local
+```
+
+#### 2. `git-secrets` / `gitleaks` で push 前にスキャン
+
+```bash
+# gitleaks（OSS、Go 製）
+brew install gitleaks
+gitleaks git .            # リポジトリ履歴全体をスキャン
+
+# pre-commit フックで自動化
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit`:
+
+```sh
+#!/bin/sh
+# v8.18 以降は protect サブコマンドが廃止。git --pre-commit --staged で代替する
+gitleaks git --pre-commit --staged --no-banner || exit 1
+```
+
+#### 3. GitHub の Secret Scanning
+
+GitHub は **public リポジトリの push を自動でスキャン** し、AWS / Stripe / GitHub トークンなど主要な型を検出するとメールで通知します。**private リポジトリでも有効化** すると、組織のセキュリティが上がる（GitHub Advanced Security の機能）。
+
+#### 4. Husky + lint-staged で運用に組み込む
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks git --pre-commit --staged --no-banner"]
+  }
+}
+```
+
+### 漏洩した時の対応
+
+「`.env` を間違って push してしまった」を想定:
+
+1. **すぐにそのキーを無効化**（rotate）
+   - クラウドサービス（AWS / Stripe / Sentry）の管理画面で **キーを再生成**
+   - GitHub に残った時点で **公開済み** とみなす（git history を消しても遅い）
+2. **新しいキーを Vercel / GitHub Secrets に登録**
+3. **チームに共有 + 監査ログをチェック**（不正利用がないか）
+4. **任意で git history から削除**（`git filter-repo`）
+   - **キーを無効化したあと** にやる。順番を逆にすると無意味
+
+::: warning git history からの削除は事後処置
+リポジトリが public なら、push した瞬間に **bot がスキャンして既にコピー** している可能性があります。**「消したから安全」ではなく、必ずキーを rotate** すること。
+:::
+
+### 設計の指針
+
+#### 1. シークレットはサーバーで使う
+
+ブラウザに渡す API キーは「**それが漏れても大丈夫な値**」だけ。本当の認証はバックエンド経由で。
+
+#### 2. `NEXT_PUBLIC_` には機密を入れない
+
+「Sentry DSN は公開しても良いと書いてあるからクライアントに置く」のは OK。けれど **DB 接続文字列 / OAuth クライアントシークレット** を `NEXT_PUBLIC_` に置くのは事故の温床。
+
+#### 3. 必須値は起動時に検証
+
+```ts
+// utils/env.ts
+import { z } from "zod";
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  NEXT_PUBLIC_API_URL: z.string().url(),
+  SENTRY_DSN: z.string().optional(),
+});
+
+export const env = envSchema.parse(process.env);
+```
+
+これで「**環境変数の設定漏れ** で本番が落ちる」を防げます。Zod / `t3-env` などのライブラリで型安全に。
+
+#### 4. 個人別の値 / 共通の値を分離
+
+| 値 | 置き場 |
+|---|---|
+| 個人の作業用 API キー | `.env.local`（gitignore） |
+| チーム共通の URL | `.env.development`（コミット可） |
+| 本番のシークレット | Vercel Environment Variables |
+
+### よくある事故
+
+#### 1. 本番 DB に開発から繋いでしまう
+
+`DATABASE_URL` を `.env.local` で本番にして、勘違いしてマイグレーションを実行 → 本番データ破壊。
+
+→ **本番のキーは個人の `.env.local` に置かない** ルールに。Vercel から `vercel env pull` する時も `--environment=development` を明示。
+
+#### 2. `process.env.X` がビルドで消える
+
+Next.js は **静的解析** でビルド時に置換するので、`process.env[key]` のような **動的アクセスは展開されない**。
+
+```ts
+const key = "NEXT_PUBLIC_API_URL";
+process.env[key]; // undefined になりがち
+process.env.NEXT_PUBLIC_API_URL; // OK
+```
+
+#### 3. `.env.production` をコミットしてしまった
+
+→ 「**シークレットを外に置く**」を徹底。`.env.production` を使うなら **dummy 値** に。
+
+#### 4. 古いキーが Slack に残っている
+
+→ シークレット管理サービスの「**監査ログ**」とローテーションスケジュールを意識。
 
 ## 演習
 
 ### ゴール
 
-- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
-- スキーマから型を自動導出する
-- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
+- Next.js の Server / Client / Middleware で環境変数の **読み取り権限** を体感する
+- gitleaks で push 前のチェックを入れる
 
-### 手順 1: 依存追加
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm install zod @hookform/resolvers
+npx create-next-app@latest env-sample --ts --app
+cd env-sample
 ```
 
-### 手順 2: スキーマ + 型を定義
+### 手順 2: `.env.local` と `.env.example`
 
-`src/contact-schema.ts`:
+`.env.example`:
 
-```ts
-import { z } from "zod";
+```
+# 公開して OK
+NEXT_PUBLIC_APP_NAME=EnvSample
 
-export const ContactSchema = z.object({
-  name: z
-    .string()
-    .min(1, "お名前は必須です")
-    .max(50, "50 文字以内で入力してください"),
-  email: z
-    .string()
-    .min(1, "メールは必須です")
-    .email("メールアドレスの形式が正しくありません"),
-  message: z
-    .string()
-    .min(10, "10 文字以上で入力してください")
-    .max(1000, "1000 文字以内で入力してください"),
-});
-
-export type ContactFormValues = z.infer<typeof ContactSchema>;
+# 公開 NG
+SECRET_TOKEN=replace_me
 ```
 
-### 手順 3: フォームを書き換え
+`.env.local`（コミットしない）:
 
-`src/ContactForm.tsx`:
+```
+NEXT_PUBLIC_APP_NAME=ローカルの名前
+SECRET_TOKEN=local-secret-xxx
+```
+
+### 手順 3: Server / Client で読み比べる
+
+`app/page.tsx`（Server Component）:
 
 ```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { ContactSchema, type ContactFormValues } from "./contact-schema";
-
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
-
-  async function onSubmit(data: ContactFormValues) {
-    await new Promise((r) => setTimeout(r, 500));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
-  }
-
+export default function Home() {
   return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
-
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          {...register("name")}
-        />
-        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          {...register("email")}
-        />
-        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          {...register("message")}
-        />
-        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
+    <main style={{ padding: 24 }}>
+      <h1>Server Component</h1>
+      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
+      <p>SECRET_TOKEN（サーバー）: {process.env.SECRET_TOKEN ?? "なし"}</p>
+    </main>
   );
 }
 ```
 
-### 手順 4: API レスポンス検証の例
+`app/client/page.tsx`:
 
-`src/api.ts`:
+```tsx
+"use client";
 
-```ts
-import { z } from "zod";
-
-const PostSchema = z.object({
-  id: z.number().int(),
-  title: z.string(),
-  body: z.string(),
-  userId: z.number().int(),
-});
-
-export type Post = z.infer<typeof PostSchema>;
-
-const PostListSchema = z.array(PostSchema);
-
-export async function fetchPosts(): Promise<Post[]> {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return PostListSchema.parse(data);   // 不正な構造なら ZodError
+export default function ClientPage() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Client Component</h1>
+      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
+      <p>SECRET_TOKEN（クライアント）: {process.env.SECRET_TOKEN ?? "なし"}</p>
+    </main>
+  );
 }
 ```
 
-これで API レスポンスの構造が変わってもすぐ気付けます。
+`npm run dev` してブラウザで両方確認します。
 
 ### 期待出力
 
-- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
-- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
-- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
-- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
+| 場所 | NEXT_PUBLIC_APP_NAME | SECRET_TOKEN |
+|---|---|---|
+| Server Component | ローカルの名前 | local-secret-xxx |
+| Client Component | ローカルの名前 | **なし** |
+
+クライアントには **`NEXT_PUBLIC_` 以外が露出しない** ことを確認します。
+
+### 手順 4: gitleaks を導入
+
+```bash
+brew install gitleaks       # macOS。Linux は go install / docker でも
+# または: docker run -v $(pwd):/path zricethezav/gitleaks detect --source /path
+```
+
+リポジトリ直下で:
+
+```bash
+git init
+echo "AWS_SECRET=AKIA1234567890ABCDEF" > test.txt
+git add test.txt
+gitleaks protect --staged
+```
+
+`AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
+
+### 手順 5: pre-commit に組み込む
+
+```bash
+mkdir -p .githooks
+cat > .githooks/pre-commit <<'EOF'
+#!/bin/sh
+gitleaks protect --staged --no-banner || exit 1
+EOF
+chmod +x .githooks/pre-commit
+git config core.hooksPath .githooks
+```
+
+これで `git commit` の前に自動で gitleaks が走ります。
 
 ### 変える
 
-- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
-- `z.email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
-- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
+- `process.env[key]` のような動的アクセスを書いて、ビルド後にどう展開されるか確認
+- `import "server-only"` を入れたファイルを Client Component から import して **ビルドエラー** になることを確認
+- Zod / t3-env で起動時の env 検証を組み込む
 
-### 自分で書く
+### 自分で書く（任意）
 
-- `password` と `passwordConfirm` の一致チェックを `refine` で書く
-- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
-
-### 自分で書く（既存の TODO アプリを継承する）
-
-**「小さなアプリを統合する」** で書いた `addTodo` / `deleteTodo`（`actions.ts`）に Zod を導入してみましょう。これまでに作った TODO アプリに **同じテーマで一段上の改善を入れる** 演習です。
-
-1. `actions.ts` の冒頭に Zod スキーマを定義:
-
-   ```ts
-   import { z } from "zod";
-
-   const AddTodoSchema = z.object({
-     text: z.string().min(1, "内容を入力してください").max(200, "200 文字以内"),
-   });
-   ```
-
-2. `addTodo` の中で `safeParse` する形に書き換える（既存の `if (!text) ...` 検証を Zod に置き換え）:
-
-   ```ts
-   export async function addTodo(prev: AddTodoResult, formData: FormData): Promise<AddTodoResult> {
-     const result = AddTodoSchema.safeParse({ text: formData.get("text") });
-     if (!result.success) {
-       return { ok: false, error: result.error.issues[0].message };
-     }
-     // result.data.text を使う
-     ...
-   }
-   ```
-
-3. `useActionState` で受けるエラー表示はそのまま動きます（型 `AddTodoResult` を変えていないため）。
-
-4. 削除 (`deleteTodo`) も同じ流れで Zod 化できます（`id: z.uuid()` などが書けます）。
-
-これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
+- Doppler を試して、`doppler run -- npm run dev` で `.env` なしの開発体験を作る
+- Vercel に deploy し、Production / Preview で **異なる値** を設定する
+- 漏洩シミュレーション: わざとリポジトリ（個人テスト用）に `.env` を push し、**キーをローテートする手順** をリハーサルする
 
 ## まとめ
 
-- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
-- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
-- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
-- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
-- `parse`（例外）/ `safeParse`（戻り値）の使い分け
-- **`z.infer<typeof schema>`** で型を自動導出
-- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
-- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
+- `.env` ファイルは **`.local` をコミットせず、`.example` を必ずコミット** する
+- Next.js の **`NEXT_PUBLIC_`** / Vite の **`VITE_`** プレフィックスは「**クライアントに露出させる**」明示
+- それ以外の値は **サーバー専用**。`server-only` パッケージで誤バンドルを防ぐ
+- 設定の置き場は **Vercel Environment Variables** / GitHub Secrets / Doppler / Vault
+- **gitleaks** + pre-commit / GitHub の Secret Scanning で push 前後のスキャン
+- 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
+- **起動時に Zod で env を検証** すると、設定漏れに早く気づける
+- 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める

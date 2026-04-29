@@ -1,409 +1,199 @@
-# lesson88: Metadata API で SEO を整える
+# lesson88: ブラウザと HTTP の基本
 
 ## ゴール
 
-- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
-- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
-- `generateMetadata` で動的にタイトルや説明文を組み立てられる
-- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
-- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
+- Web ページが表示されるまでにブラウザとサーバーのあいだで何が起きているか、おおまかに説明できる
+- HTTP のリクエスト / レスポンスがそれぞれ「何行か文字列が連なったもの」であることを理解する
+- HTTP メソッド（GET / POST / PUT / DELETE など）の違いを 1 行で言える
+- ステータスコードの番台（2xx / 3xx / 4xx / 5xx）を使い分けの文脈で説明できる
+- 主要なリクエスト / レスポンスヘッダの役割を数個挙げられる
 
 ## 解説
 
-### 「SEO を整える」とは
+### ブラウザがページを表示するまでの流れ
 
-SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
+アドレスバーに `https://example.com/` と入れて Enter を押したとき、ざっくり次の流れで動いています。
 
-- `<title>`: ブラウザタブの文字、検索結果の見出し
-- `<meta name="description">`: 検索結果の説明文
-- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
-- `<link rel="icon">`: タブの左に出る favicon
+1. DNS でホスト名（`example.com`）を IP アドレスに解決する
+2. その IP アドレスの **サーバーに TCP 接続 + TLS**（https なら） を張る
+3. `GET / HTTP/1.1` 的な **リクエスト** を送る
+4. サーバーから **レスポンス**（HTML 文字列）が返る
+5. HTML を読みながら、中に書かれている `<link>` / `<script>` / `<img>` の URL を **追加でリクエスト** する（CSS / JS / 画像）
+6. それらをすべて受け取って、ブラウザが DOM・CSSOM・レイアウト計算 → 画面に描画
 
-これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
+本レッスンでは、このうち **3-5 の「HTTP 通信の中身」** を見ていきます。「DOM を操作する」で扱った DOM は 6 の段階（ブラウザの内部表現）の話でした。
 
-### Metadata API の 2 系統
+### HTTP は「文字列のやり取り」
 
-書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
+HTTP は意外と素朴なプロトコルで、**人間が読める文字列** を TCP の上で送り合っているだけです。
 
-1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
-2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
+例えばクライアント（ブラウザ）がサーバーに送るリクエストは、次のような形をしています。
 
-### 静的 `metadata` export
+```
+GET /articles/42 HTTP/1.1
+Host: example.com
+User-Agent: Mozilla/5.0 (...)
+Accept: text/html
+Accept-Language: ja,en
+Cookie: session=abc123
 
-`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
-
-```tsx
-// app/about/page.tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function AboutPage() {
-  return <h1>About</h1>;
-}
 ```
 
-Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
+1 行目: **リクエストライン**。`HTTP メソッド パス HTTP バージョン` の 3 つ。2 行目以降: **ヘッダ**。キー: 値。空行が 1 つ入ったあと、必要ならリクエストボディが続きます（GET では普通は付けません）。
 
-### 動的 `generateMetadata`
+それに対してサーバーからのレスポンスは次のような形です。
 
-URL から情報を取ってタイトルを作るときに使います。
+```
+HTTP/1.1 200 OK
+Content-Type: text/html; charset=utf-8
+Content-Length: 1234
+Cache-Control: public, max-age=3600
+Set-Cookie: session=abc123; HttpOnly
 
-```tsx
-// app/posts/[id]/page.tsx
-import type { Metadata } from "next";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  const post = await res.json();
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
+<!doctype html>
+<html>
+...
+</html>
 ```
 
-- `generateMetadata` は非同期関数にできます
-- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
-- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
-- 戻り値は `Metadata` 型のオブジェクト
+1 行目: **ステータスライン**。`HTTP バージョン ステータスコード 理由フレーズ`。2 行目以降: **ヘッダ**。空行の後に **ボディ**（HTML / JSON / 画像バイナリなど）。
 
-`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
+この 2 つのかたまりがブラウザとサーバーのあいだを **1 往復する** のが HTTP 通信の基本単位です。HTTPS の場合も、TLS で暗号化されるだけで中身の形は同じです。
 
-### `title.template` でサイト全体を揃える
+### HTTP メソッドの 4 つ
 
-記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
+大きく 4 つ覚えておけば、ほぼ現代のアプリは読めます。
 
-```tsx
-// app/layout.tsx
-import type { Metadata } from "next";
+| メソッド | 用途 | 冪等性 | ボディ |
+|---|---|---|---|
+| **`GET`** | 取得 | あり（何回呼んでも同じ） | 基本なし |
+| **`POST`** | 作成・任意の操作 | なし | あり |
+| **`PUT`** | 全体置換 | あり | あり |
+| **`DELETE`** | 削除 | あり | 基本なし |
 
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-};
-```
+他にも `PATCH`（部分更新）/ `HEAD`（ヘッダだけ取得）/ `OPTIONS`（CORS の事前問い合わせ）がありますが、まずは上の 4 つです。
 
-- `default`: ページ側でタイトルを書いていないときに使う既定値
-- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
+**冪等性**（idempotent） とは「同じリクエストを何回送っても結果が同じ」という性質です。ネットワーク不良で再送されても安全な `GET` / `PUT` / `DELETE` と、再送で二重登録になる恐れがある `POST` は別物として扱われます。
 
-ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
+### ステータスコードの 4 つの番台
 
-### Open Graph を足す
+先頭 1 桁でグループを表します。
 
-SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
+| 番台 | 意味 | 代表例 |
+|---|---|---|
+| **2xx 成功** | リクエストは正常に処理された | `200 OK` / `201 Created` / `204 No Content` |
+| **3xx リダイレクト / キャッシュ** | 別の URL へ / ブラウザのキャッシュを使って | `301 Moved Permanently` / `302 Found` / `304 Not Modified` |
+| **4xx クライアントエラー** | 送り方が悪い | `400 Bad Request` / `401 Unauthorized` / `403 Forbidden` / `404 Not Found` |
+| **5xx サーバーエラー** | サーバー側の問題 | `500 Internal Server Error` / `502 Bad Gateway` / `503 Service Unavailable` |
 
-```tsx
-export const metadata: Metadata = {
-  title: "My Next Site",
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
-```
+細かい違いの覚え方:
 
-最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
+- `401` は「認証が要る / 認証情報が間違っている」
+- `403` は「認証は通ったが権限がない」
+- `404` は「リソースがない」
+- `500` は「サーバー側が想定外で落ちた」
+- `502` / `503` は「サーバーの手前（ロードバランサ / リバースプロキシ）で問題」
 
-### OG 画像 / canonical / robots（実務 SEO 三点セット）
+### 主要なヘッダ
 
-公開サイトでは次の 3 つを揃えるのがほぼ必須です。
+全部は覚えなくて良いですが、以下は DevTools の Network タブでも頻出します。
 
-```ts
-export const metadata: Metadata = {
-  metadataBase: new URL("https://example.com"),
-  title: "My Site",
-  description: "...",
+**リクエストヘッダ（クライアント → サーバー）:**
 
-  // (1) OG 画像（SNS シェア時の見栄え）
-  openGraph: {
-    images: [
-      { url: "/og-image.png", width: 1200, height: 630 },
-    ],
-  },
+| ヘッダ | 意味 |
+|---|---|
+| `Host` | どのホストに向けたリクエストか |
+| `User-Agent` | ブラウザの種類・バージョン |
+| `Accept` | 受け取れる Content-Type |
+| `Accept-Language` | 希望言語（`ja,en` など） |
+| `Authorization` | 認証情報（`Bearer xxxx` など） |
+| `Cookie` | サーバーから受け取った Cookie |
+| `Referer` | どのページから来たか（綴り間違い通りに定義されている） |
 
-  // (2) canonical URL（重複コンテンツ対策）
-  alternates: {
-    canonical: "/",
-  },
+**レスポンスヘッダ（サーバー → クライアント）:**
 
-  // (3) robots（インデックス制御）: 既定は本番だけ index、それ以外は noindex
-  robots: {
-    index: process.env.VERCEL_ENV === "production",
-    follow: true,
-  },
-};
-```
+| ヘッダ | 意味 |
+|---|---|
+| `Content-Type` | ボディの種類（`text/html` / `application/json` 等） |
+| `Content-Length` | ボディのバイト数 |
+| `Cache-Control` | キャッシュ制御（次の「HTTP キャッシュ」で詳解） |
+| `ETag` | リソースのバージョン識別子（キャッシュ用） |
+| `Location` | リダイレクト先（3xx と一緒に使う） |
+| `Set-Cookie` | Cookie を発行 |
 
-それぞれの「いつ使うか」:
+### DevTools の Network タブで見る
 
-- **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
-- **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
-- **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
+ここまでの話は、ブラウザの DevTools を使うと **実際にやり取りされているリクエスト / レスポンスの生の姿** として観察できます。
 
-実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
+Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページをリロード → 一覧から 1 行クリックすると、Headers / Payload / Preview / Response / Timing の各パネルで詳細が見られます。
 
-### favicon / apple-touch-icon は **ファイル配置だけで OK**
-
-Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
-
-- `app/favicon.ico` → `<link rel="icon">`
-- `app/icon.png` / `app/icon.svg` → 同上
-- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
-
-`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
-
-### Server Component の前提
-
-`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
+この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。
 
 ## 演習
 
-### 途中から始める場合
-
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-**`app/about/page.tsx`**
-
-```tsx
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
-```
-
-</details>
-
 ### ゴール
 
-- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
-- `app/about/page.tsx` に静的 metadata を追加する
-- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
-- ブラウザタブの文字が各ページで変わることを確認する
+- 任意のページを開いて DevTools の Network タブで通信を観察する
+- 1 つのリクエスト / レスポンスを選び、ヘッダ・ステータス・メソッドを読み取れる
+- `curl` でも同じ内容が取れることを手元で確認する（任意）
 
 ### 手順
 
-1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
-2. `app/about/page.tsx` に静的 `metadata` export を追加
-3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
-4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
+1. 手元のブラウザで `https://jsonplaceholder.typicode.com/posts/1` を開きます（ブラウザが JSON をそのまま表示します）
+2. DevTools（F12）→ Network タブを開いた状態で、ページをリロードします
+3. 一番上に `posts/1` のような行が出ます。これをクリックします
+4. 右側に開くパネルで以下を確認します。
 
-### 主要ファイルの完成形
+### 観察するポイント
 
-**`app/layout.tsx`**
+**Headers タブ:**
 
-```tsx
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
-import Link from "next/link";
+- General: Request URL / Request Method（`GET`）/ Status Code（`200 OK`）
+- Response Headers: `content-type: application/json; charset=utf-8` / `cache-control: ...`
+- Request Headers: `Host` / `User-Agent` / `Accept` / `Accept-Language`
 
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
+**Response タブ（または Preview タブ）:**
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
+- レスポンスボディの JSON（`{ "userId": 1, "id": 1, "title": "...", ... }`）
+
+**Timing タブ:**
+
+- DNS Lookup / Initial connection / TLS / Waiting (TTFB) / Content Download の各段階にかかった時間
+
+### 任意課題: `curl` で同じことを体験する
+
+ターミナルから `curl` を叩くと、ブラウザ抜きで同じ通信を確認できます。
+
+```bash
+curl -i https://jsonplaceholder.typicode.com/posts/1
 ```
 
-注: **`ReactNode` は `next` の公開型ではなく `react` から import します**。`Metadata` は `next` から、`ReactNode` は `react` から、と use 元が違う点に注意します。
+`-i` オプションでレスポンスヘッダも表示します。出力の先頭に `HTTP/2 200` のようなステータスライン、空行の後に JSON ボディが続くのが見えます。
 
-**`app/page.tsx`**
+送信側を見たいときは `-v`（詳細）を使います。
 
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
+```bash
+curl -v https://jsonplaceholder.typicode.com/posts/1
 ```
 
-この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
-
-**`app/about/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-import { cache } from "react";
-import type { Metadata } from "next";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-// 同一リクエスト内での重複 fetch を 1 回にまとめる
-const getPost = cache(async (id: string): Promise<Post | null> => {
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  if (!res.ok) return null;
-  return res.json();
-});
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const post = await getPost(id);
-  if (!post) {
-    return { title: "記事が見つかりません" };
-  }
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  const post = await getPost(id);
-  if (!post) {
-    return <h1>記事が見つかりません</h1>;
-  }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
-}
-```
-
-> **補足: `cache()` で同一リクエスト内の重複 fetch を 1 回にまとめる**: `generateMetadata` と `PostPage` は同じリクエストで両方走るため、素朴に書くと同じ URL に **2 回 fetch が飛びます**。`import { cache } from "react"` の `cache()` 関数で包むと、**同一リクエスト内** であれば 2 回目以降の呼び出しは 1 回目の結果を使い回します（メモ化）。`{ cache: "force-cache" }` のような fetch オプションはネットワークの再取得を防ぐ別の仕組みで、`cache()` と組み合わせなくても上記の重複呼び出し自体は走ってしまいます。
-
-### 期待出力
-
-ブラウザで次のように動きます。
-
-1. `/` を開く → タブのタイトルが `My Next Site`
-2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
-3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
-4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
+`>` で始まる行がリクエスト、`<` で始まる行がレスポンスです。最初の `> GET /posts/1 HTTP/2` と `> host: jsonplaceholder.typicode.com` を見比べると、本文で説明したリクエストの形と一致していることが分かります。
 
 ### 変える
 
-- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
-- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
-- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
+- URL を `https://jsonplaceholder.typicode.com/does-not-exist` に変えて、ブラウザのアドレスバーで開く。Network タブで Status Code が **`404`** になっていることを確認
+- `https://httpstat.us/500` を開く。Status Code が **`500`** になる（HTTP のテスト用サービス。明示的に各ステータスを返す）
+- `https://httpstat.us/301` を開く。リダイレクト先があって、ブラウザが自動で追従する様子を Network タブで確認
 
 ### 自分で書く
 
-- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
-- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
-- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
+- DevTools の Network タブで、最近よく見るサイト（自分のポートフォリオ・ブログ等）を開き、**1 つの HTML ページを開くときにいくつのリクエストが発生しているか** を数えてみる
+- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンス
 
 ## まとめ
 
-- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
-- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
-- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
-- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
-- `metadata` / `generateMetadata` は Server Component 側でだけ書く
+- HTTP はリクエスト / レスポンスという文字列の塊を 1 往復やり取りする素朴なプロトコル
+- リクエストは「メソッド + パス + ヘッダ + ボディ（任意）」の形
+- レスポンスは「ステータス + ヘッダ + ボディ」の形
+- メソッドは `GET` / `POST` / `PUT` / `DELETE` を基本に、冪等性を意識して使う
+- ステータスコードは 2xx / 3xx / 4xx / 5xx で大分類。細かい違い（401 vs 403 など）は都度覚える
+- ヘッダには `Host` / `User-Agent` / `Accept` / `Content-Type` / `Cache-Control` / `Set-Cookie` などがあり、DevTools の Network タブで実物を観察できる

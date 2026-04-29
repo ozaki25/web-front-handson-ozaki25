@@ -1,490 +1,240 @@
-# lesson100: コンポーネントテスト — React Testing Library
+# lesson100: Core Web Vitals の 3 つの指標と Lighthouse
 
 ## ゴール
 
-- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
-- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
-- `userEvent` でクリック / 入力をシミュレートできる
-- 状態変化（`useState`）を含むコンポーネントのテストが書ける
-- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
+- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
+- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
+- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
+- 75 パーセンタイル評価の意味を説明できる
+- DevTools の Performance パネルで CWV を計測できる
+- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
 
 ## 解説
 
-### React Testing Library の思想
+### Core Web Vitals とは
 
-React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
+**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
 
-1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
-2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
+| 指標 | 何を測る | Good | Needs Improvement | Poor |
+|---|---|---|---|---|
+| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
+| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
+| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
 
-これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
+「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
 
-- 内部実装をリファクタしてもテストは壊れない
-- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
+### LCP: 最大コンテンツが見えるまで
 
-### セットアップ
+LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
 
-「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
+LCP が遅くなる主な原因:
+
+1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
+2. **サーバーレスポンスが遅い**（TTFB が長い）
+3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
+4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
+
+主な対策:
+
+- 画像最適化（`next/image` 系のレッスン参照）
+- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
+- JS のコード分割（バンドルサイズ最適化のレッスン参照）
+- 重要な画像 / フォントを `<link rel="preload">` で先読み
+
+### INP: 反応の遅さ
+
+INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+
+INP が悪くなる主な原因:
+
+1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
+2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
+3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
+
+対策:
+
+- イベントハンドラ内の処理を軽くする
+- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
+- 重い処理を **Web Worker** に逃がす
+- リスト描画は **仮想スクロール**（`react-window` 等）
+- `requestIdleCallback` で空き時間に処理
+
+### CLS: レイアウトのガタつき
+
+CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
+
+CLS が悪くなる主な原因:
+
+1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
+2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
+3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
+
+対策:
+
+- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
+- 動的挿入は **下から** か、placeholder で確保したスペースに収める
+- フォントは `next/font` のようなツールで先読み・サブセット化
+- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
+
+### しきい値は「75 パーセンタイル」で評価する
+
+Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
+
+評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
+
+### Lighthouse vs Real User Monitoring（RUM）
+
+CWV を計測する方法は 2 系統あります。
+
+#### Lighthouse（ラボデータ）
+
+Chrome DevTools 内蔵の Lighthouse（7 章「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
+
+- 利点: その場ですぐ計測できる、デプロイ前に確認できる
+- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
+
+主に **開発時のデバッグ** に向きます。
+
+#### RUM（フィールドデータ / 実ユーザー測定）
+
+実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
+
+- 利点: 本物のユーザー体験を反映
+- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
+
+代表的なツール:
+
+- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
+- **Google Search Console** — Core Web Vitals レポート
+- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
+- **web-vitals ライブラリ** + 任意の解析サービスへ送信
+
+Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
+
+### web-vitals ライブラリで RUM を仕込む
+
+自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
 
 ```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
+npm install web-vitals
 ```
-
-`vitest.config.ts` を更新:
 
 ```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+// src/web-vitals.ts
+import { onLCP, onINP, onCLS } from "web-vitals";
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",  // ブラウザ風 DOM を提供
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-  },
-});
-```
-
-`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
-
-### 最小のコンポーネントテスト
-
-テスト対象:
-
-```tsx
-// src/Greeting.tsx
-type Props = { name: string };
-
-export function Greeting({ name }: Props) {
-  return <h1>こんにちは、{name} さん</h1>;
+function sendToAnalytics(metric: { name: string; value: number; id: string }) {
+  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
+  console.log(metric);
+  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
 }
+
+onLCP(sendToAnalytics);
+onINP(sendToAnalytics);
+onCLS(sendToAnalytics);
 ```
 
-テスト:
+本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
 
-```tsx
-// src/Greeting.test.tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { Greeting } from "./Greeting";
+### DevTools の Performance パネルで計測
 
-describe("Greeting", () => {
-  it("名前を含む挨拶を表示する", () => {
-    render(<Greeting name="Alice" />);
-    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
-  });
-});
-```
+Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
 
-3 つの基本要素:
+1. F12 → **Performance** タブ
+2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
+3. レポートが表示される
+   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
+   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
+   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
 
-- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
-- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
-- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
-
-### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
-
-要素を探す関数は **接頭辞** で挙動が変わります。
-
-| 接頭辞 | 見つからない時 | 用途 |
-|---|---|---|
-| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
-| `queryBy*` | `null` を返す | 「無いはず」を確認する |
-| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
-
-例:
-
-```tsx
-// 「保存」ボタンが必ずある
-const button = screen.getByRole("button", { name: "保存" });
-
-// エラーメッセージは「無いはず」（成功時）
-expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
-
-// fetch が終わった後に現れるユーザー名
-const userName = await screen.findByText("Alice");
-```
-
-### クエリの優先順位
-
-Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
-
-| 優先度 | クエリ | 何を見るか |
-|---|---|---|
-| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
-| 2 | `getByLabelText` | フォームの `<label>` テキスト |
-| 3 | `getByPlaceholderText` | input の placeholder |
-| 4 | `getByText` | 表示テキスト |
-| 5 | `getByDisplayValue` | input の現在値 |
-| 6 | `getByAltText` | img の alt |
-| 7 | `getByTitle` | title 属性 |
-| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
-
-**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
-
-### `userEvent` でユーザー操作をシミュレート
-
-ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Counter } from "./Counter";
-
-describe("Counter", () => {
-  it("ボタンを押すと数が増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("複数回押すと累積する", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    const button = screen.getByRole("button", { name: "+1" });
-    await user.click(button);
-    await user.click(button);
-    await user.click(button);
-
-    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
-  });
-});
-```
-
-`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
-
-### フォーム入力のテスト
-
-`<input>` への入力は `user.type` でシミュレートします。
-
-```tsx
-import { useState } from "react";
-
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setSubmitted(name);
-      }}
-    >
-      <label htmlFor="name">お名前</label>
-      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
-```
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    const input = screen.getByLabelText("お名前");
-    const button = screen.getByRole("button", { name: "送信" });
-
-    await user.type(input, "Alice");
-    await user.click(button);
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
-
-  it("入力が空のままだと挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-});
-```
-
-`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
-
-### よく使う追加マッチャ（jest-dom）
-
-`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
-
-```tsx
-expect(element).toBeInTheDocument();        // DOM に存在する
-expect(element).toHaveTextContent("hello"); // テキストを含む
-expect(element).toBeVisible();              // 見える状態
-expect(input).toHaveValue("Alice");         // input の値
-expect(checkbox).toBeChecked();             // チェック済み
-expect(button).toBeDisabled();              // disabled 属性付き
-expect(element).toHaveClass("active");      // CSS クラス付き
-expect(element).toHaveAttribute("href", "/about");
-```
-
-これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
-
-### テスト間で DOM / タイマーが漏れる落とし穴
-
-RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
-
-- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。
-- **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
-
-```ts
-import { afterEach, vi } from "vitest";
-afterEach(() => {
-  vi.useRealTimers();
-});
-```
+DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
 
 ## 演習
 
 ### ゴール
 
-- React + RTL のセットアップを `vitest.config.ts` に反映する
-- カウンターコンポーネントのテストを書ける
-- 簡単なフォームのテストを書ける
-- `getByRole` / `getByLabelText` を優先して使える
+- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
+- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
+- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
 
-### 途中から始める場合
+### 手順 1: Lighthouse で CWV を計測
 
-「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
+1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
+2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
+3. レポートを確認:
+   - 全体スコア
+   - **Largest Contentful Paint**（LCP の値）
+   - **Cumulative Layout Shift**（CLS の値）
+   - **Interaction to Next Paint**（条件次第で出る）
 
-### 手順 1: 依存パッケージをインストール
+### 手順 2: PageSpeed Insights で RUM を見る
 
-```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
-```
+1. <https://pagespeed.web.dev/> にアクセス
+2. URL を入れて Analyze
+3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
+4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
 
-### 手順 2: 設定ファイルを更新
+実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
 
-`vitest.config.ts`:
+### 手順 3: DevTools Performance で観察
 
-```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
-
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-  },
-});
-```
-
-`vitest.setup.ts` を新規作成:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-### 手順 3: テスト対象のコンポーネントを書く
-
-`src/Counter.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-      <button onClick={() => setCount((c) => c - 1)}>-1</button>
-      <button onClick={() => setCount(0)}>リセット</button>
-    </div>
-  );
-}
-```
-
-`src/NameForm.tsx`:
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (name.trim()) {
-      setSubmitted(name);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="name">お名前</label>
-      <input
-        id="name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
-```
-
-### 手順 4: テストを書く
-
-`src/Counter.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Counter } from "./Counter";
-
-describe("Counter", () => {
-  it("初期値は 0", () => {
-    render(<Counter />);
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-  });
-
-  it("+1 ボタンで増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("-1 ボタンで減る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "-1" }));
-
-    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
-  });
-
-  it("リセットボタンで 0 に戻る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "リセット" }));
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-  });
-});
-```
-
-`src/NameForm.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.type(screen.getByLabelText("お名前"), "Alice");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
-
-  it("空のまま送信しても挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-
-  it("入力中の値が input に反映される", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    const input = screen.getByLabelText("お名前");
-    await user.type(input, "Bob");
-
-    expect(input).toHaveValue("Bob");
-  });
-});
-```
-
-### 手順 5: 実行
-
-```bash
-npm run test
-```
-
-すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
+1. Chrome で対象ページを開く
+2. F12 → **Performance** タブ
+3. 左上の **Record**（黒丸） を押す
+4. ページをリロード（`Ctrl + R`）
+5. ページが落ち着いたら **Stop**
+6. タイムラインで:
+   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
+   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
+   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
 
 ### 期待出力
 
-```
- PASS  src/Counter.test.tsx (4)
- PASS  src/NameForm.test.tsx (3)
+Lighthouse:
 
- Test Files  2 passed (2)
-      Tests  7 passed (7)
-```
+- **Performance** スコアが 90 以上なら良好
+- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
+
+PageSpeed Insights:
+
+- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
 
 ### 変える
 
-- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
-- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
-- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
+- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
+- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
+- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
-  - 入力欄 + 「追加」ボタン
-  - 追加されたら入力欄が空になる
-  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
-- テストで以下を検証:
-  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
-  - 送信後に input が空になる
-  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
+新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
 
-`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
+```bash
+npm create vite@latest cwv-sample -- --template vanilla-ts
+cd cwv-sample
+npm install web-vitals
+```
+
+`src/main.ts`:
+
+```ts
+import { onLCP, onINP, onCLS } from "web-vitals";
+
+onLCP(console.log);
+onINP(console.log);
+onCLS(console.log);
+
+document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
+```
+
+`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
 
 ## まとめ
 
-- React Testing Library は「ユーザーの見え方」をテストする思想
-- `render` / `screen` でコンポーネントを描画して DOM クエリ
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
-- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
-- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
-- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
-- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
+- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
+- 2024 年 3 月に **FID は INP に置き換わった**
+- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
+- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
+- **PageSpeed Insights** が両方を一覧表示してくれる
+- DevTools の **Performance パネル** で詳細を時系列に見る
+- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託

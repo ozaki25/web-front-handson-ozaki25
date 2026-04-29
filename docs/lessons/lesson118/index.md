@@ -1,421 +1,425 @@
-# lesson118: 環境変数とシークレット管理
+# lesson118: CORS の詳細
 
 ## ゴール
 
-- `.env` / `.env.local` / `.env.production` などのファイルの **使い分け** が分かる
-- Next.js / Vite の **`NEXT_PUBLIC_` / `VITE_`** プレフィックスの意味と公開範囲を説明できる
-- Vercel / GitHub / Doppler / 1Password などの **シークレット管理サービス** の役割を理解する
-- シークレットを **誤って Git にコミットしない** 仕組みを作れる
-- 漏洩した時の対応の流れを知る
+- 同一オリジンポリシーと CORS（Cross-Origin Resource Sharing）の関係を説明できる
+- **シンプルリクエスト** と **プリフライト**（OPTIONS）の違いを区別できる
+- `Access-Control-Allow-Origin` / `Allow-Credentials` / `Allow-Headers` の使い分けが分かる
+- `credentials: "include"` と Cookie の絡みを理解する
+- よくある CORS エラーを **メッセージから即座に原因に到達** できる
 
 ## 解説
 
-### 環境変数とは
+### 同一オリジンポリシーの復習
 
-「**コードから見える値だが、コードと一緒に管理したくない**」値を入れる仕組みです。代表例:
+ブラウザは「**異なるオリジン** からの応答を JS に渡さない」という規則（同一オリジンポリシー）を持っています。
 
-- API のベース URL（環境ごとに違う）
-- データベース接続文字列
-- API キー / アクセストークン
-- フィーチャーフラグの ON / OFF
+オリジン = `スキーム + ホスト + ポート`。
 
-これらを **コードに直書き** すると:
-
-- 開発 / 本番の切り替えが面倒
-- **シークレットが Git に残る**（git history に永久保存）
-
-ので、環境変数で外に出します。
-
-### `.env` ファイルの種類
-
-Node.js / Next.js / Vite が読み込む慣習的なファイル名:
-
-| ファイル | 読み込まれる場面 | コミット |
+| URL A | URL B | 同一オリジン？ |
 |---|---|---|
-| `.env` | すべての環境で読まれる（あれば） | 場合による |
-| `.env.local` | **ローカル開発時のみ**。同名キーを上書き | **NG**（gitignore） |
-| `.env.development` | `NODE_ENV=development` 時 | OK（ただし秘密は書かない） |
-| `.env.production` | `NODE_ENV=production` 時 | OK（ただし秘密は書かない） |
-| `.env.test` | テスト時 | OK |
-| `.env.example` | サンプル / テンプレート | **OK**（コミットする） |
+| `https://example.com` | `https://example.com/api` | はい |
+| `https://example.com` | `http://example.com` | **いいえ**（スキームが違う） |
+| `https://example.com` | `https://api.example.com` | **いいえ**（ホストが違う） |
+| `https://example.com:443` | `https://example.com:8080` | **いいえ**（ポートが違う） |
 
-#### `.gitignore`
+### CORS = 「異なるオリジンからの読み取りを **明示的に許可**」
 
-```
-.env*.local
-.env
-```
+API がブラウザから直接呼ばれる現代では、別オリジンから読みたい場面が多発します。CORS は「**サーバー側がレスポンスヘッダで許可を出した時** に限り、ブラウザが JS にレスポンスを渡す」仕組みです。
 
-`.env.local` と `.env` は **絶対にコミットしない**。一方 `.env.example` は **必ずコミット** する（チームメンバーが何を設定すべきかの目安になる）。
+ポイント:
 
-#### `.env.example`
+- **送信は誰でもできる**（リクエスト自体はブラウザが送る）
+- **応答を JS が読めるかどうか** は CORS ヘッダ次第
+- だから **CSRF とは別問題**（CSRF は送信を防ぐ話）
 
-```
-# データベース
-DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
+### シンプルリクエスト
 
-# API キー（実値ではなくダミー）
-SENTRY_DSN=https://example@sentry.io/1234
+GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエストは、ブラウザが直接送信します。
 
-# 公開して問題ない値
-NEXT_PUBLIC_API_BASE=http://localhost:3000/api
-```
+条件（ざっくり）:
 
-### Next.js の `NEXT_PUBLIC_` プレフィックス
+- メソッドは GET / POST / HEAD
+- カスタムヘッダなし
+- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
 
-Next.js（および Vite の `VITE_`）には **「クライアントに公開する値」を明示するルール** があります。
+例:
 
-```
-DATABASE_URL=postgres://...               ← サーバーのみ（漏れない）
-SENTRY_AUTH_TOKEN=xxx                      ← サーバーのみ（漏れない）
-NEXT_PUBLIC_API_URL=https://api.example.com ← クライアントにも露出
-NEXT_PUBLIC_GA_ID=G-XXXX                    ← クライアントにも露出
+```js
+fetch("https://api.example.com/posts");
 ```
 
-ルール:
+サーバーは応答に CORS ヘッダを返す:
 
-- **`NEXT_PUBLIC_` で始まる値だけ** がクライアントの JS バンドルに **インライン** される
-- それ以外は **サーバー（API Route / Server Component / Middleware）でしか読めない**
-- ビルド時に **値が文字列として埋め込まれる**（実行時のフェッチではない）
-
-#### 露出する 例
-
-```tsx
-// app/page.tsx（Server Component でも Client Component でも）
-const apiBase = process.env.NEXT_PUBLIC_API_URL; // ブラウザでも読める
+```http
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://my-site.example
+Content-Type: application/json
 ```
 
-ビルド後の JS には **値そのもの** が入ります。**シークレットを `NEXT_PUBLIC_` に置くのは事故** の元。
+`Access-Control-Allow-Origin` がリクエスト元オリジンと一致 / `*` ならブラウザが JS に応答を渡す。一致しなければ **JS から読めずエラー**。
 
-#### 露出しない 例
+### プリフライト（OPTIONS）
 
-```ts
-// app/api/users/route.ts（Route Handler）
-export async function GET() {
-  const dbUrl = process.env.DATABASE_URL; // サーバーのみ
-  // ...
-}
-```
-
-サーバー専用コードでは **プレフィックスなしの値** が読めます。クライアント側で同じコードを書くと `undefined` になる。
-
-::: warning Server Component / Server Action の罠
-Server Component / Server Action のソースが **Client Component から間接的に import** されると、バンドラがクライアント側に持ち込みます。
-
-シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import します。これで **誤って client にバンドルされた場合に build が失敗** します。
-
-```ts
-import "server-only"; // クライアントから import するとエラー
-const dbUrl = process.env.DATABASE_URL;
-```
-:::
-
-### Vite の `VITE_` プレフィックス
-
-Vite は同じ仕組みで **`VITE_`** プレフィックス。
+メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
 
 ```
-VITE_API_URL=https://api.example.com   ← import.meta.env.VITE_API_URL で読める
-SECRET_KEY=do_not_expose                ← undefined（読めない）
+OPTIONS /posts HTTP/1.1
+Origin: https://my-site.example
+Access-Control-Request-Method: PUT
+Access-Control-Request-Headers: Content-Type, Authorization
 ```
 
-```ts
-console.log(import.meta.env.VITE_API_URL);  // OK
-console.log(import.meta.env.SECRET_KEY);    // undefined
+サーバーが応答:
+
+```
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://my-site.example
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Max-Age: 3600
 ```
 
-詳細は lesson107 でも触れた通り。
+OPTIONS の応答が **OK + 適切なヘッダ** ならブラウザは本リクエストを送る。NG なら本リクエストは飛ばない。
 
-### 環境ごとの設定
+#### `Access-Control-Max-Age`
 
-Vercel に Next.js をデプロイする場合、`.env.production` などのファイルは使わず **Vercel 管理画面で設定** するのが普通です。
+OPTIONS の結果を **キャッシュする秒数**。これがないとリクエストごとに OPTIONS が走って遅くなります。`3600`（1 時間）程度が目安。
 
-| 設定箇所 | 主な役割 |
+### 主要ヘッダ
+
+#### サーバー → ブラウザ（応答）
+
+| ヘッダ | 内容 |
 |---|---|
-| Vercel Dashboard → Settings → Environment Variables | Production / Preview / Development それぞれに値を設定 |
-| `.env.local` | ローカル開発の上書き |
+| `Access-Control-Allow-Origin` | 許可するオリジン（または `*`） |
+| `Access-Control-Allow-Methods` | 許可するメソッド |
+| `Access-Control-Allow-Headers` | 許可するリクエストヘッダ |
+| `Access-Control-Allow-Credentials` | Cookie / Authorization を含むリクエストを許可するか |
+| `Access-Control-Expose-Headers` | JS から読めるレスポンスヘッダの追加リスト |
+| `Access-Control-Max-Age` | プリフライトのキャッシュ秒 |
 
-`vercel env pull .env.local` で **Vercel の値をローカルに引っ張ってくる** こともできます（同じ設定で動かしたい時に便利）。
+#### ブラウザ → サーバー（リクエスト）
 
-### GitHub Secrets と Actions
-
-GitHub Actions の workflow で使う API キーは **GitHub Settings → Secrets and variables → Actions** に登録。workflow からは `secrets.NAME` 構文（`$` と `{{ }}` の組合せ）で参照します。
-
-**ファイルにベタ書きしない、ログに出さない、Pull Request の workflow で使わない** が三原則。
-
-### シークレット管理の選択肢
-
-#### サービス別
-
-| サービス | 役割 |
+| ヘッダ | 内容 |
 |---|---|
-| **Vercel Environment Variables** | Vercel デプロイのシークレット |
-| **GitHub Actions Secrets** | CI のシークレット |
-| **AWS Secrets Manager / Parameter Store** | AWS インフラ全体 |
-| **Doppler** | 複数環境のシークレットを一元管理する SaaS |
-| **1Password Connect / Secrets Automation** | 人と CI で同じシークレットを使う |
-| **HashiCorp Vault** | エンタープライズ標準。OSS |
-| **Infisical** | OSS のシークレット管理 |
+| `Origin` | リクエスト元オリジン（**ブラウザが自動付与、JS から偽装不能**） |
+| `Access-Control-Request-Method` | プリフライト時の本来のメソッド |
+| `Access-Control-Request-Headers` | プリフライト時の本来のヘッダ |
 
-「**ローカル開発 + CI + 本番** で同じ値を 1 箇所から配信したい」場合に Doppler / 1Password / Vault が役立ちます。
+### Cookie / 認証ヘッダを含めるには
 
-#### Doppler の最小例
+デフォルトで `fetch` は **クロスオリジンで Cookie を送らない**。送る場合は **両側に追加設定** が必要です。
 
-```bash
-doppler login
-doppler setup
-doppler run -- npm run dev   # .env を読まずに Doppler から値を流し込む
-```
+#### クライアント側
 
-CI でも `doppler run --` 経由でビルドすれば、**GitHub Secrets を一切登録せずに** 動かせます。
-
-### 「シークレットをコミットしない」仕組み
-
-#### 1. `.gitignore` を整える
-
-```
-.env
-.env.local
-.env.*.local
-```
-
-#### 2. `git-secrets` / `gitleaks` で push 前にスキャン
-
-```bash
-# gitleaks（OSS、Go 製）
-brew install gitleaks
-gitleaks git .            # リポジトリ履歴全体をスキャン
-
-# pre-commit フックで自動化
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit`:
-
-```sh
-#!/bin/sh
-# v8.18 以降は protect サブコマンドが廃止。git --pre-commit --staged で代替する
-gitleaks git --pre-commit --staged --no-banner || exit 1
-```
-
-#### 3. GitHub の Secret Scanning
-
-GitHub は **public リポジトリの push を自動でスキャン** し、AWS / Stripe / GitHub トークンなど主要な型を検出するとメールで通知します。**private リポジトリでも有効化** すると、組織のセキュリティが上がる（GitHub Advanced Security の機能）。
-
-#### 4. Husky + lint-staged で運用に組み込む
-
-```json
-{
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks git --pre-commit --staged --no-banner"]
-  }
-}
-```
-
-### 漏洩した時の対応
-
-「`.env` を間違って push してしまった」を想定:
-
-1. **すぐにそのキーを無効化**（rotate）
-   - クラウドサービス（AWS / Stripe / Sentry）の管理画面で **キーを再生成**
-   - GitHub に残った時点で **公開済み** とみなす（git history を消しても遅い）
-2. **新しいキーを Vercel / GitHub Secrets に登録**
-3. **チームに共有 + 監査ログをチェック**（不正利用がないか）
-4. **任意で git history から削除**（`git filter-repo`）
-   - **キーを無効化したあと** にやる。順番を逆にすると無意味
-
-::: warning git history からの削除は事後処置
-リポジトリが public なら、push した瞬間に **bot がスキャンして既にコピー** している可能性があります。**「消したから安全」ではなく、必ずキーを rotate** すること。
-:::
-
-### 設計の指針
-
-#### 1. シークレットはサーバーで使う
-
-ブラウザに渡す API キーは「**それが漏れても大丈夫な値**」だけ。本当の認証はバックエンド経由で。
-
-#### 2. `NEXT_PUBLIC_` には機密を入れない
-
-「Sentry DSN は公開しても良いと書いてあるからクライアントに置く」のは OK。けれど **DB 接続文字列 / OAuth クライアントシークレット** を `NEXT_PUBLIC_` に置くのは事故の温床。
-
-#### 3. 必須値は起動時に検証
-
-```ts
-// utils/env.ts
-import { z } from "zod";
-
-const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
-  NEXT_PUBLIC_API_URL: z.string().url(),
-  SENTRY_DSN: z.string().optional(),
+```js
+fetch("https://api.example.com/me", {
+  credentials: "include",   // Cookie / Authorization を送る
 });
-
-export const env = envSchema.parse(process.env);
 ```
 
-これで「**環境変数の設定漏れ** で本番が落ちる」を防げます。Zod / `t3-env` などのライブラリで型安全に。
+`credentials` の値:
 
-#### 4. 個人別の値 / 共通の値を分離
+- `"omit"`: 送らない（デフォルトのクロスオリジン）
+- `"same-origin"`: 同一オリジンの時だけ送る（デフォルトの同一オリジン）
+- `"include"`: 常に送る（クロスオリジンでも）
 
-| 値 | 置き場 |
-|---|---|
-| 個人の作業用 API キー | `.env.local`（gitignore） |
-| チーム共通の URL | `.env.development`（コミット可） |
-| 本番のシークレット | Vercel Environment Variables |
+#### サーバー側
 
-### よくある事故
+```
+Access-Control-Allow-Origin: https://my-site.example
+Access-Control-Allow-Credentials: true
+```
 
-#### 1. 本番 DB に開発から繋いでしまう
+**重要な制約**:
 
-`DATABASE_URL` を `.env.local` で本番にして、勘違いしてマイグレーションを実行 → 本番データ破壊。
+- `Allow-Credentials: true` の時、`Allow-Origin: *` は **使えない**。**具体的なオリジン** を返す必要がある
+- `Access-Control-Allow-Origin` に複数のオリジンは並べられない（`*` か **1 つだけ**）
 
-→ **本番のキーは個人の `.env.local` に置かない** ルールに。Vercel から `vercel env pull` する時も `--environment=development` を明示。
-
-#### 2. `process.env.X` がビルドで消える
-
-Next.js は **静的解析** でビルド時に置換するので、`process.env[key]` のような **動的アクセスは展開されない**。
+複数許可したい場合は **リクエストの Origin を見て動的に返す**:
 
 ```ts
-const key = "NEXT_PUBLIC_API_URL";
-process.env[key]; // undefined になりがち
-process.env.NEXT_PUBLIC_API_URL; // OK
+const allowed = [
+  "https://my-site.example",
+  "https://staging.example",
+  "http://localhost:3000",
+];
+
+export async function GET(req: Request) {
+  const origin = req.headers.get("Origin") ?? "";
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (allowed.includes(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Credentials", "true");
+    headers.set("Vary", "Origin");
+  }
+  return new Response(JSON.stringify({ ok: true }), { headers });
+}
 ```
 
-#### 3. `.env.production` をコミットしてしまった
+`Vary: Origin` を入れると **CDN がオリジン別にキャッシュ** してくれます。これがないと、別オリジンのキャッシュを別の人に返してしまう事故が起きます。
 
-→ 「**シークレットを外に置く**」を徹底。`.env.production` を使うなら **dummy 値** に。
+### Cookie 側の `SameSite`
 
-#### 4. 古いキーが Slack に残っている
+「クロスオリジンで Cookie を送る」には Cookie 側の **`SameSite`** 属性も `None`（+ `Secure`）でないといけません。
 
-→ シークレット管理サービスの「**監査ログ**」とローテーションスケジュールを意識。
+```
+Set-Cookie: session=abc; SameSite=None; Secure; HttpOnly; Path=/
+```
+
+- `SameSite=Strict`: クロスサイトには絶対送らない
+- `SameSite=Lax`: トップレベルナビゲーションでは送る（デフォルト）
+- `SameSite=None`（+ Secure）: クロスサイトでも送る（同意必要）
+
+これをセットで考えないと、CORS 設定だけ整えても **Cookie が飛ばずログイン状態が維持されない** 事故になります。
+
+### Next.js / Express での設定例
+
+#### Next.js（Route Handler）
+
+```ts
+// app/api/posts/route.ts
+import { NextResponse } from "next/server";
+
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://my-site.example",
+];
+
+function corsHeaders(origin: string | null): HeadersInit {
+  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "3600",
+    "Vary": "Origin",
+  };
+  // 許可されていないオリジンには Allow-Origin ヘッダ自体を返さない
+  // （空文字を返すとブラウザは「許可なし」だがプロキシ / CDN のキャッシュ汚染源になる）
+  if (isAllowed) {
+    headers["Access-Control-Allow-Origin"] = origin!;
+  }
+  return headers;
+}
+
+export async function OPTIONS(req: Request) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(req.headers.get("Origin")),
+  });
+}
+
+export async function GET(req: Request) {
+  return NextResponse.json({ posts: [] }, {
+    headers: corsHeaders(req.headers.get("Origin")),
+  });
+}
+```
+
+#### Express の `cors` パッケージ
+
+```js
+import cors from "cors";
+
+app.use(
+  cors({
+    origin: ["https://my-site.example", "http://localhost:3000"],
+    credentials: true,
+    maxAge: 3600,
+  }),
+);
+```
+
+### よくある CORS エラーと原因
+
+ブラウザのコンソールに出るメッセージ別の対処。
+
+#### `No 'Access-Control-Allow-Origin' header is present on the requested resource`
+
+→ サーバーがそもそも CORS ヘッダを返していない / OPTIONS で 4xx を返している。サーバー側設定を見直す。
+
+#### `The 'Access-Control-Allow-Origin' header has a value 'X' that is not equal to the supplied origin`
+
+→ `Allow-Origin` が **間違ったオリジン** を返している。動的に Origin を見て一致するものを返す。
+
+#### `The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'`
+
+→ `credentials: "include"` の時は **`*` ではなく具体的オリジン** を返す。
+
+#### `Method PUT is not allowed by Access-Control-Allow-Methods`
+
+→ `Allow-Methods` に PUT を追加。OPTIONS の応答に必ず含める。
+
+#### `Request header 'X-Custom' is not allowed by Access-Control-Allow-Headers`
+
+→ `Allow-Headers` にカスタムヘッダを追加。
+
+#### `Cookie が送られない`
+
+→ クライアント側 `credentials: "include"`、サーバー側 `Allow-Credentials: true`、Cookie の `SameSite=None; Secure` の **3 点セット** を確認。
+
+### CORS が要らないケース
+
+- **同一オリジンへのリクエスト**（`/api/...` のような相対パス）
+- **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
+- **サーバー → サーバー**（fetch がブラウザを通らない）
+
+「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
+
+### CORB / CORP / COEP / COOP
+
+似た名前の仕組みが他にもあります。混同しないように整理:
+
+| 名前 | 役割 |
+|---|---|
+| **CORS** | クロスオリジンレスポンスを **JS に読ませるか** |
+| **CORB**（Cross-Origin Read Blocking） | ブラウザが Spectre 対策で内部的に行うレスポンス遮断 |
+| **CORP**（`Cross-Origin-Resource-Policy`） | リソース側が **誰に埋め込まれるか** を制限 |
+| **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
+| **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
+
+通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
 
 ## 演習
 
 ### ゴール
 
-- Next.js の Server / Client / Middleware で環境変数の **読み取り権限** を体感する
-- gitleaks で push 前のチェックを入れる
+- 自前 API に対して CORS エラーを **出してから直す** 流れを体験する
+- プリフライトの OPTIONS が飛ぶことを観察する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: API サーバー（Hono）
 
 ```bash
-npx create-next-app@latest env-sample --ts --app
-cd env-sample
+mkdir cors-server
+cd cors-server
+npm init -y
+npm install hono @hono/node-server
 ```
 
-### 手順 2: `.env.local` と `.env.example`
+`server.ts`:
 
-`.env.example`:
+```ts
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
 
-```
-# 公開して OK
-NEXT_PUBLIC_APP_NAME=EnvSample
+const app = new Hono();
 
-# 公開 NG
-SECRET_TOKEN=replace_me
-```
+app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
 
-`.env.local`（コミットしない）:
-
-```
-NEXT_PUBLIC_APP_NAME=ローカルの名前
-SECRET_TOKEN=local-secret-xxx
+serve({ fetch: app.fetch, port: 4000 });
+console.log("API on http://localhost:4000");
 ```
 
-### 手順 3: Server / Client で読み比べる
+```bash
+npx tsx server.ts
+```
 
-`app/page.tsx`（Server Component）:
+### 手順 2: クライアント（別ポート）
 
-```tsx
-export default function Home() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Server Component</h1>
-      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
-      <p>SECRET_TOKEN（サーバー）: {process.env.SECRET_TOKEN ?? "なし"}</p>
-    </main>
-  );
+別ターミナルで:
+
+```bash
+npm create vite@latest cors-client -- --template vanilla-ts
+cd cors-client
+npm install
+npm run dev
+```
+
+`src/main.ts`:
+
+```ts
+async function load() {
+  const res = await fetch("http://localhost:4000/posts");
+  const data = await res.json();
+  document.body.textContent = JSON.stringify(data);
 }
+load();
 ```
 
-`app/client/page.tsx`:
+ブラウザで `http://localhost:5173`（Vite のデフォルトポート）を開くと、コンソールに **CORS エラー** が出るはずです。
 
-```tsx
-"use client";
-
-export default function ClientPage() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Client Component</h1>
-      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
-      <p>SECRET_TOKEN（クライアント）: {process.env.SECRET_TOKEN ?? "なし"}</p>
-    </main>
-  );
-}
+```
+Access to fetch at 'http://localhost:4000/posts' from origin 'http://localhost:5173' has been blocked by CORS policy:
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
 ```
 
-`npm run dev` してブラウザで両方確認します。
+### 手順 3: サーバーで CORS を許可
+
+`server.ts`:
+
+```ts
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { cors } from "hono/cors";
+
+const app = new Hono();
+
+app.use(
+  "*",
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    maxAge: 3600,
+  }),
+);
+
+app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
+app.put("/posts/:id", (c) => c.json({ ok: true }));
+
+serve({ fetch: app.fetch, port: 4000 });
+```
+
+再起動するとクライアントから読めるようになります。
+
+### 手順 4: プリフライトを観察
+
+PUT を呼ぶ:
+
+```ts
+await fetch("http://localhost:4000/posts/1", {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ title: "updated" }),
+});
+```
+
+DevTools の Network タブで:
+
+1. まず **OPTIONS** が飛ぶ
+2. 200 / 204 が返る
+3. その後 **PUT** が飛ぶ
+
+を確認します。
 
 ### 期待出力
 
-| 場所 | NEXT_PUBLIC_APP_NAME | SECRET_TOKEN |
-|---|---|---|
-| Server Component | ローカルの名前 | local-secret-xxx |
-| Client Component | ローカルの名前 | **なし** |
-
-クライアントには **`NEXT_PUBLIC_` 以外が露出しない** ことを確認します。
-
-### 手順 4: gitleaks を導入
-
-```bash
-brew install gitleaks       # macOS。Linux は go install / docker でも
-# または: docker run -v $(pwd):/path zricethezav/gitleaks detect --source /path
-```
-
-リポジトリ直下で:
-
-```bash
-git init
-echo "AWS_SECRET=AKIA1234567890ABCDEF" > test.txt
-git add test.txt
-gitleaks protect --staged
-```
-
-`AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
-
-### 手順 5: pre-commit に組み込む
-
-```bash
-mkdir -p .githooks
-cat > .githooks/pre-commit <<'EOF'
-#!/bin/sh
-gitleaks protect --staged --no-banner || exit 1
-EOF
-chmod +x .githooks/pre-commit
-git config core.hooksPath .githooks
-```
-
-これで `git commit` の前に自動で gitleaks が走ります。
+- 最初は CORS エラー
+- サーバーで許可してから読める
+- PUT 時に **OPTIONS → PUT** の 2 段階のリクエストが見える
 
 ### 変える
 
-- `process.env[key]` のような動的アクセスを書いて、ビルド後にどう展開されるか確認
-- `import "server-only"` を入れたファイルを Client Component から import して **ビルドエラー** になることを確認
-- Zod / t3-env で起動時の env 検証を組み込む
+- `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
+- `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
+- `allowOrigins` に `*` を入れると、`credentials` を使う場合だけエラー（仕様違反）
 
 ### 自分で書く（任意）
 
-- Doppler を試して、`doppler run -- npm run dev` で `.env` なしの開発体験を作る
-- Vercel に deploy し、Production / Preview で **異なる値** を設定する
-- 漏洩シミュレーション: わざとリポジトリ（個人テスト用）に `.env` を push し、**キーをローテートする手順** をリハーサルする
+- Next.js の Route Handler で同じ CORS 設定を再現する
+- `SameSite=None; Secure` の Cookie を使ってログインを成立させる
+- バックエンドプロキシ（Next.js の `/api/proxy`）を立てて、CORS を消す構成にする
 
 ## まとめ
 
-- `.env` ファイルは **`.local` をコミットせず、`.example` を必ずコミット** する
-- Next.js の **`NEXT_PUBLIC_`** / Vite の **`VITE_`** プレフィックスは「**クライアントに露出させる**」明示
-- それ以外の値は **サーバー専用**。`server-only` パッケージで誤バンドルを防ぐ
-- 設定の置き場は **Vercel Environment Variables** / GitHub Secrets / Doppler / Vault
-- **gitleaks** + pre-commit / GitHub の Secret Scanning で push 前後のスキャン
-- 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
-- **起動時に Zod で env を検証** すると、設定漏れに早く気づける
-- 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める
+- CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
+- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
+- 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
+- **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
+- **Cookie の `SameSite=None; Secure`** とセットで考える
+- 動的に Origin を見て返す時は **`Vary: Origin`** をつけて CDN を安全に
+- エラーメッセージから原因を特定できる定型パターンを覚える
+- 「バックエンドプロキシで CORS を消す」も実用解

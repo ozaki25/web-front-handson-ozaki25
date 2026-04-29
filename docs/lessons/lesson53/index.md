@@ -1,49 +1,46 @@
-# lesson53: React ってなに？
+# lesson53: JSX を書く
+
+<script setup>
+const closeScript = '<' + '/script>'
+const demoHtml =
+  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
+  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
+  '<div id="root"></div>'
+
+const demoJs = `
+// 本来 JSX で書く <h1 className="title">Hello, React</h1> は
+// ビルド時に React.createElement(...) に変換されます。
+// このデモは CDN から React を読み込み、変換後の形を直接書いています。
+// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
+// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
+const h = React.createElement;
+
+function App() {
+  const name = 'Alice';
+  return h(
+    'div',
+    null,
+    h('h1', { className: 'title' }, 'Hello, React'),
+    h('p', null, 'こんにちは、' + name + ' さん')
+  );
+}
+
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(h(App));
+`
+</script>
 
 ## ゴール
 
-- React が何を解決する道具なのかを、自分の言葉で説明できる
-- Vite / npm / `package.json` / `npm run dev` の役割をざっくり理解する
-- StackBlitz の React + Vite（TypeScript）テンプレートから、自分の文字を画面に出せる
+- JSX の基本ルールを理解し、HTML との違いを説明できる
+- JSX の中に `{式}` で JS の値を埋め込める
+- `className` / キャメルケースの属性 / フラグメントを使い分けられる
 
 ## 解説
 
-### ここまでの立ち位置
+### JSX は「JS の中に書く HTML 風の文法」
 
-2 章 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。2 章 の仕上げの「TODO アプリを作る」では、TODO アプリを「入力欄 + 一覧 + 削除 + `localStorage` 保存」まで作りました。
-
-そこまでできるのなら、React はなぜ必要なのでしょうか。
-
-### React が解決すること
-
-素の JS で画面を書き換えるコードを思い出してください。例えば「TODO を 1 件追加する」ためには、次のような手順が必要でした。
-
-1. 新しい `<li>` 要素を `document.createElement` で作る
-2. その中に文字を入れる
-3. 削除ボタンを作って `<li>` の中にくっつける
-4. `<ul>` に `appendChild` で追加する
-
-「画面をこう変えたい」という気持ちから遠い、**手順の羅列**になりがちです。項目数が増えたり、削除・並び替え・ハイライトなど状態の種類が増えると、どの DOM をどう更新するかを 1 つずつ書かないといけません。バグも混入しやすいです。
-
-React の発想はこうです。
-
-> **画面（UI）を「今の状態」から計算される結果として書く**
-
-コードの書き方は「今、TODO 配列がこうなっているなら、画面はこういう形です」と宣言するだけ。追加・削除で配列が変わると、React が「前の画面」と「新しい画面」を比べて、**変わった箇所だけ** DOM に反映してくれます。
-
-### 「仮想 DOM」という言葉は使わない
-
-古い記事では「仮想 DOM」という言葉で説明されていることがあります。本コースでは次のような現代的な表現を使います。
-
-- React は UI を「JS のツリー」として保持している
-- 状態が変わるたびに、新しいツリーを作って前のツリーと比較する
-- 差があった部分だけ、本物の DOM に反映する
-
-要は「全部書き換えるのではなく、変化した差分だけ反映する」仕組みだと覚えておけば十分です。
-
-### コンポーネントという単位
-
-React では、画面を**コンポーネント**という部品に分けて組み立てます。コンポーネントは「JSX を返す関数」です。
+「React ってなに？」で、コンポーネントは JSX を返す関数だと紹介しました。
 
 ```tsx
 function Hello() {
@@ -51,68 +48,160 @@ function Hello() {
 }
 ```
 
-この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。
+この `<h1>Hello, React</h1>` の部分が **JSX** です。見た目は HTML ですが、JS の中に直接書いています。Vite（内部で TypeScript / Babel）が、裏で JS に変換してから動かしています。
 
-### Vite / npm / `package.json` の最低限
+HTML とは次の点で違います。本コースでは、よくぶつかる 3 点をまず覚えます。
 
-素の JS なら `<script defer src="./script.js">` と書けば動きました。React + TypeScript では、TS を JS に変換したり、開発中に保存するとブラウザを自動更新したりする仕組みが必要です。その仕組みをまとめて提供してくれるのが **Vite**（ヴィート） です。
+1. 属性名がキャメルケース（`onclick` → `onClick`、`tabindex` → `tabIndex`）
+2. `class` 属性は `className` に変わる
+3. 自己閉じタグにスラッシュが必要（`<img src="..." />`、`<br />`）
 
-Vite は次の 2 つを担います。
+「`for`（`<label for="...">`）→ `htmlFor`」も同じ仲間ですが、実用頻度が上がるのは5 章（フォーム）なので、ここでは頭の片隅に。
 
-- **開発サーバー**: ファイルを保存するたびに画面を自動更新（`npm run dev`）
-- **ビルド**: 本番公開用に最適化したファイルを出力（`npm run build`）
+### `{式}` で JS の値を埋め込む
 
-そして Vite 本体や React 本体などの「外部ライブラリ」をダウンロード・管理する道具が **npm**（Node Package Manager） です。npm は `package.json` というファイルを見て、「このプロジェクトはどのライブラリを使っていて、どのコマンドで起動するか」を判断します。
+JSX の中で `{ ... }` と書くと、中の JS の**式**が評価されます。
 
-`package.json` の `scripts` セクションだけ見れば、とりあえず十分です。例えば次のような形です。
+```tsx
+const name = "Alice";
+const age = 20;
 
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "preview": "vite preview"
-  }
+function Profile() {
+  return (
+    <div>
+      <p>名前: {name}</p>
+      <p>来年は {age + 1} 歳</p>
+      <p>今: {new Date().toLocaleTimeString()}</p>
+    </div>
+  );
 }
 ```
 
-`npm run dev` と打つと、npm は `scripts.dev` に書かれているコマンド（ここでは `vite`）を実行します。Vite が開発サーバーを立ち上げて、ブラウザで表示できる状態になります。
+- 変数（`name`、`age`）を埋め込める
+- 式（`age + 1`、関数呼び出し）を埋め込める
+- `if` 文や `for` 文のような**文**は書けない。あくまで**式**だけ
 
-### StackBlitz なら自動で走る
+`if` で分岐したいときは三項演算子や `&&` を使います。
 
-StackBlitz の React + Vite テンプレートを開くと、次のことが自動で起きます。
+### `className`（`class` との違い）
 
-1. `npm install`（`package.json` に書かれたライブラリをダウンロード）
-2. `npm run dev`（Vite 開発サーバーを起動）
-3. プレビューエリアに画面が表示される
-
-本コースでは `npm install` や `npm run dev` を **知っておく程度** でよく、コマンドを手で打つことはほとんどありません。それでも「StackBlitz の裏では Vite が動いている」「設定は `package.json` に書かれている」ことだけ頭に入れておくと、後で応用が利きます。
-
-### `App.tsx` の位置
-
-Vite の React + TS テンプレートでは、画面の入口となるファイルが 2 つあります。
-
-- `src/main.tsx`: React を起動する（ここは基本触らない）
-- `src/App.tsx`: 画面の中身を書く（本コースではここを中心に触る）
-
-`main.tsx` の中で `<App />` をブラウザに流し込んでいます。イメージとしてはこうです。
+HTML では `<div class="card">` でしたが、JSX では **`className`** を使います。
 
 ```tsx
-// src/main.tsx（テンプレートに最初から入っている）
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
+function Card() {
+  return <div className="card">カードの中身</div>;
+}
 ```
 
-`StrictMode` は「開発中に問題を見つけやすくするラッパー」です。今は気にしなくてよいです。
+なぜかというと、JSX は JS に変換されるので、`class` が JS の予約語（クラス構文に使う）と衝突するためです。本コースではクラス構文自体は扱いませんが、**JSX では必ず `className`** と覚えておきます。
 
-本コースで意識的に編集するのは、基本的に `src/App.tsx` です。
+CSS 側の書き方は変わりません。これまで通り `.card { ... }` と書いて読み込めば効きます。
+
+### 属性はキャメルケース
+
+HTML の属性名は全て小文字でしたが、JSX では複数単語の属性名をキャメルケース（途中で大文字）にします。
+
+| HTML | JSX |
+| --- | --- |
+| `onclick` | `onClick` |
+| `onchange` | `onChange` |
+| `tabindex` | `tabIndex` |
+| `maxlength` | `maxLength` |
+| `aria-label` | `aria-label`（`aria-*` と `data-*` はそのまま） |
+
+数は多いですが、書いて間違えたらエディタが赤線で教えてくれます。慣れの世界です。
+
+### 要素は 1 つしか返せない → フラグメント
+
+JSX のルールとして、コンポーネントは **1 つの要素** しか `return` できません。次のコードは動きません。
+
+```tsx
+// NG: 複数の要素を並べて返している
+function Broken() {
+  return (
+    <h1>タイトル</h1>
+    <p>本文</p>
+  );
+}
+```
+
+解決策は 2 つあります。
+
+#### (a) `<div>` で囲む
+
+```tsx
+function Ok1() {
+  return (
+    <div>
+      <h1>タイトル</h1>
+      <p>本文</p>
+    </div>
+  );
+}
+```
+
+単純ですが、意味のない `<div>` が DOM に増えてしまいます。
+
+#### (b) フラグメント `<>...</>`
+
+```tsx
+function Ok2() {
+  return (
+    <>
+      <h1>タイトル</h1>
+      <p>本文</p>
+    </>
+  );
+}
+```
+
+`<>` と `</>` はフラグメントと呼ばれる特殊なタグで、**DOM に何も出さずに** 中身だけを並べてくれます。余計な `<div>` を増やしたくないときに使います。
+
+本コースでは原則フラグメントを使います。
+
+### 複数行の JSX は `( ... )` で囲む
+
+`return` の後で改行したい場合は、全体を丸括弧で囲みます。
+
+```tsx
+function Multi() {
+  return (
+    <div>
+      <h1>タイトル</h1>
+      <p>本文</p>
+    </div>
+  );
+}
+```
+
+囲まないと「`return` の直後で改行」した時点で `undefined` が返ると解釈されて、JSX が実行されません。本コースの例はほぼ複数行なので、常に `(` で開く癖を付けておきます。
+
+### コメントの書き方
+
+JSX の中では、`{/* ... */}` のように書きます。
+
+```tsx
+function WithComment() {
+  return (
+    <div>
+      {/* ここはタイトル */}
+      <h1>タイトル</h1>
+    </div>
+  );
+}
+```
+
+JS のコメント `// ...` をそのまま書くと JSX として解釈されてしまうので、必ず `{/* ... */}` にします。
+
+### JSX は `React.createElement` に変換されている
+
+JSX はブラウザが直接理解できる文法ではありません。ビルド時に `React.createElement(...)` という関数呼び出しに変換されてから動きます。下のデモでは CDN から React を読み込み、**変換後の `React.createElement` を直接書いて** 同じ結果を出しています。`App` コンポーネントから返している「タグみたいに見えるもの」の正体はこの関数呼び出しだ、というイメージを掴んでください。
+
+<LiveDemo
+  height="240px"
+  :html="demoHtml"
+  :js="demoJs"
+/>
 
 ## 演習
 
@@ -122,69 +211,93 @@ createRoot(document.getElementById("root")!).render(
 
 ### ゴール
 
-- StackBlitz の React + Vite（TS）テンプレートから新しいプロジェクトを起動する
-- `src/App.tsx` を編集して「Hello, React」とあなたの名前を画面に表示する
-- `package.json` を開いて `scripts.dev` の値を確認する
+- 自分の名前と現在時刻を JSX で埋め込んで表示する
+- `className` で CSS を当てる
+- フラグメントで複数の要素を並べて返す
 
 ### 手順
 
-1. ブラウザで直リンク [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts) を開く（**Vite + React + TypeScript** のテンプレートが立ち上がる。本コースでは旧 Create React App ではなく必ずこの Vite 版を使う）
-2. 左のファイルツリーから `src/App.tsx` を開く
-3. 中身を下記の内容に書き換える
-4. 右のプレビューで確認する
+1. これまでの StackBlitz をそのまま使う（別プロジェクトを新規作成しても OK）
+2. `src/App.tsx` を書き換える
+3. `src/App.css` を書き換える（テンプレートに既にあるはず。なければ作る）
+4. 保存して画面を確認する
 
 ### `src/App.tsx`
 
 ```tsx
+import "./App.css";
+
 function App() {
-  const userName = "Alice";
+  const name = "Alice";
+  const now = new Date();
+  const hour = now.getHours();
+  const minute = now.getMinutes();
+
   return (
-    <div>
-      <h1>Hello, React</h1>
-      <p>こんにちは、{userName} さん</p>
-    </div>
+    <>
+      <h1 className="title">プロフィール</h1>
+      <p className="greeting">
+        こんにちは、{name} さん（{hour}:{minute}）
+      </p>
+      <p>来年は {20 + 1} 歳</p>
+      {/* フラグメントで複数要素を並べている */}
+    </>
   );
 }
 
 export default App;
 ```
 
-`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です。
+### `src/App.css`
+
+```css
+.title {
+  color: #2b7a78;
+}
+
+.greeting {
+  color: #333;
+  background-color: #f0f8f7;
+  padding: 8px 12px;
+  border-radius: 4px;
+}
+
+/* ダークモード */
+@media (prefers-color-scheme: dark) {
+  .title {
+    color: #7ec8c4;
+  }
+  .greeting {
+    color: #eee;
+    background-color: #1f2a2a;
+  }
+}
+```
 
 ### 期待出力
 
-プレビューに次の 2 行が表示されます。
+- 画面上部に `プロフィール` という見出し（緑寄りの色）
+- その下に `こんにちは、Alice さん（14:35）`（数字は現在の時分。薄い背景が付く）
+- さらに下に `来年は 21 歳`
 
-```
-Hello, React
-こんにちは、Alice さん
-```
-
-見出しの `Hello, React` が `<h1>` の大きな文字、`こんにちは、Alice さん` が `<p>` の通常の大きさで並びます。
+時刻は開いた時刻によって変わります。
 
 ### 変える
 
-- `const userName = "Alice";` の `"Alice"` をあなたの名前に書き換えて保存する。保存するとプレビューが自動で更新されることを確認する
-- `<h1>Hello, React</h1>` を `<h1>Hello, 世界</h1>` に変えて保存。これも即反映されるはず
+- `const name = "Alice";` をあなたの名前に変える
+- `className="greeting"` を `className="title"` に差し替えると、見出しのスタイルが段落にも当たる
+- フラグメントの `<>` を `<div>` に、`</>` を `</div>` に差し替えて、DevTools で違いを見る（`<div>` だと DOM に `div` が増える）
 
 ### 自分で書く
 
-- 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
-- 変数の型は今は書かなくてよい（3 章 でやった型注釈は、次の lesson で必要に応じて使う）
-
-### `package.json` を覗く小タスク
-
-1. 左のファイルツリーから `package.json` を開く
-2. `"scripts"` の中を見つける
-3. `"dev": "vite"` のような行があることを確認する
-
-StackBlitz が自動で走らせているのは、この `vite` コマンドです。手元で同じことをやるなら、ターミナルで `npm install` → `npm run dev` と打つ流れになります。
+- 変数 `hobby` を追加して「趣味は ○○ です」という `<p>` を増やす
+- `<p>` のどれかに `className="greeting"` を付けて色を変える
+- `{/* ここにコメント */}` を 1 行加えて、レンダリング結果に出ないことを確認する
 
 ## まとめ
 
-- React は「画面を今の状態から計算する」発想の道具。差分だけを DOM に反映する
-- 画面は**コンポーネント**（JSX を返す関数）の組み合わせで作る
-- Vite は開発サーバーとビルドを担当し、`npm run dev` で起動する
-- `package.json` の `scripts` セクションに、起動やビルドのコマンドがまとまっている
-- StackBlitz を使う限り、`npm install` も `npm run dev` も自動で走る。コマンドは知っておく程度で OK
-- 編集するのは基本的に `src/App.tsx`
+- JSX は「JS の中に書く HTML 風の文法」。裏で JS に変換される
+- `{式}` で JS の値を埋め込める。文（`if`、`for`）は書けない
+- `class` → **`className`**、属性はキャメルケース、自己閉じタグは `/`
+- コンポーネントは 1 つの要素しか返せない。並べたいときは **フラグメント `<>...</>`**
+- 複数行は `( ... )` で囲む。コメントは `{/* ... */}`

@@ -1,398 +1,483 @@
-# lesson110: Git の基本操作
+# lesson110: CI/CD パイプラインの設計
 
 ## ゴール
 
-- Git が「ファイルの履歴を残す」道具であることを説明できる
-- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
-- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
-- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
-- `.gitignore` でコミットしないファイルを除外できる
-- マージコンフリクトの解消手順を 1 度経験する
+- 「CI」と「CD」を正しく区別して語れる
+- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
+- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
+- Lighthouse CI で速度劣化を **PR 単位** で検知できる
+- Vercel の **Preview Deployment** とテストを連携できる
+
+::: tip 前提
+このレッスンは lesson109「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson109 を参照してください。
+:::
 
 ## 解説
 
-### Git とは
+### CI と CD の違い
 
-**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
+| 略 | 正式名称 | やること |
+|---|---|---|
+| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
+| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
 
-なぜ必要か:
+「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
 
-- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
-- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
-- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
-- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
+### パイプラインの基本構成
 
-2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
+```
+push / PR
+   ↓
+┌─────────┐  ┌─────────┐  ┌─────────┐
+│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
+└─────────┘  └─────────┘  └─────────┘
+        ↓        ↓        ↓
+        └────────┴────────┘
+                   ↓
+              ┌─────────┐
+              │  Build  │
+              └─────────┘
+                   ↓
+              ┌─────────┐
+              │ Deploy  │  ← main にマージされた時のみ
+              └─────────┘
+```
 
-### リポジトリ（repository）と作業ディレクトリ
+ポイント:
 
-- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
-- **作業ディレクトリ**: あなたが今編集しているファイル群
+- **lint / test / typecheck は並列**（独立しているので速い）
+- **build は依存** が解決した後（手戻りを早く検知）
+- **deploy は最後** にする
+- **PR では deploy しない**（preview deployment は別フロー）
 
-### `git init` で履歴管理を開始
+### GitHub Actions の最小パイプライン
 
-新規プロジェクトを Git 管理下に置くには:
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+```
+
+`needs:` で **前のジョブが成功した時だけ** 次に進みます。
+
+### キャッシュで速くする
+
+毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
+
+#### `actions/cache` で任意のディレクトリ
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: |
+      ~/.npm
+      .next/cache
+    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+    restore-keys: |
+      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+```
+
+Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
+
+::: warning キャッシュの落とし穴
+キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
+:::
+
+### マトリクスビルド
+
+複数の Node.js バージョン / OS で同時にテストする時に便利。
+
+```yaml
+test:
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, macos-latest, windows-latest]
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }} }
+    - run: npm ci
+    - run: npm test
+```
+
+これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
+
+### 並列の使いどころ
+
+- **Lint / Typecheck / Test を並列に**
+- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
+- **Storybook ビルドを別ジョブに**
+- **Cypress / Playwright を shard** で分割
+
+シャーディング例（Playwright）:
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    shard: [1, 2, 3, 4]
+steps:
+  - run: npx playwright test --shard=${{ matrix.shard }}/4
+```
+
+### CD（デプロイ）の戦略
+
+#### Vercel / Netlify / Cloudflare Pages を使うなら
+
+これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
+
+#### 自前でデプロイする時の最小例
+
+```yaml
+deploy:
+  if: github.ref == 'refs/heads/main'
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npm run build
+    - run: npm run deploy
+      env:
+        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
+
+### Vercel の Preview Deployment と組み合わせる
+
+Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
+
+- レビュアーが **動作確認しながら** レビューできる
+- E2E テストを **本番に近い環境** で走らせられる
+- Lighthouse CI を **プレビュー URL に対して** 実行できる
+
+#### プレビュー URL に E2E を回す
+
+```yaml
+e2e:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npx playwright install --with-deps
+    - name: Wait for Vercel preview
+      uses: patrickedqvist/wait-for-vercel-preview@v1
+      id: vercel
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        max_timeout: 300
+    - run: npx playwright test
+      env:
+        BASE_URL: ${{ steps.vercel.outputs.url }}
+```
+
+### Lighthouse CI
+
+PR 単位で **Lighthouse スコアの劣化** を検知します。
 
 ```bash
-mkdir my-project
-cd my-project
-git init
+npm install -D @lhci/cli
 ```
 
-`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
+`lighthouserc.json`:
 
-### 3 つのエリア（変更が辿る道）
-
-Git では変更が次の 3 段階を辿ります。
-
-```
-作業ディレクトリ          ステージング         リポジトリ（履歴）
-（編集中のファイル）  →  （add した変更）  →  （commit した変更）
-       │                      │                      │
-       └─ git add ─────────────                       │
-       └─ git commit -m "..." ────────────────────────┘
-```
-
-- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
-- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
-- **リポジトリ**: `git commit` で履歴に固定された状態
-
-### 基本コマンド
-
-#### `git status`: 今の状態を確認
-
-```bash
-git status
+```json
+{
+  "ci": {
+    "collect": {
+      "url": ["https://example.com/"],
+      "numberOfRuns": 3
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
+  }
+}
 ```
 
-未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
+GitHub Actions で:
 
-#### `git add`: ステージングに追加
-
-```bash
-git add file.txt        # 1 ファイル
-git add src/            # ディレクトリ全部
-git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
+```yaml
+lighthouse:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npx lhci autorun
 ```
 
-#### `git commit`: 履歴に固定
+スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
 
-```bash
-git commit -m "ボタンの色を変更"
+### シークレットの取り扱い
+
+- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
+- workflow ファイルに **平文で書かない**
+- **fork からの Pull Request** に対する `pull_request` トリガーでは **secrets は読めません**（空文字列になります）。これは「fork してきた攻撃者が悪意ある workflow を入れて secrets を盗む」サプライチェーン攻撃を防ぐためです。CI で secrets が必要な処理は「自分のリポジトリ内のブランチからの PR」だけで動くように分けます
+- `pull_request_target` を使うと fork PR でも secrets が読めますが、**fork の悪意あるコードがそのまま走るため極めて危険** です。利用は「ラベル付けや welcome コメント等、コードを実行しない処理に限る」のが鉄則です
+
+### 環境（Environment）の活用
+
+`environment: production` を指定すると:
+
+- Required reviewers（**承認が必要**）
+- Wait timer（**N 分待つ**）
+- Branch policy（**main 限定**）
+- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
+
+を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
+
+```yaml
+deploy-prod:
+  environment: production
+  runs-on: ubuntu-latest
+  steps: ...
 ```
 
-`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
+### 再利用可能な workflow
 
-#### `git log`: 履歴を見る
+組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
 
-```bash
-git log              # 詳しく見る
-git log --oneline    # 1 行ずつ簡潔に
-git log --graph      # ブランチをグラフで
-git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
+```yaml
+# .github/workflows/_node-ci.yml（呼ばれる側）
+on:
+  workflow_call:
+    inputs:
+      node-version: { type: string, default: "20" }
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: ${{ inputs.node-version }}, cache: npm }
+      - run: npm ci
+      - run: npm run lint && npm run test
 ```
 
-#### `git diff`: 変更内容を見る
-
-```bash
-git diff              # 作業ディレクトリ vs ステージング
-git diff --staged     # ステージング vs リポジトリ
-git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
+```yaml
+# 呼び出す側
+jobs:
+  ci:
+    uses: my-org/.github/.github/workflows/_node-ci.yml@main
+    with:
+      node-version: "22"
 ```
 
-### `.gitignore` でコミット対象を絞る
+### 失敗を早く検知するコツ
 
-`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
+- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
+- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
+- **`timeout-minutes`** を設定して暴走を止める
+- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
 
-`.gitignore`（プロジェクトルート）:
+### コスト管理
 
+GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
+
+- **キャッシュ** で `npm ci` の時間を削る
+- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
+- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
+
+```yaml
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "package*.json"
 ```
-# 依存パッケージ（巨大、再生成可能）
-node_modules/
-
-# ビルド成果物
-dist/
-build/
-
-# 環境変数（秘匿）。.env* で派生形（.env.local, .env.production.local など）も含めて除外
-.env
-.env.*
-!.env.example
-
-# OS のメタファイル
-.DS_Store
-Thumbs.db
-
-# エディタ
-.vscode/
-.idea/
-```
-
-`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。`.env.example` はテンプレートとしてコミットしたいので `!.env.example` で除外を打ち消しています。
-
-> **補足: `.env` を間違えて push したら revert ではなく secret rotation が先**: `.env` を 1 度でも push してしまうと、`git revert` で履歴を取り消しても **過去のコミットには値が残ったまま**で、git history を遡れば誰でも読めます。**まずやるべきは** 「漏れた値を無効化（rotation）すること」です。API キーは新しいキーに発行し直す、DB のパスワードを変える、トークンを revoke する。GitHub には自動で漏洩を検出する **secret scanning** や、push の時点で止める **push protection** がありますが、自分の責任範囲で値を rotate することが最優先です。履歴自体を消すには `git filter-repo` / `BFG Repo-Cleaner` などのツールが必要で、共有リポジトリでは全員に強制 push の調整が要るため、**「キーは漏れたものとして扱い、すぐ rotate する」のが現実的な初手**です。
-
-### ブランチ: 並行作業の単位
-
-**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
-
-#### ブランチを作って切り替える
-
-```bash
-# 旧来の書き方
-git branch feature/login
-git checkout feature/login
-
-# 現代の書き方（Git 2.23 以降推奨）
-git switch -c feature/login   # -c は「create」
-```
-
-`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
-
-#### ブランチを切り替える
-
-```bash
-git switch main
-git switch feature/login
-```
-
-`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
-
-#### ブランチを一覧
-
-```bash
-git branch          # ローカルブランチ
-git branch -a       # リモート含む全部
-```
-
-### マージ: ブランチを統合
-
-`feature/login` での作業が終わったら、main に統合します。
-
-```bash
-git switch main
-git merge feature/login
-```
-
-これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
-
-### マージコンフリクト
-
-両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
-
-```
-<<<<<<< HEAD
-const message = "こんにちは";
-=======
-const message = "Hello";
->>>>>>> feature/login
-```
-
-このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
-
-```js
-const message = "Hello, こんにちは";  // 例: 両方を統合
-```
-
-その後:
-
-```bash
-git add path/to/conflicted-file.js
-git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
-```
-
-### リモートリポジトリ（GitHub / GitLab）
-
-`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
-
-#### リモートを追加
-
-GitHub で空の repo を作って、ローカルから紐付け:
-
-```bash
-git remote add origin https://github.com/your-name/your-repo.git
-```
-
-`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
-
-#### push: ローカル → リモート
-
-```bash
-git push -u origin main
-```
-
-`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
-
-#### pull: リモート → ローカル
-
-```bash
-git pull origin main
-```
-
-これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
-
-#### fetch: リモートの内容だけ取得
-
-```bash
-git fetch origin
-```
-
-リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
-
-### よくある初学者のつまずき
-
-1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
-2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
-3. **main で直接作業**: ブランチを切る習慣を最初から
-4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
-
-### 設定の基本
-
-最初の 1 回だけ:
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "you@example.com"
-git config --global init.defaultBranch main
-```
-
-これがないと commit で「誰が」が記録できません。
 
 ## 演習
 
 ### ゴール
 
-- ローカルで Git リポジトリを作って commit を 3 回打つ
-- ブランチを作って別の変更を入れ、main にマージする
-- わざとコンフリクトを起こして解消する
+- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
+- キャッシュを効かせて 2 倍速にする
 
-### 途中から始める場合
-
-ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
-
-### 手順 1: リポジトリを初期化
+### 手順 1: ベースのプロジェクト
 
 ```bash
-mkdir git-practice
-cd git-practice
-git init
+npm create vite@latest cicd-sample -- --template react-ts
+cd cicd-sample
+npm install
+git init && git add . && git commit -m "init"
 ```
 
-### 手順 2: ファイルを作って 1 回目の commit
+GitHub にリポジトリを作って push。
 
-`README.md`:
+### 手順 2: scripts を整える
 
-```md
-# Git 練習用リポジトリ
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
+  }
+}
 ```
+
+ESLint 設定 / 簡単な test は省略可。
+
+### 手順 3: workflow
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
+```
+
+### 手順 4: PR を作って動作確認
 
 ```bash
-git add README.md
-git commit -m "README を追加"
+git checkout -b feature/test
+echo "// test" >> src/App.tsx
+git commit -am "test"
+git push -u origin feature/test
 ```
 
-### 手順 3: ファイルを増やして 2 回目の commit
-
-`hello.txt`:
-
-```
-Hello, Git!
-```
-
-```bash
-git status              # 変更が見える
-git add hello.txt
-git commit -m "hello.txt を追加"
-git log --oneline       # 2 件の履歴が見える
-```
-
-### 手順 4: ブランチで作業
-
-```bash
-git switch -c feature/greeting
-# hello.txt を編集 → 「Hello, Git! こんにちは。」 に
-git add hello.txt
-git commit -m "挨拶を日本語追記"
-```
-
-### 手順 5: main に切り替えて、main 側でも変更
-
-```bash
-git switch main
-# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」 に
-git add hello.txt
-git commit -m "ビックリマーク追加"
-```
-
-これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
-
-### 手順 6: マージ → コンフリクト発生
-
-```bash
-git merge feature/greeting
-```
-
-エラーが出ます:
-
-```
-Auto-merging hello.txt
-CONFLICT (content): Merge conflict in hello.txt
-Automatic merge failed; fix conflicts and then commit the result.
-```
-
-`hello.txt` を開くと:
-
-```
-<<<<<<< HEAD
-Hello, Git!! ビックリマーク追加
-=======
-Hello, Git! こんにちは。
->>>>>>> feature/greeting
-```
-
-両方を取り込むよう手動で編集:
-
-```
-Hello, Git!! こんにちは。ビックリマーク追加
-```
-
-```bash
-git add hello.txt
-git commit               # エディタが開く → 自動メッセージのまま保存
-git log --oneline --graph
-```
-
-ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
+PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
 
 ### 期待出力
 
-```
-*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
-|\
-| * abcdef0 (feature/greeting) 挨拶を日本語追記
-* | fedcba9 ビックリマーク追加
-|/
-* 7654321 hello.txt を追加
-* 0987654 README を追加
-```
+- 4 つのジョブが Actions のタブに並ぶ
+- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
+- どれか fail すると build が走らない（`needs:` のおかげ）
 
 ### 変える
 
-- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
-- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
-- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
+- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
+- マトリクスを使って Node 20 と 22 の両方でテストする
+- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
-- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
+- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
+- Vercel に連携して PR で Preview URL が作られる構成にする
+- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
+- `environment: production` で本番デプロイに承認ステップを入れる
 
 ## まとめ
 
-- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
-- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
-- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
-- `.gitignore` で `node_modules` / `.env` 等を除外
-- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
-- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
-- リモート: `remote add origin URL` / `push` / `pull` / `fetch`
+- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
+- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
+- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
+- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
+- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
+- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
+- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
+- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える

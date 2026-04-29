@@ -1,231 +1,212 @@
-# lesson84: Proxy で認証前処理
+# lesson84: Tailwind CSS の紹介
 
 ## ゴール
 
-- `proxy.ts` を使ってリクエストに割り込める
-- 認証状態（Cookie）に応じてリダイレクトできる
-- Node.js ランタイムで動くことと、軽量処理に留めるべき理由を理解する
-- `matcher` で適用範囲を絞れる
+- Tailwind CSS v4 の存在と基本的な使い方を知る
+- 本コースの「素の CSS で書く」方式との違いを説明できる
+- Next.js プロジェクトに Tailwind v4 を導入する手順を観察できる
+- 本コースを終えた後の「次のステップ」として判断できる
 
 ## 解説
 
-### Proxy とは
+### 本コースのスタンス
 
-**Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
+ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
 
-> Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
+一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
 
-配置ルール:
+**本コースの結論**: 「Tailwind は **次のステップ** として学ぶ選択肢」。本コースの自己紹介 / TODO プロジェクトには **持ち込みません**。
 
-- ファイル名は **`proxy.ts`**（または `.js`） 固定
-- 配置は **プロジェクトルート直下** または `src/` 直下（`app/` や `pages/` の横に置く）
-- 1 つのプロジェクトに 1 ファイルのみ
+### Tailwind CSS とは
 
-### 最小の proxy
+Tailwind は **ユーティリティファースト** の CSS フレームワークです。`margin: 16px` のような個別のスタイルをコード上に書かず、`m-4` のような短いクラス名を HTML に重ねて見た目を作ります。
 
-```ts
-// proxy.ts
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+素の CSS で書いたコード:
 
-export function proxy(request: NextRequest) {
-  // ここに前処理を書く
-  return NextResponse.next(); // 通常通りページを表示
+```html
+<div class="card">
+  <h2 class="card-title">タイトル</h2>
+  <p class="card-body">本文</p>
+</div>
+```
+
+```css
+.card {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+}
+.card-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+.card-body {
+  color: #666;
 }
 ```
 
-- 引数 `request` は `NextRequest`（通常の `Request` に Next.js 独自の機能を追加したもの）
-- export は **named `proxy` 関数** または **default export** のどちらかで書けます
-- 戻り値:
-  - `NextResponse.next()` → そのままページへ
-  - `NextResponse.redirect(url)` → リダイレクトする
-  - `NextResponse.rewrite(url)` → URL はそのままで別ページを表示（中身を差し替え）
+Tailwind で書くと:
 
-### `matcher` で適用範囲を絞る
-
-デフォルトでは **すべてのリクエスト** で proxy が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
-
-```ts
-export const config = {
-  matcher: ["/todos/:path*", "/admin/:path*"],
-};
+```html
+<div class="p-4 bg-white rounded-lg">
+  <h2 class="text-lg font-bold">タイトル</h2>
+  <p class="text-gray-600">本文</p>
+</div>
 ```
 
-- `/todos/:path*` は `/todos` と `/todos/*` の全部にマッチ
-- 静的アセット（画像・CSS）など余計なものを避ける
+CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た目を組み立てます。
 
-### Node.js ランタイムで動く
+長所:
 
-Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
+- クラス名の衝突がない（`.card` の名前を考えなくてよい）
+- 小さな変更が HTML 内で完結する
+- VS Code 拡張で補完が強い
 
-重要な指針:
+短所:
 
-- **重い処理は proxy に書かない**。ユーザー認証の JWT 署名検証や細かい権限チェックは Server Components / Server Actions に寄せる
-- proxy は「Cookie が無ければログインへ飛ばす」のような **トラフィック制御** に絞る
+- クラス名が長くなる
+- 「なぜこのプロパティなのか」が CSS の知識無しだと理解しづらい（だから本コースでは素の CSS から学んだ）
 
-「Route Handlers」と同じ Node.js ランタイム上で動きますが、**ページ本体の前に毎回走る** ぶん、オーバーヘッドが気になりやすい点に注意してください。
+### Tailwind v4 の特徴（2025 年 GA）
 
-### 本コースの範囲
+本レッスンは **Tailwind v4** 準拠で紹介します。v3 から **設定方法が大きく変わった** ため、古い記事のコピペは通用しません。
 
-本レッスンでは **最小形の認証前処理** だけを扱います。
+主な変更点:
 
-- Cookie `auth` がある → 通す
-- Cookie `auth` が無い → `/login` にリダイレクト
+- **CSS ファイル 1 行で導入**:
+  ```css
+  @import "tailwindcss";
+  ```
+  v3 の `@tailwind base; @tailwind components; @tailwind utilities;` の 3 行は廃止
+- **`init` コマンド廃止**: v3 の `npx tailwindcss init -p` で `tailwind.config.ts` を生成する手順は不要
+- **PostCSS プラグイン名の変更**: `postcss.config.mjs` に `@tailwindcss/postcss` を指定する
+- **Vite 用プラグイン**: Vite プロジェクトでは `@tailwindcss/vite`（PostCSS 経由ではない）
+- **パフォーマンス大幅改善**: ビルドが高速、開発時のホットリロードも速い
 
-本格的な認証（NextAuth、JWT 検証、セッション管理）は扱いません。「認証のガワを書く感じ」を体験するだけです。
+`create-next-app --tailwind` で新規プロジェクトを作ると、デフォルトで Tailwind v4 の設定が入ります。古いチュートリアルを見る前に、まずは `create-next-app` 生成物を観察するのが確実です。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`proxy.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
 
 ### ゴール
 
-- `/todos` にアクセスしたとき、Cookie `auth` が無ければ `/login` にリダイレクトする
-- `/login` ページで「ログイン」ボタンを押すと Cookie が立って `/todos` に戻れる
+- `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
+- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
 
 ### 手順
 
-1. これまでのプロジェクトを開く（5 章 のここまでの成果を引き継ぐ）
-2. `proxy.ts` をプロジェクトルート直下に新規作成
-3. `app/login/page.tsx` を新規作成
+1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
+2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
+3. プロジェクト内の以下のファイルを観察する
+   - `app/globals.css`
+   - `postcss.config.mjs`（または `.js`）
+   - `package.json` の `devDependencies`
+4. 任意で、`app/page.tsx` にユーティリティクラスを 1〜2 個書いてみる（`@theme` などカスタマイズは扱わない）
 
-### `proxy.ts`（プロジェクトルート直下）
+### `app/globals.css`（観察対象）
 
-```ts
-import { NextResponse } from "next/server";
-import type { NextRequest } from "next/server";
+Tailwind v4 の導入は、CSS ファイル冒頭に **この 1 行だけ**:
 
-export function proxy(request: NextRequest) {
-  const auth = request.cookies.get("auth");
-
-  if (!auth) {
-    // /login にリダイレクト
-    const loginUrl = new URL("/login", request.url);
-    return NextResponse.redirect(loginUrl);
-  }
-
-  return NextResponse.next();
-}
-
-export const config = {
-  matcher: ["/todos/:path*"],
-};
+```css
+@import "tailwindcss";
 ```
 
-ポイント:
+v3 の時代は 3 行書いていました:
 
-- `request.cookies.get("auth")` で Cookie を読む
-- `NextResponse.redirect(loginUrl)` でリダイレクト
-- `matcher` で `/todos` 配下だけに適用（`/` や `/about` は素通り）
+```css
+/* v3（古い、書かない） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
 
-### `app/login/page.tsx`（新規）
+v4 では `@import "tailwindcss";` に統合されています。
+
+### `postcss.config.mjs`（観察対象）
+
+```js
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
+};
+export default config;
+```
+
+v3 で必要だった `autoprefixer` は **v4 ではプラグイン内に内蔵** されたため、別途書かなくて済むようになりました。
+
+### `package.json` の `devDependencies`（観察対象）
+
+```json
+{
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
+```
+
+`tailwind.config.ts` は **v4 では原則不要**（デフォルト設定で十分）。カスタマイズしたい場合は CSS 内で `@theme { ... }` を書く方式に変わりました。本レッスンでは `@theme` の深掘りはしません。
+
+### 小さく試す（任意）
+
+生成されたプロジェクトの `app/page.tsx` を次のように書き換えて、Tailwind v4 のデフォルトパレットを試せます。
 
 ```tsx
-"use client";
-
-import { useRouter } from "next/navigation";
-
-export default function LoginPage() {
-  const router = useRouter();
-
-  function handleLogin() {
-    // Cookie をその場で立てる（max-age 1 時間）
-    document.cookie = "auth=1; path=/; max-age=3600";
-    // /todos に遷移
-    router.push("/todos");
-  }
-
+export default function Page() {
   return (
-    <main>
-      <h1>ログイン</h1>
-      <p>
-        本格認証は本コースでは扱いません。下のボタンで Cookie を立てて `/todos`
-        にアクセスできるようにします。
+    <main className="p-8 max-w-xl mx-auto">
+      <h1 className="text-3xl font-bold text-slate-800">Tailwind v4 の練習</h1>
+      <p className="mt-4 text-slate-600">
+        素の CSS なしで、クラス名だけで見た目を組み立てている。
       </p>
-      <button type="button" onClick={handleLogin}>
-        ログイン
+      <button className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+        ボタン
       </button>
     </main>
   );
 }
 ```
 
-ポイント:
+- `p-8`（padding 2rem）、`max-w-xl`（max-width）、`mx-auto`（水平中央寄せ）
+- `text-3xl`（フォントサイズ）、`font-bold`（太字）
+- `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
 
-- `"use client"` を付ける（`document.cookie` や `useRouter` を使うため）
-- ボタンクリックで `document.cookie` を直接書く
-- `useRouter().push("/todos")` で `/todos` に遷移
-
-### この演習の Cookie は「学習用」（本物のログインではない）
-
-上の `document.cookie = "auth=1; ..."` は **学習用の擬似ログイン** です。本物の認証では絶対にこの形にしません。理由は次の 3 点。
-
-1. **JavaScript から `document.cookie` で書ける Cookie は、ブラウザ側のすべての JS から読める**。XSS（任意の JS が走る攻撃）が成立すると即漏洩します。
-2. **`HttpOnly` フラグが付いていない**。本物の認証 Cookie には必ず `HttpOnly` を付けて、JS から読めないようにします。`HttpOnly` はサーバー側でしか付けられないため、`document.cookie` で立てた時点で「JS 可視」になっています。
-3. **`SameSite` / `Secure` が指定されていない**。CSRF / 中間者攻撃に対する基本防御が抜けています。
-
-実運用では、認証 Cookie はサーバー側（Server Action や Route Handler）で次のように発行します。
-
-```ts
-// Server Action / Route Handler 内で（例）
-import { cookies } from "next/headers";
-
-(await cookies()).set("session", token, {
-  httpOnly: true,        // JS から読めない
-  secure: true,          // HTTPS のみ送信
-  sameSite: "lax",       // 別オリジンからの送信を制限（CSRF 対策）
-  maxAge: 60 * 60 * 24,  // 1 日
-  path: "/",
-});
-```
-
-本コースでは認証フローには深入りしないため、この演習では学習用の擬似 Cookie を使いますが、**実装するときは「JS から `document.cookie` を書く」を絶対にしない** と覚えてください。本格的な認証は Auth.js / NextAuth など専用ライブラリに任せます。
+1 章で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが分かります。本コースで CSS の仕組みを先に押さえたのが効いてきます。
 
 ### 期待出力
 
-1. Cookie が何もない状態で `/todos` にアクセス → `/login` にリダイレクトされる
-2. 「ログイン」ボタンを押す → `/todos` に遷移、一覧が見える
-3. DevTools → Application → Cookies で `auth=1` が登録されているのが確認できる
-4. Cookie を削除してから `/todos` にアクセスし直す → また `/login` に戻される
+- 生成されたプロジェクトで、`@import "tailwindcss";` 1 行で Tailwind が動いていることを確認
+- `app/page.tsx` にユーティリティクラスを書くと、即座にスタイルが適用される
+- `tailwind.config.ts` が無いことを確認（デフォルトで動く）
 
-### 変える
+### 本コースのプロジェクトに入れない理由
 
-- Cookie 名を `session` に変えて、`proxy.ts` と `login/page.tsx` の両方を追随する
-- `matcher` を `["/todos/:path*", "/admin/:path*"]` に増やして、`/admin/page.tsx` を作り、そちらでもリダイレクトが効くことを確認
-- `NextResponse.redirect` を `NextResponse.rewrite` に変えて挙動の違いを見る（URL が書き換わらないで表示が変わる）
-- `export function proxy(...)` を `export default function(...)` に書き換えて、どちらでも動くことを確認
+本コースの自己紹介 / TODO プロジェクトには **Tailwind を持ち込みません**。理由:
 
-### 自分で書く
+- これまで素の CSS で書いた資産（`.site-header`、`.cards`、`.card` など）が多い
+- Tailwind に置き換えるには全 JSX を書き直す必要がある
+- 「学ぶ手段」として Tailwind を見るだけなら、別プロジェクトで十分
 
-- 「ログアウト」ボタンを `/login` に追加し、Cookie を消す:
-  ```ts
-  document.cookie = "auth=; path=/; max-age=0";
-  ```
-- `/todos` のページヘッダーに「ログイン中」と表示し、Cookie が無いとリダイレクトされるので逆に常に「ログイン中」しか出ないことを確認
+本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
 
-### Route Handlers との組み合わせ（発展）
+### 変える（任意）
 
-これまでのレッスンで作った `/api/todos` も、proxy で認証必須にできます。
+- 生成した Tailwind プロジェクトで `bg-blue-500` を `bg-green-500` / `bg-red-500` に変えて色の組を観察
+- `hover:` や `md:` などのプレフィックス（状態・ブレークポイント）を使ってみる
 
-```ts
-export const config = {
-  matcher: ["/todos/:path*", "/api/todos/:path*"],
-};
-```
+### 自分で書く（挑戦）
 
-これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「proxy で API も守れる」ことだけ押さえます。
-
-### Node.js ランタイムでの注意
-
-Next.js 16 から proxy は Node.js ランタイムで動くので、`fs` / `path` / ネイティブモジュールなどの Node API が使えます。ただし **proxy は毎リクエスト前に走る** ため、重い処理（DB 接続・大きな計算）は書かないでください。ファイル I/O や外部 API 呼び出しは Server Components / Server Actions / Route Handlers に寄せるのが原則です。
+- Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
+- 書き終えたら、1 章 の素の CSS 版（`docs/lessons/lesson12`）と見比べて **同じ見た目をどう表現しているか** 対比する
 
 ## まとめ
 
-- `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
-- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
-- `NextResponse.next` / `redirect` / `rewrite` で分岐
-- `matcher` で適用パスを絞る
-- Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
-- 本格認証は本コース外。擬似ログインで流れだけ掴む
+- Tailwind は「ユーティリティファースト」の CSS、クラス名だけで見た目を作る
+- v4（2025 GA）は `@import "tailwindcss";` 1 行で導入、`init` コマンドや `tailwind.config.ts` は原則不要
+- `create-next-app --tailwind` でデフォルトで v4 がセットアップされる
+- 本コースの自己紹介 / TODO プロジェクトには持ち込まない（素の CSS 資産を壊さないため）
+- 学ぶ意義を感じたら、本コース完走後に次のステップとして挑戦する

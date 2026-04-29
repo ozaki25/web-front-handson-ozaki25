@@ -1,96 +1,127 @@
-# lesson86: 小さなアプリを統合する
+# lesson86: Loading UI と Streaming
 
 ## ゴール
 
-- ここまでの知識を統合して「投稿できる TODO アプリ」の主要機能を組み上げます。
-- `/todos`（一覧 + 追加フォーム）、`/todos/[id]`（詳細）、`/about` の 3 ページが繋がった状態で動きます。
-- `export const metadata` でサイト共通タイトルを設定できます。
-- `searchParams`（Next.js 15 以降 Promise 化されている）から `?highlight=<id>` を受け取り、対象 TODO を黄色背景で目立たせられます。
+- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
+- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
+- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
+- React 19.2 + Next.js 16 の Server Component で Streaming がどう動くかを理解する
 
 ## 解説
 
-### 今まで作ってきたものを並べる
+### `loading.tsx` の役割
 
-2 章 で素の JS で作った TODO、4 章 の「TODO アプリを React で作る」で React + localStorage に移植した TODO、そして「Server Actions の最小形」「送信状態とエラー表示」で Server Actions 化した TODO。
+Server Component でデータを取得すると、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
 
-ここまでで以下が揃っています:
-
-- `app/layout.tsx`（「共通レイアウトを作る」）: ナビとフッターを含む共通レイアウト
-- `app/page.tsx`（「Next.js ってなに？」で作った形）: トップページ
-- `app/about/page.tsx`（「ページを増やしてリンクで移動する」）: 1 章 の自己紹介ページを移植
-- `app/posts/page.tsx` / `app/posts/[id]/page.tsx`（「Server Component でデータを取得する」「動的ルート」）: 練習用の記事一覧
-- `app/todos/page.tsx` + `app/todos/TodoForm.tsx`（「Server Actions の最小形」「送信状態とエラー表示」）: 追加フォーム付き一覧
-- `app/actions.ts`（「Server Actions の最小形」「送信状態とエラー表示」）: Server Actions
-
-このレッスンで足すものは次のとおりです:
-
-1. TODO の **詳細ページ** `/todos/[id]`
-2. 一覧からの削除ボタン
-3. ルートレイアウトの `metadata`（サイト共通の静的タイトル）
-4. `/todos?highlight=<id>` のハイライト表示（`searchParams` の初登場）
-
-### `export const metadata`（静的）
-
-ルートレイアウトや静的なページでは、`metadata` という名前の定数を `export` するとタイトル等が設定できます。
-
-```tsx
-// app/layout.tsx
-export const metadata = {
-  title: "TODO アプリ",
-  description: "Next.js App Router の学習用アプリ",
-};
+```
+app/
+└── posts/
+    ├── page.tsx       ← データ取得込みのページ
+    └── loading.tsx    ← 取得中に表示される
 ```
 
-`title` `description` 以外にも OG 画像などを指定できますが、本コースでは 2 つに留めます。
+- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
+- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
 
-### `searchParams` も Promise
+これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
 
-クエリ文字列（`?highlight=abc`）を受け取るのが `searchParams` です。Next.js 15 以降は `params` と同様に **Promise** になっています。
+### ルート単位のローディングだけだと粗い
+
+`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
+
+例: 記事ページに
+
+- 記事本文（速い、キャッシュ済み）
+- 関連記事（遅い、外部 API から取得）
+
+があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
+
+### 部分的 Streaming: `<Suspense>` で囲む
+
+遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
 
 ```tsx
-export default async function TodosPage({
-  searchParams,
-}: PageProps<"/todos">) {
-  const { highlight } = await searchParams;
-  // highlight は string | undefined
+// app/posts/[id]/page.tsx
+import { Suspense } from "react";
+import RelatedPosts from "./RelatedPosts";
+
+export default async function PostPage() {
+  return (
+    <>
+      <h1>記事本文（すぐ出る）</h1>
+      <p>...本文...</p>
+
+      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
+        <RelatedPosts />
+      </Suspense>
+    </>
+  );
 }
 ```
 
-- `PageProps<"/todos">` のグローバル型が `searchParams` を `Promise<{ [key: string]: string | string[] | undefined }>` として推論します。`?highlight=abc` のようなクエリを取り出すときは `await searchParams` してから `highlight` を読みます。
-- `?highlight=abc&foo=bar` のように複数指定されていれば、それぞれのキーが文字列として届きます。
-- 同じキーが複数個（`?foo=1&foo=2`）あると配列になりますが、本レッスンでは扱いません。
+- `<h1>` と `<p>` は先にブラウザに届く
+- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
+- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
 
-#### `PageProps<"/...">` グローバル型について
+これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
 
-`PageProps<"/todos">` は **Next.js 16 が `.next/types/` 配下に自動生成するグローバル型** で、`import` 不要で使えます。これは `tsconfig.json` の `include` に `.next/types/**/*.ts` が入っている前提で動きます（StackBlitz の Next.js テンプレートはこの設定が入っているのでそのまま動きます）。
+### `loading.tsx` と `<Suspense>` の棲み分け
 
-**初回 `npm run dev` を立ち上げる前にエディタが赤線を出すこと** がありますが、起動して `.next/types` が生成されれば消えます。
+ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
 
-### `searchParams` は外部入力扱い
+- **`loading.tsx`**（ルート単位）: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
+- **`<Suspense>`**（コンポーネント単位）: ページの中で遅い領域だけを個別に待たせる
 
-`searchParams` の値は **URL のクエリ文字列** なので、攻撃者を含めた任意のユーザーが好きな値を入れられます。「サーバーが渡してきた信頼できるデータ」ではなく、`fetch` のレスポンスや `<form>` の入力と同じ **外部入力** として扱います。具体的には次の 3 点を守ります。
+両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
 
-1. **画面に出すだけなら React に任せる**: JSX 内で `{highlight}` のように埋めると React が自動で HTML エスケープします。XSS は出ません。
-2. **`<a href={...}>` や別の URL に組み込むときは `encodeURIComponent`**: `highlight` を別画面の URL に転用するなら、`encodeURIComponent(highlight)` でエンコードしてから埋めます。素直に文字列連結すると `?` や `&` が攻撃に使われます。
-3. **`dangerouslySetInnerHTML` には絶対渡さない**: 名前のとおり危険です。`searchParams` の値をここに渡すと XSS が成立します。
+### `error.tsx` との関係
 
-「同じキーが複数個」「想定外に長い文字列」も外部入力ゆえに起こります。値を使う前に `Array.isArray(highlight)` をチェックする、長さ上限で切り捨てる、既知の値（DB の id）と照合してから使う、といった**入り口での検証**を入れるのが堅い書き方です。
+「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
 
-### 学習用の in-memory 配列は本番で破綻する
+| 何が起きた？ | 担当ファイル |
+|---|---|
+| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
+| 取得に失敗・例外が飛んだ | `error.tsx` |
 
-このレッスンの演習では `const todos: Todo[] = [];` のように **ファイル先頭の配列** を「保存先」として使っています。学習中は動きますが、本番デプロイ後は次の理由で **追加した TODO が消える** 現象に直撃します。
+両方置いておくのが実用的な構成です。
 
-- Vercel など **サーバーレス環境** ではリクエストごとに別インスタンスで動くことがあり、配列がリセットされる
-- インスタンスが**複数並行**で動くと、ユーザー A が追加した TODO がユーザー B のインスタンスには見えない
-- **コールドスタート**でインスタンスが落ちると配列ごと消える
+```
+app/
+└── posts/
+    ├── page.tsx
+    ├── loading.tsx
+    └── error.tsx
+```
 
-実務では **DB**（Postgres / SQLite / D1 など）や **KV**（Vercel KV / Upstash）、ユーザー単位なら `cookies()` 経由のセッションに永続化します。本コースでは概念に集中するため in-memory のままです。
+### スケルトン UI を返すコツ
+
+`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
+
+- 見出しの位置にグレーのバー
+- 本文の位置に複数の細いバー
+- 画像の位置に正方形のプレースホルダ
+
+これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
+
+### 実行順のイメージ
+
+`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+
+1. ブラウザが `/posts/1` にアクセス
+2. Server が `page.tsx` を評価し始める
+3. `<h1>` と `<p>` の部分は即座に生成される
+4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
+5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
+6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
+7. ブラウザが追加分を受け取り、`fallback` を置き換える
+
+「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「共通レイアウトを作る」の共通レイアウト、「Server Actions の最小形」の Server Actions、「送信状態とエラー表示」の `useActionState` / `useFormStatus` が揃っている想定です。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
 
 <details>
 <summary>出発点のファイル</summary>
@@ -100,11 +131,6 @@ export default async function TodosPage({
 ```tsx
 import type { ReactNode } from "react";
 import Link from "next/link";
-import "./globals.css";
-
-export const metadata = {
-  title: "My Next App",
-};
 
 export default function RootLayout({
   children,
@@ -114,25 +140,12 @@ export default function RootLayout({
   return (
     <html lang="ja">
       <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/streaming">Streaming</Link>
+        </nav>
+        {children}
       </body>
     </html>
   );
@@ -142,446 +155,144 @@ export default function RootLayout({
 **`app/page.tsx`**
 
 ```tsx
-export default function Page() {
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
-    </>
-  );
-}
-```
-
-**`app/about/page.tsx`**（「ページを増やしてリンクで移動する」で作った自己紹介ページ。省略可）
-
-**`app/types.ts`**
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-**`app/actions.ts`**
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-```
-
-**`app/todos/TodoForm.tsx`**
-
-```tsx
-"use client";
-
-import { useActionState } from "react";
-import { useFormStatus } from "react-dom";
-import { addTodo, type AddTodoState } from "../actions";
-
-const initialState: AddTodoState = {};
-
-function SubmitButton() {
-  const { pending } = useFormStatus();
-  return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
-  );
-}
-
-export function TodoForm() {
-  const [state, formAction, isPending] = useActionState(addTodo, initialState);
-
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
-      {state.error && <p className="error">{state.error}</p>}
-      {isPending && <p>通信中...</p>}
-    </form>
-  );
-}
-```
-
-**`app/todos/page.tsx`**
-
-```tsx
-import { listTodos } from "../actions";
-import { TodoForm } from "./TodoForm";
-
-export default async function TodosPage() {
-  const todos = await listTodos();
-
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
-  );
-}
-```
-
-**`app/globals.css`**（「共通レイアウトを作る」と「送信状態とエラー表示」で書いた共通 CSS + `.error` スタイル）
-
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
-
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
-
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
-
-.error {
-  color: #c00;
-  background: #ffe8e8;
-  padding: 0.5rem;
-  border-radius: 4px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
-  }
-  .site-header a {
-    color: #4ea2ff;
-  }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-  .error {
-    color: #ffb0b0;
-    background: #4a1d1d;
-  }
+export default function Home() {
+  return <h1>Home</h1>;
 }
 ```
 
 </details>
 
-### 前回のプロジェクトを開く
+### ゴール
 
-「送信状態とエラー表示」で作ったプロジェクトを開き直しましょう。
+- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
+- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
+- fetch が終わると fallback が実データに置き換わる
 
-### 手順 1: 削除アクションを追加する
+### 手順
 
-`app/actions.ts` に `deleteTodo` を追加します。
+1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
+2. `app/streaming/loading.tsx` を置く
+3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
+4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
+5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
 
-```ts
-"use server";
+### 主要ファイルの完成形
 
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export type AddTodoState = { error?: string };
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
-}
-
-export async function getTodo(id: string): Promise<Todo | undefined> {
-  return todos.find((t) => t.id === id);
-}
-
-export async function addTodo(
-  prevState: AddTodoState,
-  formData: FormData,
-): Promise<AddTodoState> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { error: "空のまま追加はできない" };
-  }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return {};
-}
-
-export async function deleteTodo(formData: FormData) {
-  const id = String(formData.get("id") ?? "");
-  const index = todos.findIndex((t) => t.id === id);
-  if (index >= 0) {
-    todos.splice(index, 1);
-  }
-  revalidatePath("/todos");
-}
-```
-
-- `getTodo(id)` は詳細ページで使います。
-- `deleteTodo` は `FormData` から `id` を取り出し、`splice` で削除します。同じく Server Action です。
-- 削除用フォームは `useActionState` を使わない（戻り値不要）ので `(formData) => void` のシンプルな形です。
-
-### 手順 2: 一覧ページで削除ボタンを出す + ハイライト対応
-
-`app/todos/page.tsx` を書き換えます。`searchParams` を受け取って、ハイライトする行に `className` を付けます。
+**`app/streaming/page.tsx`**
 
 ```tsx
-import { listTodos, deleteTodo } from "../actions";
-import { TodoForm } from "./TodoForm";
-import Link from "next/link";
+import { Suspense } from "react";
+import RelatedPosts from "./RelatedPosts";
+import { PostsSkeleton } from "./skeleton";
 
-export default async function TodosPage({
-  searchParams,
-}: PageProps<"/todos">) {
-  const { highlight } = await searchParams;
-  const todos = await listTodos();
-
+export default function StreamingPage() {
   return (
-    <>
-      <h1>TODO 一覧</h1>
-      <TodoForm />
-      <ul className="todo-list">
-        {todos.map((todo) => (
-          <li
-            key={todo.id}
-            className={todo.id === highlight ? "todo-item todo-item--highlight" : "todo-item"}
-          >
-            <Link href={`/todos/${todo.id}`}>{todo.text}</Link>
-            <form action={deleteTodo} style={{ display: "inline" }}>
-              <input type="hidden" name="id" value={todo.id} />
-              <button type="submit">削除</button>
-            </form>
-          </li>
-        ))}
-      </ul>
-      {todos.length === 0 && <p>まだ 1 件もない。上のフォームから追加する。</p>}
-    </>
-  );
-}
-```
-
-ポイント:
-
-- `PageProps<"/todos">` のグローバル型が `searchParams` を Promise として推論するので、`await searchParams` で `highlight` を取り出します。
-- `todo.id === highlight` のときだけ `todo-item--highlight` クラスを足します。
-- 削除ボタンは `<form action={deleteTodo}>` の中に `<input type="hidden" name="id" value={todo.id} />` を仕込みます。ボタンを押すと `deleteTodo(formData)` が呼ばれます。
-- 詳細ページへのリンクも `<Link href={`/todos/${todo.id}`}>` で追加します。
-
-### 手順 3: CSS でハイライト
-
-`app/globals.css` に以下を追加します。
-
-```css
-.todo-list {
-  list-style: none;
-  padding: 0;
-}
-
-.todo-item {
-  padding: 0.5rem;
-  border-bottom: 1px solid #ddd;
-  display: flex;
-  justify-content: space-between;
-  gap: 1rem;
-}
-
-.todo-item--highlight {
-  background: #fff3a3;
-}
-
-@media (prefers-color-scheme: dark) {
-  .todo-item {
-    border-bottom-color: #333;
-  }
-  .todo-item--highlight {
-    background: #665c1e;
-    color: #fff;
-  }
-}
-```
-
-- 黄色背景 `#fff3a3` がハイライトです（ダーク時は濃い黄土色 `#665c1e` + 白文字で視認性を確保します）。
-
-### 手順 4: 詳細ページ `/todos/[id]` を作る
-
-`app/todos/[id]/page.tsx` を新規作成します。
-
-```tsx
-import { notFound } from "next/navigation";
-import Link from "next/link";
-import { getTodo } from "../../actions";
-
-export default async function TodoDetailPage({
-  params,
-}: PageProps<"/todos/[id]">) {
-  const { id } = await params;
-  const todo = await getTodo(id);
-
-  if (!todo) {
-    notFound();
-  }
-
-  return (
-    <>
-      <h1>Todo 詳細</h1>
-      <p>ID: {todo.id}</p>
-      <p>内容: {todo.text}</p>
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <h1>Streaming デモ</h1>
       <p>
-        <Link href={`/todos?highlight=${todo.id}`}>一覧でハイライトして見る</Link>
+        このテキストと見出しは <strong>すぐに</strong> 表示されます。
+        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
       </p>
-      <p>
-        <Link href="/todos">一覧に戻る</Link>
-      </p>
-    </>
+
+      <h2>関連記事</h2>
+      <Suspense fallback={<PostsSkeleton />}>
+        <RelatedPosts />
+      </Suspense>
+
+      <p>フッター（これも先に出ます）</p>
+    </div>
   );
 }
 ```
 
-ポイント:
-
-- 見つからないときは `notFound()` を呼びます（「エラーと見つからないページ」と同じです）。
-- `<Link href={`/todos?highlight=${todo.id}`}>` で、一覧のハイライト付き URL に飛べます。
-- ここではブラウザのタブが共通の「TODO アプリ」のままで OK です。
-
-### 手順 5: 詳細ページの `not-found.tsx`
-
-`app/todos/[id]/not-found.tsx`:
+**`app/streaming/RelatedPosts.tsx`**
 
 ```tsx
-import Link from "next/link";
-
-export default function TodoNotFound() {
-  return (
-    <>
-      <h1>Todo が見つからない</h1>
-      <p>指定された ID の Todo は存在しない（または削除された）。</p>
-      <Link href="/todos">一覧に戻る</Link>
-    </>
-  );
-}
-```
-
-### 手順 6: ルートレイアウトの `metadata`
-
-`app/layout.tsx` の `metadata` を書き換えます。
-
-```tsx
-export const metadata = {
-  title: "TODO アプリ",
-  description: "Next.js App Router の学習用 TODO アプリ",
+type Post = {
+  id: number;
+  title: string;
 };
+
+export default async function RelatedPosts() {
+  // わざと 2 秒待つ
+  await new Promise((r) => setTimeout(r, 2000));
+
+  // Next.js 16 では fetch の既定が no-store なので明示は不要だが、
+  // 「キャッシュしない」を明示したい場合の書き方として残している。
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts?_limit=3"
+  );
+  const posts: Post[] = await res.json();
+
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  );
+}
 ```
 
-これでブラウザのタブに「TODO アプリ」と表示されます。`title.template` を使うとページごとに `%s | TODO アプリ` のように共通サフィックスを付けられますが、これは「Metadata API で SEO を整える」で深掘りします。
+**`app/streaming/skeleton.tsx`**
+
+```tsx
+export function PostsSkeleton() {
+  return (
+    <ul style={{ listStyle: "none", padding: 0 }}>
+      {[0, 1, 2].map((i) => (
+        <li
+          key={i}
+          style={{
+            height: 16,
+            margin: "8px 0",
+            background: "#e5e5e5",
+            borderRadius: 4,
+          }}
+        />
+      ))}
+    </ul>
+  );
+}
+```
+
+**`app/streaming/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return (
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
+    </div>
+  );
+}
+```
 
 ### 期待出力
 
-1. `/todos` を開く → TODO 一覧が表示されます。0 件なら「まだ 1 件もない」のメッセージが出ます。
-2. 「買い物」「課題」「運動」を順に追加 → 3 件の一覧が出ます。各項目は詳細リンクと削除ボタン付きです。
-3. タブのタイトルはどのページでも「TODO アプリ」です。
-4. 「買い物」をクリック → `/todos/<id>` に遷移します。詳細が表示されます。
-5. 「一覧でハイライトして見る」をクリック → `/todos?highlight=<id>` に飛び、その行だけ **黄色背景** になります。
-6. 一覧で「削除」ボタンを押す → その 1 件が消えます。
-7. 削除した ID で直接 `/todos/<削除済み id>` にアクセス → `not-found.tsx` の「Todo が見つからない」が表示されます。
-8. `/about` は 1 章 の自己紹介ページです。
-9. ナビから 3 ページを行き来できます。
+1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
+2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
+3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
+4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
 
-### 動作確認チェックリスト
+DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
 
-- [ ] 空入力で追加ボタン → 「空のまま追加はできない」が表示される（「送信状態とエラー表示」の成果）
-- [ ] 送信中はボタンが disabled になる（「送信状態とエラー表示」の成果）
-- [ ] 追加 → 一覧が自動で更新される（`revalidatePath` の成果）
-- [ ] 削除 → 該当 1 件だけが消える
-- [ ] `/todos?highlight=<id>` でその行だけ黄色背景
-- [ ] `/todos/<id>` の詳細ページのタブタイトルが動的に変わる
-- [ ] `/todos/not-a-real-id` で `not-found.tsx` が出る
-- [ ] `/about` が1 章 の自己紹介と同じ見た目で出る
+### 変える
 
-### 変えてみる
+- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
+- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
+- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
 
-1. `<input type="hidden" name="id">` の値を書き換えて送信してみましょう（DevTools で編集）→ 存在しない ID になっても `deleteTodo` 側で `findIndex` が `-1` を返すので何も起きないことを確認します。
-2. ルートレイアウトの `metadata.title` を `{ default: "TODO アプリ", template: "%s | TODO アプリ" }` に変えると、子ページで `metadata.title` を設定したときに自動でサフィックスが付きます。
-3. ハイライトを `?highlight=<id>&mode=loud` のように 2 つ目のクエリで太字にする演習です。`searchParams` の型に `mode?: string` を追加し、`mode === "loud"` なら `<strong>` で囲みます。
+### 自分で書く
 
-### 自分で書く（応用）
-
-TODO に「完了」のフラグを追加する演習です。
-
-- `types.ts` の `Todo` 型に `done: boolean` を追加します。
-- `actions.ts` に `toggleDone(formData: FormData)` を追加し、`id` を受け取って該当 Todo の `done` を反転させます。
-- 一覧の各項目に「完了」ボタンを足し、`<form action={toggleDone}>` で呼び出します。
-- 完了済みの項目はテキストに `text-decoration: line-through` を当てます（CSS に `.todo-item--done` を追加）。
-
-実装の流れは「hidden input で id を渡す → サーバー側で配列を書き換える → `revalidatePath` で再レンダリング」が共通パターンです。「Server Actions の最小形」「送信状態とエラー表示」でやったことの応用です。
+- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
+- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
+- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
 
 ## まとめ
 
-- App Router では `app/` 配下のディレクトリ構造がそのままサイトの URL になり、複数ページを 1 つのレイアウトで束ねられる。
-- ルートレイアウトの静的 `metadata` でサイト共通のタブタイトルを設定できる。
-- `PageProps<"/...">` で URL クエリ（`searchParams`）を受け取り、`await` してから画面に反映できる。`searchParams` は外部入力なので React 経由の埋め込みに留めるか `encodeURIComponent` で必ずエスケープする。
-
-### レイアウトのおさらい
-
-このレッスンまでの `app/` 以下は、おおよそ次の形になっているはずです。
-
-```
-app/
-├── layout.tsx                # 共通レイアウト (Server)
-├── page.tsx                  # トップ (Server)
-├── globals.css
-├── actions.ts                # Server Actions
-├── types.ts                  # Todo 型
-├── components/               # 共通部品
-│   ├── Counter.tsx           # 「Server Component と Client Component」で作った Client コンポーネント
-│   ├── ClientBox.tsx
-│   └── ServerInfo.tsx
-├── about/
-│   ├── page.tsx              # 自己紹介 (Server)
-│   └── about.css
-├── todos/
-│   ├── page.tsx              # TODO 一覧 (Server)
-│   ├── TodoForm.tsx          # 追加フォーム (Client)
-│   └── [id]/
-│       ├── page.tsx          # TODO 詳細 (Server)
-│       └── not-found.tsx
-└── posts/                    # 記事一覧ページの練習用
-    ├── page.tsx
-    ├── loading.tsx
-    └── [id]/
-        ├── page.tsx
-        ├── error.tsx
-        └── not-found.tsx
-```
-
-不要になった練習用ページは消しても、残しても構いません。残すと Vercel 公開後も色々見られて面白いです。
+- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
+- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
+- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
+- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
+- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける

@@ -1,589 +1,497 @@
-# lesson129: Server Components の設計論
+# lesson129: OGP と SEO 実践
 
 ## ゴール
 
-- 「**どこまでサーバー、どこから Client**」の判断軸を持てる
-- データ取得とインタラクションの **分離** が説明できる
-- Server Actions と Client Component の **協調パターン** を書ける
-- よくある設計ミス（巨大 Client Component / 不要なシリアライズ）を避けられる
-- 自分の Next.js プロジェクトで Server / Client の境界設計を整理できる
-
-::: tip 前提
-このレッスンは「Server Component と Client Component」「Server Component でデータ取得」「Server Actions の最小形」の発展編です。基本概念はそれぞれのレッスンで確認してください。
-:::
+- OGP（Open Graph）タグと Twitter Card で **シェアされた時の見栄え** を制御できる
+- Next.js の Metadata API（**Metadata API のレッスン**の発展）で OGP を動的に生成できる
+- `sitemap.xml` と `robots.txt` の役割と Next.js での生成方法を知る
+- JSON-LD（構造化データ）でリッチリザルトを狙える
+- Google Search Console の使い方が分かる
 
 ## 解説
 
-### Server / Client の境界判断
+### OGP（Open Graph Protocol）
 
-Next.js App Router では **すべてのコンポーネントがデフォルトで Server Component**。Client Component にしたい時に **`"use client"`** を明示します。
+Twitter（X）/ Facebook / LINE / Slack / Discord などで URL を共有した時、**タイトル + 説明 + 画像** がカード形式で表示されます。これを制御するのが OGP です。
 
-判断の **基本原則**:
+```html
+<head>
+  <title>記事のタイトル</title>
+  <meta property="og:title" content="記事のタイトル" />
+  <meta property="og:description" content="この記事は OGP の使い方について書きます" />
+  <meta property="og:image" content="https://example.com/og.png" />
+  <meta property="og:url" content="https://example.com/post/1" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="My Blog" />
 
-1. **デフォルトは Server**（バンドルから外せて速い）
-2. **状態 / イベントが必要な葉だけ Client**（最小限）
-3. **Client は子に Client / Server を持てるが、Server を import するなら children prop 経由**
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@my_handle" />
+</head>
+```
 
-### Client Component が必要な合図
+ポイント:
 
-次のいずれかが要るなら Client Component:
+- `og:image` は **絶対 URL** を渡す（相対パスは効かない）
+- 画像サイズは **1200 x 630px** が推奨（Twitter / Facebook 共通）
+- `og:type` は `website` / `article` / `book` / `profile` などから選ぶ
+- Twitter Card は OGP を補完する。`summary_large_image` で大きく表示
 
-- `useState` / `useReducer` で **state を持つ**
-- `useEffect` で **副作用** を行う
-- `onClick` / `onChange` などの **イベントハンドラ**
-- `useRef` / `useContext` などの Hook
-- ブラウザ API（`window` / `localStorage` / `navigator`）
+### Next.js の Metadata API（おさらい + 発展）
 
-それ以外は **Server Component に置いた方が良い**:
+**Metadata API のレッスン** で `metadata` を export する書き方を扱いました。OGP も同じ仕組みで書けます。
 
-- データ取得（DB / 外部 API）
-- マークダウンや HTML のレンダリング
-- 認証情報を使う処理（Cookie 読み取り）
-- フォントやレイアウト
+```ts
+// app/blog/[slug]/page.tsx
+import type { Metadata } from "next";
 
-### 「Client Component が大きすぎる」アンチパターン
+type Props = { params: Promise<{ slug: string }> };
 
-**よくある失敗**: ページ全体を Client Component にしてしまう。
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPost(slug);
+  return {
+    title: post.title,
+    description: post.excerpt,
+    openGraph: {
+      title: post.title,
+      description: post.excerpt,
+      url: `https://example.com/blog/${slug}`,
+      siteName: "My Blog",
+      images: [
+        {
+          url: post.coverImage,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+      type: "article",
+      publishedTime: post.publishedAt,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.excerpt,
+      images: [post.coverImage],
+      creator: "@my_handle",
+    },
+  };
+}
+```
+
+### `metadataBase` を必ず指定
+
+OGP の画像 URL を相対パスで書きたい時は、**ルートで `metadataBase`** を指定します。
+
+```ts
+// app/layout.tsx
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+};
+```
+
+これがないと相対パスが効かず、開発時のローカル URL（`http://localhost:3000`）が混入する事故が起きます。
+
+### 動的 OGP 画像（`opengraph-image.tsx`）
+
+Next.js 13.3+ から、**ファイルベースで OGP 画像を生成** できます。
 
 ```tsx
-// app/page.tsx
-"use client";  // 危険信号
+// app/blog/[slug]/opengraph-image.tsx
+import { ImageResponse } from "next/og";
 
-export default function HomePage() {
-  // すべての処理がブラウザに送られる
-  return (
-    <div>
-      <Header />
-      <Hero />
-      <FeatureList />     {/* 静的でも Client */}
-      <Counter />          {/* これだけ state が必要 */}
-      <Footer />
-    </div>
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default async function OG({ params }: { params: { slug: string } }) {
+  const post = await getPost(params.slug);
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: 60,
+          background: "linear-gradient(135deg, #1e3a8a, #06b6d4)",
+          color: "white",
+        }}
+      >
+        <div style={{ fontSize: 64, fontWeight: 700 }}>{post.title}</div>
+        <div style={{ fontSize: 32, marginTop: 24, opacity: 0.85 }}>
+          {post.excerpt}
+        </div>
+      </div>
+    ),
+    { ...size },
   );
 }
 ```
 
-**バンドルサイズが膨らむ**、**SEO に悪い**、**ハイドレーション** が遅い。
+これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動き、軽量。
 
-### 改善: Client は **葉に閉じ込める**
+### `sitemap.xml`
+
+検索エンジンに「**このサイトにこういう URL があるよ**」と教えるファイル。Google は基本クロールで見つけてくれますが、**サイトが大きい / 内部リンクが少ない** 場合は sitemap が大事です。
+
+#### Next.js の `app/sitemap.ts`
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const posts = await getAllPosts();
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    ...posts.map((p) => ({
+      url: `https://example.com/blog/${p.slug}`,
+      lastModified: p.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
+  ];
+}
+```
+
+ビルド時に `/sitemap.xml` が自動生成されます。
+
+#### 巨大サイトでは分割
+
+URL が 50,000 件 / 50MB を超える場合は **sitemap index** に分割します。Next.js では `app/sitemap.ts` を `[id]/sitemap.ts` 配列で複数 export することで対応できます。
+
+### `robots.txt`
+
+クローラーへの指示。`/admin` などをクロールから除外します。
+
+#### Next.js の `app/robots.ts`
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin/", "/api/"],
+      },
+    ],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
+
+ビルドで `/robots.txt` が自動生成されます。
+
+::: warning robots.txt は「お願い」
+robots.txt は **善意のクローラーが従う** だけで、強制力はありません。本当に隠したい URL は **認証で守る** / **`X-Robots-Tag: noindex` ヘッダ** / **`<meta name="robots" content="noindex">`** を使います。
+:::
+
+### 構造化データ（JSON-LD）
+
+検索結果に **リッチリザルト**（評価星 / レシピ写真 / FAQ アコーディオンなど）を出すための仕組み。Schema.org のスキーマを **JSON-LD** で埋め込みます。
+
+#### 記事（Article）
 
 ```tsx
-// app/page.tsx（Server Component）
-import Header from "@/components/Header";
-import Hero from "@/components/Hero";
-import FeatureList from "@/components/FeatureList";
-import Counter from "@/components/Counter";  // Client
-import Footer from "@/components/Footer";
+// app/blog/[slug]/page.tsx
+export default async function Page({ params }: Props) {
+  const { slug } = await params;
+  const post = await getPost(slug);
 
-export default function HomePage() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.excerpt,
+    image: post.coverImage,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt,
+    author: { "@type": "Person", name: post.author },
+  };
+
   return (
-    <div>
-      <Header />
-      <Hero />
-      <FeatureList />
-      <Counter />
-      <Footer />
-    </div>
+    <article>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>{post.title}</h1>
+      {/* ... */}
+    </article>
   );
 }
 ```
 
-```tsx
-// components/Counter.tsx
-"use client";
-import { useState } from "react";
+#### よく使うスキーマ
 
-export default function Counter() {
-  const [n, setN] = useState(0);
-  return <button onClick={() => setN(n + 1)}>{n}</button>;
-}
-```
-
-**Counter だけ** がブラウザに送られ、他は Server で解決される。
-
-### Server Component から Client Component に **データを渡す**
-
-これは普通に **props で渡す** だけです。**渡せるのは serializable な値のみ**:
-
-| 渡せる | 渡せない |
+| `@type` | 用途 |
 |---|---|
-| 文字列 / 数値 / boolean / null / undefined | 関数 |
-| 配列 / プレーンオブジェクト | クラスインスタンス |
-| Date / Map / Set | Symbol（一部例外） |
-| Promise（React 19 以降） | DOM ノード |
+| `Article` / `BlogPosting` / `NewsArticle` | 記事 |
+| `Product` | EC 商品（価格 / 在庫） |
+| `Recipe` | レシピ |
+| `FAQPage` | よくある質問（手風琴 UI で出る） |
+| `Organization` | 会社情報 |
+| `BreadcrumbList` | パンくず |
 
-```tsx
-// Server Component
-export default async function Page() {
-  const user = await db.user.findFirst();
-  return <UserCard user={user} />; // user はプレーンオブジェクトなら OK
-}
-```
+#### 検証
 
-### Client Component から Server Component を **使う**
+[Google リッチリザルトテスト](https://search.google.com/test/rich-results) で URL を入れると、認識される構造化データが見られます。
 
-直接 import はできません。代わりに **`children` prop** で受け取ります。
+### Google Search Console
 
-```tsx
-// app/layout.tsx（Server Component）
-import Sidebar from "@/components/Sidebar";          // Client
-import RecentPosts from "@/components/RecentPosts";  // Server
+「Google の目線で自分のサイトがどう見えているか」を見るツール。
 
-export default function Layout({ children }: { children: React.ReactNode }) {
-  return (
-    <Sidebar>           {/* Client */}
-      <RecentPosts />   {/* Sidebar は中身を知らずに描画 */}
-      {children}
-    </Sidebar>
-  );
-}
-```
+#### できること
 
-```tsx
-// components/Sidebar.tsx
-"use client";
+- どの検索クエリで何位に出ているか
+- どのページがインデックスされているか / エラーがあるか
+- Core Web Vitals の実フィールドデータ
+- `sitemap.xml` の登録 / クロール状況確認
+- モバイルユーザビリティの問題検出
 
-export default function Sidebar({ children }: { children: React.ReactNode }) {
-  return (
-    <aside>
-      <h2>サイドバー</h2>
-      {children}
-    </aside>
-  );
-}
-```
+#### 設定
 
-「Client Component の中身に Server Component を **slot で挿入する**」発想。Sidebar は中身がServer か Client かを知らず、ただ描画する。
+1. Search Console にプロパティを追加（ドメインまたは URL プレフィックス）
+2. 所有権の確認（DNS TXT レコード / HTML タグ / Google Analytics アカウント連携）
+3. **`sitemap.xml` を登録**
+4. 数日待つとデータが集まり始める
 
-### Server Actions との協調
+### canonical URL
 
-Server Actions（lesson81）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
-
-```tsx
-// app/posts/page.tsx
-import { createPost } from "./actions";
-
-export default function NewPostPage() {
-  return (
-    <form action={createPost}>
-      <input name="title" />
-      <textarea name="body" />
-      <button>投稿</button>
-    </form>
-  );
-}
-```
+「同じ内容のページが複数 URL で見える」場合、検索エンジンに **正規 URL** を伝えるのが `<link rel="canonical">`。
 
 ```ts
-// app/posts/actions.ts
-"use server";
-import { revalidatePath } from "next/cache";
-
-export async function createPost(formData: FormData) {
-  const title = formData.get("title") as string;
-  const body = formData.get("body") as string;
-  await db.post.create({ data: { title, body } });
-  revalidatePath("/posts");
-}
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/blog/post-1",
+  },
+};
 ```
 
-#### Client Component から呼ぶ
+クエリパラメータ違い / 大文字小文字違いで重複インデックスされないように。
 
-```tsx
-"use client";
-import { useTransition } from "react";
-import { createPost } from "./actions";
+### hreflang（多言語サイト）
 
-export default function NewPostForm() {
-  const [pending, startTransition] = useTransition();
-
-  return (
-    <form
-      action={(formData) => {
-        startTransition(async () => {
-          await createPost(formData);
-        });
-      }}
-    >
-      <input name="title" disabled={pending} />
-      <button disabled={pending}>{pending ? "送信中..." : "投稿"}</button>
-    </form>
-  );
-}
-```
-
-`useTransition` で **送信中** の UI を切り替え。Server Component に **戻り値** を返すこともできます。
-
-### `useActionState`（旧 `useFormState`）
-
-React 19 / Next.js 16 では `useActionState` で **action の結果を state として** 受け取れます。
-
-```tsx
-"use client";
-import { useActionState } from "react";
-import { createPost } from "./actions";
-
-const initialState = { ok: false, error: "" };
-
-export default function NewPostForm() {
-  const [state, formAction, pending] = useActionState(createPost, initialState);
-
-  return (
-    <form action={formAction}>
-      <input name="title" />
-      <button disabled={pending}>投稿</button>
-      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
-      {state.ok && <p>投稿しました</p>}
-    </form>
-  );
-}
-```
+同じコンテンツを複数言語で出す場合の指定。
 
 ```ts
-"use server";
-export async function createPost(prev: any, formData: FormData) {
-  try {
-    await db.post.create({ data: {/* ... */} });
-    return { ok: true, error: "" };
-  } catch (e) {
-    return { ok: false, error: "保存失敗" };
-  }
-}
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/en/about",
+    languages: {
+      "en": "https://example.com/en/about",
+      "ja": "https://example.com/ja/about",
+      "x-default": "https://example.com/en/about",
+    },
+  },
+};
 ```
 
-「Server Action から **エラーメッセージを返す**」が型安全に書けます。
+これがあると Google が「英語ユーザーには英語版、日本語ユーザーには日本語版」を出してくれます。
 
-### よくある設計ミス
+### Core Web Vitals と SEO
 
-#### 1. データを Server Component で取って **JSON に詰めて Client Component に丸投げ**
+Google は **Core Web Vitals**（**パフォーマンス計測のレッスン**で扱う指標）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せない**。
 
-```tsx
-// NG パターン
-export default async function Page() {
-  const posts = await db.post.findMany();  // Server で取得
-  return <PostListClient posts={posts} />; // 全部 Client にバンドル
-}
-```
+### よくある事故
 
-→ 結局すべて JS にシリアライズされて送られる。**せっかくの Server Component の意味が薄れる**。
-
-改善: **表示は Server で**、操作だけ Client に切り出す。
-
-```tsx
-// 改善
-export default async function Page() {
-  const posts = await db.post.findMany();
-  return (
-    <ul>
-      {posts.map((p) => (
-        <li key={p.id}>
-          <h2>{p.title}</h2>
-          <p>{p.body}</p>
-          <DeleteButton postId={p.id} />  {/* Client は削除ボタンだけ */}
-        </li>
-      ))}
-    </ul>
-  );
-}
-```
-
-#### 2. Server Component の中で Client Component を再描画させたい
-
-Server Component の **再実行はナビゲーション / 再検証** がトリガー。「state が変わったので再取得」したい時は:
-
-- **Server Action + `revalidatePath()`**（推薦）
-- **Client 側で fetch**（やむを得ない時）
-
-```ts
-"use server";
-export async function deletePost(id: string) {
-  await db.post.delete({ where: { id } });
-  revalidatePath("/posts");  // Server Component を再実行
-}
-```
-
-#### 3. Server / Client を混ぜてシリアライズ不能なものを渡す
-
-```tsx
-// NG: 関数を渡す
-<ClientComponent onClick={() => doSomething()} />
-```
-
-→ Server Component から関数は **渡せない**。`onClick` を持つロジックは **Client Component の中** で完結させる。
-
-#### 4. `"use client"` の場所を間違える
-
-```tsx
-// app/page.tsx（Server Component）
-"use client";   // ファイルの先頭でないと無効
-```
-
-`"use client"` は **ファイルの先頭** に書く必要があります。途中に書いても効きません。
-
-### `server-only` と `client-only`
-
-「**意図しない場所で import される事故**」を防ぐ仕組み。
-
-```ts
-// db.ts
-import "server-only";
-
-export const db = /* DB クライアント */;
-```
-
-これを誤って Client Component から import するとビルド時にエラー。**シークレットの漏洩防止** に有効（lesson118）。
-
-```ts
-// browser-utils.ts
-import "client-only";
-
-export function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
-}
-```
-
-逆も同様。
-
-### Suspense と Loading
-
-データ取得中の UI を **Suspense + Loading UI** で書きます（lesson70 / lesson89 と関連）。
-
-```tsx
-// app/posts/page.tsx
-import { Suspense } from "react";
-import PostList from "./PostList";
-import PostListSkeleton from "./PostListSkeleton";
-
-export default function Page() {
-  return (
-    <Suspense fallback={<PostListSkeleton />}>
-      <PostList />
-    </Suspense>
-  );
-}
-```
-
-`PostList` が `await` を含む Server Component なら、待ち時間に **Skeleton が表示** される。**ストリーミング SSR** で各部分が **独立に到着** します。
-
-### `cache()` / `cacheSignal()`
-
-Next.js 16 / React 19 では **同一リクエスト内** のデータをメモ化する `cache()` が安定。`cacheSignal()` は React 19.2 時点で **experimental（実験的）** であり、安定 API になるまでは API が変わる可能性があります。
-
-```ts
-import { cache } from "react";
-
-export const getUser = cache(async (id: string) => {
-  return db.user.findUnique({ where: { id } });
-});
-```
-
-複数の Server Component が `getUser("1")` を呼んでも **DB は 1 回しかヒット** しない。リクエストスコープのメモ化。
-
-### 「全体構造」のテンプレート
-
-経験則で次のように分割します:
-
-```
-app/
-├── layout.tsx                    ← Server（フォント / Provider 設置）
-├── page.tsx                       ← Server
-├── components/
-│   ├── Header.tsx                 ← Server
-│   ├── ThemeToggle.tsx            ← Client（state 必要）
-│   ├── PostList.tsx               ← Server（DB 取得）
-│   ├── PostCard.tsx               ← Server（表示のみ）
-│   ├── DeleteButton.tsx           ← Client（onClick → Action）
-│   └── CommentForm.tsx            ← Client（form + useActionState）
-├── posts/
-│   ├── actions.ts                 ← Server Actions
-│   └── [id]/page.tsx              ← Server
-└── api/
-    └── webhook/route.ts           ← Route Handler
-```
-
-### よくある質問
-
-#### Q: 全部 Client にしてもいいか？
-
-→ **動くけど遅い**。バンドルが膨らみ、ハイドレーションも遅い。最低限「データ取得は Server」を守る。
-
-#### Q: 古い React パターン（Pages Router / `getServerSideProps`）から移行するには？
-
-→ Pages Router の `getServerSideProps` は App Router の **Server Component** に置き換わる。**そのまま Server で `await fetch()`** を書けば良い。
-
-#### Q: Edge Runtime と Node.js Runtime の違いは？
-
-→ **Edge** は軽量・高速だが利用できる API に制限がある、**Node.js** は Node API がまるごと使える。App Router は **Server Component / Route Handler とも Node.js Runtime がデフォルト** で、Edge を使いたいファイルだけ `export const runtime = "edge"` で opt-in する。Next.js 16 では **Middleware も Node.js Runtime を選べる** ようになり、Node API を必要とする処理を Middleware に書きやすくなった。
+- `og:image` が **相対パス** で実体が読めない → `metadataBase` を設定する
+- `noindex` を本番に持ち込んでしまう → 環境変数で制御する習慣を
+- `sitemap.xml` に **404 の URL** が残る → 動的生成にする
+- 構造化データにスキーマと合わない値を入れる → リッチリザルトテストで検証
+- `canonical` が **自分自身を指していない** → 正しい URL に揃える
 
 ## 演習
 
 ### ゴール
 
-- 「ブログ記事一覧 + 投稿フォーム + 削除」を Server / Client の境界を意識して設計する
-- 既存の Client Component を **Server に格上げ** する練習
+- Next.js プロジェクトに OGP / sitemap / robots / JSON-LD を一通り入れる
+- リッチリザルトテストで構造化データが認識されるところまで持っていく
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest rsc-design --ts --app
-cd rsc-design
+npx create-next-app@latest seo-sample --ts --app
+cd seo-sample
 ```
 
-### 手順 2: Server Component で一覧
+### 手順 2: ルートに metadataBase と OGP
+
+`app/layout.tsx`:
+
+```tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: { default: "Demo Blog", template: "%s | Demo Blog" },
+  description: "Next.js Metadata API の演習",
+  openGraph: {
+    type: "website",
+    siteName: "Demo Blog",
+    locale: "ja_JP",
+  },
+  twitter: { card: "summary_large_image" },
+};
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="ja"><body>{children}</body></html>;
+}
+```
+
+### 手順 3: 動的 OGP 画像
+
+`app/opengraph-image.tsx`:
+
+```tsx
+import { ImageResponse } from "next/og";
+
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default function OG() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          fontSize: 64,
+          background: "linear-gradient(135deg,#1e3a8a,#06b6d4)",
+          color: "white",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        Demo Blog
+      </div>
+    ),
+    { ...size },
+  );
+}
+```
+
+### 手順 4: sitemap と robots
+
+`app/sitemap.ts`:
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+  ];
+}
+```
+
+`app/robots.ts`:
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [{ userAgent: "*", allow: "/", disallow: "/admin/" }],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
+
+### 手順 5: JSON-LD
 
 `app/page.tsx`:
 
 ```tsx
-import DeleteButton from "./DeleteButton";
-import { posts } from "@/data/posts";
+export default function Home() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Demo Blog",
+    url: "https://example.com",
+  };
 
-export default async function Home() {
   return (
     <main style={{ padding: 24 }}>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.map((p) => (
-          <li key={p.id}>
-            <h2>{p.title}</h2>
-            <p>{p.body}</p>
-            <DeleteButton id={p.id} />
-          </li>
-        ))}
-      </ul>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>Demo Blog</h1>
+      <p>SEO 演習</p>
     </main>
   );
 }
 ```
 
-`data/posts.ts`（仮データ）:
+### 手順 6: 確認
 
-```ts
-export const posts = [
-  { id: "1", title: "Hello", body: "本文 1" },
-  { id: "2", title: "World", body: "本文 2" },
-];
+```bash
+npm run dev
 ```
 
-### 手順 3: Server Action と Client Component
+ブラウザで以下にアクセス:
 
-`app/actions.ts`:
-
-```ts
-"use server";
-import { revalidatePath } from "next/cache";
-
-export async function deletePost(id: string) {
-  // 実際には DB から削除
-  console.log("Deleting:", id);
-  revalidatePath("/");
-}
-```
-
-`app/DeleteButton.tsx`:
-
-```tsx
-"use client";
-import { useTransition } from "react";
-import { deletePost } from "./actions";
-
-export default function DeleteButton({ id }: { id: string }) {
-  const [pending, startTransition] = useTransition();
-  return (
-    <button
-      disabled={pending}
-      onClick={() => startTransition(() => deletePost(id))}
-    >
-      {pending ? "..." : "削除"}
-    </button>
-  );
-}
-```
-
-### 手順 4: 投稿フォーム（useActionState）
-
-`app/PostForm.tsx`:
-
-```tsx
-"use client";
-import { useActionState } from "react";
-import { createPost } from "./actions";
-
-export default function PostForm() {
-  const [state, action, pending] = useActionState(createPost, { ok: false, error: "" });
-
-  return (
-    <form action={action}>
-      <input name="title" placeholder="タイトル" required />
-      <textarea name="body" placeholder="本文" />
-      <button disabled={pending}>{pending ? "送信中" : "投稿"}</button>
-      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
-      {state.ok && <p>投稿完了</p>}
-    </form>
-  );
-}
-```
-
-`actions.ts` に `createPost` を追加:
-
-```ts
-export async function createPost(prev: any, formData: FormData) {
-  const title = String(formData.get("title") ?? "");
-  if (!title.trim()) return { ok: false, error: "タイトル必須" };
-  console.log("Created:", title);
-  revalidatePath("/");
-  return { ok: true, error: "" };
-}
-```
-
-### 手順 5: 動作確認
-
-`npm run dev` で:
-
-- 記事一覧は **Server で描画**（ソース表示で HTML に文字列が含まれる）
-- 削除ボタンの onClick 部分だけ **Client にハイドレーション**
-- 投稿フォームでバリデーションエラーをサーバーから返却
+- `http://localhost:3000/sitemap.xml` → XML が出る
+- `http://localhost:3000/robots.txt` → robots テキストが出る
+- `http://localhost:3000/opengraph-image` → 画像が出る
+- ページのソースを表示すると `<meta property="og:image" content="..." />` や `<script type="application/ld+json">` が含まれている
 
 ### 期待出力
 
-- ページの初回 HTML には **記事タイトルと本文がそのまま** 含まれている（Server で描画）
-- 削除 / 投稿のロジックはサーバーで実行
-- バリデーションエラーが Client Component の state に反映
+| パス | 内容 |
+|---|---|
+| `/sitemap.xml` | 2 URL を含む sitemap |
+| `/robots.txt` | `Disallow: /admin/` を含む |
+| `/opengraph-image` | 1200x630 の PNG |
+| ページソース | OGP / Twitter Card / JSON-LD のタグが入る |
 
 ### 変える
 
-- `Suspense` + `loading.tsx` でストリーミング表示にする
-- `cache()` で同じデータの取得を 1 回に集約する
-- `server-only` パッケージを入れて、誤って Client から import されないように守る
+- `app/blog/[slug]/page.tsx` を作って `generateMetadata` で記事ごとに OGP を変える
+- 動的 OGP 画像で記事タイトルを反映する
+- JSON-LD を `Article` に変えて、リッチリザルトテストで認識されるか試す
 
-### 自分で書く（5 章 の synthesis 成果物に適用）
+### 自分で書く（任意）
 
-このコースの **5 章「小さなアプリを仕上げる」** で完成させた TODO アプリ（`/todos` / `/todos/[id]` / `/about`）を **境界の目で見直す** 演習です。
-
-1. プロジェクトの全 `.tsx` を `grep "use client"` で抽出 → どれが Client Component か一覧化
-2. 各 Client Component について、**本当に Client が必要か** を確認:
-   - 状態 / イベント / ブラウザ API があるか?
-   - 無いなら `"use client"` を外して Server Component に戻す
-3. **`server-only` パッケージで「壊す」テスト**:
-   - `app/actions.ts` の冒頭に `import "server-only";` を追加
-   - 試しに Client Component から `import { addTodo } from "../actions"` してビルド → **エラーが出る**ことを確認
-4. **データ取得の場所** をチェック: Client Component の `useEffect` 内で `fetch` していないか? あれば Server Component に **吸い上げて props で渡す**
-5. 「`<DeleteButton>` だけが Client、リスト本体は Server」のように **葉に閉じ込める** 形になっているか確認
-
-before / after で「Client にバンドルされる JS」が減っていれば成功です（Network タブで JS の合計サイズを見る）。
-
-### 単独の任意課題
-
-- DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
-- React Compiler（lesson128）と組み合わせて、`useMemo` を消した状態で動かす
+- `BreadcrumbList` の JSON-LD を作って、検索結果のパンくずを狙う
+- `FAQPage` を作って、よくある質問アコーディオンの表示を狙う
+- 多言語サイトを `hreflang` で構成し、Search Console で確認する
 
 ## まとめ
 
-- **デフォルトは Server Component**、必要な葉だけ `"use client"`
-- データ取得は Server、インタラクションは Client、書き込みは **Server Actions**
-- Client から Server を使うには **children prop** で挿入
-- props は **serializable な値だけ**（関数 / クラスは渡らない）
-- `useActionState` で Server Action の結果を Client の state に
-- 巨大 Client Component / 不要シリアライズ / 関数受け渡しは **アンチパターン**
-- `server-only` / `client-only` で誤 import を防ぐ
-- `Suspense` + Loading UI で **ストリーミング表示**、`cache()` で同一リクエストのメモ化
-- 「全体構造」を Server / Client で **ファイル単位で分割** すると見通しが良い
+- **OGP / Twitter Card** で SNS シェア時の見栄えを制御。`og:image` は **絶対 URL / 1200x630**
+- Next.js は **Metadata API** に OGP / Twitter Card / canonical / hreflang が揃っている
+- **`metadataBase`** を必ず設定する（相対パス事故防止）
+- `app/opengraph-image.tsx` で **動的 OGP 画像** を JSX で生成
+- `app/sitemap.ts` / `app/robots.ts` でファイルベースに `sitemap.xml` / `robots.txt` を生成
+- **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
+- **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
+- Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない

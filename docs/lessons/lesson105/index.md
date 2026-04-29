@@ -1,327 +1,415 @@
-# lesson105: 画像とフォントの最適化
+# lesson105: ESLint / Prettier / Biome
 
 ## ゴール
 
-- 画像が **LCP の最重要要因** であることを理解する
-- 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
-- `next/image` がやってくれる自動最適化の中身を説明できる
-- フォントが **CLS** と LCP にどう効くかを理解する
-- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
-- Self-hosted フォントと Google Fonts の使い分けを知る
+- Lint と Format が **役割の異なる別物** であることを理解する
+- ESLint の flat config（`eslint.config.js`）の最小形を読める
+- Prettier との連携で衝突しない設定を書ける
+- Biome がこの 2 役を **1 ツール** で 35x 速く処理することを理解する
+- 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
+- VS Code の保存時 autofix で「書きながら直る」体験を得る
 
 ## 解説
 
-### 画像が LCP の最重要要因
+### Lint と Format は別物
 
-ほとんどのページで **LCP（最大コンテンツ）はヒーロー画像** が選ばれます。だから「LCP を改善する」は事実上「画像を最適化する」とほぼ同義です。
+混同しがちですが、役割が違います。
 
-### 画像最適化 5 つの技
+| ツール | 守備範囲 |
+|---|---|
+| **Lint**（ESLint） | コードの **品質** チェック。バグの種 / アンチパターン / a11y 違反 / 未使用変数を検知 |
+| **Format**（Prettier） | コードの **見た目** を整える。インデント / クォート / 改行位置 |
 
-#### 1. フォーマット: WebP / AVIF を使う
+ESLint は「未使用変数があるよ」「`any` 型は避けて」と教える。Prettier は「シングルクォートに統一して、80 文字で改行して」と整える。両方やると初めて綺麗で安全なコードベースになります。
 
-JPEG / PNG はもう古い選択肢です。現代は:
+歴史的には ESLint だけで両方やる時代もありましたが、**役割を分ける** のが現代の合意。最近はさらに **Biome** という「両方を 1 ツールでやる」次世代の選択肢が出てきました。
 
-- **WebP**: ブラウザ対応率 95% 超。JPEG より 25-35% 軽い
-- **AVIF**: 比較的新しい。WebP よりさらに 30% 軽い。ブラウザ対応率は約 95%
+### ESLint の flat config
 
-両者は **可逆 / 非可逆** 両方サポート。古いブラウザ用に JPEG をフォールバックで残すのが定番です。
+ESLint v9（2024 年リリース）から **flat config** が既定になり、古い `.eslintrc` 形式は非推奨です。設定ファイルは **`eslint.config.js`**（ESM）になります。
 
-#### 2. サイズ: 表示サイズに合わせる
+#### 最小構成（TypeScript + React）
 
-3000×2000 の写真を `<img width="300" height="200">` で表示すると、**3000×2000 のファイルがそのまま転送** されます。これが LCP を遅らせる最大の原因です。
-
-対策:
-
-- **複数解像度** を用意して `srcset` で適切な一枚を選ばせる
-- ビルド時に **自動リサイズ** するツール（`next/image`、`vite-plugin-image-optimizer` 等）を使う
-
-```html
-<img
-  src="/photo-400.jpg"
-  srcset="/photo-400.jpg 400w, /photo-800.jpg 800w, /photo-1200.jpg 1200w"
-  sizes="(max-width: 600px) 100vw, 800px"
-  alt="海辺で撮影した記念写真"
-/>
+```bash
+npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks
 ```
 
-`sizes` は CSS のメディアクエリと同じ書き方で「表示サイズの目安」を伝えます。ブラウザがそれを見て `srcset` から最適な 1 枚を選びます。
+`eslint.config.js`:
 
-> **`alt` は意味のある文を入れる**: `alt="..."` のような placeholder は本番のコードに残してはいけません。スクリーンリーダーがその文字列を読み上げる形で利用者に届きます。`alt` には **画像が伝えたい情報** を 1 文で書き、見出し近くの装飾画像のように **何の情報も足さない** 画像なら `alt=""`（空文字）を指定します。空文字を指定するとスクリーンリーダーはその要素を読み飛ばします。`alt` 属性自体を省略すると「ファイル名を読み上げる」最悪のフォールバックになるので、必ず `alt=""` を明示します。
+```js
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
 
-#### 3. 遅延読み込み: `loading="lazy"`
-
-画面外の画像は **読み込みを遅らせて** 後から取りに行きます。
-
-```html
-<!-- ページ最初に見える画像（first view）: eager -->
-<img src="/hero.jpg" loading="eager" fetchpriority="high" alt="サイトのトップビジュアル: 海辺の夕焼け" />
-
-<!-- 画面外の画像: lazy -->
-<img src="/below-fold.jpg" loading="lazy" alt="記事中の図表" />
+export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+  },
+  {
+    ignores: ["dist/", "node_modules/"],
+  },
+];
 ```
 
-- **`loading="lazy"`**: ブラウザがスクロール位置に応じて読み込み開始
-- **`loading="eager"`**: 即時読み込み（既定）
-- **`fetchpriority="high"`**: ヒーロー画像で優先度を上げる（LCP の最強の武器）
+`package.json`:
 
-`loading="lazy"` を **first view の画像に付けてはいけません**（LCP が悪化）。ページの最重要画像には `fetchpriority="high"` を付けるのが 2026 年の定番です。
-
-#### 4. プレースホルダ: ぼかし画像の先出し
-
-LQIP（Low Quality Image Placeholder）と呼ばれる手法です。本物が読み込まれるまで、極小サイズのぼかし画像を表示しておきます。
-
-```html
-<!-- placeholder-blur と 本物の差し替え -->
-<img
-  src="/placeholder-blur.jpg"  /* 数 KB の小さい画像 */
-  data-src="/full.jpg"          /* 本物 */
-  ...
-/>
-```
-
-`next/image` の `placeholder="blur"` がこれを自動でやってくれます。
-
-#### 5. `<picture>` でフォーマットを分岐
-
-WebP / AVIF をサポートしていないブラウザに JPEG をフォールバックで返すには `<picture>` を使います。
-
-```html
-<picture>
-  <source srcset="/photo.avif" type="image/avif" />
-  <source srcset="/photo.webp" type="image/webp" />
-  <img src="/photo.jpg" alt="海辺で撮影した記念写真" width="800" height="600" />
-</picture>
-```
-
-ブラウザは上から順に対応形式を探し、最初に対応している `<source>` を使います。すべて非対応なら最後の `<img>` を使います。
-
-### `next/image` は全部やってくれる
-
-5 章 で扱った `<Image>` コンポーネントは、上記 5 つの最適化を **設定なしで** 全部やります。
-
-- フォーマット自動変換（WebP / AVIF）
-- 表示サイズに応じた `srcset` 生成
-- `loading="lazy"`（first view を除く自動判定は手動が確実）
-- `placeholder="blur"` でぼかし
-- `<picture>` 相当のフォールバック
-
-Next.js 以外の環境では同等の自動化は手作業が必要なので、Next.js が選ばれる理由の 1 つになっています。
-
-### フォントが CLS と LCP に効く
-
-フォントの読み込み挙動が悪いと:
-
-- **CLS 悪化**: フォントが切り替わった瞬間にテキスト幅が変わってレイアウトがズレる
-- **LCP 悪化**: テキストが LCP 要素なら、フォント読み込み完了まで描画されない
-
-主な現象:
-
-- **FOIT**（Flash of Invisible Text）: フォント読み込み中、テキストが **見えない**
-- **FOUT**（Flash of Unstyled Text）: フォント読み込み中、フォールバックフォントで一瞬表示 → 切り替わり
-
-### `font-display: swap`
-
-CSS の `@font-face` で `font-display: swap` を指定すると、**FOUT** モードになります。フォールバックフォントで先に表示し、本物のフォントが届いたら差し替えます。
-
-```css
-@font-face {
-  font-family: "MyFont";
-  src: url("/fonts/myfont.woff2") format("woff2");
-  font-display: swap;
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  }
 }
 ```
 
-`swap` は LCP に有利（テキストが先に表示される）ですが、CLS は出やすくなります。トレードオフです。`optional` を選ぶと「100ms 以内に読み込めなければ諦める」という慎重派の挙動になります。
+`npm run lint` で全ファイルをチェック、`npm run lint:fix` で自動修正できる範囲は直してくれます。
 
-### `<link rel="preload">` で先読み
+#### よく使うプラグイン
 
-クリティカルなフォント（first view で使う）は **`<link rel="preload">`** でブラウザに「優先して読んでね」と伝えます。
+- `typescript-eslint`: TypeScript の型情報を使った高度なチェック
+- `eslint-plugin-react`: React のお作法
+- `eslint-plugin-react-hooks`: フック規則の検証
+- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（7 章「アクセシビリティ」と相性◎）
+- `eslint-plugin-import`: import の順序とパス解決
 
-```html
-<link
-  rel="preload"
-  href="/fonts/myfont.woff2"
-  as="font"
-  type="font/woff2"
-  crossorigin
-/>
+### Prettier の最小設定
+
+```bash
+npm install -D prettier
 ```
 
-これで HTML パース中に並行して読み込みが始まり、CSS で `@font-face` が見つかった時にはほぼ準備完了の状態になります。LCP / CLS 双方に効きます。
+`.prettierrc`（プロジェクトルート）:
 
-### `next/font` は全部やってくれる
-
-Next.js では `next/font` が自動で:
-
-- フォントをビルド時にダウンロード（self-host 化、Google Fonts への外部リクエスト削減）
-- サブセット化（必要な文字だけ抽出）
-- preload リンクを HTML に自動挿入
-- `font-display: swap` を既定にする
-- フォールバックフォントの幅メトリクスを近づけて CLS を抑制
-
-```tsx
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"], display: "swap" });
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
-  );
+```json
+{
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "tabWidth": 2
 }
 ```
 
-`next/font/google` は Google Fonts を自動 self-host 化、`next/font/local` は手元の `.woff2` をビルドに組み込みます。
+`package.json`:
 
-### Self-host vs Google Fonts CDN
+```json
+{
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}
+```
 
-| 方式 | 利点 | 欠点 |
-|---|---|---|
-| Google Fonts CDN（`<link href="fonts.googleapis.com">`） | セットアップ簡単 | 外部ドメインへの追加 DNS / 接続 / プライバシー懸念 |
-| Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
-| `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
+`.prettierignore` に除外を書きます:
 
-2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
+```
+dist/
+node_modules/
+*.min.js
+```
 
-### サブセット化
+### ESLint と Prettier の衝突を避ける
 
-日本語フォント（`Noto Sans JP` 等）はファイルが MB 単位で巨大です。**実際に使う文字だけを抽出した「サブセット」** を配信しないと一気に LCP / CLS が悪化します。
+ESLint にも整形系のルール（インデント / セミコロン）が組み込まれていますが、これが Prettier と衝突します。**`eslint-config-prettier`** を使ってこれらのルールを無効化します。
 
-- ラテン文字だけのページなら `subsets: ["latin"]` で 30KB 程度
-- 日本語ページは `Noto Sans JP` の **第一水準漢字 + 平仮名 + 片仮名 + 数字 + 記号** に絞ったサブセットを用意（数百 KB 程度）
+```bash
+npm install -D eslint-config-prettier
+```
 
-ビルド時にサブセット化するツール（`subset-font` パッケージ等）や、`next/font/google` の `subsets` 指定で自動化できます。
+`eslint.config.js` の最後に追加:
+
+```js
+import prettierConfig from "eslint-config-prettier";
+
+export default [
+  // ...上記の設定
+  prettierConfig,  // 最後に置いて整形系のルールを上書きで OFF
+];
+```
+
+これで「ESLint は品質、Prettier は見た目」の役割分担が綺麗に成立します。
+
+### VS Code の保存時 autofix
+
+`.vscode/settings.json`（プロジェクトの設定）:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}
+```
+
+これでファイル保存時に:
+
+1. ESLint の自動修正可能な違反が直る
+2. Prettier がコードを整形する
+
+の 2 段階が走ります。「書きながら綺麗になる」体験になり、PR レビューで「インデントが…」と指摘するムダが消えます。
+
+VS Code の拡張は `dbaeumer.vscode-eslint` と `esbenp.prettier-vscode` を入れます。
+
+### Biome: 1 ツールで両方
+
+**Biome** は Rust 製の Lint + Format ツールです。
+
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
+
+これだけで `biome.json` が生成され、すぐ使えます。
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
+```
+
+#### Biome の魅力
+
+- **設定ファイルが 1 つだけ**（`biome.json`）
+- **ESLint + Prettier より 35x 速い**（10000 ファイル: ESLint 45.2s vs Biome 0.8s）
+- **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
+- **Lint と Format の衝突がない**（同じツール内なので）
+- **VS Code 拡張**（`biomejs.biome`）も公式
+
+#### Biome の限界
+
+- TypeScript の **型情報を使う高度なルール**（`no-floating-promises` 等）は ESLint だけが提供
+- 既存 ESLint プラグイン（`jsx-a11y` 等）は使えない
+- カスタムルールが書きづらい
+
+### 2026 年の選び方
+
+#### 新規プロジェクト（greenfield）
+
+**Biome 単独** が最有力候補です。設定が少なく速いので、立ち上げの摩擦が圧倒的に小さい。
+
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
+
+#### 既存プロジェクト（ESLint + Prettier がある）
+
+**ハイブリッド構成** が現実解:
+
+- **Biome**: フォーマット + 基本 Lint（高速）
+- **ESLint**: 型情報を要する高度なルール + 既存プラグイン
+
+または、コストをかけて Biome に完全移行（手動マイグレーションツールあり）。
+
+#### Lighthouse / a11y 検査も Lint で
+
+ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、7 章「アクセシビリティ」と組み合わせると効果的です。
+
+```js
+// eslint.config.js
+import jsxA11y from "eslint-plugin-jsx-a11y";
+
+export default [
+  // ...
+  jsxA11y.configs.recommended,
+];
+```
+
+これで `<img>` の alt 欠落 / `<button>` の `tabindex="-1"` などが Lint で警告されます。
+
+### Husky + lint-staged で commit 時に自動チェック
+
+「commit する時に Lint / Format を自動実行」して、CI で fail する前に直す仕組みです。
+
+```bash
+npm install -D husky lint-staged
+npx husky init
+```
+
+`.husky/pre-commit`:
+
+```sh
+npx lint-staged
+```
+
+`package.json`:
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": ["biome check --write"]
+  }
+}
+```
+
+`git commit` のたびに、ステージングされたファイルだけが対象に Lint + Format されます。**全プロジェクトを毎回チェックしないので速い** のが lint-staged の利点。
 
 ## 演習
 
+> **このレッスンはローカル前提**: VS Code 拡張 + 保存時の自動整形を確認するため、**ローカル環境での Node.js 実行と VS Code 利用を前提** にしています。StackBlitz では VS Code 拡張が動かないので、Biome のコマンドライン実行までは追えますが、エディタ統合の体感はできません。
+
 ### ゴール
 
-- 既存の Next.js プロジェクト（または新規）に `<Image>` を入れる前後で Lighthouse の LCP を比較する
-- `next/font/google` で Google Fonts を self-host 化する
-- DevTools Network タブで画像 / フォントの読み込み順序を観察する
+- Vite + React + TS プロジェクトに **Biome** を導入する
+- VS Code で保存時に自動整形 / 自動修正が走るようにする
+- わざとエラーを入れて、Biome が検知することを確認する
 
-### 手順 1: 画像最適化の前後比較（Next.js）
+### 手順 1: 新規プロジェクト
 
-1. 5 章 で作った Next.js プロジェクト or 新規 `create-next-app` で:
+```bash
+npm create vite@latest lint-sample -- --template react-ts
+cd lint-sample
+npm install
+```
 
-   ```bash
-   npx create-next-app@latest perf-image --typescript --tailwind=false --app
-   cd perf-image
-   ```
+### 手順 2: Biome を導入
 
-2. `app/page.tsx` に大きな画像を **素の `<img>` で** 配置（最初は最適化なし）:
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
 
-   ```tsx
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <img
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           style={{ width: 600, height: 400 }}
-         />
-       </main>
-     );
-   }
-   ```
+`biome.json` が生成されます。中身は最小設定:
 
-3. `npm run build && npm run start` でビルド済みを起動し、Lighthouse を Mobile で計測。LCP / 全体スコアをメモ
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "files": {
+    "ignoreUnknown": false,
+    "ignore": ["node_modules", "dist"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}
+```
 
-4. `<img>` を `<Image>` に置き換え:
+`indentStyle` を `space` に変えたい場合は `"indentStyle": "space", "indentWidth": 2` に。
 
-   ```tsx
-   import Image from "next/image";
+### 手順 3: package.json scripts
 
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <Image
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           width={600}
-           height={400}
-           priority
-         />
-       </main>
-     );
-   }
-   ```
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
+```
 
-   `next.config.ts` に `picsum.photos` を許可:
+### 手順 4: VS Code 設定
 
-   ```ts
-   const nextConfig = {
-     images: {
-       remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
-     },
-   };
-   export default nextConfig;
-   ```
+`.vscode/settings.json`:
 
-5. もう一度ビルド + Lighthouse。LCP が大幅に改善するはず（数秒 → 1 秒以下）
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}
+```
 
-### 手順 2: `next/font` でフォント
+VS Code の拡張ストアで `biomejs.biome` をインストールします。
 
-`app/layout.tsx`:
+### 手順 5: 動作確認
+
+`src/App.tsx` に、わざと整形が崩れたコードを書きます:
 
 ```tsx
-import { Inter } from "next/font/google";
+import {useState}from "react"
 
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-});
+export default function App(){
+const[count,setCount]=useState(0)
+const unused = "使ってない";
+return <div><h1>Count: {count}</h1><button onClick={()=>setCount(c=>c+1)}>+1</button></div>
+}
+```
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+ファイルを保存すると:
+
+- インデントが揃う
+- 改行が入る
+- 引用符が統一される
+- `unused` 変数が「使われていない」と警告される
+
+ターミナルで `npm run check` を実行すると、すべての違反が一覧されます。`npm run check:fix` で自動修正できる範囲は直されます。
+
+### 期待出力
+
+```
+Checked 5 files in 200ms. No fixes applied.
+Found 1 warning.
+```
+
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [count, setCount] = useState(0);
+  const unused = "使ってない";  // 警告: unused
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
   );
 }
 ```
 
-ビルドして Network タブで:
-
-- 自分のドメイン（`localhost:3000`）から `.woff2` が配信される
-- `fonts.googleapis.com` への外部リクエストが消える
-- HTML の `<head>` に `<link rel="preload" as="font">` が自動挿入されている
-
-### 手順 3: 画像のフォーマット確認
-
-Network タブの **Type** 列で:
-
-- `<img>` 直書き: `jpeg` / `png`
-- `<Image>`: `webp` / `avif`（ブラウザ対応に応じて）
-
-「Response Headers」の `content-type` も確認できます。
-
-### 期待出力
-
-- 同じ画像でもファイルサイズが半分以下に縮む
-- LCP の数値が劇的に改善
-- フォントの FOIT / FOUT がほぼ気にならないレベル
-
 ### 変える
 
-- `<Image priority>` を外してみる。LCP がやや悪化する（`priority` は first view の画像に必須）
-- `next/font/google` の `display: "swap"` を `display: "block"` に変えると、FOIT になることを確認
-- `<Image>` の `placeholder="blur"` を試す（ローカル画像を使う場合のみ）。読み込み中にぼかしが見える
+- `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
+- `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
+- `linter.rules.style.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 普段使う画像を `<picture>` でラップして、AVIF / WebP / JPEG のフォールバック構造を手書きで作る
-- `<link rel="preload">` を `<head>` に追加して、特定の画像 / フォントを先読みさせる
+- 既存の Vite テンプレートに **ESLint + Prettier** を入れて、Biome 構成と比較する
+  - 必要なパッケージ数の違い
+  - 設定ファイルの数の違い
+  - `npm run lint` の所要時間
+- Husky + lint-staged を入れて commit 時に自動 Lint / Format される構成を作る
 
 ## まとめ
 
-- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
-- 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
-- **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
-- フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
-- **`font-display: swap`** + **`<link rel="preload">`** が基本
-- **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化
+- **Lint** はコード品質、**Format** はコード整形。役割が違う
+- **ESLint v9** は flat config が既定。`.eslintrc` は非推奨
+- ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
+- VS Code の保存時 autofix で「書きながら綺麗になる」体験
+- **Biome** は Lint + Format を 1 ツール、Rust 製、35x 速い、設定 1 ファイル
+- **新規プロジェクトは Biome 単独** が 2026 年の有力解
+- 既存 ESLint 資産を活かすなら **Biome（基本）+ ESLint**（型情報を要するルール） のハイブリッド
+- `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
+- Husky + lint-staged で commit 時の自動 Lint / Format

@@ -1,91 +1,123 @@
-# lesson42: TypeScript ってなに？
+# lesson42: 関数の型
 
 ## ゴール
 
-- TypeScript（以下 TS）が何を解決する言語なのか、JavaScript（以下 JS）との違いを自分の言葉で説明できる。
-- プリミティブ型（`string` / `number` / `boolean`）の変数に **型注釈** を付けられる。
-- わざと間違った値を入れて、エディタの赤線と `tsc` の型エラーを自分の目で確認できる。
+- 関数の **引数** と **戻り値** に型を付けられる。
+- 戻り値を返さない関数の型 `void` を理解し、使い分けられる。
+- 「関数そのものの型」（関数型）を書き、変数に代入できる。
 
 ## 解説
 
-### この章で使う環境
+### 2 章 の関数を TS 化する
 
-この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開いてください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。
-
-テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の3 章 のレッスンでは、この `main.ts` を書き換えていきます。
-
-### JS だけだと何が困るのか
-
-2 章 までに書いてきた JS では、変数にどんな値でも入れられました。
+2 章 の「関数」では、数値を合計する関数を書きました。
 
 ```js
-let age = 20;
-age = "二十歳"; // 何の警告もなく通る
+function add(a, b) {
+  return a + b;
+}
 ```
 
-小さなファイルなら困りません。しかし人数やファイルが増え、関数が関数を呼ぶようになると、次のような事故が起き始めます。
+この関数は `add(1, 2)` なら `3` を返しますが、`add("1", "2")` と呼ぶと `"12"` を返します（文字列結合になる）。引数に何を渡してよいかは、呼ぶ側の「気持ち」だけが頼りです。
 
-- 数値を期待している関数に、うっかり文字列を渡してしまう。
-- オブジェクトのプロパティ名を typo したのに、そのまま `undefined` が流れて画面が壊れる。
-- 自分以外の人が書いた関数に、何を渡せばよいか分からない。
+TS では、引数と戻り値に型を付けてこの「気持ち」を明文化できます。
 
-これらは **実行してみるまで分からない** 種類のバグです。しかもブラウザで動かしてはじめて「`undefined is not a function`」のようなメッセージに出会うので、原因の追跡に時間がかかります。
+### 引数と戻り値の型注釈
 
-### TS は「書いた瞬間にチェックしてくれる JS」
-
-TypeScript は、JavaScript に **型**（かた） の仕組みを足した言語です。値や変数に「これは文字列」「これは数値」というラベルを付けておくと、コンパイラ（`tsc`）やエディタが、書いた直後に「その操作はラベルに合っていない」と教えてくれます。
-
-> **補足: 「コンパイル」「コンパイラ」の意味**: コンパイルとは「ある言語で書いたコードを別の言語に変換すること」です。TS のコンパイルは **TS から JS への変換** を指します。`tsc` はその変換を行うプログラム（TypeScript Compiler）です。エディタが赤線を出してくれるのも、裏側で同じ仕組みが動いているから、と理解すれば十分です。
-
-- 型のチェックは **実行する前** に行われる。これを **静的型付け** と呼ぶ。
-- 型のチェックを通った TS コードは、最終的に JS に変換（コンパイル）されてブラウザで動く。ブラウザは TS を直接は読めない。
-- 型の情報はコンパイル後の JS には残らない。**実行時の速度は JS と変わらない**。
-
-ざっくり言うと、TS は「書いた直後に typo と型の食い違いを指摘してくれる JS」です。
-
-### 型注釈の書き方
-
-変数を宣言するときに、変数名の後ろに `: 型名` を付けます。これを **型注釈**（type annotation） と呼びます。
+関数宣言で、各引数の名前のあとに `: 型名`、引数リストの閉じ括弧の後ろに `: 戻り値の型` を書きます。
 
 ```ts
-const userName: string = "Alice";
-const age: number = 20;
-const isAdmin: boolean = false;
+function add(a: number, b: number): number {
+  return a + b;
+}
 ```
 
-- `string`: 文字列（`"hello"`、`` `template` ``、`'single'` すべて含む）
-- `number`: 数値（整数も小数も区別しない）
-- `boolean`: 真偽値（`true` / `false`）
+- `a: number` / `b: number`: 引数はどちらも数値。
+- `: number`: 戻り値は数値。
+- 体の中で `return` する値がこの型と合っていないとエラーになる。
 
-型注釈は **変数名の直後にコロン**、そのあとに型名、という順番です。JS の代入 (`=`) とは位置が違うので混同しないようにします。
-
-### 書かなくても型は付く（型推論）
-
-毎回型を書くのは面倒です。TS は右辺を見て型を自動で決めてくれます。これを **型推論**（type inference） と呼びます。
+アロー関数でも同じ場所に書きます。
 
 ```ts
-const userName = "Alice"; // userName は string 型と推論される
-const age = 20;        // age は number 型と推論される
+const add = (a: number, b: number): number => {
+  return a + b;
+};
 ```
 
-型推論で十分なときは型注釈を省略するのが普通です。このレッスンでは学習目的であえて型注釈を書き、間違った値を入れたらどうなるかを体験します。
+### 戻り値の型は推論に任せてもよい
 
-### エラーの出方は 2 段階
+戻り値の型は、`return` している値から TS が自動で決めてくれます（型推論）。普段は省略することが多いです。
 
-型が合っていないとき、TS は次の 2 か所でエラーを教えてくれます。
-
-1. **エディタ上の赤い波線**: StackBlitz のコード画面で該当箇所に赤線が出る。マウスを乗せるとメッセージが出る。
-2. **`tsc` のコンパイルエラー**: ターミナルで `tsc` を実行する（テンプレートでは通常自動で走る）と、ファイル名・行番号付きでエラーが一覧表示される。
-
-どちらも同じ内容です。エディタの赤線は「書いている最中に教えてくれる」、`tsc` は「保存 / ビルドのタイミングで全ファイルまとめて確認してくれる」くらいの違いです。
-
-典型的なエラーメッセージは例えばこうなります。
-
-```
-Type 'string' is not assignable to type 'number'.
+```ts
+function add(a: number, b: number) {
+  return a + b; // 戻り値は number と推論される
+}
 ```
 
-「文字列型は数値型には代入できない」という意味です。実際に出してみるのは演習で行います。
+このレッスンでは学習目的で、あえて戻り値の型も書きます。関数がどんな型を返すのかを **意図として** 書き残すと、実装が意図とずれたときに TS が止めてくれるからです。
+
+### 戻り値がない関数は `void`
+
+`console.log` のように、何かを実行するだけで **値を返さない** 関数があります。この「値を返さない」を表す型が `void` です。
+
+```ts
+function greet(name: string): void {
+  console.log(`Hello, ${name}`);
+}
+
+greet("Alice"); // 呼び出すだけ。戻り値は使わない
+```
+
+- `void` 型の関数を `return` 付きで書くと、`return;`（値なし）か、そもそも `return` を書かないかのどちらか。
+- `void` と書いた関数の戻り値を使おうとすると、TS は警告する。
+
+### 関数そのものの型（関数型）
+
+「この変数には、数値 2 つを受け取って数値を返す関数が入る」と書きたい場面があります。関数の型は次のように書きます。
+
+```ts
+const add: (a: number, b: number) => number = (a, b) => a + b;
+```
+
+左辺の `: (a: number, b: number) => number` が **関数型** です。
+
+- `(a: number, b: number)`: 引数の型。名前は何でもよいが、書く必要がある。
+- `=>`: この矢印は「関数の型を表す矢印」。アロー関数の `=>` と見た目は同じだが、文法上の位置が違う。
+- `number`: 戻り値の型。
+
+左辺で型を決めてしまっているので、右辺のアロー関数では引数の型注釈を省略できます（型推論が働く）。
+
+関数を **引数として受け取る関数** でも同じ書き方が使えます。
+
+```ts
+function twice(fn: (n: number) => number, value: number): number {
+  return fn(fn(value));
+}
+
+twice((n) => n + 1, 10); // 12
+```
+
+関数型を使うと「関数を受け渡すときの契約」を型で書けるようになります。2 章 の「配列の変換」の `map` / `filter` に渡す関数も、実は TS のライブラリ側で関数型が定義されています。
+
+### 引数の数が合わないのもエラー
+
+TS は「宣言した数と違う数の引数で呼び出す」こともエラーにします。
+
+```ts
+function add(a: number, b: number): number {
+  return a + b;
+}
+
+add(1);       // エラー: 引数が足りない
+add(1, 2, 3); // エラー: 引数が多い
+```
+
+典型的なメッセージはこうなります。
+
+```
+Expected 2 arguments, but got 1.
+Expected 2 arguments, but got 3.
+```
 
 ## 演習
 
@@ -93,107 +125,157 @@ Type 'string' is not assignable to type 'number'.
 
 このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-### 手順 1: テンプレートを開く
-
-1. 直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開く（TypeScript Vanilla テンプレートが立ち上がる）。
-2. `src/main.ts` を開く。中身はサンプルが入っているので、すべて消す。
-3. プレビュー横のコンソールも見えるようにしておく（DevTools の Console、または StackBlitz 下部のターミナル）。
-
-### 手順 2: 型注釈付きの変数を書く
+### 手順 1: `add` を TS 化する
 
 `src/main.ts` の中身を以下に置き換える。
 
 ```ts
-const userName: string = "Alice";
-const age: number = 20;
-const isAdmin: boolean = false;
+function add(a: number, b: number): number {
+  return a + b;
+}
 
-console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
-```
-
-保存するとプレビューが再読み込みされる。ブラウザの DevTools の Console に次のように出れば成功。
-
-```
-Alice は 20 歳です。管理者: false
-```
-
-### 手順 3: わざと型を間違えてエラーを見る
-
-次のコードに書き換える。
-
-```ts
-const userName: string = "Alice";
-const age: number = "二十歳"; // わざと文字列を入れる
-const isAdmin: boolean = false;
-
-console.log(`${userName} は ${age} 歳です。管理者: ${isAdmin}`);
+console.log(add(1, 2));
+console.log(add(10, 20));
 ```
 
 #### 期待出力
 
-- `"二十歳"` の下に **赤い波線** が引かれる。
-- マウスを乗せると次のようなメッセージが出る。
+Console に次のように出る。
 
 ```
-Type 'string' is not assignable to type 'number'.
+3
+30
 ```
 
-- StackBlitz 下部のターミナル（または Problems タブ）にも同じエラーが出る。
+### 手順 2: わざと間違えてエラーを見る
 
-これが **静的型付けが実行前にエラーを教えてくれる** 体験です。2 章 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
-
-### 手順 4: 変えてみる
-
-次の 3 つをそれぞれ試し、どんなメッセージが出るか見比べる。エラーを確認したら元に戻すこと。
-
-1. `const isAdmin: boolean = "yes";`
-2. `const age: number = true;`
-3. `const userName: string = 123;`
-
-期待される代表的なメッセージは次の通り。
-
-```
-Type 'string' is not assignable to type 'boolean'.
-Type 'boolean' is not assignable to type 'number'.
-Type 'number' is not assignable to type 'string'.
-```
-
-型名のところだけ入れ替わっているのが分かる。
-
-### 手順 5: 型推論に任せてみる
-
-型注釈を消しても、右辺から型が決まることを確認する。
+次のように呼び出しを変えて、それぞれのエラーを確認する。確認したら元に戻すこと。
 
 ```ts
-const userName = "Alice";
-const age = 20;
-const isAdmin = false;
-
-age = "二十歳"; // ここで赤線が出るはず
+console.log(add("1", "2"));
 ```
 
-`age` に型注釈は書いていないが、`20` が入っていたので TS は `number` 型と推論している。そこに文字列を入れようとすると、やはり次のようなメッセージが出る。
+期待されるメッセージ:
+
+```
+Argument of type 'string' is not assignable to parameter of type 'number'.
+```
+
+```ts
+console.log(add(1));
+```
+
+期待されるメッセージ:
+
+```
+Expected 2 arguments, but got 1.
+```
+
+```ts
+function add(a: number, b: number): number {
+  return `${a}${b}`; // 文字列を返してしまう
+}
+```
+
+期待されるメッセージ:
 
 ```
 Type 'string' is not assignable to type 'number'.
 ```
 
-（`const` なので「そもそも再代入できない」というエラーも同時に出る場合がある。その場合は `let age = 20;` に変えてから試す。）
+最後のパターンは「戻り値の型注釈が、実装のミスを捕まえてくれる」例です。
+
+### 手順 3: `void` 型の関数
+
+次のコードを追記して動かす。
+
+```ts
+function greet(name: string): void {
+  console.log(`Hello, ${name}`);
+}
+
+greet("Alice");
+greet("Bob");
+```
+
+#### 期待出力
+
+```
+Hello, Alice
+Hello, Bob
+```
+
+次に、戻り値を使おうとしてみる。
+
+```ts
+const result = greet("Alice");
+console.log(result.toUpperCase());
+```
+
+`result` は `void` 型なので、`.toUpperCase()` を呼ぶと次のようなメッセージが出る。
+
+```
+Property 'toUpperCase' does not exist on type 'void'.
+```
+
+「`void` 型に `toUpperCase` というプロパティは存在しない」という意味。`void` は「値が無いことを表す型」なので、そもそも値として使ってはいけない、と TS が教えてくれている。
+
+### 手順 4: 関数型を書いてみる
+
+次のコードを書く。
+
+```ts
+const multiply: (a: number, b: number) => number = (a, b) => a * b;
+
+function twice(fn: (n: number) => number, value: number): number {
+  return fn(fn(value));
+}
+
+console.log(multiply(3, 4));
+console.log(twice((n) => n + 1, 10));
+console.log(twice((n) => n * 2, 5));
+```
+
+#### 期待出力
+
+```
+12
+12
+20
+```
+
+- `multiply(3, 4)` は `12`。
+- `twice((n) => n + 1, 10)` は「10 に 1 を足す」を 2 回で `12`。
+- `twice((n) => n * 2, 5)` は「5 を 2 倍」を 2 回で `20`。
+
+### 変えてみる
+
+`twice` に、数値ではなく文字列を返す関数を渡してみる。
+
+```ts
+twice((n) => `number: ${n}`, 10);
+```
+
+期待されるメッセージ:
+
+```
+Type 'string' is not assignable to type 'number'.
+```
+
+`twice` の引数 `fn` は `(n: number) => number` 型なので、文字列を返す関数は渡せない、と教えてくれる。
 
 ### 自分で書く
 
-何も見ずに、次の条件を満たすコードを `src/main.ts` に書く。
+次の条件を満たす関数を何も見ずに書く。
 
-- `string` 型の変数 `city` に自分が住んでいる都市名を入れる。
-- `number` 型の変数 `population` に適当な人口を入れる。
-- `boolean` 型の変数 `hasSea` に「海に面しているか」を入れる。
-- 3 つをテンプレートリテラルで繋げて `console.log` する。
+1. `subtract(a: number, b: number): number` — 引き算して返す関数。
+2. `printUser(name: string, age: number): void` — `"Alice (20)"` のように Console に出すだけの関数。
+3. 関数型 `(s: string) => string` を持つ変数 `shout` に、「文字列を受け取って大文字にして `!` を足して返す関数」を代入する。
 
-書き終わったら、わざとどれか 1 つの型注釈と値を食い違わせ、どんなエラーメッセージが出るかを確認してから元に戻す。
+書けたら、それぞれを 1 回ずつ呼び出して期待通りに動くことを確認する。
 
 ## まとめ
 
-- TypeScript は JS に型を足した言語で、**実行する前に** 型の食い違いを教えてくれる。
-- 型注釈は `const 変数名: 型名 = 値` の形で書く。プリミティブ型は `string` / `number` / `boolean` の 3 つから。
-- 右辺から型が自動で決まる **型推論** もあるので、実務では型注釈を省略する場面も多い。
-- 型が合わないと、エディタの赤線と `tsc` の両方が `Type 'X' is not assignable to type 'Y'.` のような形で教えてくれる。
+- 関数の引数と戻り値に型を付けると、呼び出し側と実装の両方のミスを TS が事前に止めてくれる。
+- 値を返さない関数は `void` を戻り値の型として使う。`void` の戻り値は値として使えない。
+- 関数そのものの型は `(引数名: 型) => 戻り値の型` で書ける。関数を受け渡すときの「契約」になる。

@@ -1,314 +1,268 @@
-# lesson77: `next/image` で画像最適化
+# lesson77: 動的ルート
 
 ## ゴール
 
-- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できます。
-- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を覚えます。
-- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを押さえます。
-- 5 章 の「ページを増やしてリンクで移動する」で `/about` に貼った `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
+- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
+- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
+- 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
 
 ## 解説
 
-### なぜ `<img>` のままでは駄目なのか
+### 動的ルートとは
 
-HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
+「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
 
-- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送されます。
-- **形式が古い**: JPG / PNG のまま配ると、WebP や AVIF に対応するブラウザでもその恩恵を受けられません。
-- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に全部読みに行きます（CLS や LCP の悪化）。
-- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動きます（CLS）。
+App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
 
-`next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
+```
+app/
+└── posts/
+    ├── page.tsx            → /posts（一覧）
+    └── [id]/
+        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
+```
 
-- 表示サイズに応じた解像度を自動生成（`srcset`）
-- WebP / AVIF に自動変換（ブラウザが対応していれば）
-- 画面内に入ったときだけ読み込み（遅延読み込み）
-- `width` / `height` 必須にすることでレイアウトのガタつきを防ぐ
+`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
 
-### 最小の使い方
+### `params` は Promise になった
+
+Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
+
+> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
+
+型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
 
 ```tsx
-import Image from "next/image";
-
-export default function Page() {
-  return (
-    <Image
-      src="/coffee.jpg"
-      alt="コーヒーの写真"
-      width={300}
-      height={200}
-    />
-  );
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  // id を使って処理
 }
 ```
 
-- `import Image from "next/image"` でコンポーネントを読み込みます。
-- `src` はプロジェクト内の `public/` 直下のパス、または **登録済み** の外部 URL です。
-- `alt` は必須です。読み上げソフトと、画像が読み込めなかったときの代替テキストになります。
-- `width` と `height` はピクセル数を **数値** で書きます（CSS 単位の `px` は付けません）。
+`PageProps<"/posts/[id]">` の文字列は、**この `page.tsx` があるルート** を書きます。`[id]` の部分がそのまま `params.id` の型に反映されます（`string` 型）。
 
-### `width` / `height` は原則必須。ただし省略できる 2 つのケース
+- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
+- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
+- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
 
-`<Image>` は `width` / `height` を **原則必須** にします。レイアウトのガタつき（CLS）を防ぐためです。ただし、次の 2 ケースだけは省略できます。
+### `find` で 1 件だけ取り出す
 
-1. **静的 import の場合**
-   プロジェクト内の画像を `import` すると、Next.js がビルド時に画像のサイズを読み取って自動で埋めてくれます。
-   ```tsx
-   import heroImg from "./hero.png";
-
-   <Image src={heroImg} alt="ヒーロー画像" />
-   ```
-2. **`fill` を使う場合**
-   親要素いっぱいに広げる使い方です。親に `position: relative` と明示的なサイズが要ります。
-   ```tsx
-   <div style={{ position: "relative", width: 300, height: 200 }}>
-     <Image src="/coffee.jpg" alt="コーヒー" fill />
-   </div>
-   ```
-
-外部 URL を `src` に指定する場合は **静的 import できないので `width` / `height` を明示するか、`fill` で親サイズに従わせる** ことになります。
-
-### 外部ホストを使うには `remotePatterns`
-
-`<Image>` はセキュリティとキャッシュの都合で、**どの外部ホストからの画像を許可するか** を事前に宣言する必要があります。これが `next.config.ts` の `images.remotePatterns` です。
-
-未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
-
-```
-Invalid src prop (https://placehold.co/...) on `next/image`,
-hostname "placehold.co" is not configured under images in your `next.config.js`
-```
-
-書き方は次の通りです。
+2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
 
 ```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
-    ],
-  },
-};
-
-export default nextConfig;
+const target = posts.find((p) => p.id === id);
 ```
 
-Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書けば 1 ファイルだけ許可するパターンも書けます。
+- 見つかったとき: その要素を返します。
+- 見つからないとき: `undefined` を返します。
 
-### `sizes` でレスポンシブ対応
+なので、詳細ページでは次のような流れになります。
 
-`<Image>` は可変サイズ（`width` が CSS で `100%` のような動的な値）で使うときに `sizes` を付けると、もっとも賢く `srcset` を切り替えてくれます。詳細は本レッスンの範囲外ですが、1 行だけ雰囲気を見せておきます。
+1. 一覧を `fetch` で全部取ってくる（Server Component）。
+2. `await params` で URL の `id` を取り出す。
+3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
+4. 見つからないときは 404 を返す。
+
+この段階ではシンプルに「一覧から `find` で取り出して表示」までを作ります。
+
+### 実務では「単件 fetch」が原則
+
+学習用の演習では `posts` 一覧をまるごと fetch して `find` で 1 件選び出していますが、**実務ではこの書き方を本番に持ち込みません**。一覧が 1 万件あれば「1 件のページを表示するために 1 万件をネットワーク越しに取ってくる」ことになり、転送量・実行時間ともに無駄が大きく、外部 API への過剰呼び出しにもなります。
+
+JSONPlaceholder の場合は **`/posts/${id}` で単件取得できる** ので、実務寄りに書くなら次のようにします。
+
+```ts
+const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+if (!res.ok) {
+  // 見つからなかったときの処理（notFound() など）
+}
+const post: Post = await res.json();
+```
+
+加えて、変更頻度の低いデータなら `{ next: { revalidate: 60 } }` のような **時間ベースの再検証** を付けたり、ビルド時に静的生成する `generateStaticParams` で **既知の `id` 一覧を SSG する** 戦略もあります。本コースでは概念に集中するため `find` のままにしますが、本番に持ち込む前に「単件 API があれば単件 fetch、なければキャッシュ戦略を考える」を頭に入れておきます。
+
+### `searchParams` でクエリ文字列を受け取る
+
+URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。`params`（動的ルートのディレクトリ名から来る値）と並んでよく使うので、ここで一緒に押さえておきます。
 
 ```tsx
-<Image
-  src="/coffee.jpg"
-  alt="コーヒー"
-  width={600}
-  height={400}
-  sizes="(max-width: 640px) 100vw, 300px"
-/>
+export default async function PostsPage({
+  searchParams,
+}: PageProps<"/posts">) {
+  const { highlight } = await searchParams;
+  // highlight は string | undefined
+}
 ```
 
-スマホ幅では 100vw、それ以外では 300px で表示される、という意味です。本演習では使いませんが、覚えておくと役立ちます。
+- Next.js 15 以降、`searchParams` は **`params` と同様に Promise** になっています。`await searchParams` で取り出します。
+- `PageProps<"/posts">` のグローバル型が `searchParams` を `Promise<{ [key: string]: string | string[] | undefined }>` として推論します。
+- `?foo=1&foo=2` のように同じキーが複数個渡ると配列になりますが、本コースでは扱いません。
+
+### `searchParams` は外部入力扱い
+
+`searchParams` の値は **URL のクエリ文字列** なので、攻撃者を含めた任意のユーザーが好きな値を入れられます。「サーバーが渡してきた信頼できるデータ」ではなく、`fetch` のレスポンスや `<form>` の入力と同じ **外部入力** として扱います。具体的には次の 3 点を守ります。
+
+1. **画面に出すだけなら React に任せる**: JSX 内で `{highlight}` のように埋めると React が自動で HTML エスケープします。XSS は出ません。
+2. **`<a href={...}>` や別の URL に組み込むときは `encodeURIComponent`**: `highlight` を別画面の URL に転用するなら、`encodeURIComponent(highlight)` でエンコードしてから埋めます。素直に文字列連結すると `?` や `&` が攻撃に使われます。
+3. **`dangerouslySetInnerHTML` には絶対渡さない**: 名前のとおり危険です。`searchParams` の値をここに渡すと XSS が成立します。
+
+「同じキーが複数個」「想定外に長い文字列」も外部入力ゆえに起こります。値を使う前に `Array.isArray(highlight)` をチェックする、長さ上限で切り捨てる、既知の値（DB の id）と照合してから使う、といった**入り口での検証**を入れるのが堅い書き方です。「Zod でスキーマバリデーション」で扱う `safeParse` がこの検証の定番です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。`/about` の画像を差し替える演習なので、最低限 `/about` ページと `<img>` が存在すれば構いません。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
 
 <details>
-<summary>出発点のファイル（`/about` 最小形）</summary>
+<summary>出発点のファイル（`/posts` 部分）</summary>
 
-**`app/about/page.tsx`**
+**`app/posts/page.tsx`**
 
 ```tsx
-export default function AboutPage() {
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
   return (
     <>
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
 ```
 
-Route Groups を使っていない出発点なので、本文中で `app/(public)/about/page.tsx` と書かれている箇所は `app/about/page.tsx` に読み替えてください。
+**`app/posts/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
+}
+```
 
 </details>
 
 ### 前回のプロジェクトを開く
 
-5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
+「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
 
-### 手順 1: `next.config.ts` に `remotePatterns` を追加
+### 手順 1: 一覧ページを詳細リンク付きに更新
 
-プロジェクト直下に `next.config.ts`（または `next.config.mjs`）があります。StackBlitz テンプレートでは既に存在するはずです。なければ新規作成します。
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
-    ],
-  },
-};
-
-export default nextConfig;
-```
-
-保存すると、Next.js が設定を再読み込みします（StackBlitz ではターミナルに再起動のログが流れます）。
-
-### 手順 2: `/about` の `<img>` を `<Image>` に置き換える
-
-`app/(public)/about/page.tsx`（「Route Groups で整理する」以前のままなら `app/about/page.tsx`）を開きます。「ページを増やしてリンクで移動する」で貼った 3 枚のカードの `<img>` を、`<Image>` に置き換えます。
-
-ファイル全体はこうなります。
+`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
 
 ```tsx
-import Image from "next/image";
-import "./about.css";
+import Link from "next/link";
 
-export default function AboutPage() {
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
   return (
     <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="コーヒーのプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="本のプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="散歩のプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <Link href={`/posts/${post.id}`}>
+              <strong>#{post.id}</strong> {post.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
 ```
 
-変更点:
+### 手順 2: 動的ルートのファイルを作る
 
-- 1 行目に `import Image from "next/image";` を追加しました。
-- `<img src="..." alt="..." />` を 3 箇所とも `<Image ... width={300} height={200} />` に置き換えました。
-- `<Image>` は `width` と `height` を **数値**（中括弧） で書くことに注意してください（HTML の `<img width="300">` のような文字列ではありません）。
+`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
 
-### 手順 3: 画像サイズの CSS を見直す
+```tsx
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
 
-「ページを増やしてリンクで移動する」の `about.css` には次のような指定が入っていました。
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
 
-```css
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  // URL の id は string、API の id は number なので揃える
+  const post = posts.find((p) => String(p.id) === id);
+
+  if (!post) {
+    return (
+      <>
+        <h1>見つかりません</h1>
+        <p>ID: {id} の記事は存在しない。</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
+  );
 }
 ```
 
-`<Image>` も内部的には `<img>` を生成するので、このスタイルはそのまま効きます。`width: 100%` でカードの幅に合わせて縮みます。`height: auto` を入れておくと、縮んでも縦横比が崩れません。
+ポイント:
 
-ダークモードでの `filter` 調整などは不要です。「ページを増やしてリンクで移動する」時点の CSS のままで構いません。
+- `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
+- `await params` してから `id` を取り出します。
+- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
+- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。
 
 ### 期待出力
 
-1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
-2. **DevTools → Network タブ** を開いて再読み込みします。
-3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
-4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
-5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
+1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
+2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
+3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
+4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
 
 ### 変えてみる
 
-1. 3 枚目のカードの `<Image>` に `priority` プロパティを付けて、遅延読み込みを止めてみましょう（`<Image src="..." alt="..." width={300} height={200} priority />`）。ページ表示のタイミングが少しだけ速くなる可能性があります（体感差は小さい）。
-2. `width={300} height={200}` を `width={600} height={400}` に変えると、同じ見た目のまま 2 倍の解像度のソースが配信されるようになります（ネットワークタブで URL の `w=` が変わるのを確認）。
-3. `public/` フォルダに自分の PNG 画像を 1 枚置いて、`import myImg from "../../../../public/my.png"` のように静的 import で `<Image src={myImg} alt="..." />` を書いてみましょう。`width` / `height` を **省略しても** 動くはずです（静的 import なので Next.js が自動でサイズを取る）。
-
-### スコープ外
-
-- LCP 最適化の深掘り、`priority` の本格活用、`placeholder="blur"` の `blurDataURL` 自動生成は本コースでは扱いません。
-- `localPatterns`（Next.js 15.3 で追加）などの発展設定は扱いません。
-- カスタムローダー（CDN 連携）も扱いません。
+1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
+2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
+3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`PageProps<"/posts/[postId]">` に合わせて書き直します（グローバル型なので再ビルドすると自動で型が切り替わります）。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
 
 ### 自分で書く
 
-`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.co/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
+`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
+
+- URL: `/users/1`
+- API: `https://jsonplaceholder.typicode.com/users`
+- 表示: `name` と `email`、`phone`
+
+`PageProps<"/users/[id]">` の型定義、`await params`、`find` の 3 点が書ければ合格です。
 
 ## まとめ
 
-- `import Image from "next/image"` で `<Image>` コンポーネントを使えます。素の `<img>` より賢い画像表示ができます。
-- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
-- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
-- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられます。
+- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
+- Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
+- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。

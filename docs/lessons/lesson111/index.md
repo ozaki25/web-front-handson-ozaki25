@@ -1,329 +1,444 @@
-# lesson111: GitHub の PR とコードレビュー
+# lesson111: React Hook Form の基本
 
 ## ゴール
 
-- GitHub と Git の関係を区別して説明できる
-- リモートリポジトリを作成し、ローカル → GitHub に push できる
-- ブランチで作業 → Pull Request（PR）作成 → レビュー → マージの流れを理解する
-- 良いコミットメッセージと PR タイトルの書き方を知る
-- マージ戦略（merge / squash / rebase）の違いを 1 行で言える
-- ブランチ保護ルールの目的を説明できる
-- セルフホストではなく GitHub を選ぶ理由を 1 つ挙げられる
+- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
+- RHF を `npm install` してフォームに導入できる
+- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
+- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
+- `formState.errors` でエラーメッセージを表示できる
+- `defaultValues` で初期値を入れる
+- `watch` / `setValue` / `reset` の使い分けを知る
 
 ## 解説
 
-### Git と GitHub は別物
+### 制御コンポーネントの限界
 
-混同されがちですが:
+これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
 
-- **Git**: バージョン管理ツール（`git` コマンド本体）
-- **GitHub**: Git リポジトリをホスティングする SaaS。PR / Issue / Actions / Projects 等の協業機能付き
+```tsx
+const [name, setName] = useState("");
+const [email, setEmail] = useState("");
+const [message, setMessage] = useState("");
+// ...
+<input value={name} onChange={(e) => setName(e.target.value)} />
+<input value={email} onChange={(e) => setEmail(e.target.value)} />
+<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+```
 
-似たサービスに **GitLab** / **Bitbucket** / **Codeberg** などがありますが、2026 年時点でデファクトは GitHub です。本コースも GitHub を前提にします。
+シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
 
-### リモートリポジトリを作る
+- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
+- **コードが冗長**: state と setter の宣言が増える
+- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
+- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
 
-#### 1. GitHub で空の repo を作成
+これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
 
-1. <https://github.com/new> にアクセス
-2. **Repository name** を入力（例: `my-todo-app`）
-3. **Public / Private** を選択
-4. **Initialize this repository** のチェックは **すべて外す**（後でローカルから push するため）
-5. **Create repository**
+### React Hook Form とは
 
-#### 2. ローカルから push
+RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
 
-GitHub の repo 作成後の画面に表示される手順をそのまま実行:
+- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
+- **少ないコード** で大きなフォームを書ける
+- **バリデーション + エラー管理** が組み込み
+
+2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
+
+### インストール
 
 ```bash
-git remote add origin https://github.com/your-name/my-todo-app.git
-git branch -M main
-git push -u origin main
+npm install react-hook-form
 ```
 
-これでローカルのコミットが GitHub に上がります。`-u`（upstream）はそのブランチの追跡先を記録するので、次回からは `git push` だけで OK。
+### 最小のフォーム
 
-### Pull Request（PR）の流れ
+`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
 
-PR は「**このブランチの変更を main に取り込みたい**、レビューしてください」という依頼書です。現代の開発フローでは **直接 main に push する代わりに** PR を経由するのが基本です。
+```tsx
+import { useForm } from "react-hook-form";
 
-#### 典型的なフロー
+type FormValues = {
+  name: string;
+  email: string;
+};
 
-```
-1. ローカルでブランチ作成: git switch -c feature/add-login
-2. 変更してコミット (1 件 or 複数件)
-3. ブランチを GitHub に push: git push -u origin feature/add-login
-4. GitHub で PR を作成（main ← feature/add-login）
-5. レビュアーがコードをチェック、コメント、修正依頼
-6. 必要に応じて修正コミットを追加 push（PR は自動更新）
-7. レビュー承認（Approve）
-8. main にマージ
-9. ブランチを削除（GitHub の UI からワンクリック）
-```
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>();
 
-#### PR の作り方
+  function onSubmit(data: FormValues) {
+    console.log(data);
+  }
 
-`git push` 後に GitHub のリポジトリページを開くと、**「Compare & pull request」** ボタンが出ます。または:
+  return (
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-required="true"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name", { required: "必須です" })}
+        />
+        {errors.name && <p role="alert">{errors.name.message}</p>}
+      </div>
 
-- リポジトリの **Pull requests** タブ → **New pull request**
-- ベースブランチ（マージ先）= `main`、比較ブランチ（変更元）= `feature/add-login`
-- タイトルと説明を書く → **Create pull request**
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-required="true"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email", { required: "必須です" })}
+        />
+        {errors.email && <p role="alert">{errors.email.message}</p>}
+      </div>
 
-### 良いコミットメッセージ・PR タイトル
-
-#### コミットメッセージ
-
-**Why**（なぜ）を中心に書きます。**What**（何）はコードを見れば分かるので最小限で。
-
-NG:
-
-```
-修正
-変更
-fix
-```
-
-OK:
-
-```
-Login ボタンの色をブランドカラーに統一
-useEffect のクリーンアップ漏れで起きていたメモリリークを修正
-ヘッダーのレスポンシブ対応（600px 以下で縦並び）
-```
-
-書式は **1 行目 50 文字以内** + **空行** + 詳細。最近は **Conventional Commits**（`feat:` / `fix:` / `docs:` などの prefix）も人気です。
-
-```
-feat(auth): magic link ログインを追加
-
-メール経由のワンタイム URL でログインできるようにする。
-パスワード認証は次のリリースで非推奨化する予定。
+      <button type="submit" disabled={isSubmitting}>
+        送信
+      </button>
+    </form>
+  );
+}
 ```
 
-#### PR タイトル
+主な要素:
 
-PR タイトルもコミットメッセージと同じ書き方が良いです。マージ後のコミット履歴に残るので、後から検索できる文言を選びます。
+- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
+- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
+- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
+- **`formState.errors`**: バリデーションエラーが格納される
+- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
 
-PR 説明（本文）は **「何を変えたか」「なぜ」「どうテストしたか」** の 3 つを書くのが定番。テンプレート（`.github/pull_request_template.md`）を用意するチームも多いです。
+### バリデーションオプション
 
-### コードレビュー
+`register` の第 2 引数で各種ルールを指定できます。
 
-#### レビュアーの観点
-
-- **動くか**: ローカルで動かして確認できれば理想
-- **読めるか**: 半年後の自分が読んで意味が通るか
-- **テストがあるか**: 重要なロジックに自動テストが付いているか
-- **影響範囲**: 既存機能を壊していないか
-- **セキュリティ**: 入力値検証 / シークレット漏洩 / XSS / SQL インジェクション
-- **パフォーマンス**: 明らかに遅くなる書き方をしていないか
-
-#### コメントの書き方
-
-GitHub の **Files changed** タブで、行ごとに `+` ボタンを押すとインラインコメントが書けます。
-
-良いコメント:
-
-```
-suggestion: ここは Array.from よりも展開構文の方が読みやすそうです
-question: なぜ条件を反転させているか教えてもらえますか？
-nit: 命名は `users` より `userList` の方がチームの規約に合いそうです
-blocking: ここで input をエスケープしないと XSS の余地があります
+```tsx
+{...register("password", {
+  required: "パスワードは必須です",
+  minLength: { value: 8, message: "8 文字以上で入力してください" },
+  maxLength: { value: 100, message: "100 文字以内で入力してください" },
+  pattern: {
+    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+    message: "英字と数字を混ぜてください",
+  },
+})}
 ```
 
-`suggestion` / `question` / `nit`（nitpick = 些細な指摘）/ `blocking`（マージブロッカー）のような **接頭辞** を使うと、レビュアーの意図が明確で議論が早くなります。
+`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
 
-GitHub の **Suggested change** 機能を使うと、コードを直接書き換える提案も送れます。レビュイーは 1 クリックで取り込めます。
-
-### マージ戦略の 3 種類
-
-PR の **Merge** ボタンには 3 つのオプションがあります（リポジトリ設定で許可されているものだけ表示）。
-
-#### 1. Merge commit（既定）
-
-```
-*   Merge pull request #42 from feature/login
-|\
-| * a (feature/login)
-| * b
-|/
-* c (main)
+```tsx
+{...register("age", {
+  validate: (value) => {
+    if (value < 18) return "18 歳以上である必要があります";
+    if (value > 120) return "値が大きすぎます";
+    return true; // OK
+  },
+})}
 ```
 
-ブランチの履歴が残り、マージ用の追加コミット（`Merge pull request ...`）が作られます。
+### `defaultValues` で初期値
 
-- 利点: 履歴が完全に残る、PR と main の関係が分かりやすい
-- 欠点: 履歴グラフが複雑になりやすい
+編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
 
-#### 2. Squash and merge
-
-```
-* squashed (main) ← feature/login の全 commit を 1 つに圧縮
-* c (main)
-```
-
-PR の全コミットを **1 つに圧縮** して main に合流。
-
-- 利点: main の履歴が線形 + クリーン、1 PR = 1 commit でリバートしやすい
-- 欠点: PR 内の細かい履歴が失われる
-
-最近のチームでは **Squash が既定** になることが多いです。本コースの教材サイトもこの方針です。
-
-#### 3. Rebase and merge
-
-PR のコミットを **そのまま順番に** main の上に積む。マージコミットなし。
-
-- 利点: 完全に線形な履歴
-- 欠点: PR 中のコミットが個別に main に並ぶので、ノイズが多い場合は読みづらい
-
-### ブランチ保護ルール
-
-GitHub の **Settings → Branches → Branch protection rules** で main ブランチに守りを入れます。
-
-典型的な設定:
-
-- **Require a pull request before merging**: main への直接 push を禁止
-- **Require approvals: 1 人以上**: 最低 1 人の Approve を必須化
-- **Require status checks to pass**: CI（Lint / Test / Build）が通らないとマージできない
-- **Require branches to be up to date**: main の最新を取り込んでから merge
-- **Require linear history**: Squash / Rebase 限定にする
-- **Restrict pushes that create matching branches**: 特定ブランチ名の作成を制限
-
-これでチームの誰かがうっかり main に push しても、ブロックしてくれます。
-
-### Issue / Discussions / Projects
-
-GitHub には PR 以外にも協業ツールがあります。
-
-- **Issues**: バグ報告 / 機能要望 / TODO の管理
-- **Discussions**: Q&A / アイデア共有（Issue より柔らかい場）
-- **Projects**: カンバン / ロードマップで Issue / PR を整理
-- **Milestones**: リリース単位で Issue / PR をまとめる
-
-本コースでも、機能追加要望や軽微な修正は Issue → PR の流れで管理しています（過去の commit メッセージにも issue 番号が付いている例があります）。
-
-### `gh` CLI
-
-GitHub の操作をコマンドラインからやる公式ツールです。
-
-```bash
-# インストール（macOS）
-brew install gh
-
-# ログイン（1 回だけ）
-gh auth login
-
-# PR を作成
-gh pr create --title "feat: login を追加" --body "..."
-
-# PR 一覧
-gh pr list
-
-# PR をマージ
-gh pr merge --squash
+```tsx
+const { register, handleSubmit } = useForm<FormValues>({
+  defaultValues: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
 ```
 
-ブラウザを開かずに操作できるので、慣れると圧倒的に速いです。
+非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
+
+```tsx
+const { register, handleSubmit, reset } = useForm<FormValues>();
+
+useEffect(() => {
+  fetch("/api/me")
+    .then((r) => r.json())
+    .then((user) => reset(user));
+}, [reset]);
+```
+
+### `watch` で値を購読
+
+特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
+
+```tsx
+const { watch, register } = useForm<FormValues>();
+const subscribe = watch("subscribe");
+
+return (
+  <>
+    <label>
+      <input type="checkbox" {...register("subscribe")} />
+      購読する
+    </label>
+
+    {subscribe && (
+      <div>
+        <label>頻度</label>
+        <select {...register("frequency")}>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週</option>
+        </select>
+      </div>
+    )}
+  </>
+);
+```
+
+`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
+
+### `setValue` でプログラム的に値を設定
+
+```tsx
+const { setValue } = useForm<FormValues>();
+
+// 別のボタンや非同期処理から値を入れる
+setValue("name", "Bob");
+```
+
+「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
+
+### `reset` でフォームを初期化
+
+送信成功後にフォームを空にする:
+
+```tsx
+async function onSubmit(data: FormValues) {
+  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
+  reset();  // 入力をクリア
+}
+```
+
+### 送信中の表示
+
+`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
+
+```tsx
+const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
+
+return (
+  <button type="submit" disabled={isSubmitting}>
+    {isSubmitting ? "送信中..." : "送信"}
+  </button>
+);
+```
+
+`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
+
+### アクセシブルなエラー表示
+
+「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
+
+```tsx
+<input
+  id="email"
+  type="email"
+  aria-invalid={errors.email ? "true" : "false"}
+  aria-describedby={errors.email ? "email-error" : undefined}
+  {...register("email", { required: "メールは必須です" })}
+/>
+{errors.email && (
+  <p id="email-error" role="alert">
+    {errors.email.message}
+  </p>
+)}
+```
+
+これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
+
+### エラー表示は色だけに頼らない
+
+フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
+
+1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
+2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
+3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
+
+CSS 例:
+
+```css
+.form-error {
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .form-error {
+    color: #fca5a5;
+  }
+}
+```
 
 ## 演習
 
 ### ゴール
 
-- ローカルの Git リポジトリを GitHub に push する
-- ブランチで作業 → PR 作成 → 自分でセルフレビュー → マージする
-- ブランチ保護ルールを 1 つ設定する
+- React + TS プロジェクトに RHF を導入する
+- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
+- 必須 / メールパターン / 最大長 のバリデーションを実装
+- 送信時に「送信中...」、成功で「送信しました！」を表示
 
-### 手順 1: GitHub アカウント準備
+### 途中から始める場合
 
-GitHub アカウントを持っていない場合は <https://github.com/> で作成。SSH キーや Personal Access Token も設定しておきます（公式ガイド: <https://docs.github.com/ja/authentication>）。
-
-### 手順 2: 「Git の基本操作」で作ったリポジトリを push
-
-```bash
-cd git-practice    # 「Git の基本操作」で作ったディレクトリ
-```
-
-GitHub で空 repo（例: `git-practice`）を作成後:
+これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
 
 ```bash
-git remote add origin https://github.com/your-name/git-practice.git
-git branch -M main
-git push -u origin main
+npm create vite@latest rhf-sample -- --template react-ts
+cd rhf-sample
+npm install
+npm install react-hook-form
 ```
 
-### 手順 3: ブランチで変更 → PR
+### `src/ContactForm.tsx`
 
-```bash
-git switch -c feature/colors
-echo "色を変える予定" >> README.md
-git add README.md
-git commit -m "docs: 色変更の予定をメモに追加"
-git push -u origin feature/colors
+> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
+
+```tsx
+import { useForm } from "react-hook-form";
+import { useState } from "react";
+
+type FormValues = {
+  name: string;
+  email: string;
+  message: string;
+};
+
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>();
+
+  async function onSubmit(data: FormValues) {
+    // 実際は fetch で送信。ここでは 1 秒待つだけ
+    await new Promise((r) => setTimeout(r, 1000));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
+
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          aria-describedby={errors.name ? "name-error" : undefined}
+          {...register("name", {
+            required: "お名前は必須です",
+            maxLength: { value: 50, message: "50 文字以内で入力してください" },
+          })}
+        />
+        {errors.name && (
+          <p id="name-error" role="alert" className="form-error">
+            {errors.name.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          aria-describedby={errors.email ? "email-error" : undefined}
+          {...register("email", {
+            required: "メールは必須です",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "メールアドレスの形式が正しくありません",
+            },
+          })}
+        />
+        {errors.email && (
+          <p id="email-error" role="alert" className="form-error">
+            {errors.email.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          aria-describedby={errors.message ? "message-error" : undefined}
+          {...register("message", {
+            required: "メッセージは必須です",
+            minLength: { value: 10, message: "10 文字以上で入力してください" },
+          })}
+        />
+        {errors.message && (
+          <p id="message-error" role="alert" className="form-error">
+            {errors.message.message}
+          </p>
+        )}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
+  );
+}
 ```
 
-GitHub のリポジトリページに **「Compare & pull request」** ボタンが出るのでクリック → タイトルと説明を書いて **Create pull request**。
+### `src/App.tsx`
 
-### 手順 4: セルフレビュー
+```tsx
+import { ContactForm } from "./ContactForm";
 
-自分で PR の **Files changed** タブを開き、変更を眺めます。気になった行に `+` ボタンでコメントを 1 つ書いてみる（例: `nit: 「予定」より「TODO」の方が一般的かも`）。
-
-### 手順 5: マージ
-
-PR ページ下部の **Merge pull request** → **Squash and merge** を試します。マージ後、`feature/colors` ブランチを削除（**Delete branch** ボタン）。
-
-ローカルでも:
-
-```bash
-git switch main
-git pull origin main
-git branch -d feature/colors    # ローカルブランチも削除
+export default function App() {
+  return <ContactForm />;
+}
 ```
-
-### 手順 6: ブランチ保護を 1 つ設定
-
-リポジトリの **Settings** → **Branches** → **Add rule** で:
-
-- **Branch name pattern**: `main`
-- **Require a pull request before merging** にチェック
-- 保存
-
-これで、これ以降 `main` に直接 push できなくなります。試しに `git push origin main` を直接やろうとすると拒否されます（ブランチ保護を一時解除するか、PR 経由で取り込む必要がある）。
 
 ### 期待出力
 
-- GitHub にローカルの履歴がそのまま反映される
-- PR 画面で行単位の差分とコメントが表示される
-- Squash でマージすると、main の履歴が線形になる（PR の複数 commit が 1 つに圧縮）
-- main への直接 push が「Branch protection rules: protected branch」のエラーで拒否される
+- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
+- メールに `abc` を入れて送信 → メール形式エラー
+- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
+- DevTools の Console に送信値が出る
+
+`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
 
 ### 変える
 
-- マージ戦略を **Merge commit** に変えてみる（リポジトリ設定で許可）。グラフが分岐 + 合流の形になる
-- PR をマージせず **Close** してみる（後から消したい時の操作）
-- Issues タブで Issue を作り、コミットメッセージに `Closes #1` と書いて push してみる。マージ時に Issue が自動で閉じる
+- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
+- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
+- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
 
 ### 自分で書く
 
-- リポジトリに `.github/pull_request_template.md` を追加し、PR の説明テンプレートを作る:
-
-  ```md
-  ## 概要
-
-  ## 変更内容
-  -
-  -
-
-  ## テスト
-  - [ ] ローカルで動作確認
-  - [ ] 単体テスト追加 / 更新
-  ```
-
-- `gh` CLI をインストールして、`gh pr create` でブラウザを開かずに PR を作る
+- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
+- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
 
 ## まとめ
 
-- **Git は道具、GitHub はホスティングサービス**
-- 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
-- コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
-- マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
-- ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
-- `gh` CLI でコマンドラインからほぼ全操作が可能
+- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
+- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
+- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
+- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
+- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
+- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
+- `isSubmitting` で送信中の UI 制御

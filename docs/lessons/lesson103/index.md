@@ -1,240 +1,400 @@
-# lesson103: Core Web Vitals の 3 つの指標と Lighthouse
+# lesson103: package.json と npm スクリプト
 
 ## ゴール
 
-- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
-- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
-- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
-- 75 パーセンタイル評価の意味を説明できる
-- DevTools の Performance パネルで CWV を計測できる
-- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
+- `dependencies` / `devDependencies` / `peerDependencies` の違いを言える
+- セマンティックバージョニング（`^` / `~` / 固定）の意味を読める
+- `package-lock.json` がなぜ必要か説明できる
+- npm / pnpm / yarn / Bun の違いを把握する
+- `scripts` の書き方と `npm run` の仕組みを理解する
 
 ## 解説
 
-### Core Web Vitals とは
+### `package.json` はプロジェクトの「目次」
 
-**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
+Node.js / フロントのプロジェクトには必ず `package.json` があります。役割は次の 4 つ。
 
-| 指標 | 何を測る | Good | Needs Improvement | Poor |
+1. **メタ情報**（プロジェクト名 / バージョン / 作者など）
+2. **依存パッケージ** の宣言
+3. **スクリプト** の登録（`npm run dev` など）
+4. **ツール設定** の置き場（lint-staged / browserslist / 各種 CLI の設定）
+
+最小例:
+
+```json
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0"
+  }
+}
+```
+
+### 依存の 3 つの種類
+
+#### `dependencies`
+
+「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要がある。
+
+#### `devDependencies`
+
+「**開発時だけ必要** な依存」。`typescript` / `vite` / `eslint` / `vitest` など、ビルド済みコードを動かすには不要なもの。本番のサーバーで `npm install --omit=dev` すると **dev は入らず、容量が減る** メリットがあります。
+
+#### `peerDependencies`
+
+「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言する。
+
+例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示。
+
+普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
+
+#### `optionalDependencies` / `bundledDependencies`
+
+たまに見かけますが、めったに使いません。`optionalDependencies` は「入らなくても続行」、`bundledDependencies` は「自分のパッケージに同梱」。
+
+### セマンティックバージョニング（semver）
+
+`react: ^19.2.0` の数字は **3 つに区切られた意味** を持ちます。
+
+```
+19.2.0
+│ │ │
+│ │ └── PATCH（バグ修正）
+│ └──── MINOR（後方互換のある機能追加）
+└────── MAJOR（破壊的変更）
+```
+
+ルール:
+
+- **PATCH を上げる** → 既存のコードは動き続けるはず
+- **MINOR を上げる** → 既存のコードは動き、新機能が増える
+- **MAJOR を上げる** → 既存のコードが動かなくなる可能性あり
+
+#### 範囲指定の記号
+
+| 書き方 | 意味 | 例: `^1.2.3` の許容範囲 |
+|---|---|---|
+| `^1.2.3` | MAJOR は固定。MINOR / PATCH は上げて OK | `>= 1.2.3 < 2.0.0` |
+| `~1.2.3` | MINOR も固定。PATCH のみ上げて OK | `>= 1.2.3 < 1.3.0` |
+| `1.2.3` | 完全固定 | `1.2.3` のみ |
+| `>=1.2.3` | これ以上 | `1.2.3` 以降すべて |
+| `1.x` / `1.*` | MAJOR だけ固定 | `>= 1.0.0 < 2.0.0` |
+
+**新規プロジェクトのデフォルトは `^`**。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
+
+ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用も。
+
+### `package-lock.json` の役割
+
+`package.json` に `^19.2.0` と書いてあっても、**実際にインストールされる版は `npm install` 実行時の最新** です。チームで開発していると「**人によって入る版が違う**」事態が起きます。
+
+`package-lock.json` は「**実際に入った全パッケージの正確なバージョン**」を記録するファイル。
+
+```json
+// package-lock.json の中身（抜粋）
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz",
+    "integrity": "sha512-..."
+  }
+}
+```
+
+これにより:
+
+- **再現可能なインストール** が保証される
+- 直接の依存だけでなく、**間接の依存**（dependency の dependency） まで固定される
+- セキュリティ的にも `integrity` でファイルの完全性が確認される
+
+ルール:
+
+- **`package-lock.json` は必ず Git にコミット** する
+- 競合が起きたら片側を採用して `npm install` を再実行する（手動マージはしない）
+- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lock`（旧 `bun.lockb`）が同じ役割
+
+### npm / pnpm / yarn / Bun
+
+2026 年の選択肢は 4 つ。それぞれ「**仕事は同じだが内部の効率と機能が違う**」と理解します。
+
+| | 速度 | ディスク効率 | 安定性 | モノレポ |
 |---|---|---|---|---|
-| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
-| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
-| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
+| npm | 標準 | 普通 | 抜群 | workspaces 対応 |
+| pnpm | 速い | **抜群**（ハードリンク共有） | 抜群 | workspaces 対応 |
+| yarn (v4 / Berry) | 速い | 普通〜良 | 良 | workspaces 対応 |
+| Bun | **最速** | 良 | 改善中 | workspaces 対応 |
 
-「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
+#### pnpm の利点
 
-### LCP: 最大コンテンツが見えるまで
+- 同じパッケージを複数プロジェクトで使う場合、**1 回しかディスクに置かない**（`~/.pnpm-store` に集約）
+- 厳密な依存解決（**書いていない依存は import できない**）でバグを防げる
+- `pnpm-workspace.yaml` でモノレポ管理
 
-LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
+2026 年現在、**新規プロジェクトで pnpm を選ぶ現場が増えています**。Vue / Vite / Vitest など主要 OSS の公式推奨も pnpm。
 
-LCP が遅くなる主な原因:
+#### Bun の利点
 
-1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
-2. **サーバーレスポンスが遅い**（TTFB が長い）
-3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
-4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
+- インストールが **桁違いに速い**（並列ダウンロード + 効率的な書き込み）
+- ランタイムも兼ねる（`bun run script.ts` で `tsx` 不要）
+- 仕様が安定してきた 2026 年は、**新規 CLI / バックエンドで採用** が増えている
 
-主な対策:
+#### Yarn の現在地
 
-- 画像最適化（`next/image` 系のレッスン参照）
-- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
-- JS のコード分割（バンドルサイズ最適化のレッスン参照）
-- 重要な画像 / フォントを `<link rel="preload">` で先読み
+- v1（Classic）は古い。新規には選ばない
+- v4（Berry）は機能豊富だが、PnP モードは **採用が頭打ち**
 
-### INP: 反応の遅さ
+#### 使い分けの目安
 
-INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+- **学習中 / Next.js 公式チュートリアル** → npm（公式が npm 前提のため）
+- **業務で長く付き合う** → pnpm
+- **試してみたい / インストールの速さ重視** → Bun
 
-INP が悪くなる主な原因:
+このコースの演習では基本 `npm` を使います。これは普及度の問題で、pnpm に置き換えても何も変わりません（コマンド名だけ違う）。
 
-1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
-2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
-3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
+### `scripts` と `npm run`
 
-対策:
+`package.json` の `scripts` に書いたコマンドを `npm run xxx` で実行できます。
 
-- イベントハンドラ内の処理を軽くする
-- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
-- 重い処理を **Web Worker** に逃がす
-- リスト描画は **仮想スクロール**（`react-window` 等）
-- `requestIdleCallback` で空き時間に処理
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "test": "vitest",
+    "format": "prettier --write ."
+  }
+}
+```
 
-### CLS: レイアウトのガタつき
+ルール:
 
-CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
+- `npm run dev` で `vite` が走る
+- `npm run` だけで使えるスクリプト一覧が表示される
+- 環境変数 `npm run` 内では `node_modules/.bin` が PATH に追加される（`vite` のパスを書く必要がない）
+- `dev` / `start` / `test` / `restart` / `stop` は `npm run` を省略できる（`npm test` だけで動く）
 
-CLS が悪くなる主な原因:
+#### スクリプトを連結する
 
-1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
-2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
-3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck && npm run test"
+  }
+}
+```
 
-対策:
+`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利。
 
-- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
-- 動的挿入は **下から** か、placeholder で確保したスペースに収める
-- フォントは `next/font` のようなツールで先読み・サブセット化
-- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
+並列実行は `&` ではなく `npm-run-all` / `concurrently` を使うのが安全です。
 
-### しきい値は「75 パーセンタイル」で評価する
+```json
+{
+  "scripts": {
+    "dev": "concurrently \"npm:dev:*\"",
+    "dev:client": "vite",
+    "dev:server": "node server.js"
+  }
+}
+```
 
-Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
+#### pre / post スクリプト
 
-評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
+`scripts` に `prebuild` / `postbuild` を書くと **`npm run build` の前後で自動実行** されます。
 
-### Lighthouse vs Real User Monitoring（RUM）
+```json
+{
+  "scripts": {
+    "prebuild": "npm run lint",
+    "build": "vite build",
+    "postbuild": "echo 'done'"
+  }
+}
+```
 
-CWV を計測する方法は 2 系統あります。
+便利ですが、**チームで把握しづらい** ので連鎖を多用しないほうが無難。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
 
-#### Lighthouse（ラボデータ）
+#### `npx` と `pnpm dlx` / `bunx`
 
-Chrome DevTools 内蔵の Lighthouse（7 章「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
-
-- 利点: その場ですぐ計測できる、デプロイ前に確認できる
-- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
-
-主に **開発時のデバッグ** に向きます。
-
-#### RUM（フィールドデータ / 実ユーザー測定）
-
-実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
-
-- 利点: 本物のユーザー体験を反映
-- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
-
-代表的なツール:
-
-- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
-- **Google Search Console** — Core Web Vitals レポート
-- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
-- **web-vitals ライブラリ** + 任意の解析サービスへ送信
-
-Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
-
-### web-vitals ライブラリで RUM を仕込む
-
-自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
+「**一度だけ** コマンドを実行したい」場合の使い捨て実行。
 
 ```bash
-npm install web-vitals
+npx create-next-app my-app    # one-shot で create-next-app を取得して実行
+pnpm dlx create-next-app my-app
+bunx create-next-app my-app
 ```
 
-```ts
-// src/web-vitals.ts
-import { onLCP, onINP, onCLS } from "web-vitals";
+`npm install -g` でグローバルに入れずに済むのが利点。**最新版を使える** という意味でも安全。
 
-function sendToAnalytics(metric: { name: string; value: number; id: string }) {
-  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
-  console.log(metric);
-  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
+### `engines` で Node.js のバージョンを縛る
+
+```json
+{
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
 }
-
-onLCP(sendToAnalytics);
-onINP(sendToAnalytics);
-onCLS(sendToAnalytics);
 ```
 
-本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
+`engines` で要求するバージョンを書き、環境が満たさない時に警告 / 失敗させられます。`.nvmrc` / `.node-version` と組み合わせて、**チーム全員が同じ Node を使う** よう揃えます。
 
-### DevTools の Performance パネルで計測
+### `.npmrc` と `.nvmrc`
 
-Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
+| ファイル | 役割 |
+|---|---|
+| `.npmrc` | npm 自身の設定（registry / cache / strict-peer-deps など） |
+| `.nvmrc` | nvm が読む。プロジェクトで使う Node のバージョン |
+| `.node-version` | nvm 以外（asdf / fnm / volta）が読む |
 
-1. F12 → **Performance** タブ
-2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
-3. レポートが表示される
-   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
-   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
-   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
+`.npmrc` の代表例:
 
-DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
+```
+strict-peer-deps=true
+save-exact=true
+registry=https://registry.npmjs.org/
+```
+
+### よくある事故
+
+#### `npm install` の度に lock が更新される
+
+→ `^` で書いてあると、新しい patch / minor が出ているとロックが更新される。意図しない更新を防ぐには **CI では `npm ci`** を使う。
+
+#### `npm ci` と `npm install` の違い
+
+- `npm install`: 必要に応じて `package-lock.json` を更新
+- `npm ci`: lock の通りに **そのまま** 入れる（CI で **再現性が高く速い**）
+
+#### グローバルインストールに頼らない
+
+`npm install -g` で入れた CLI は **マシン全体に影響**。プロジェクトごとに違う版が必要な時に困る。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本。
 
 ## 演習
 
 ### ゴール
 
-- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
-- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
-- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
+- `package.json` の依存とスクリプトを実際に編集する
+- `npm ci` と `npm install` の差を体験する
 
-### 手順 1: Lighthouse で CWV を計測
+### 手順 1: 新規プロジェクト
 
-1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
-2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
-3. レポートを確認:
-   - 全体スコア
-   - **Largest Contentful Paint**（LCP の値）
-   - **Cumulative Layout Shift**（CLS の値）
-   - **Interaction to Next Paint**（条件次第で出る）
+```bash
+npm create vite@latest pkg-sample -- --template react-ts
+cd pkg-sample
+npm install
+```
 
-### 手順 2: PageSpeed Insights で RUM を見る
+### 手順 2: dependencies / devDependencies を区別する
 
-1. <https://pagespeed.web.dev/> にアクセス
-2. URL を入れて Analyze
-3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
-4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
+```bash
+npm install dayjs              # dependencies に入る
+npm install -D vitest          # devDependencies に入る
+```
 
-実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
+`package.json` を開いて、それぞれが正しく入っていることを確認します。
 
-### 手順 3: DevTools Performance で観察
+```json
+{
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0",
+    "vitest": "^3.0.0"
+  }
+}
+```
 
-1. Chrome で対象ページを開く
-2. F12 → **Performance** タブ
-3. 左上の **Record**（黒丸） を押す
-4. ページをリロード（`Ctrl + R`）
-5. ページが落ち着いたら **Stop**
-6. タイムラインで:
-   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
-   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
-   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
+### 手順 3: scripts を増やす
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "echo 'lint placeholder'",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "ci": "npm run lint && npm run typecheck && npm run test"
+  }
+}
+```
+
+`npm run ci` を実行して、3 つのスクリプトが順に走ることを確認します。
+
+### 手順 4: lock の挙動を観察する
+
+```bash
+git init
+git add .
+git commit -m "init"
+
+# package-lock.json を消して install
+rm package-lock.json
+npm install
+git diff --stat package-lock.json
+```
+
+ハッシュや解決バージョンが微妙に変わっていることがあります（依存ツリー全体で再解決される）。これが「lock を Git に入れる理由」です。
+
+### 手順 5: npm ci を試す
+
+```bash
+rm -rf node_modules
+npm ci
+```
+
+`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石。
 
 ### 期待出力
 
-Lighthouse:
-
-- **Performance** スコアが 90 以上なら良好
-- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
-
-PageSpeed Insights:
-
-- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
+- `npm install dayjs` 後、`dependencies` に `dayjs` が追加される
+- `npm install -D vitest` 後、`devDependencies` に `vitest` が追加される
+- `npm run ci` で 3 ステップが順に走る
+- `package-lock.json` を消して install すると差分が出る場合がある
+- `npm ci` は lock 通りに高速に入る
 
 ### 変える
 
-- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
-- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
-- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
+- `dayjs: "^1.11.10"` を `dayjs: "~1.11.10"` に変えて、`npm update` で何が更新されるか観察する
+- `engines: { "node": ">=20" }` を加えて、古い Node で `npm install` が警告を出すことを確認する
+- `prebuild` / `postbuild` を追加して連鎖実行を体験する
 
 ### 自分で書く（任意）
 
-新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
-
-```bash
-npm create vite@latest cwv-sample -- --template vanilla-ts
-cd cwv-sample
-npm install web-vitals
-```
-
-`src/main.ts`:
-
-```ts
-import { onLCP, onINP, onCLS } from "web-vitals";
-
-onLCP(console.log);
-onINP(console.log);
-onCLS(console.log);
-
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
-```
-
-`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
+- pnpm / Bun を入れて、同じプロジェクトの `install` 速度を比べる
+- モノレポ（`workspaces`）の最小構成を作って、共通の utility パッケージを 2 つのアプリから使う
+- `.npmrc` で `save-exact=true` を設定し、`npm install dayjs` した時に `^` が付かなくなることを確認
 
 ## まとめ
 
-- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
-- 2024 年 3 月に **FID は INP に置き換わった**
-- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
-- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
-- **PageSpeed Insights** が両方を一覧表示してくれる
-- DevTools の **Performance パネル** で詳細を時系列に見る
-- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託
+- `package.json` は **メタ情報 / 依存 / スクリプト / ツール設定** の 4 つを担う
+- `dependencies` / `devDependencies` / `peerDependencies` の使い分け
+- semver の `^` は **MAJOR 固定 / MINOR・PATCH 自動更新**、`~` は MINOR まで固定
+- `package-lock.json` を **必ず Git に入れる**。CI では `npm ci` で再現性を保つ
+- パッケージマネージャは **npm / pnpm / yarn / Bun** の 4 択。新規業務開発は pnpm が増加傾向、最速重視なら Bun
+- `scripts` は `npm run xxx` で起動。`&&` で連結、`pre` / `post` で連鎖
+- `npx` / `pnpm dlx` / `bunx` で **一度だけ実行** できる
+- `engines` と `.nvmrc` でチーム間の Node のバージョンを揃える

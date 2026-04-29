@@ -1,124 +1,149 @@
-# lesson72: ページを増やしてリンクで移動する
+# lesson72: Route Groups で整理する
 
 ## ゴール
 
-- `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
-- `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
-- 既存の HTML を JSX に書き換えられます。
-- HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
+- `(group)/` という括弧付きディレクトリ名の意味を理解し、URL を変えずにファイル側だけを意味のある単位で整理できます。
+- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されることを確認できます。
+- 「公開側」と「アプリ側」で共通レイアウトを分けたい、という典型的な使いどころを体験できます。
 
 ## 解説
 
-### 前回のプロジェクトを開く
+### 前回までに作ったもの
 
-これまでのレッスンで作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
+「共通レイアウトを作る」で、全ページ共通のヘッダー・フッターを `app/layout.tsx` にまとめました。`/`、`/about`、`/todos` のどのページにアクセスしても、上にナビ・下にフッターが出る状態です。
 
-### 新しいページを作る手順
+一方で、今後アプリが大きくなると次のような悩みが出ます。
 
-App Router では、ディレクトリ名がそのまま URL になります。`/about` というページを作るには次の 2 ステップだけです。
+- `/about` は公開ページなのでサイドバーは不要
+- `/todos` はアプリ内ページなので、左にサイドメニューがあると便利
 
-1. `app/` の下に `about/` ディレクトリを作ります。
-2. その中に `page.tsx` を作り、コンポーネントを `export default` します。
+「ページの種類ごとに追加レイアウトを変えたい」のに、URL 体系は `/`、`/about`、`/todos` のままにしたい。このとき役立つのが **Route Groups** です。
+
+### `(group)/` の意味
+
+App Router では、ディレクトリ名を `( )` で囲むと **URL には登場しない** 仕組みがあります。これが Route Groups です。
 
 ```
 app/
-├── page.tsx           → /
-├── about/
-│   └── page.tsx       → /about
-└── todos/
-    └── page.tsx       → /todos
+├── (public)/
+│   ├── page.tsx          → /
+│   └── about/
+│       └── page.tsx      → /about
+└── (app)/
+    ├── layout.tsx        → (app) 配下だけに適用
+    └── todos/
+        └── page.tsx      → /todos
 ```
 
-`/todos` も同じ要領です。`app/todos/page.tsx` を作るだけで `/todos` でアクセスできます。
+- `(public)` というディレクトリ名は URL には出ません。`app/(public)/page.tsx` の URL は `/` です。
+- 同じく `(app)` も URL には出ません。`app/(app)/todos/page.tsx` の URL は `/todos` です。
+- 結果として、**URL は `/`、`/about`、`/todos` のまま変わりません**。ファイルの置き場所だけが整理されます。
 
-### HTML → JSX の違い 3 点
+### グループ内の `layout.tsx`
 
-1 章 で書いた HTML を Next.js に持ち込むと、そのままでは動きません。JSX は JavaScript の中で書く拡張記法なので、JS 予約語との衝突や XML の厳密さから **3 点だけ** 書き換えが必要です。
+Route Groups の嬉しさは、グループ直下に `layout.tsx` を置けることです。この `layout.tsx` は、**そのグループ配下のページだけ** に適用されます。
 
-1. `class` → `className`
-   - JS の `class` 構文（クラス構文）と衝突するため、JSX では `className` を使います。
-   - 例: `<p class="lead">` → `<p className="lead">`
-2. `for`（`<label for="...">`）→ `htmlFor`
-   - `for` も JS の `for` 文と衝突するため、`htmlFor` に変えます。
-   - 例: `<label for="name">` → `<label htmlFor="name">`
-3. 自己閉じタグに `/` が必要
-   - HTML では `<img>` や `<br>` は終了タグなしで書けますが、JSX では必ず `/` で閉じます。
-   - 例: `<img src="..." alt="">` → `<img src="..." alt="" />`
-   - 例: `<br>` → `<br />`
+- `app/(app)/layout.tsx` を置くと、`/todos` には適用されるが、`/` や `/about` には適用されない
+- 逆に `app/(public)/layout.tsx` を置くと、`/` と `/about` には適用されるが、`/todos` には適用されない
+- `app/layout.tsx`（ルートレイアウト）は引き続き全ページに適用される
 
-他にも細かい違いはありますが、当面はこの 3 点を意識すれば1 章 の HTML を移植できます。
+つまり、レイアウトの構造は「ルートレイアウト → グループレイアウト → page」のように入れ子になります。
 
-### `<Link>` でページ遷移する
+```mermaid
+graph TD
+  classDef root fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
+  classDef group fill:#1b4965,stroke:#62b6cb,color:#ffffff;
+  classDef page fill:#3a2d5c,stroke:#c4a6ff,color:#ffffff;
 
-ブラウザの `<a href="...">` でもページは切り替わりますが、その都度ページ全体を再読み込みする重い動きになります。Next.js では `next/link` の `<Link>` を使うことで、必要な部分だけを差し替える軽い遷移ができます。
+  Root["app/layout.tsx (全ページ共通)"]:::root
+  Public["(public) は layout.tsx なし"]:::group
+  App["app/(app)/layout.tsx (サイドバー)"]:::group
+  Home["/ page.tsx"]:::page
+  About["/about page.tsx"]:::page
+  Todos["/todos page.tsx"]:::page
 
-```tsx
-import Link from "next/link";
-
-export default function Home() {
-  return (
-    <nav>
-      <Link href="/">Home</Link>
-      <Link href="/about">About</Link>
-      <Link href="/todos">Todos</Link>
-    </nav>
-  );
-}
+  Root --> Public
+  Root --> App
+  Public --> Home
+  Public --> About
+  App --> Todos
 ```
 
-- `import` は **`next/link`** からです（`next/router` ではありません。`next/router` は古い Pages Router 用です）。
-- `href` の値は `/about` のように **URL のパス** です。
-- `<Link>` は内部的には `<a>` タグを生成するので、見た目は普通のリンクと同じです。
+図の色はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965` / `#3a2d5c`、文字 `#ffffff`）を指定しています。
+
+### 並列・インターセプトは扱わない
+
+App Router には `@slot/page.tsx`（並列ルート）や `(.)path`（インターセプトルート）といったさらに発展的な機能もありますが、本コースでは **Route Groups まで** にとどめます。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。手順 2 で1 章 の「Flexbox とレスポンシブ」の自己紹介ページの HTML と CSS を参照するため、先に「Flexbox とレスポンシブ」のコードを手元にコピーしておくとスムーズです。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
-### 手順 1: `/todos` の空ページを作る
+<details>
+<summary>出発点のファイル</summary>
 
-StackBlitz のファイルツリーで、`app/` を右クリックして「New Folder」→ `todos` を作ります。その中に「New File」で `page.tsx` を作り、以下を貼ります。
+**`app/layout.tsx`**
 
 ```tsx
-export default function TodosPage() {
+import Link from "next/link";
+import "./globals.css";
+
+export const metadata = {
+  title: "My Next App",
+};
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <main>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </main>
+    <html lang="ja">
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
   );
 }
 ```
 
-ブラウザのプレビュー URL に `/todos` を付けてアクセスし、この文言が出ることを確認しましょう。
+**`app/page.tsx`**
 
-### 手順 2: 1 章 の自己紹介ページを `/about` に移植
+```tsx
+export default function Page() {
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <p>このアプリについてはヘッダーのリンクから。</p>
+    </>
+  );
+}
+```
 
-1 章 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML と CSS をもう一度開きます。このレッスンでは **「Flexbox とレスポンシブ」の最終成果物（`.site-header` / `.cards` / 3 枚のカード / 問い合わせフォーム）をそのまま移植** する想定で進めます。手元に無ければ、「Flexbox とレスポンシブ」を開いて HTML / CSS をコピーしてから戻ってきてください。
+**`app/about/page.tsx`**
 
-元の HTML（「Flexbox とレスポンシブ」の完成形の抜粋）:
+```tsx
+import "./about.css";
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>私の自己紹介</title>
-    <link rel="stylesheet" href="style.css" />
-  </head>
-  <body>
-    <header class="site-header">
-      <h1>私の名前</h1>
-      <nav class="site-nav">
-        <a href="#about">自己紹介</a>
-        <a href="#likes">好きなもの</a>
-        <a href="#contact">問い合わせ</a>
-      </nav>
-    </header>
-
-    <main>
+export default function AboutPage() {
+  return (
+    <>
       <section id="about">
         <h2>自己紹介</h2>
         <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
@@ -126,19 +151,19 @@ export default function TodosPage() {
 
       <section id="likes">
         <h2>好きなもの</h2>
-        <div class="cards">
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像">
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
             <h3>コーヒー</h3>
             <p>朝の 1 杯が欠かせない。</p>
           </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像">
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
             <h3>本</h3>
             <p>技術書からエッセイまで。</p>
           </article>
-          <article class="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像">
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
             <h3>散歩</h3>
             <p>行き先を決めずに歩く。</p>
           </article>
@@ -149,326 +174,303 @@ export default function TodosPage() {
         <h2>問い合わせ</h2>
         <form>
           <div>
-            <label for="name">お名前</label>
-            <input id="name" name="name" type="text" required>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
           </div>
           <div>
-            <label for="email">メール</label>
-            <input id="email" name="email" type="email" required>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
           </div>
           <div>
-            <label for="message">メッセージ</label>
-            <textarea id="message" name="message" rows="4" required></textarea>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
           </div>
           <button type="submit">送信</button>
         </form>
       </section>
-    </main>
-
-    <footer class="site-footer">
-      <p>&copy; 私の名前</p>
-    </footer>
-  </body>
-</html>
-```
-
-これを `app/about/page.tsx` に、**3 点の違い** だけ差し替えてコピーします。`<!DOCTYPE html>` / `<html>` / `<head>` / `<body>` は `app/layout.tsx` が担当するので **コピーしません**。`<header>` 〜 `<footer>` の中身だけ移します。
-
-`app/about/page.tsx`:
-
-```tsx
-export default function AboutPage() {
-  return (
-    <>
-      <header className="site-header">
-        <h1>私の名前</h1>
-        <nav className="site-nav">
-          <a href="#about">自己紹介</a>
-          <a href="#likes">好きなもの</a>
-          <a href="#contact">問い合わせ</a>
-        </nav>
-      </header>
-
-      <main>
-        <section id="about">
-          <h2>自己紹介</h2>
-          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-        </section>
-
-        <section id="likes">
-          <h2>好きなもの</h2>
-          <div className="cards">
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-              <h3>コーヒー</h3>
-              <p>朝の 1 杯が欠かせない。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-              <h3>本</h3>
-              <p>技術書からエッセイまで。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-              <h3>散歩</h3>
-              <p>行き先を決めずに歩く。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="contact">
-          <h2>問い合わせ</h2>
-          <form>
-            <div>
-              <label htmlFor="name">お名前</label>
-              <input id="name" name="name" type="text" required />
-            </div>
-            <div>
-              <label htmlFor="email">メール</label>
-              <input id="email" name="email" type="email" required />
-            </div>
-            <div>
-              <label htmlFor="message">メッセージ</label>
-              <textarea id="message" name="message" rows={4} required></textarea>
-            </div>
-            <button type="submit">送信</button>
-          </form>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <p>&copy; 私の名前</p>
-      </footer>
     </>
   );
 }
 ```
 
-書き換えたのは **HTML → JSX の 3 点の違い** にほぼ収まります:
+**`app/about/about.css`**（「ページを増やしてリンクで移動する」と同じ。`.cards` / `.card` のスタイル中心に必要なものを貼ってください）
 
-- `class="..."` → `className="..."`（`.site-header` / `.site-nav` / `.cards` / `.card` / `.site-footer` すべて）
-- `<label for="...">` → `<label htmlFor="...">`（3 箇所）
-- `<input ...>` → `<input ... />`、`<img ...>` → `<img ... />` の自己閉じ
-- 追加で `<textarea rows="4">` の属性は **数値中括弧 `rows={4}`** に（JSX では数値属性は中括弧が慣例）
+**`app/todos/page.tsx`**
 
-ほぼ機械的な置換で済むのが JSX の嬉しいところです。1 章 で作った見た目・レイアウトがそのまま Next.js で動きます。
+```tsx
+export default function TodosPage() {
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
+    </>
+  );
+}
+```
 
-### 手順 3: CSS を当てる
-
-1 章 の「Flexbox とレスポンシブ」の `style.css` の中身は、`app/about/about.css` のようなファイル名で `app/about/` に置き、`page.tsx` の先頭で `import` します。中身はそのまま流用できます（セレクタは HTML 要素名やクラス名を見ているので、JSX でも同じセレクタが効きます）。
-
-`app/about/about.css`（「Flexbox とレスポンシブ」の CSS をそのまま貼る、抜粋）:
+**`app/globals.css`**
 
 ```css
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.6;
-  color: #1f2937;
-  background-color: #f9fafb;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb;
-    background-color: #0b1220;
-  }
-}
-
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
+.site-header ul {
   display: flex;
-  align-items: center;
-  justify-content: space-between;
+  gap: 1rem;
+  list-style: none;
+  padding: 1rem;
+  background: #f5f5f5;
 }
 
-.site-nav a {
-  color: #f9fafb;
-  margin-right: 16px;
-}
-
-.cards {
-  display: flex;
-  gap: 16px;
-}
-
-.cards .card {
-  flex: 1;
-  background-color: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cards .card {
-    background-color: #111827;
-    border-color: #374151;
-  }
-}
-
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
+.site-header a {
+  text-decoration: none;
+  color: #0070f3;
 }
 
 .site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  text-align: center;
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  color: #555;
 }
 
-@media (max-width: 600px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
+@media (prefers-color-scheme: dark) {
+  .site-header ul {
+    background: #1f1f1f;
   }
-
-  .cards {
-    flex-direction: column;
+  .site-header a {
+    color: #4ea2ff;
+  }
+  .site-footer {
+    border-top-color: #333;
+    color: #bbb;
   }
 }
 ```
 
-（フォームや hover など、「Flexbox とレスポンシブ」で書いた他のスタイルも一緒にコピーして構いません。）
+</details>
 
-`app/about/page.tsx` の **1 行目に CSS の import を追加します**。ファイル全体は次のような形になります（関数本体はそのまま維持）。
+### 前回のプロジェクトを開く
 
-```tsx
-import "./about.css";
+これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
 
-export default function AboutPage() {
-  return (
-    <>
-      <header className="site-header">
-        <h1>私の名前</h1>
-        <nav className="site-nav">
-          <a href="#about">自己紹介</a>
-          <a href="#likes">好きなもの</a>
-          <a href="#contact">問い合わせ</a>
-        </nav>
-      </header>
+### 現状の確認
 
-      <main>
-        <section id="about">
-          <h2>自己紹介</h2>
-          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-        </section>
+現在のファイル構成は次のようになっているはずです。
 
-        <section id="likes">
-          <h2>好きなもの</h2>
-          <div className="cards">
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-              <h3>コーヒー</h3>
-              <p>朝の 1 杯が欠かせない。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-              <h3>本</h3>
-              <p>技術書からエッセイまで。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-              <h3>散歩</h3>
-              <p>行き先を決めずに歩く。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="contact">
-          <h2>問い合わせ</h2>
-          <form>
-            <div>
-              <label htmlFor="name">お名前</label>
-              <input id="name" name="name" type="text" required />
-            </div>
-            <div>
-              <label htmlFor="email">メール</label>
-              <input id="email" name="email" type="email" required />
-            </div>
-            <div>
-              <label htmlFor="message">メッセージ</label>
-              <textarea id="message" name="message" rows={4} required></textarea>
-            </div>
-            <button type="submit">送信</button>
-          </form>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <p>&copy; 私の名前</p>
-      </footer>
-    </>
-  );
-}
+```
+app/
+├── layout.tsx       ← 全ページ共通のヘッダー・フッター
+├── page.tsx         → /
+├── about/
+│   ├── page.tsx     → /about
+│   └── about.css
+└── todos/
+    └── page.tsx     → /todos
 ```
 
-**期待出力**: `/about` を開くと、1 章 の「Flexbox とレスポンシブ」で作ったページと **ほぼ同じ見た目** になります。ヘッダーの `<h1>` と `<nav>` が横並び、カードが 3 枚横並び、スマホ幅（600px 以下）で縦並びに切り替わる、というレスポンシブ挙動もそのまま生きます。
+この構成を、次の形に変えます。
 
-### 手順 4: ナビを `/` に置く
+```
+app/
+├── layout.tsx
+├── (public)/
+│   ├── page.tsx
+│   └── about/
+│       ├── page.tsx
+│       └── about.css
+└── (app)/
+    ├── layout.tsx   ← 新規。サイドバーを置く
+    └── todos/
+        └── page.tsx
+```
 
-`app/page.tsx` を以下に書き換えます。これでトップページから 3 つのページに飛べるナビが完成します。
+### 手順 1: `(public)` グループを作る
+
+StackBlitz のファイルツリーで、`app/` の直下に新しいフォルダを作ります。名前は `(public)` です（括弧も含めてそのまま入力します）。
+
+作れたら、次のファイル・フォルダを `(public)/` の中に **移動** します。
+
+- `app/page.tsx` → `app/(public)/page.tsx`
+- `app/about/` フォルダごと → `app/(public)/about/`
+
+移動は StackBlitz の UI 上でドラッグするか、右クリックメニューの「Move」で行います。
+
+### 手順 2: `(app)` グループを作る
+
+同じ要領で、`app/` 直下に `(app)` というフォルダを新規作成します。
+
+- `app/todos/` フォルダごと → `app/(app)/todos/`
+
+これで `(public)` と `(app)` の 2 つのグループに分かれました。
+
+### 手順 3: 動作確認（`layout.tsx` 追加前）
+
+この時点で、ブラウザから `/`、`/about`、`/todos` の 3 つの URL を確認しましょう。
+
+- URL は **変わりません**（Route Groups なので `( )` は URL に出ません）
+- 見た目も **変わりません**（`app/layout.tsx` のヘッダー・フッターは全ページに適用されたままです）
+
+「ファイルを動かしても URL が壊れない」ことが Route Groups の第一印象です。
+
+### 手順 4: `(app)/layout.tsx` を作る
+
+`app/(app)/layout.tsx` を新規作成します。ここに「アプリ用のサイドバー」を置きます。
 
 ```tsx
 import Link from "next/link";
 
-export default function Page() {
+export default function AppLayout({ children }: LayoutProps<"/todos">) {
   return (
-    <main>
-      <h1>ようこそ</h1>
-      <nav>
-        <ul>
-          <li>
-            <Link href="/">Home</Link>
-          </li>
-          <li>
-            <Link href="/about">About</Link>
-          </li>
-          <li>
-            <Link href="/todos">Todos</Link>
-          </li>
-        </ul>
-      </nav>
-    </main>
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <h2>アプリメニュー</h2>
+        <nav>
+          <ul>
+            <li>
+              <Link href="/todos">TODO 一覧</Link>
+            </li>
+            <li>
+              <Link href="/">ホームに戻る</Link>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+      <section className="app-main">{children}</section>
+    </div>
   );
+}
+```
+
+ポイント:
+
+- このファイルは `(app)` グループ配下の `layout.tsx` なので、`/todos` にだけ適用されます。`/` や `/about` には影響しません。
+- `children` には `(app)` 配下の各 `page.tsx` が差し込まれます（今回は `/todos` だけ）。
+- `"use client"` は不要です。`<Link>` を並べるだけで、クリックで動く JS は書いていません（Server Component のままで OK）。
+
+### 手順 5: サイドバーの CSS
+
+`app/globals.css` の末尾に次を追加します。
+
+```css
+.app-shell {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.app-sidebar {
+  flex: 0 0 200px;
+  padding: 1rem;
+  background: #f5f5f5;
+  border-right: 1px solid #ddd;
+}
+
+.app-sidebar h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.app-sidebar ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.app-sidebar a {
+  color: #0070f3;
+  text-decoration: none;
+}
+
+.app-main {
+  flex: 1;
+}
+
+/* ダークモード配慮 */
+@media (prefers-color-scheme: dark) {
+  .app-sidebar {
+    background: #1f1f1f;
+    border-right-color: #333;
+    color: #e5e7eb;
+  }
+  .app-sidebar a {
+    color: #4ea2ff;
+  }
+}
+
+/* 画面が狭いときは縦積み */
+@media (max-width: 640px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .app-sidebar {
+    flex: 0 0 auto;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
 }
 ```
 
 ### 期待出力
 
-- `/` にアクセスすると「ようこそ」の見出しと 3 つのリンクが出ます。
-- 「About」をクリックすると1 章 と同じ見た目の自己紹介ページが表示されます（CSS が当たっています）。
-- 「Todos」をクリックすると「TODO 一覧はここに実装する。」が表示されます。
-- ブラウザのネットワークタブを開きながら遷移すると、ページ全体ではなくデータだけが追加で読み込まれます（フル再読み込みにはなりません）。
-- `class` や `for` をそのまま残すと、StackBlitz のターミナルやブラウザ Console に「Invalid DOM property `class`. Did you mean `className`?」のような警告が出ます。
+ブラウザで `/about` と `/todos` を開き比べます。
+
+**`/about`（サイドバーなし）:**
+
+```
++-----------------------------------------+
+| Home | About | Todos   ← ルートレイアウト |
++-----------------------------------------+
+|                                         |
+| 自己紹介                                |
+| ...                                     |
+|                                         |
++-----------------------------------------+
+| © 2026 My Next App                      |
++-----------------------------------------+
+```
+
+**`/todos`（サイドバーあり）:**
+
+```
++-----------------------------------------+
+| Home | About | Todos   ← ルートレイアウト |
++-----------------------------------------+
+| アプリメニュー |                        |
+| - TODO 一覧   |  TODO 一覧              |
+| - ホームに戻る|  (ページ固有の内容)     |
+|               |                         |
++-----------------------------------------+
+| © 2026 My Next App                      |
++-----------------------------------------+
+```
+
+確認したいポイント:
+
+- **URL は `/`、`/about`、`/todos` のまま変わらない**（`(public)` や `(app)` はどちらも URL に出ない）
+- **`/about` にはサイドバーが出ない**（`(app)/layout.tsx` の適用範囲外）
+- **`/todos` にはサイドバーが出る**（`(app)/layout.tsx` の適用範囲内）
+- ルートレイアウト（ヘッダー・フッター）は 3 ページすべてに出る
+
+この「同じ URL 体系のまま、一部のページだけに追加レイアウトを付けられる」のが Route Groups の狙いです。
 
 ### 変えてみる
 
-1. 自己紹介ページに好きな見出しを 1 つ追加しましょう。
-2. `/about` のナビ内に「Top に戻る」`<Link>` を追加しましょう。
+1. `(app)/layout.tsx` のサイドバーに「新規作成」のリンク（仮に `/todos/new`）を足してみましょう（リンク先のページはまだ作らなくて構いません）。
+2. `(public)/layout.tsx` を新規作成して、`/` と `/about` にだけ「Welcome!」と書かれた小さなバナーを上に出してみましょう。`/todos` には出ないことを確認します。
+3. 手順の途中で、`(app)` を誤って `app/app/` のような括弧なしのディレクトリに作ったら URL がどうなるか試してみましょう（`/app/todos` のように URL に反映されてしまうはずです）。確認したら元に戻します。
 
 ### 自分で書く
 
-`/contact` という 3 つ目のページを、ディレクトリ作成 → `page.tsx` → ナビへの `<Link>` 追加、の手順だけを見ないで試してみましょう。中身は「Contact ページです」の 1 行で十分です。
+何も見ずに、次の構造を組めるか挑戦しましょう。
+
+- `(marketing)` グループの中に `/pricing` ページを作り、`(marketing)/layout.tsx` で「製品ページ共通の帯」を上に出す
+- `/pricing` ではその帯が出るが、`/about` では出ないことを確認する
+
+必要なファイルは `app/(marketing)/layout.tsx` と `app/(marketing)/pricing/page.tsx` の 2 つだけです。
 
 ## まとめ
 
-- `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになります。
-- ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
-- HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
+- ディレクトリ名を `( )` で囲むと URL に出ない「グループ」になります。URL 体系を変えずにファイル配置だけを整理できます。
+- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されます。
+- 典型的な使いどころは「公開ページ / アプリ側ページ」のような大きな 2 分割です。
+- 本コースで扱うのはここまで。並列ルート（`@slot`）やインターセプトルート（`(.)path`）は本コースでは扱いません。

@@ -1,212 +1,140 @@
-# lesson87: Tailwind CSS の紹介
+# lesson87: Vercel にデプロイする
+
+これまでに作った Next.js プロジェクトを、SNS で共有できる本番 URL として公開します。本レッスンは「自分が StackBlitz で動かしている Next.js アプリを Vercel に乗せる」という **公開フロー** を体験するのが目的で、特定のアプリ内容は前提にしません（過去レッスンの完成品でも、シンプルな Hello World でも構いません）。
 
 ## ゴール
 
-- Tailwind CSS v4 の存在と基本的な使い方を知る
-- 本コースの「素の CSS で書く」方式との違いを説明できる
-- Next.js プロジェクトに Tailwind v4 を導入する手順を観察できる
-- 本コースを終えた後の「次のステップ」として判断できる
+- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できます。
+- そのリポジトリを Vercel に接続して、数十秒でデプロイできます。
+- 発行された `https://<project>.vercel.app` の URL をブラウザで開き、動作確認できます。
+- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえます。
 
 ## 解説
 
-### 本コースのスタンス
+### 今までは「自分のブラウザでしか見えない」状態
 
-ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
+StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
 
-一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
+Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
 
-**本コースの結論**: 「Tailwind は **次のステップ** として学ぶ選択肢」。本コースの自己紹介 / TODO プロジェクトには **持ち込みません**。
+### 3 ステップの全体像
 
-### Tailwind CSS とは
+以下の 3 つのサービスを繋ぎます。
 
-Tailwind は **ユーティリティファースト** の CSS フレームワークです。`margin: 16px` のような個別のスタイルをコード上に書かず、`m-4` のような短いクラス名を HTML に重ねて見た目を作ります。
+1. **StackBlitz**: コードを書いている場所です。
+2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
+3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
 
-素の CSS で書いたコード:
+流れはこうです。
 
-```html
-<div class="card">
-  <h2 class="card-title">タイトル</h2>
-  <p class="card-body">本文</p>
-</div>
+```
+StackBlitz → GitHub → Vercel → https://<project>.vercel.app
 ```
 
-```css
-.card {
-  padding: 16px;
-  background: white;
-  border-radius: 8px;
-}
-.card-title {
-  font-size: 1.25rem;
-  font-weight: bold;
-}
-.card-body {
-  color: #666;
-}
-```
+一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
 
-Tailwind で書くと:
+### アカウントが 2 つ必要
 
-```html
-<div class="p-4 bg-white rounded-lg">
-  <h2 class="text-lg font-bold">タイトル</h2>
-  <p class="text-gray-600">本文</p>
-</div>
-```
-
-CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た目を組み立てます。
-
-長所:
-
-- クラス名の衝突がない（`.card` の名前を考えなくてよい）
-- 小さな変更が HTML 内で完結する
-- VS Code 拡張で補完が強い
-
-短所:
-
-- クラス名が長くなる
-- 「なぜこのプロパティなのか」が CSS の知識無しだと理解しづらい（だから本コースでは素の CSS から学んだ）
-
-### Tailwind v4 の特徴（2025 年 GA）
-
-本レッスンは **Tailwind v4** 準拠で紹介します。v3 から **設定方法が大きく変わった** ため、古い記事のコピペは通用しません。
-
-主な変更点:
-
-- **CSS ファイル 1 行で導入**:
-  ```css
-  @import "tailwindcss";
-  ```
-  v3 の `@tailwind base; @tailwind components; @tailwind utilities;` の 3 行は廃止
-- **`init` コマンド廃止**: v3 の `npx tailwindcss init -p` で `tailwind.config.ts` を生成する手順は不要
-- **PostCSS プラグイン名の変更**: `postcss.config.mjs` に `@tailwindcss/postcss` を指定する
-- **Vite 用プラグイン**: Vite プロジェクトでは `@tailwindcss/vite`（PostCSS 経由ではない）
-- **パフォーマンス大幅改善**: ビルドが高速、開発時のホットリロードも速い
-
-`create-next-app --tailwind` で新規プロジェクトを作ると、デフォルトで Tailwind v4 の設定が入ります。古いチュートリアルを見る前に、まずは `create-next-app` 生成物を観察するのが確実です。
+- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
+- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
+これまでのレッスンで作った Next.js プロジェクトがあれば、それをそのまま使えます。手元に無くても問題ありません。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、Hello World レベルのプロジェクトでも公開フロー自体は同じように体験できます。
 
-### ゴール
+Vercel デプロイの手順（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。本レッスンの目的は **「自分の Next.js プロジェクトを Vercel に乗せる流れ」を一度通すこと** なので、画面の中身は何でも構いません。
 
-- `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
-- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
+### 自分の Next.js プロジェクトを開く
 
-### 手順
+公開したい Next.js プロジェクトを StackBlitz で開きます。これまでのレッスンで作った成果物でも、新規の Hello World テンプレートでも構いません。
 
-1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
-2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
-3. プロジェクト内の以下のファイルを観察する
-   - `app/globals.css`
-   - `postcss.config.mjs`（または `.js`）
-   - `package.json` の `devDependencies`
-4. 任意で、`app/page.tsx` にユーティリティクラスを 1〜2 個書いてみる（`@theme` などカスタマイズは扱わない）
+### 手順 1: GitHub アカウントを用意
 
-### `app/globals.css`（観察対象）
+1. <https://github.com/> にアクセスします。
+2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
 
-Tailwind v4 の導入は、CSS ファイル冒頭に **この 1 行だけ**:
+### 手順 2: StackBlitz から GitHub に保存
 
-```css
-@import "tailwindcss";
-```
+1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
+2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
+3. 保存先のリポジトリ名を指定します。例: `my-next-app`。
+4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
+5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-app` が出ているはずです。
 
-v3 の時代は 3 行書いていました:
+> うまく行かないとき: StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもある。本コース想定は前者。
 
-```css
-/* v3（古い、書かない） */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
+### 手順 3: Vercel アカウントを作る
 
-v4 では `@import "tailwindcss";` に統合されています。
+1. <https://vercel.com/> にアクセスします。
+2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
+3. 必要なら Vercel にメール認証を済ませましょう。
 
-### `postcss.config.mjs`（観察対象）
+### 手順 4: Vercel で新しいプロジェクトを作る
 
-```js
-const config = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-export default config;
-```
+1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
+2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-app` を **「Import」** します。
+   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-app` のみ選択）。
+3. 設定画面が出ます。
+   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
+   - **Root Directory**: デフォルトのままにします。
+   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
+   - **Environment Variables**: 本コースでは使いません。空で OK です。
+4. 画面下の **「Deploy」** をクリックします。
+5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
 
-v3 で必要だった `autoprefixer` は **v4 ではプラグイン内に内蔵** されたため、別途書かなくて済むようになりました。
+### 手順 5: 公開 URL を確認
 
-### `package.json` の `devDependencies`（観察対象）
-
-```json
-{
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.0.0",
-    "tailwindcss": "^4.0.0"
-  }
-}
-```
-
-`tailwind.config.ts` は **v4 では原則不要**（デフォルト設定で十分）。カスタマイズしたい場合は CSS 内で `@theme { ... }` を書く方式に変わりました。本レッスンでは `@theme` の深掘りはしません。
-
-### 小さく試す（任意）
-
-生成されたプロジェクトの `app/page.tsx` を次のように書き換えて、Tailwind v4 のデフォルトパレットを試せます。
-
-```tsx
-export default function Page() {
-  return (
-    <main className="p-8 max-w-xl mx-auto">
-      <h1 className="text-3xl font-bold text-slate-800">Tailwind v4 の練習</h1>
-      <p className="mt-4 text-slate-600">
-        素の CSS なしで、クラス名だけで見た目を組み立てている。
-      </p>
-      <button className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
-        ボタン
-      </button>
-    </main>
-  );
-}
-```
-
-- `p-8`（padding 2rem）、`max-w-xl`（max-width）、`mx-auto`（水平中央寄せ）
-- `text-3xl`（フォントサイズ）、`font-bold`（太字）
-- `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
-
-1 章で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが分かります。本コースで CSS の仕組みを先に押さえたのが効いてきます。
+1. Vercel の「Dashboard」→ プロジェクト名（`my-next-app`）をクリックします。
+2. 画面上部に **`https://my-next-app-xxxx.vercel.app`** のような URL が出ています。
+3. クリックして開きます。
 
 ### 期待出力
 
-- 生成されたプロジェクトで、`@import "tailwindcss";` 1 行で Tailwind が動いていることを確認
-- `app/page.tsx` にユーティリティクラスを書くと、即座にスタイルが適用される
-- `tailwind.config.ts` が無いことを確認（デフォルトで動く）
+- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ画面が表示されます。
+- 自分のプロジェクトに含まれる機能（ページ遷移、フォーム、データ表示など）がそのまま動きます。
+- URL を別のブラウザや友人に送っても、同じアプリが見えます。
 
-### 本コースのプロジェクトに入れない理由
+### 更新を反映する
 
-本コースの自己紹介 / TODO プロジェクトには **Tailwind を持ち込みません**。理由:
+GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
 
-- これまで素の CSS で書いた資産（`.site-header`、`.cards`、`.card` など）が多い
-- Tailwind に置き換えるには全 JSX を書き直す必要がある
-- 「学ぶ手段」として Tailwind を見るだけなら、別プロジェクトで十分
+1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
+2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
+3. 数十秒待ちます。
+4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
+5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
 
-本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
+### よくある躓き
 
-### 変える（任意）
+- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
+- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
+- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
+- 投稿系の機能でデータがリロード後に消える → 次項の通り、サーバーレス環境ではモジュールトップレベルの配列が保持されません。
 
-- 生成した Tailwind プロジェクトで `bg-blue-500` を `bg-green-500` / `bg-red-500` に変えて色の組を観察
-- `hover:` や `md:` などのプレフィックス（状態・ブレークポイント）を使ってみる
+### 注意: 本番ではメモリ上のデータが保持されない
 
-### 自分で書く（挑戦）
+学習中のコードで「Server Actions の最小形」のように `const items: Item[] = []` のような **モジュール先頭の配列** でデータを持っていた場合、Vercel に乗せると挙動が変わります。
 
-- Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
-- 書き終えたら、1 章 の素の CSS 版（`docs/lessons/lesson12`）と見比べて **同じ見た目をどう表現しているか** 対比する
+- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
+- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。インスタンスが複数並行で動くと、ユーザー A が追加したデータがユーザー B のインスタンスには見えません。コールドスタートでインスタンスが落ちると配列ごと消えます。
+
+本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。ユーザー単位なら `cookies()` 経由のセッションに永続化する手もあります。本コースでは扱いませんが、次のステップとして「サーバー側のメモリ配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
+
+### 自分で書く
+
+1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。
+2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
+3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
 
 ## まとめ
 
-- Tailwind は「ユーティリティファースト」の CSS、クラス名だけで見た目を作る
-- v4（2025 GA）は `@import "tailwindcss";` 1 行で導入、`init` コマンドや `tailwind.config.ts` は原則不要
-- `create-next-app --tailwind` でデフォルトで v4 がセットアップされる
-- 本コースの自己紹介 / TODO プロジェクトには持ち込まない（素の CSS 資産を壊さないため）
-- 学ぶ意義を感じたら、本コース完走後に次のステップとして挑戦する
+- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できます。
+- 初回の接続だけ手数がかかりますが、以後は Git に push すれば自動デプロイです。
+- サーバー側のモジュールトップレベル配列など、メモリで保持していたデータは Vercel では保持されません。本番の永続化には DB が必要です（本コースでは扱いません）。
+- 次に進みたい学習者へのおすすめ:
+  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
+  - 認証（NextAuth、Clerk など）を足してログインできるアプリにする
+  - スタイリングを Tailwind CSS や CSS Modules に寄せる
+  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る

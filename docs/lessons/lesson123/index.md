@@ -1,408 +1,561 @@
-# lesson123: OAuth / OIDC / JWT の概念
+# lesson123: Service Worker と PWA 深掘り
 
 ## ゴール
 
-- 「**認証**」と「**認可**」の違いを言える
-- OAuth 2.0 の **認可コードフロー** の流れを大づかみで説明できる
-- OpenID Connect（OIDC）が「OAuth に **認証** を載せた拡張」だと分かる
-- JWT の構造（Header / Payload / Signature）と **署名検証** の意味を理解する
-- セッション Cookie と JWT の使い分けを判断できる
-- Auth0 / Clerk / NextAuth / Supabase Auth の位置付けを把握する
-
-::: tip このレッスンの方針
-認証は「自前で実装すると事故りやすい」分野です。本講座では概念の地図 + 既存 SaaS / ライブラリの選び方に絞ります。実装は SaaS のドキュメントと併せて行うのが現実的。
-:::
+- Service Worker の **ライフサイクル**（install / activate / fetch）を理解する
+- Workbox の **キャッシュ戦略**（CacheFirst / NetworkFirst / StaleWhileRevalidate）を選べる
+- オフライン対応（fallback ページ）の最小実装ができる
+- Web Push 通知の流れを大づかみに掴む
+- `manifest.webmanifest` の主要フィールドが分かる
 
 ## 解説
 
-### 認証 と 認可
+### PWA とは
 
-最初に区別すべき 2 つの言葉。
+「**Progressive Web App**」= Web を **アプリのように扱う** ための仕組みの総称。本講座のドキュメントサイト自体も `@vite-pwa/vitepress` で PWA 化済みで、デスクトップ / モバイルから **インストール** できます。
 
-| 用語 | 意味 |
-|---|---|
-| **認証**（Authentication, AuthN） | **誰** か（あなたは本当に山田さんか？） |
-| **認可**（Authorization, AuthZ） | **何ができる** か（山田さんはこのファイルを編集できるか？） |
+PWA の柱:
 
-ID + パスワードでログインするのは認証。「管理者だけ /admin にアクセス可」は認可。**OAuth は本来 認可** で、**OIDC は 認証**。混乱の元なので、地図を頭に置いておきます。
+1. **Service Worker**（バックグラウンドのスクリプト）
+2. **Web App Manifest**（インストール時のメタデータ）
+3. **HTTPS**（必須）
+4. インストール可能 / オフライン対応 / 通知
 
-### OAuth 2.0
+### Service Worker とは
 
-「**ユーザーがパスワードを渡さずに、第三者アプリに自分のリソースへのアクセスを認可** する」プロトコル。
+**ブラウザのバックグラウンドで動く、ネットワークプロキシ的な JavaScript**。ページから独立して動き、`fetch` イベントを **横取り** してキャッシュ応答 / カスタム応答ができます。
 
-例: 「**Spotify に Google フォトの写真を読ませる**」と言われた時、Spotify に Google パスワードを渡すのは危険。OAuth なら Google 上で認可するだけで、Spotify は **アクセストークン** を受け取って Google フォト API を叩けます。
+特徴:
 
-#### 登場する役割（Role）
+- **DOM にアクセスできない**（ワーカー）
+- **HTTPS 必須**（localhost は例外）
+- **同一オリジン** に限定
+- **永続的** に動き、ページが閉じても残る（バックグラウンドで通知 / 同期）
 
-| 役 | 例 |
-|---|---|
-| **Resource Owner** | エンドユーザー（あなた） |
-| **Client** | アクセスするアプリ（Spotify） |
-| **Authorization Server** | 認可するサーバー（Google） |
-| **Resource Server** | API サーバー（Google フォト API） |
+### ライフサイクル
 
-#### 認可コードフロー（推奨）
-
-OAuth 2.0 で最も使われ、安全とされるフロー。**Client の種類** によって `client_secret` の扱いが変わるので、2 つに分けて図解します。
-
-##### A. Confidential Client（サーバーアプリ / BFF）
-
-サーバーが安全に `client_secret` を保持できる場合（Next.js の Route Handler など）。
+3 つの状態を順に行き来します。
 
 ```
-[User]                         [Client(Server)]              [Auth Server]
-  │   1. ログインボタン押下       │                                │
-  │ ───────────────────────────> │                                │
-  │                              │   2. /authorize にリダイレクト │
-  │                              │ ──────────────────────────────>│
-  │   3. ログイン + 認可画面     │                                │
-  │ <─────────────────────────────────────────────────────────── │
-  │   4. 認可                    │                                │
-  │ ────────────────────────────────────────────────────────── > │
-  │                              │   5. /redirect?code=XXX        │
-  │                              │ <──────────────────────────────│
-  │                              │   6. /token (code + client_secret) │
-  │                              │ ──────────────────────────────>│
-  │                              │   7. access_token 取得         │
-  │                              │ <──────────────────────────────│
+[ install ] → [ activate ] → [ idle / fetch / message ]
+                                       ↑
+                                       │（更新時）新 SW が install
 ```
 
-##### B. Public Client（ブラウザの SPA / ネイティブアプリ）
+#### `install`
 
-`client_secret` を保持できない場合。代わりに **PKCE**（後述）を必ず使います。
+「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
 
-```
-[Browser SPA]                                                   [Auth Server]
-   │   1. verifier を生成、challenge を計算                        │
-   │   2. /authorize?code_challenge=...                              │
-   │ ────────────────────────────────────────────────────────────────> │
-   │   3-4. ログイン + 認可                                          │
-   │ <───────────────────────────────────────────────────────────────│
-   │   5. /redirect?code=XXX                                         │
-   │ <───────────────────────────────────────────────────────────────│
-   │   6. /token (code + verifier) ← secret は持たない               │
-   │ ────────────────────────────────────────────────────────────────> │
-   │   7. access_token 取得                                          │
-   │ <───────────────────────────────────────────────────────────────│
+```js
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((cache) =>
+      cache.addAll(["/", "/index.html", "/styles.css", "/app.js"]),
+    ),
+  );
+});
 ```
 
-ポイント:
+#### `activate`
 
-- **認可コード**（短命）→ アクセストークンに **サーバー側で交換**（A） / **PKCE で偽装防止**（B）
-- ブラウザに **直接トークン** を渡さない（漏洩リスクが下がる）
-- 現代の Web では **Auth.js / Clerk / Auth0 がこれを内部で組み立てる**
+「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
 
-#### Implicit Flow は非推奨
-
-ブラウザに直接トークンを返す **Implicit Flow** は古いやり方。**現代は使わない**。SPA であっても **Authorization Code Flow with PKCE** が推奨。
-
-#### PKCE（Proof Key for Code Exchange）
-
-「**認可コードが盗まれてもトークンに交換できない**」を実現する仕組み。
-
-1. クライアントが **ランダムな verifier** を生成
-2. その **ハッシュ**（challenge） を `/authorize` に渡す
-3. 認可コードを **/token に送る時に verifier を一緒に送る**
-4. 認可サーバーが challenge と一致するかを検証
-
-ネイティブアプリ / SPA で必須。Auth0 / Clerk などの SaaS は自動でやってくれます。
-
-### OpenID Connect（OIDC）
-
-OAuth 2.0 は **認可** のフレームワーク。**「誰がログインしたか」** を扱う仕組みが標準化されていなかった。OIDC は OAuth 2.0 の上に **認証情報の規格** を載せたものです。
-
-OIDC は次を追加:
-
-- **`openid` スコープ**: OIDC を有効化
-- **ID Token**: 「**この人がログインした**」を表す JWT
-- **`/userinfo` エンドポイント**: ユーザープロフィール取得
-
-#### ID Token の中身
-
-```json
-{
-  "iss": "https://accounts.google.com",   // 発行者
-  "sub": "user-123",                        // ユーザー ID
-  "aud": "my-client-id",                    // クライアント ID
-  "exp": 1714000000,                        // 有効期限
-  "iat": 1713999000,                        // 発行時刻
-  "email": "user@example.com",
-  "name": "山田太郎"
-}
+```js
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== "v1").map((k) => caches.delete(k))),
+    ),
+  );
+});
 ```
 
-これに **署名** が付き、クライアントが **公開鍵で検証** することで「**確かに Google が発行した本物**」を確認できます。
+#### `fetch`
 
-### JWT（JSON Web Token）
+「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
 
-JWT は「**JSON データに署名を付けたトークン**」のフォーマット。OIDC の ID Token も JWT。アクセストークンも JWT 形式で返ってくることが多い。
-
-#### 構造: 3 つを `.` で繋ぐ
-
-```
-eyJhbGciOiJIUzI1NiI...   ← Header（base64url）
-.
-eyJzdWIiOiJ1c2VyLTEyMyI...   ← Payload（base64url）
-.
-SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c   ← Signature
+```js
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((res) => res || fetch(event.request)),
+  );
+});
 ```
 
-Header の例:
+### キャッシュ戦略（Workbox 風）
 
-```json
-{
-  "alg": "RS256",
-  "typ": "JWT",
-  "kid": "key-id-1"
-}
-```
+リソース別に **どんな順序でキャッシュ / ネットワークを使うか** を決める戦略。
 
-Payload の例:
-
-```json
-{
-  "sub": "user-123",
-  "name": "山田太郎",
-  "iat": 1713999000,
-  "exp": 1714002600
-}
-```
-
-Signature は **Header + Payload を秘密鍵で署名** したもの。
-
-#### 重要な事実
-
-- **Payload は base64 のエンコードされているだけ** で **暗号化されていない**。誰でも読める
-- **改ざんはできない**（署名検証で弾く）
-- **秘密情報を Payload に入れない**（パスワード / クレジットカードなど）
-
-### 署名アルゴリズム
-
-| 種類 | 例 | 用途 |
+| 戦略 | 流れ | 適切なリソース |
 |---|---|---|
-| **HMAC**（共有鍵） | `HS256` | 自前で発行 + 検証する場合 |
-| **RSA**（公開鍵） | `RS256` | 発行は秘密鍵、検証は公開鍵。**OIDC で標準** |
-| **ECDSA**（楕円曲線） | `ES256` | RSA より短く速い |
+| **CacheFirst** | キャッシュ → なければネット | フォント / 画像 / 不変アセット |
+| **NetworkFirst** | ネット → 失敗したらキャッシュ | API レスポンス / HTML（最新優先） |
+| **StaleWhileRevalidate** | キャッシュ即返却 + 裏でネット更新 | 一覧 / プロフィール画像（やや古くて OK） |
+| **NetworkOnly** | ネットのみ | POST / 認証など |
+| **CacheOnly** | キャッシュのみ | 完全オフライン専用ページ |
 
-OIDC は通常 `RS256` を使い、**JWKS**（公開鍵のセット）を `https://issuer.example.com/.well-known/jwks.json` で配布します。クライアントはこれを取得して **署名検証** します。
+#### CacheFirst の例
 
-#### `alg: none` の罠
-
-JWT 仕様には `alg: none`（署名なし）があり、**チェックなしの実装** だと攻撃者が任意の payload で偽造できます。**ライブラリで `alg: none` を許可しない** が必須。
-
-### セッション Cookie vs JWT
-
-ログイン後の状態維持で **どちらを使うか** がよく議論されます。**「保存方式」と「攻撃面」は組合せで決まる** ので、表で整理します。
-
-| | セッション Cookie（DB セッション） | JWT |
-|---|---|---|
-| 保存場所 | サーバー側（DB / Redis）+ Cookie に ID | クライアント側（保存先は **Cookie / localStorage の選択** 次第） |
-| 取り消し | DB から消すだけ（即時無効化） | 短命にする / Blacklist で対処（即時は難しい） |
-| ステートレス性 | サーバー状態あり | サーバー状態なし |
-| サイズ | 小さい（ID だけ） | 大きい（ペイロード分） |
-| クロスドメイン | 工夫が必要 | 渡すだけ |
-
-**攻撃面は保存場所で決まる**:
-
-- **Cookie**（`HttpOnly` + `Secure` + `SameSite=Lax` か `Strict`）: XSS で **盗めない**。ただし CSRF が要対策（SameSite + CSRF トークンで防御）
-- **localStorage**: XSS で **JS から盗まれる**。CSRF はそもそも該当しない（ブラウザが自動付与しない）
-
-→ **HttpOnly Cookie に JWT を入れる** 形が現代の安全策で、Auth.js / Clerk / Lucia などの既定もこれに近い構成です。
-
-#### 一般的な指針（2026 年）
-
-- **Web アプリ単独**: **セッション Cookie**（HttpOnly / Secure / SameSite）が最も安全
-- **マイクロサービス間 / SPA + 別ドメイン API**: JWT のアクセストークン
-- **モバイル / SPA で OIDC 利用**: ID Token を JWT で取得
-
-「**Cookie に JWT を入れる**」のもよくある折衷案（Cookie の保護 + JWT の検証性）。
-
-### Refresh Token
-
-アクセストークンは **短命**（15 分〜1 時間）にしておき、**Refresh Token** で更新します。
-
-- Access Token: API 呼び出し用、漏れても被害が短時間
-- Refresh Token: Access Token を更新するため、漏れると被害が長期
-
-Refresh Token は **HttpOnly + Secure な Cookie** に保存し、`/token` 経由で交換します。
-
-### 既存 SaaS / ライブラリの位置付け
-
-「**自前実装は避ける**」が現代の標準。代表的選択肢:
-
-| サービス / ライブラリ | 特徴 |
-|---|---|
-| **Auth0** | エンタープライズ標準。フロー / IdP 連携 / カスタムが豊富 |
-| **Clerk** | React / Next.js 専用、UI コンポーネントが秀逸。スタートアップで人気 |
-| **NextAuth.js**（Auth.js） | Next.js 用 OSS。OAuth プロバイダ多数、自前で動かせる |
-| **Supabase Auth** | DB + 認証セット。Postgres ベース |
-| **Firebase Authentication** | Google エコシステム。設定が簡単 |
-| **AWS Cognito** | AWS 系インフラと統合 |
-| **WorkOS** | エンタープライズ向け SAML / SSO |
-| **Lucia / better-auth** | より軽量、自前で書きたい時の OSS |
-
-選び方:
-
-- **すぐ使いたい**: Clerk / Supabase
-- **エンタープライズ要件**（SAML / SCIM）: Auth0 / WorkOS
-- **OSS / ホストせず手元で**: NextAuth / better-auth
-- **既存インフラに揃える**: Cognito / Firebase
-
-### Passkeys（パスワードレス）
-
-2024 年以降、Apple / Google / Microsoft が **Passkeys**（FIDO2 / WebAuthn）の普及を進めています。**パスワードを使わず、デバイスの生体認証で OIDC ログイン** できる仕組み。
-
-```html
-<!-- 簡略 -->
-<script>
-const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
-</script>
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.destination === "image") {
+    event.respondWith(
+      caches.match(event.request).then((res) =>
+        res || fetch(event.request).then((networkRes) => {
+          const clone = networkRes.clone();
+          caches.open("images").then((c) => c.put(event.request, clone));
+          return networkRes;
+        }),
+      ),
+    );
+  }
+});
 ```
 
-主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
+#### NetworkFirst の例
 
-### よくある事故
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open("api").then((c) => c.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+  }
+});
+```
 
-- **JWT の検証を skip** していて偽造を許す → **必ず署名検証**
-- **localStorage にトークン** を入れて XSS で持ち出される → **HttpOnly Cookie** に
-- **Refresh Token が無期限** → 短命 + ローテートを徹底
-- **CORS で `Allow-Origin: *` + `Allow-Credentials: true`** → 仕様違反、CORS エラー
-- **redirect_uri が緩い**（`*` 許可）→ open redirect で攻撃可能
-- **state パラメータを検証していない** → CSRF 成立
+### Workbox
 
-これらが起きやすいので、**SaaS の SDK** に従うのが安全です。
+Google が出している **キャッシュ戦略のヘルパー** ライブラリ。生で書くと冗長な処理を **数行で** 表現できます。
 
-## 演習
+```js
+// sw.js
+import { precacheAndRoute } from "workbox-precaching";
+import { registerRoute } from "workbox-routing";
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from "workbox-strategies";
+import { ExpirationPlugin } from "workbox-expiration";
 
-### ゴール
+precacheAndRoute(self.__WB_MANIFEST);
 
-- OAuth / OIDC / JWT の **トークンの中身** を実物で確認する
-- NextAuth.js（Auth.js）で Google ログインを最小実装する
+registerRoute(
+  ({ request }) => request.destination === "image",
+  new CacheFirst({
+    cacheName: "images",
+    plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 3600 })],
+  }),
+);
 
-### 手順 1: 新規 Next.js
+registerRoute(
+  ({ url }) => url.pathname.startsWith("/api/"),
+  new NetworkFirst({ cacheName: "api", networkTimeoutSeconds: 3 }),
+);
+
+registerRoute(
+  ({ request }) => request.destination === "script" || request.destination === "style",
+  new StaleWhileRevalidate({ cacheName: "assets" }),
+);
+```
+
+### Vite / Next.js での導入
+
+#### Vite + `vite-plugin-pwa`
 
 ```bash
-npx create-next-app@latest auth-sample --ts --app
-cd auth-sample
-npm install next-auth
+npm install -D vite-plugin-pwa
 ```
-
-### 手順 2: Google OAuth クライアント作成
-
-[Google Cloud Console](https://console.cloud.google.com/) で:
-
-1. プロジェクトを作成
-2. APIs & Services → Credentials → OAuth 2.0 Client ID
-3. Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
-4. Client ID と Secret を控える
-
-### 手順 3: NextAuth の設定
-
-`.env.local`:
-
-```
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-AUTH_SECRET=（任意のランダム文字列）
-AUTH_URL=http://localhost:3000
-```
-
-> **補足: 環境変数名は v5 で `AUTH_*` に変わった**: Auth.js v5（旧 NextAuth.js）では `NEXTAUTH_SECRET` / `NEXTAUTH_URL` が **`AUTH_SECRET` / `AUTH_URL` にリネーム**されました。v4 系のチュートリアルをコピペすると古い名前のまま動かないので注意します。`AUTH_SECRET` は `npx auth secret` でランダム生成できます。
-
-`auth.ts`:
 
 ```ts
-import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
+// vite.config.ts
+import { VitePWA } from "vite-plugin-pwa";
 
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+export default defineConfig({
+  plugins: [
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "My App",
+        short_name: "App",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+      },
     }),
   ],
 });
 ```
 
-`app/api/auth/[...nextauth]/route.ts`:
+#### Next.js + `@ducanh2912/next-pwa` / `serwist`
 
-```ts
-import { handlers } from "@/auth";
-export const { GET, POST } = handlers;
+Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
+
+```bash
+npm install @serwist/next serwist
 ```
 
-`app/page.tsx`:
+`next.config.ts`:
 
-```tsx
-import { signIn, signOut, auth } from "@/auth";
+```ts
+import withSerwistInit from "@serwist/next";
 
-export default async function Home() {
-  const session = await auth();
+const withSerwist = withSerwistInit({
+  swSrc: "src/sw.ts",
+  swDest: "public/sw.js",
+});
 
-  if (!session) {
-    return (
-      <main style={{ padding: 24 }}>
-        <form action={async () => { "use server"; await signIn("google"); }}>
-          <button>Google でログイン</button>
-        </form>
-      </main>
+export default withSerwist({});
+```
+
+`src/sw.ts`:
+
+```ts
+import { defaultCache } from "@serwist/next/worker";
+import { Serwist } from "serwist";
+
+declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
+
+new Serwist({
+  precacheEntries: self.__SW_MANIFEST,
+  skipWaiting: true,
+  clientsClaim: true,
+  navigationPreload: true,
+  runtimeCaching: defaultCache,
+}).addEventListeners();
+```
+
+### オフライン対応
+
+最小例: ネットが切れた時に「オフライン画面」を出す。
+
+```js
+const OFFLINE_URL = "/offline.html";
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((c) => c.add(OFFLINE_URL)),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
     );
   }
+});
+```
 
-  return (
-    <main style={{ padding: 24 }}>
-      <p>ようこそ {session.user?.name} さん</p>
-      <pre>{JSON.stringify(session, null, 2)}</pre>
-      <form action={async () => { "use server"; await signOut(); }}>
-        <button>ログアウト</button>
-      </form>
-    </main>
+`/offline.html` は静的に **「オフラインです」** と書かれた HTML を置きます。
+
+### Web Push 通知
+
+ブラウザを閉じている時でも **プッシュ通知** が届く仕組み。
+
+#### 仕組み
+
+1. **クライアント** が **VAPID 鍵** を使って通知を購読
+2. ブラウザが **Push Service**（Apple / Google / Mozilla）に **endpoint** を発行
+3. クライアントが **endpoint をサーバーに送る**
+4. サーバーが **endpoint に POST**（VAPID 秘密鍵で署名）
+5. Push Service が **ブラウザに配信**
+6. Service Worker の `push` イベントが発火 → `showNotification`
+
+#### クライアント側の最小例
+
+```js
+// 通知の許可
+const permission = await Notification.requestPermission();
+if (permission !== "granted") return;
+
+const reg = await navigator.serviceWorker.ready;
+const subscription = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+});
+
+// サーバーに endpoint を保存
+await fetch("/api/push/subscribe", {
+  method: "POST",
+  body: JSON.stringify(subscription),
+  headers: { "Content-Type": "application/json" },
+});
+```
+
+#### Service Worker 側
+
+```js
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "通知", {
+      body: data.body ?? "",
+      icon: "/icon-192.png",
+      badge: "/badge.png",
+      data: { url: data.url ?? "/" },
+    }),
   );
+});
+
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data.url));
+});
+```
+
+#### サーバー側
+
+`web-push` パッケージで送信:
+
+```ts
+import webpush from "web-push";
+
+webpush.setVapidDetails(
+  "mailto:admin@example.com",
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+);
+
+await webpush.sendNotification(subscription, JSON.stringify({
+  title: "新しい通知",
+  body: "メッセージが届きました",
+  url: "/inbox",
+}));
+```
+
+#### iOS Safari の状況
+
+iOS 16.4+ では **PWA をホーム画面に追加した時のみ** Push 通知が動くようになりました。要件:
+
+- ホーム画面に **インストール済み**
+- HTTPS
+- ユーザーの明示的な購読
+
+通常の Safari ブラウザではまだ Push が動かないので注意。
+
+### Background Sync
+
+「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組み。
+
+```js
+self.addEventListener("sync", (event) => {
+  if (event.tag === "send-message") {
+    event.waitUntil(sendQueuedMessages());
+  }
+});
+```
+
+クライアント側:
+
+```js
+const reg = await navigator.serviceWorker.ready;
+await reg.sync.register("send-message");
+```
+
+`Periodic Background Sync` は **定期的にバックグラウンドで実行** する仕組み（権限の関係で制限あり）。
+
+### `manifest.webmanifest` の詳細
+
+```json
+{
+  "name": "My PWA App",
+  "short_name": "PWA",
+  "description": "サンプル PWA アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "scope": "/",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshot1.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow" }
+  ],
+  "shortcuts": [
+    { "name": "新規作成", "url": "/new", "icons": [{ "src": "/new.png", "sizes": "96x96" }] }
+  ]
 }
 ```
 
-### 手順 4: 起動
+| フィールド | 役割 |
+|---|---|
+| `display: standalone` | ブラウザ UI を消してアプリ風に |
+| `theme_color` | 上部バーの色 |
+| `background_color` | スプラッシュ画面の背景 |
+| `icons` | ホーム画面のアイコン |
+| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
+| `screenshots` | インストール画面（form_factor で広 / 狭を区別） |
+| `shortcuts` | アプリ長押しでのクイックメニュー |
+
+> **補足: `theme_color` をダーク/ライトで切り替える**: マニフェストの `theme_color` は単一値ですが、HTML の `<meta name="theme-color">` には `media` 属性を付けて **OS のテーマ設定に応じて切り替え** できます。
+>
+> ```html
+> <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+> <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
+> ```
+>
+> こうすると iOS / Android のダークモード利用者には暗い `theme_color` が、ライトモード利用者には明るい色が反映されます。マニフェストの `theme_color` はインストール後のフォールバックとして残り、`<meta>` が上書きする形になります。
+
+### よくある罠
+
+- **HTTPS でないと動かない**（localhost 以外）
+- **Service Worker は更新が反映されない問題**（古い SW がキャッシュを返し続ける）→ `skipWaiting()` + `clientsClaim()` を使う / **更新確認 UI** を入れる
+- **キャッシュが暴走** → `ExpirationPlugin` で件数 / 期間を制限
+- **ローカルテストで Notification 権限が出ない** → ブラウザ設定でリセット
+- **iOS で通知が来ない** → ホーム画面追加が必要
+
+### 確認ツール
+
+- Chrome DevTools → **Application** タブ
+  - **Manifest**: マニフェストの内容
+  - **Service Workers**: 登録状態 / 更新ボタン
+  - **Cache Storage**: キャッシュの中身
+  - **Storage**: クォータと使用量
+- **Lighthouse** → PWA カテゴリ（インストール可能性 / オフライン動作のチェック）
+- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
+
+## 演習
+
+### ゴール
+
+- Vite プロジェクトに `vite-plugin-pwa` を入れて PWA 化
+- 自前の Service Worker を書いて **オフライン fallback** を実装
+- ホーム画面追加 / Lighthouse の PWA 診断を通す
+
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm run dev
+npm create vite@latest pwa-sample -- --template react-ts
+cd pwa-sample
+npm install
+npm install -D vite-plugin-pwa
 ```
 
-`http://localhost:3000` で Google ログインを試します。
+### 手順 2: vite.config.ts
 
-### 手順 5: セッション Cookie を覗く
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
 
-ブラウザの DevTools → Application → Cookies で **`authjs.session-token`** を確認。Auth.js v5 の既定では **JWE（暗号化 JWT）** で発行されるため、[jwt.io](https://jwt.io/) に貼っても **デコードできません**（暗号化されている）。これは「Cookie が盗まれても中身を読めない」セキュリティ目的です。
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "PWA Sample",
+        short_name: "PWA",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        background_color: "#ffffff",
+        icons: [
+          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png}"],
+        navigateFallback: "/offline.html",
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "google-fonts-stylesheets" },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+    }),
+  ],
+});
+```
 
-「JWT の Payload は base64 で誰でも読める」のは **暗号化なしの JWS** の話です。学習用に中身を見たい時は、別途 `jose` ライブラリでサーバー側 token を発行 / `getToken()` で復号した値を `console.log` する、という手順が要ります。
+### 手順 3: オフラインページ
+
+`public/offline.html`:
+
+```html
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8"><title>オフライン</title></head>
+  <body>
+    <h1>オフラインです</h1>
+    <p>ネットワークに接続してください</p>
+  </body>
+</html>
+```
+
+`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
+
+### 手順 4: ビルドとプレビュー
+
+```bash
+npm run build
+npm run preview
+```
+
+`http://localhost:4173` で開いて DevTools の Application タブを確認。
+
+1. **Service Workers**: SW が登録されている
+2. **Manifest**: フィールドが反映されている
+3. ネットを **Offline** に切り替えて再読込 → `offline.html` が表示される
+
+### 手順 5: Lighthouse で PWA 診断
+
+DevTools → Lighthouse → PWA カテゴリで実行。**インストール可能性** が緑になっていることを確認。
 
 ### 期待出力
 
-- Google ログインが成立し、セッション情報が表示される
-- Cookie に **`authjs.session-token`**（JWE）が入っている
-- jwt.io で **デコードできず警告** が出る（暗号化されているため正常）
+- アドレスバーに **インストールアイコン** が出る
+- ホーム画面 / アプリ一覧から起動可能
+- オフラインで `/offline.html` が表示される
+- Lighthouse の PWA カテゴリが緑
 
 ### 変える
 
-- `Email` プロバイダ（マジックリンク）を追加
-- 複数プロバイダ（GitHub / Discord）を追加
-- ログイン後にしかアクセスできないルートを **Middleware で保護** する
+- `runtimeCaching` で API URL を `NetworkFirst` でキャッシュ
+- `manifest.shortcuts` を追加して **長押しメニュー** を作る
+- `purpose: "maskable"` のアイコンを追加して、Android で円形にトリミングされる挙動を確認
 
 ### 自分で書く（任意）
 
-- Clerk に置き換えて UI コンポーネントの体験を比較
-- Supabase Auth を試して DB / 認証統合の体験
-- Passkey 対応プロバイダ（WebAuthn）を有効にしてパスワードなしログイン
+- `web-push` で Push 通知を送る最小サーバーを書く
+- iOS Safari で **ホーム画面追加 → 通知許可** の流れを試す
+- `IndexedDB` を使って、オフラインで作成したデータを再接続時に同期する
 
 ## まとめ
 
-- **認証**（誰か） と **認可**（何ができるか） を区別する。OAuth は認可、OIDC は認証
-- **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準
-- **Implicit Flow は非推奨**
-- **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
-- **JWT** は Header / Payload / Signature の 3 部構成。**Payload は誰でも読める**
-- 署名アルゴリズムは `RS256` などを使い、**`alg: none` を絶対許可しない**
-- セッション Cookie vs JWT: **Web 単独はセッション Cookie**、API 呼び出しは JWT が定石
-- **Refresh Token** で Access Token を短命に保つ
-- **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
-- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
+- **Service Worker** は **install / activate / fetch** のライフサイクルで動く
+- キャッシュ戦略は **CacheFirst / NetworkFirst / StaleWhileRevalidate / NetworkOnly / CacheOnly** から選ぶ
+- **Workbox** で戦略の記述が劇的に短くなる
+- Vite は `vite-plugin-pwa`、Next.js は `@serwist/next` が定番
+- **`navigateFallback`** で **オフラインページ** を出せる
+- **Web Push 通知** は VAPID 鍵 + Push Service の流れ。iOS は **インストール後限定**
+- **`manifest.webmanifest`** の `display` / `icons` / `shortcuts` でアプリ体験を整える
+- DevTools の Application タブと **Lighthouse PWA** で診断

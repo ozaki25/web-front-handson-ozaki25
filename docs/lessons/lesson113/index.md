@@ -1,483 +1,394 @@
-# lesson113: CI/CD パイプラインの設計
+# lesson113: 状態管理の地図（TanStack Query / Zustand / Jotai）
 
 ## ゴール
 
-- 「CI」と「CD」を正しく区別して語れる
-- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
-- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
-- Lighthouse CI で速度劣化を **PR 単位** で検知できる
-- Vercel の **Preview Deployment** とテストを連携できる
-
-::: tip 前提
-このレッスンは lesson112「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson112 を参照してください。
-:::
+- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
+- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
+- **TanStack Query** が **サーバー state** に特化していることを理解する
+- **Zustand** が **グローバルクライアント state** の現代の定番であることを知る
+- **Jotai** の atom 思想と Zustand との使い分けを 1 行で言える
+- **Redux Toolkit** の現在地（特定用途に残る）を把握する
+- 「迷ったら何を選ぶか」の判断軸を持つ
 
 ## 解説
 
-### CI と CD の違い
+### state を 5 種類に分ける
 
-| 略 | 正式名称 | やること |
+「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
+
+| 種類 | 例 | 最適なツール |
 |---|---|---|
-| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
-| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
+| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
+| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
+| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
+| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
+| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
 
-「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
+> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
 
-### パイプラインの基本構成
+### 1. ローカル state: `useState` / `useReducer`
 
-```
-push / PR
-   ↓
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
-└─────────┘  └─────────┘  └─────────┘
-        ↓        ↓        ↓
-        └────────┴────────┘
-                   ↓
-              ┌─────────┐
-              │  Build  │
-              └─────────┘
-                   ↓
-              ┌─────────┐
-              │ Deploy  │  ← main にマージされた時のみ
-              └─────────┘
+特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
+
+```tsx
+const [isOpen, setIsOpen] = useState(false);
 ```
 
-ポイント:
+「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
 
-- **lint / test / typecheck は並列**（独立しているので速い）
-- **build は依存** が解決した後（手戻りを早く検知）
-- **deploy は最後** にする
-- **PR では deploy しない**（preview deployment は別フロー）
+### 2. URL state: `useSearchParams`
 
-### GitHub Actions の最小パイプライン
+「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。
 
-`.github/workflows/ci.yml`:
+```tsx
+"use client";
+import { useSearchParams, useRouter, usePathname } from "next/navigation";
 
-```yaml
-name: CI
+export function FilterBar() {
+  const searchParams = useSearchParams();
+  const router = useRouter();
+  const pathname = usePathname();
+  const tag = searchParams.get("tag") ?? "all";
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm test
-
-  build:
-    needs: [lint, typecheck, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-```
-
-`needs:` で **前のジョブが成功した時だけ** 次に進みます。
-
-### キャッシュで速くする
-
-毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
-
-#### `actions/cache` で任意のディレクトリ
-
-```yaml
-- uses: actions/cache@v4
-  with:
-    path: |
-      ~/.npm
-      .next/cache
-    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-    restore-keys: |
-      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
-```
-
-Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
-
-::: warning キャッシュの落とし穴
-キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
-:::
-
-### マトリクスビルド
-
-複数の Node.js バージョン / OS で同時にテストする時に便利。
-
-```yaml
-test:
-  runs-on: ${{ matrix.os }}
-  strategy:
-    matrix:
-      os: [ubuntu-latest, macos-latest, windows-latest]
-      node: [20, 22]
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: ${{ matrix.node }} }
-    - run: npm ci
-    - run: npm test
-```
-
-これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
-
-### 並列の使いどころ
-
-- **Lint / Typecheck / Test を並列に**
-- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
-- **Storybook ビルドを別ジョブに**
-- **Cypress / Playwright を shard** で分割
-
-シャーディング例（Playwright）:
-
-```yaml
-strategy:
-  fail-fast: false
-  matrix:
-    shard: [1, 2, 3, 4]
-steps:
-  - run: npx playwright test --shard=${{ matrix.shard }}/4
-```
-
-### CD（デプロイ）の戦略
-
-#### Vercel / Netlify / Cloudflare Pages を使うなら
-
-これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
-
-#### 自前でデプロイする時の最小例
-
-```yaml
-deploy:
-  if: github.ref == 'refs/heads/main'
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 22, cache: npm }
-    - run: npm ci
-    - run: npm run build
-    - run: npm run deploy
-      env:
-        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-```
-
-`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
-
-### Vercel の Preview Deployment と組み合わせる
-
-Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
-
-- レビュアーが **動作確認しながら** レビューできる
-- E2E テストを **本番に近い環境** で走らせられる
-- Lighthouse CI を **プレビュー URL に対して** 実行できる
-
-#### プレビュー URL に E2E を回す
-
-```yaml
-e2e:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 22, cache: npm }
-    - run: npm ci
-    - run: npx playwright install --with-deps
-    - name: Wait for Vercel preview
-      uses: patrickedqvist/wait-for-vercel-preview@v1
-      id: vercel
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        max_timeout: 300
-    - run: npx playwright test
-      env:
-        BASE_URL: ${{ steps.vercel.outputs.url }}
-```
-
-### Lighthouse CI
-
-PR 単位で **Lighthouse スコアの劣化** を検知します。
-
-```bash
-npm install -D @lhci/cli
-```
-
-`lighthouserc.json`:
-
-```json
-{
-  "ci": {
-    "collect": {
-      "url": ["https://example.com/"],
-      "numberOfRuns": 3
-    },
-    "assert": {
-      "assertions": {
-        "categories:performance": ["error", { "minScore": 0.9 }],
-        "categories:accessibility": ["error", { "minScore": 0.95 }]
-      }
-    },
-    "upload": {
-      "target": "temporary-public-storage"
-    }
+  function setTag(newTag: string) {
+    const params = new URLSearchParams(searchParams);
+    params.set("tag", newTag);
+    router.push(`${pathname}?${params}`);
   }
+
+  return (
+    <select value={tag} onChange={(e) => setTag(e.target.value)}>
+      <option value="all">すべて</option>
+      <option value="js">JavaScript</option>
+      <option value="css">CSS</option>
+    </select>
+  );
 }
 ```
 
-GitHub Actions で:
+URL に状態が入ると:
 
-```yaml
-lighthouse:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 22, cache: npm }
-    - run: npm ci
-    - run: npx lhci autorun
+- ブラウザの戻る / 進むで遷移できる
+- URL を共有すれば同じ画面が再現できる
+- ブックマークできる
+
+「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
+
+### 3. サーバー state: TanStack Query
+
+API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
+
+- **古くなる**（他のユーザーの書き換えで上書きされる可能性がある）
+- **キャッシュしたい**（同じデータを何度も取りたくない）
+- **再取得したい**（ページに戻ってきた時など）
+- **楽観的更新したい**（UI を先に変えて、サーバー応答で確定）
+
+これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。
+
+**TanStack Query**（React Query から改名）はこの問題を **`useQuery` 1 行** で解決します。
+
+```bash
+npm install @tanstack/react-query
 ```
 
-スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
+```tsx
+import { useQuery } from "@tanstack/react-query";
 
-### シークレットの取り扱い
+function PostsList() {
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["posts"],
+    queryFn: async () => {
+      const res = await fetch("/api/posts");
+      return res.json();
+    },
+  });
 
-- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
-- workflow ファイルに **平文で書かない**
-- **fork からの Pull Request** に対する `pull_request` トリガーでは **secrets は読めません**（空文字列になります）。これは「fork してきた攻撃者が悪意ある workflow を入れて secrets を盗む」サプライチェーン攻撃を防ぐためです。CI で secrets が必要な処理は「自分のリポジトリ内のブランチからの PR」だけで動くように分けます
-- `pull_request_target` を使うと fork PR でも secrets が読めますが、**fork の悪意あるコードがそのまま走るため極めて危険** です。利用は「ラベル付けや welcome コメント等、コードを実行しない処理に限る」のが鉄則です
-
-### 環境（Environment）の活用
-
-`environment: production` を指定すると:
-
-- Required reviewers（**承認が必要**）
-- Wait timer（**N 分待つ**）
-- Branch policy（**main 限定**）
-- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
-
-を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
-
-```yaml
-deploy-prod:
-  environment: production
-  runs-on: ubuntu-latest
-  steps: ...
+  if (isLoading) return <p>読み込み中...</p>;
+  if (error) return <p>エラー</p>;
+  return <ul>{data.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+}
 ```
 
-### 再利用可能な workflow
+`useQuery` がやってくれること:
 
-組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
+- **キャッシュ**: 同じ `queryKey` のデータは再利用
+- **重複排除**: 同じ key で複数コンポーネントから呼んでも 1 回だけ fetch
+- **再取得**: ウィンドウフォーカス時 / ネットワーク復帰時
+- **ステール管理**: `staleTime` を超えたら古い扱いに
+- **楽観的更新**: `useMutation` で送信中に UI を先に更新
+- **無限スクロール**: `useInfiniteQuery`
 
-```yaml
-# .github/workflows/_node-ci.yml（呼ばれる側）
-on:
-  workflow_call:
-    inputs:
-      node-version: { type: string, default: "20" }
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ inputs.node-version }}, cache: npm }
-      - run: npm ci
-      - run: npm run lint && npm run test
+2026 年の React アプリで **API 呼び出しがある** なら、TanStack Query 入れない理由はほぼないです。
+
+> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
+
+### 4. グローバルクライアント state: Zustand / Jotai / Context
+
+「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には:
+
+#### 軽量な定番: Zustand
+
+```bash
+npm install zustand
 ```
 
-```yaml
-# 呼び出す側
-jobs:
-  ci:
-    uses: my-org/.github/.github/workflows/_node-ci.yml@main
-    with:
-      node-version: "22"
+```tsx
+import { create } from "zustand";
+
+type AuthStore = {
+  user: { id: string; name: string } | null;
+  login: (user: { id: string; name: string }) => void;
+  logout: () => void;
+};
+
+export const useAuthStore = create<AuthStore>((set) => ({
+  user: null,
+  login: (user) => set({ user }),
+  logout: () => set({ user: null }),
+}));
 ```
 
-### 失敗を早く検知するコツ
+```tsx
+function Header() {
+  const user = useAuthStore((s) => s.user);
+  const logout = useAuthStore((s) => s.logout);
 
-- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
-- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
-- **`timeout-minutes`** を設定して暴走を止める
-- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
-
-### コスト管理
-
-GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
-
-- **キャッシュ** で `npm ci` の時間を削る
-- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
-- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
-
-```yaml
-on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "package*.json"
+  return user ? (
+    <div>
+      ようこそ、{user.name} さん
+      <button onClick={logout}>ログアウト</button>
+    </div>
+  ) : (
+    <p>未ログイン</p>
+  );
+}
 ```
+
+利点:
+
+- **Provider が要らない**: import するだけで使える
+- **boilerplate が少ない**: Redux に比べて 1/5 のコード
+- **TypeScript フレンドリー**
+- **React 外でも呼べる**: `useAuthStore.getState()` で外部からも参照可能
+
+2026 年の **グローバルクライアント state の第一候補**。Redux Toolkit の boilerplate に疲れた人が大量に乗り換えました。
+
+#### atom ベース: Jotai
+
+```bash
+npm install jotai
+```
+
+```tsx
+import { atom, useAtom } from "jotai";
+
+const countAtom = atom(0);
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom);
+  return <button onClick={() => setCount(count + 1)}>{count}</button>;
+}
+```
+
+特徴:
+
+- 状態を **小さな atom** に分割。それぞれが独立に管理される
+- 「明確な store がない、散らばった state を組み合わせる」アプリ向け
+- 派生状態（derived atom）が綺麗に書ける
+
+Zustand の **明確な store** とは対照的に、Jotai は **粒度の細かい atom** を組み合わせる思想です。React の useState を「アプリ全体に拡張した版」と考えると分かりやすい。
+
+#### React Context（組み込み）
+
+`useContext` も簡易な共有手段ですが、**頻繁に変わる state には向きません**（全消費者が再レンダリングされる）。テーマや言語設定のような「滅多に変わらない」共有値に使うのが定番です。
+
+「`Context` で済むなら Context、頻繁に変わるなら Zustand or Jotai、サーバー由来なら TanStack Query」が 2026 年の使い分けです。
+
+### Redux / Redux Toolkit の現在地
+
+Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。
+
+Redux が今でも残るのは:
+
+- **既存プロジェクト**: 移行コストで残る
+- **大規模 + 複雑な action / reducer ロジック** が要る場合
+- **Redux DevTools の時間旅行デバッグ** が欲しい場合
+- **ミドルウェア（thunk / saga）の生態系** に依存
+
+新規アプリなら **Zustand から始める** のが軽量で十分です。
+
+### SWR（TanStack Query の代替）
+
+Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。
+
+- TanStack Query: 機能豊富、エコシステム大、複雑系も得意
+- SWR: シンプル、API が小さい、学習コスト低、Next.js との親和性
+
+「シンプルさを優先」なら SWR、「全部入りで困らない」なら TanStack Query、というイメージです。
+
+### 「迷ったらこう選ぶ」フローチャート
+
+1. **コンポーネント内だけで完結？** → `useState`
+2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
+3. **サーバーから取るデータ？** → **TanStack Query**
+4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
+5. **散らばった派生状態が多い？** → **Jotai**
+6. **滅多に変わらない設定値？** → **Context**
+7. **フォームの入力値？** → **React Hook Form**
+
+これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
 
 ## 演習
 
 ### ゴール
 
-- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
-- キャッシュを効かせて 2 倍速にする
+- 「TanStack Query で API データ取得」「Zustand でテーマ切替」「URL state でフィルタ」を 1 つのアプリで体験する
+- それぞれが **どの種類の state** を扱っているか意識する
 
-### 手順 1: ベースのプロジェクト
+### 途中から始める場合
+
+新規 Vite + React + TS プロジェクトを作成。
 
 ```bash
-npm create vite@latest cicd-sample -- --template react-ts
-cd cicd-sample
+npm create vite@latest state-sample -- --template react-ts
+cd state-sample
 npm install
-git init && git add . && git commit -m "init"
+npm install @tanstack/react-query zustand
 ```
 
-GitHub にリポジトリを作って push。
+### 手順 1: TanStack Query の Provider を入れる
 
-### 手順 2: scripts を整える
+`src/main.tsx`:
 
-`package.json`:
+```tsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import App from "./App";
 
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  }
+const queryClient = new QueryClient();
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </StrictMode>
+);
+```
+
+### 手順 2: Zustand store
+
+`src/themeStore.ts`:
+
+```ts
+import { create } from "zustand";
+
+type ThemeStore = {
+  theme: "light" | "dark";
+  toggle: () => void;
+};
+
+// 初期値は OS 設定 (prefers-color-scheme) を尊重する
+const prefersDark =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+export const useThemeStore = create<ThemeStore>((set) => ({
+  theme: prefersDark ? "dark" : "light",
+  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+}));
+```
+
+> **`aria-pressed` と `prefers-color-scheme`**: 切替ボタン側には `aria-pressed={theme === "dark"}` を付けて、スクリーンリーダーに「現在 ON / OFF どちらの状態か」を伝えます。初期値は `prefers-color-scheme: dark` を見て OS 設定に揃えると、ダークモード設定の利用者が **明るい画面で迎えられる事故** を防げます。
+
+### 手順 3: 統合した App
+
+`src/App.tsx`:
+
+```tsx
+import { useState } from "react";
+import { useQuery } from "@tanstack/react-query";
+import { useThemeStore } from "./themeStore";
+
+type Post = { id: number; title: string };
+
+export default function App() {
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggle);
+  const [filter, setFilter] = useState("all");  // 簡易版（本来は URL state）
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["posts"],
+    queryFn: async () => {
+      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+      return (await res.json()) as Post[];
+    },
+  });
+
+  const filtered = filter === "all" ? data : data?.filter((p) => p.id <= 10);
+
+  return (
+    <main
+      style={{
+        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
+        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
+        padding: 16,
+        minHeight: "100vh",
+      }}
+    >
+      <h1>状態管理の地図</h1>
+
+      <button
+        type="button"
+        aria-pressed={theme === "dark"}
+        onClick={toggleTheme}
+      >
+        テーマ: {theme}（クリックで切替 — Zustand）
+      </button>
+
+      <div style={{ marginTop: 12 }}>
+        <button onClick={() => setFilter("all")}>すべて（ローカル state）</button>
+        <button onClick={() => setFilter("first10")}>最初の 10 件</button>
+      </div>
+
+      <h2>記事一覧（TanStack Query で fetch）</h2>
+      {isLoading && <p>読み込み中...</p>}
+      {error && <p>エラー</p>}
+      <ul>
+        {filtered?.slice(0, 20).map((p) => (
+          <li key={p.id}>#{p.id} {p.title}</li>
+        ))}
+      </ul>
+    </main>
+  );
 }
 ```
 
-ESLint 設定 / 簡単な test は省略可。
-
-### 手順 3: workflow
-
-`.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm test
-
-  build:
-    needs: [lint, typecheck, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build
-```
-
-### 手順 4: PR を作って動作確認
-
-```bash
-git checkout -b feature/test
-echo "// test" >> src/App.tsx
-git commit -am "test"
-git push -u origin feature/test
-```
-
-PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
-
 ### 期待出力
 
-- 4 つのジョブが Actions のタブに並ぶ
-- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
-- どれか fail すると build が走らない（`needs:` のおかげ）
+- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示
+- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
+- 「最初の 10 件」を押すと表示が絞り込まれる（ローカル state）
+- ブラウザを **リロードしても fetch は走らない**（TanStack Query のキャッシュ）→ DevTools の Network で 2 回目以降は出ない
 
 ### 変える
 
-- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
-- マトリクスを使って Node 20 と 22 の両方でテストする
-- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
+- `useQuery` の `staleTime: 1000 * 60` を渡してみる。1 分間は再取得されないキャッシュ
+- Zustand の `theme` をブラウザリロード後も保持するために `zustand/middleware` の `persist` を使ってみる
+- `filter` を URL state に変更（`useSearchParams` で `?filter=...`）
 
-### 自分で書く（任意）
+### 自分で書く
 
-- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
-- Vercel に連携して PR で Preview URL が作られる構成にする
-- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
-- `environment: production` で本番デプロイに承認ステップを入れる
+- TanStack Query の `useMutation` で「記事を作成」ボタンを足す（POST）。送信中の UI を表示
+- Jotai を入れて、`countAtom` でカウンターを実装し、Zustand 版と書き味を比較
 
 ## まとめ
 
-- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
-- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
-- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
-- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
-- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
-- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
-- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
-- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える
+- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
+- 2026 年は **役割ごとに使い分ける** のが定番
+- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
+- **Jotai** は atom ベース、散らばった派生状態に向く
+- **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
+- **SWR** は TanStack Query のシンプル代替
+- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ

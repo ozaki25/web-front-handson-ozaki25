@@ -1,469 +1,304 @@
-# lesson73: 共通レイアウトを作る
+# lesson73: Server Component と Client Component
 
 ## ゴール
 
-- `app/layout.tsx` の役割を理解し、全ページで共通のヘッダー・フッターを持てます。
-- `children` という props を受け取って、中に各ページの中身を差し込む仕組みを把握できます。
-- ルートレイアウトがデフォルトで Server Component であることを確認できます。
+- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できます。
+- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子にも Client 扱いが伝播することを理解できます。
+- Client Component が Server Component を `import` はできませんが、`children` や props として受け取れることを知っています。
+- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを自分の目で確認できます。
 
 ## 解説
 
-### 同じ見た目を毎ページ書くのは大変
+### 2 種類のコンポーネントがある
 
-「ページを増やしてリンクで移動する」で 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
+App Router では、コンポーネントが 2 種類あります。
 
-この「全ページで共通の外側」を 1 箇所に集めるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
+- **Server Component**（デフォルト）
+  - サーバー側で React を実行します。
+  - `useState` / `useEffect` / `onClick` など、**ブラウザでしか動かないもの** は使えません。
+  - データベースアクセスや秘密情報を扱えます。
+  - 送り出されたあとはブラウザでは再実行されません。
+- **Client Component**
+  - ブラウザで動きます。4 章 までの React と同じ感覚で書けます。
+  - `useState` / `useEffect` / `onClick` が使えます。
+  - 先頭に `"use client"` を書いて明示します。
 
-### `app/layout.tsx` の最小形
+4 章 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
 
-StackBlitz の Next.js テンプレートには最初から `app/layout.tsx` が用意されています。中身は概ね次の形になっています。
+### `"use client"` のルール
+
+Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
 
 ```tsx
-export const metadata = {
-  title: "My App",
-};
+"use client";
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+import { useState } from "react";
+
+export function Counter() {
+  // ...
+}
+```
+
+- 必ず **ファイル先頭 1 行目**（`import` より上）です。
+- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
+
+つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
+
+### 境界のイメージ
+
+ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
+
+```mermaid
+graph TD
+  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
+  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
+
+  Layout["RootLayout (Server)"]:::server
+  Page["page.tsx (Server)"]:::server
+  Nav["Nav (Server)"]:::server
+  Counter["Counter (Client)"]:::client
+  Form["TodoForm (Client)"]:::client
+
+  Layout --> Page
+  Page --> Nav
+  Page --> Counter
+  Page --> Form
+```
+
+- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
+- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
+- Client の部分は「葉」に配置します。ページ全体を Client にしません。
+
+上記図はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965`、枠 `#95d5b2` / `#62b6cb`、文字 `#ffffff`）を指定しています。
+
+### Client → Server の呼び出しルール
+
+ここがよく詰まるポイントです。
+
+- Client Component から Server Component を **`import` できません**。
+- ただし、`children` や props として **受け取ること** は可能です。
+
+つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
+
+```tsx
+// Server Component（親）
+import { ClientWrapper } from "./ClientWrapper";
+import { ServerInfo } from "./ServerInfo";
+
+export default function Page() {
   return (
-    <html lang="ja">
-      <body>{children}</body>
-    </html>
+    <ClientWrapper>
+      <ServerInfo />
+    </ClientWrapper>
   );
 }
 ```
 
-重要なのは次の点です。
+```tsx
+// ClientWrapper.tsx
+"use client";
 
-- **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
-- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（「ページを増やしてリンクで移動する」で「コピーしない」と言ったのはこのためです）。
-- `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
-- `LayoutProps<"/">` は Next.js 16 が自動生成する **グローバル型** です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` にルート別の型定義が生成されます。第 1 引数の `"/"` はこの `layout.tsx` が覆うルートのパスで、他のルート用レイアウトなら `LayoutProps<"/posts">` のように書きます。
-- `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
+import type { ReactNode } from "react";
+import { useState } from "react";
 
-### `children` の正体
+export function ClientWrapper({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>開閉</button>
+      {open && children}
+    </div>
+  );
+}
+```
 
-`children` はこれまで4 章 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
+`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
 
-レイアウトの場合、Next.js が現在 URL に対応する `page.tsx` を自動で `children` に入れてくれます。学習者が直接 `<RootLayout>` を呼ぶことはありません。
+### Server → Client へ渡せる props は **シリアライズ可能なもの限定**
 
-- `/` にアクセス → `app/page.tsx` の JSX が `children` に入る
-- `/about` にアクセス → `app/about/page.tsx` の JSX が `children` に入る
-- `/todos` にアクセス → `app/todos/page.tsx` の JSX が `children` に入る
+Server Component から Client Component へ props を渡すとき、**シリアライズ可能** （JSON で表現できる）な値しか渡せません。具体的には次のとおりです。
 
-### ルートレイアウトは Server Component
+- **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
+- **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
 
-`app/layout.tsx` の先頭に `"use client"` は付いていないので、これは **Server Component** として動きます。ヘッダーやフッターなど、クリックで動くような仕掛けがなければ Server Component のままで良いです。
+これは「Server で計算した結果を Client に渡す = ネットワーク越しに JSON で送る」ためです。`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーで詰まります。実務での回避パターン:
 
-今回のようにナビ内の `<Link>` を並べるだけならイベントハンドラを使わないので、`"use client"` は不要です。
+- **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
+- **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
+- **コールバック関数**: 普通の関数は渡せないので、**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せます
 
-### レイアウトは入れ子にできる（予告）
+### `"use client"` を忘れたときのエラー
 
-実は `app/<path>/layout.tsx` を置くと、その配下のページだけに適用される追加のレイアウトが作れます。本コースでは **ルートレイアウト 1 枚** のみ使います（入れ子レイアウトは扱いません）。
+`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+```
+
+このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
+このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
 
-<details>
-<summary>出発点のファイル</summary>
+### 既存のプロジェクトを使う
 
-**`app/page.tsx`**
+「共通レイアウトを作る」のレッスンで作ったプロジェクトを開き直しましょう。
+
+### 手順 1: Client Component の `Counter` を作る
+
+`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
+
+`app/components/Counter.tsx`:
 
 ```tsx
-import Link from "next/link";
+"use client";
+
+import { useState } from "react";
+
+export function Counter() {
+  const [count, setCount] = useState(0);
+  console.log("client render");
+  return (
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
+  );
+}
+```
+
+- 1 行目に `"use client"` を書きます。
+- `useState` と `onClick` を使っています。
+- `console.log("client render")` をレンダリング中に仕掛けます。
+
+### 手順 2: Server Component の `page.tsx` に埋め込む
+
+`app/page.tsx` を次のように書き換えます。
+
+```tsx
+import { Counter } from "./components/Counter";
 
 export default function Page() {
-  return (
-    <main>
-      <h1>ようこそ</h1>
-      <nav>
-        <ul>
-          <li>
-            <Link href="/">Home</Link>
-          </li>
-          <li>
-            <Link href="/about">About</Link>
-          </li>
-          <li>
-            <Link href="/todos">Todos</Link>
-          </li>
-        </ul>
-      </nav>
-    </main>
-  );
-}
-```
-
-**`app/about/page.tsx`**
-
-```tsx
-import "./about.css";
-
-export default function AboutPage() {
-  return (
-    <>
-      <header className="site-header">
-        <h1>私の名前</h1>
-        <nav className="site-nav">
-          <a href="#about">自己紹介</a>
-          <a href="#likes">好きなもの</a>
-          <a href="#contact">問い合わせ</a>
-        </nav>
-      </header>
-
-      <main>
-        <section id="about">
-          <h2>自己紹介</h2>
-          <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-        </section>
-
-        <section id="likes">
-          <h2>好きなもの</h2>
-          <div className="cards">
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-              <h3>コーヒー</h3>
-              <p>朝の 1 杯が欠かせない。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-              <h3>本</h3>
-              <p>技術書からエッセイまで。</p>
-            </article>
-            <article className="card">
-              <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-              <h3>散歩</h3>
-              <p>行き先を決めずに歩く。</p>
-            </article>
-          </div>
-        </section>
-
-        <section id="contact">
-          <h2>問い合わせ</h2>
-          <form>
-            <div>
-              <label htmlFor="name">お名前</label>
-              <input id="name" name="name" type="text" required />
-            </div>
-            <div>
-              <label htmlFor="email">メール</label>
-              <input id="email" name="email" type="email" required />
-            </div>
-            <div>
-              <label htmlFor="message">メッセージ</label>
-              <textarea id="message" name="message" rows={4} required></textarea>
-            </div>
-            <button type="submit">送信</button>
-          </form>
-        </section>
-      </main>
-
-      <footer className="site-footer">
-        <p>&copy; 私の名前</p>
-      </footer>
-    </>
-  );
-}
-```
-
-**`app/about/about.css`**
-
-```css
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.6;
-  color: #1f2937;
-  background-color: #f9fafb;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb;
-    background-color: #0b1220;
-  }
-}
-
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.site-nav a {
-  color: #f9fafb;
-  margin-right: 16px;
-}
-
-.cards {
-  display: flex;
-  gap: 16px;
-}
-
-.cards .card {
-  flex: 1;
-  background-color: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cards .card {
-    background-color: #111827;
-    border-color: #374151;
-  }
-}
-
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
-}
-
-.site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  text-align: center;
-}
-
-@media (max-width: 600px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .cards {
-    flex-direction: column;
-  }
-}
-```
-
-**`app/todos/page.tsx`**
-
-```tsx
-export default function TodosPage() {
-  return (
-    <main>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </main>
-  );
-}
-```
-
-</details>
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
-
-### 手順 1: ヘッダーとフッターをルートレイアウトに集める
-
-`app/layout.tsx` を以下に書き換えます。
-
-```tsx
-import Link from "next/link";
-import "./globals.css";
-
-export const metadata = {
-  title: "My Next App",
-};
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
-  );
-}
-```
-
-### 手順 2: 共通 CSS
-
-`app/globals.css` を開き（StackBlitz テンプレートに既にあります）、末尾に以下を追加します。存在しなければ新規作成してください。
-
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
-
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
-
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
-
-/* ダークモード色指定: 白背景前提にすると文字が読めなくなるため必ず上書き */
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
-  }
-  .site-header a {
-    color: #4ea2ff;
-  }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-}
-```
-
-### 手順 3: 各ページからナビを消す
-
-`app/page.tsx` から `<nav>` のブロックを削除し、ページ固有の中身だけにします。
-
-```tsx
-export default function Page() {
+  console.log("server render");
   return (
     <>
       <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
+      <p>Counter は Client Component として動く。</p>
+      <Counter />
     </>
   );
 }
 ```
 
-`app/about/page.tsx` はこれまでのレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
+- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
+- `console.log("server render")` を仕掛けます。
 
-これまでの `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします。外側の `<main>` / `<>` も不要です（`layout.tsx` の `<main>` に入るため、直接 `<section>` から書き始めます）。
+### 手順 3: 境界を確認する
+
+1. ブラウザで `/` を開きます。
+2. ブラウザの DevTools → Console を開きます。
+3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
+4. ページを再読み込みします。
+
+#### 期待出力
+
+- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
+- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
+- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
+
+これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
+
+### 手順 4: `"use client"` を消してみる
+
+`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
+
+ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+```
+
+このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
+
+### 手順 5: Server を Client の children として渡す
+
+以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
+
+`app/components/ClientBox.tsx`:
 
 ```tsx
-import "./about.css";
+"use client";
 
-export default function AboutPage() {
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export function ClientBox({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(true);
   return (
-    <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </>
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>
+        {open ? "閉じる" : "開く"}
+      </button>
+      {open && <div>{children}</div>}
+    </div>
   );
 }
 ```
 
-これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになります。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整えます。
-
-`app/todos/page.tsx` も同様にページ固有の中身だけ残します。
+`app/components/ServerInfo.tsx`:
 
 ```tsx
-export default function TodosPage() {
+export function ServerInfo() {
+  // Server Component なので、ここでサーバー時刻が取れる
+  const now = new Date().toISOString();
+  return <p>サーバー時刻: {now}</p>;
+}
+```
+
+`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
+
+```tsx
+import { Counter } from "./components/Counter";
+import { ClientBox } from "./components/ClientBox";
+import { ServerInfo } from "./components/ServerInfo";
+
+export default function Page() {
+  console.log("server render");
   return (
     <>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
+      <h1>ようこそ</h1>
+      <Counter />
+      <ClientBox>
+        <ServerInfo />
+      </ClientBox>
     </>
   );
 }
 ```
 
-### 期待出力
+#### 期待出力
 
-- どのページにアクセスしても、画面上部に「Home / About / Todos」のナビ、下部に「&copy; 2026 My Next App」のフッターが表示されます。
-- ナビをクリックするとページ本体だけが差し替わります（ヘッダー・フッターは再レンダリングされません）。
-- ブラウザタブのタイトルが「My Next App」になっています（`export const metadata` によります）。
+- 最初は `サーバー時刻: 2026-...` が見えています。
+- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
+- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
+
+もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
 
 ### 変えてみる
 
-1. `metadata.title` を自分のアプリ名に変えて、タブ名が変わるのを確認しましょう。
-2. フッターの著作権表示を自分の名前に変えましょう。
-3. 試しに `app/about/layout.tsx` を作って、そこに `<h2>自己紹介セクション</h2>` を入れてみましょう。`/about` の中だけにそのタイトルが追加されることを確認したら、実験が終わったらそのファイルは削除します（本コースではルートレイアウト 1 枚運用）。
+1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
+2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
 
 ### 自分で書く
 
-`app/layout.tsx` を何も見ずに、`<html>` `<body>` `{children}` の最小構成から書き直してみましょう。ヘッダーとフッターを再度足して、見た目が崩れないことを確認します。
+「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
 
 ## まとめ
 
-- `app/layout.tsx` は全ページ共通の外側の枠です。`<html>` と `<body>` はここだけに書きます。
-- `children` に現在のページ（`page.tsx`）の中身が自動で差し込まれます。
-- ルートレイアウトは何もしなければ Server Component です。ナビや文字を並べるだけなら `"use client"` は不要です。
-- 共通部分を 1 箇所に集めたので、ページを増やしても繰り返しコードが増えません。
-- このあとの「Server Component と Client Component」で、2 つの違いに踏み込みます。`useState` が必要な部品だけを Client にする使い分けを覚えましょう。
+- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
+- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
+- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
+- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。

@@ -1,421 +1,343 @@
-# lesson101: API モック — MSW（Mock Service Worker）
+# lesson101: バンドルサイズの最適化とコード分割
 
 ## ゴール
 
-- なぜテストで API モックが必要かを説明できる
-- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
-- `http.get` / `http.post` で HTTP ハンドラを書ける
-- `setupServer` で Vitest にモックを組み込める
-- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
-- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
+- バンドルサイズが LCP や INP に効く理由を説明できる
+- Vite のビルド出力を **Visualizer** で可視化できる
+- `import("...")` の **動的インポート** でコードを分割できる
+- `React.lazy` + `<Suspense>` でルート / コンポーネント単位の遅延読み込みができる
+- 「最初の 1 画面で **必要なコードだけ** を送る」考え方を持てる
+- Tree shaking が効く / 効かない書き方を区別できる
 
 ## 解説
 
-### なぜテストで API モックが必要か
+### バンドルサイズと CWV の関係
 
-`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
+ブラウザは JS を **ダウンロード → パース → 実行** してから初めて画面を描画できます。バンドルが大きいと:
 
-- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
-- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
-- 速度が遅い（数百 ms × テスト数だけ待たされる）
-- オフラインで CI が動かない
+- ダウンロードに時間がかかる → **LCP 悪化**
+- パース・実行で **メインスレッドが詰まる** → **INP 悪化**
+- 大きな `<script>` が `<body>` を遮る → **First Paint も遅延**
 
-これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
+特にモバイル + 遅い回線では 100KB 違うだけで体感が劇的に変わります。**「送らないコードが最速」** が鉄則です。
 
-### MSW とは
+### バンドル分析: rollup-plugin-visualizer
 
-**Mock Service Worker**（MSW） は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
-
-特徴:
-
-- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
-- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
-- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
-- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
-
-### 他のモック手法との比較
-
-- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
-- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
-- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
-
-複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
-
-### セットアップ
-
-「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
+Vite は **Rollup** をベースにビルドします。`rollup-plugin-visualizer` を入れると、ビルド成果物の中身を **木構造の図** で見られます。
 
 ```bash
-npm install -D msw
+npm install -D rollup-plugin-visualizer
 ```
 
-`src/mocks/handlers.ts` を作成（ハンドラ定義）:
+`vite.config.ts`:
 
 ```ts
-import { http, HttpResponse } from "msw";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 
-export const handlers = [
-  // GET /api/posts
-  http.get("https://api.example.com/posts", () => {
-    return HttpResponse.json([
-      { id: 1, title: "1 件目" },
-      { id: 2, title: "2 件目" },
-    ]);
-  }),
-
-  // POST /api/posts
-  http.post("https://api.example.com/posts", async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
-  }),
-];
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,        // ビルド後に自動でブラウザで開く
+      filename: "stats.html",
+      gzipSize: true,    // gzip 圧縮後のサイズも表示
+      brotliSize: true,  // brotli 圧縮後のサイズも表示
+    }),
+  ],
+});
 ```
 
-`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
+`npm run build` を実行すると `dist/` 出力後に `stats.html` がブラウザで開き、各依存パッケージのサイズが視覚的に分かります。意外なほど大きいライブラリ（例: `moment`、`lodash` 全部）が見つかることがあります。
+
+### よくある肥大化パターン
+
+| パターン | 解決策 |
+|---|---|
+| `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
+| `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
+| `motion/react`（旧 `framer-motion`、2024 年に `motion` パッケージへ改称）を `import * as motion` で全部読み込み | `import { motion } from "motion/react"` の named import で必要分だけ |
+| Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
+| 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
+| アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
+
+「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
+
+### コード分割（Code Splitting）
+
+「最初の 1 画面で必要なコードだけ送る」を実現するのが **コード分割** です。アプリ全体を 1 つの大きなバンドルにせず、**画面 / 機能ごとに小さな chunk** に分けます。
+
+#### 1. 動的インポート `import("...")`
+
+JavaScript 標準の **動的 `import()`** を使うと、その行に到達するまでファイルを読み込みません。
 
 ```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
+// 静的 import: ビルド時に main bundle に含まれる
+import { heavyFunction } from "./heavy";
 
-export const server = setupServer(...handlers);
+// 動的 import: 実行時に必要になったら別 chunk として読み込む
+button.addEventListener("click", async () => {
+  const { heavyFunction } = await import("./heavy");
+  heavyFunction();
+});
 ```
 
-`vitest.setup.ts` に追記（テスト全体のフック）:
+ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
 
-```ts
-import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
+### 2. React.lazy + `<Suspense>`
 
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
-
-これで:
-
-- 全テストの前にモックサーバを起動
-- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
-- 全テスト後にサーバを停止
-- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
-
-### 簡単なコンポーネントテスト
-
-`src/PostsList.tsx`:
+React コンポーネントを動的に読み込むには `React.lazy` を使います。
 
 ```tsx
-import { useEffect, useState } from "react";
+import { lazy, Suspense } from "react";
 
-type Post = { id: number; title: string };
+// 通常の import
+// import { HeavyChart } from "./HeavyChart";
 
-export function PostsList() {
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+// 動的 import + lazy
+const HeavyChart = lazy(() => import("./HeavyChart"));
 
-  useEffect(() => {
-    fetch("https://api.example.com/posts")
-      .then((res) => {
-        if (!res.ok) throw new Error("読み込み失敗");
-        return res.json();
-      })
-      .then(setPosts)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <p>エラー: {error}</p>;
-  if (posts === null) return <p>読み込み中...</p>;
+function App() {
+  const [showChart, setShowChart] = useState(false);
 
   return (
-    <ul>
-      {posts.map((p) => (
-        <li key={p.id}>{p.title}</li>
-      ))}
-    </ul>
+    <div>
+      <button onClick={() => setShowChart(true)}>グラフを表示</button>
+      {showChart && (
+        <Suspense
+          fallback={
+            <p role="status" aria-live="polite">グラフ読み込み中...</p>
+          }
+        >
+          <HeavyChart />
+        </Suspense>
+      )}
+    </div>
   );
 }
 ```
 
-`src/PostsList.test.tsx`:
+`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。fallback 要素には `role="status"` と `aria-live="polite"` を付けるのがおすすめです。スクリーンリーダーが「読み込み中」を発話してくれるようになり、何も無いまま黙って待たせる事故を防げます。
+
+#### 3. Next.js でのコード分割
+
+Next.js の App Router は **デフォルトで自動コード分割** をします。`app/posts/page.tsx` の中身は `/posts` を訪れた時だけ送られ、トップ `/` には含まれません。
+
+明示的に分割したい時は `next/dynamic` を使います:
 
 ```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { PostsList } from "./PostsList";
+import dynamic from "next/dynamic";
 
-describe("PostsList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<PostsList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
-  });
-
-  it("読み込みが終わると一覧を表示する", async () => {
-    render(<PostsList />);
-    expect(await screen.findByText("1 件目")).toBeInTheDocument();
-    expect(screen.getByText("2 件目")).toBeInTheDocument();
-  });
+const Chart = dynamic(() => import("./Chart"), {
+  loading: () => <p>読み込み中...</p>,
+  ssr: false,  // クライアント側でだけ実行
 });
+
+export default function Page() {
+  return <Chart />;
+}
 ```
 
-`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
+`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
 
-### 失敗ケースのテスト: `server.use` で一時上書き
+### Tree Shaking の落とし穴
 
-「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
+**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
 
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { PostsList } from "./PostsList";
-
-describe("PostsList のエラー", () => {
-  it("API が 500 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
-  });
-
-  it("API が 404 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 404 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
-  });
-});
-```
-
-`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
-
-### POST のテスト
-
-書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { CreatePostForm } from "./CreatePostForm";
-
-describe("CreatePostForm", () => {
-  it("送信すると新しい記事 ID が表示される", async () => {
-    const user = userEvent.setup();
-    render(<CreatePostForm />);
-
-    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
-  });
-});
-```
-
-`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
-
-### 遅延を入れる: `delay`
-
-「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
+#### 効く書き方（named import）
 
 ```ts
-import { http, HttpResponse, delay } from "msw";
-
-export const handlers = [
-  http.get("https://api.example.com/posts", async () => {
-    await delay(100);  // 100ms 遅らせる
-    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
-  }),
-];
+import { format } from "date-fns";
+// 使うのは format だけ。他の関数はバンドルされない
 ```
 
-これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
+#### 効きにくい書き方
+
+```ts
+import * as dateFns from "date-fns";
+dateFns.format(...);
+// すべての export を読み込む可能性が上がる
+```
+
+```ts
+import _ from "lodash";
+// CommonJS の lodash は tree shaking が効かない。lodash 全部が含まれる
+```
+
+代替策:
+
+- `lodash` → `lodash-es`（ESM 版） or 個別関数 import（`import debounce from "lodash/debounce"`）
+- `moment` → `dayjs` / `date-fns`
+- 大きな UI ライブラリ → 個別パッケージ化されているものを選ぶ（Chakra UI v3、Radix UI のように）
+
+### `package.json` の `sideEffects: false`
+
+ライブラリ作者向けですが、自作のライブラリで Tree Shaking を効かせるには `package.json` に `sideEffects: false` を書きます。
+
+```json
+{
+  "name": "my-lib",
+  "sideEffects": false
+}
+```
+
+「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
 
 ## 演習
 
 ### ゴール
 
-- MSW のセットアップを完了する
-- ハンドラ 3 種（成功 / エラー / 遅延）を書く
-- `useEffect` で fetch する小さなコンポーネントをテストする
-- `server.use` でテストごとにレスポンスを上書きできる
+- 既存の Vite + React プロジェクトに `rollup-plugin-visualizer` を入れる
+- `stats.html` を見てバンドル内容を可視化する
+- `React.lazy` でページ単位のコード分割を体験する
+- ビルド前後でサイズの違いを比較する
 
 ### 途中から始める場合
 
-「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
+新規 Vite + React + TypeScript テンプレートを作ります（StackBlitz でも可）。
 
 ```bash
-npm install -D vitest @vitejs/plugin-react jsdom
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
-npm install -D msw
+npm create vite@latest perf-sample -- --template react-ts
+cd perf-sample
+npm install
+npm install -D rollup-plugin-visualizer
 ```
 
-`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
+### 手順 1: Visualizer を有効化
 
-### 手順 1: モックサーバを構築
-
-`src/mocks/handlers.ts`:
+`vite.config.ts`:
 
 ```ts
-import { http, HttpResponse, delay } from "msw";
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 
-export const handlers = [
-  http.get("https://api.example.com/users", async () => {
-    await delay(50);
-    return HttpResponse.json([
-      { id: 1, name: "Alice" },
-      { id: 2, name: "Bob" },
-    ]);
-  }),
-];
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,
+      filename: "dist/stats.html",
+      gzipSize: true,
+    }),
+  ],
+});
 ```
 
-`src/mocks/server.ts`:
+### 手順 2: わざと大きなコンポーネントを作る
 
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
-
-export const server = setupServer(...handlers);
-```
-
-`vitest.setup.ts` に追記:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
-
-### 手順 2: コンポーネントを作る
-
-`src/UsersList.tsx`:
+`src/HeavyChart.tsx`:
 
 ```tsx
-import { useEffect, useState } from "react";
-
-type User = { id: number; name: string };
-
-export function UsersList() {
-  const [users, setUsers] = useState<User[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("https://api.example.com/users")
-      .then((res) => {
-        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
-        return res.json();
-      })
-      .then(setUsers)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <p role="alert">{error}</p>;
-  if (users === null) return <p>読み込み中...</p>;
+export function HeavyChart() {
+  // 実際のグラフライブラリの代わりに、大きな配列を生成
+  const data = Array.from({ length: 1000 }, (_, i) => ({
+    label: `点 ${i}`,
+    value: Math.sin(i / 50) * 100 + 100,
+  }));
 
   return (
-    <ul>
-      {users.map((u) => (
-        <li key={u.id}>{u.name}</li>
-      ))}
-    </ul>
+    <div>
+      <h2>グラフ（モック）</h2>
+      <ul>
+        {data.slice(0, 20).map((d) => (
+          <li key={d.label}>
+            {d.label}: {d.value.toFixed(2)}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 ```
 
-> **補足: `role="alert"` を後挿入で使うときの注意**: `role="alert"` を持つ要素は **live region** として扱われ、内容が更新されるとスクリーンリーダーが即座に読み上げます。ただし、エラー発生時に `<p role="alert">` を **新しく描画** する形（上のコードのように `{error && <p role="alert">...}` で出し入れする形）は、SR 実装によっては読み上げが発火しないことがあります。確実に通知したいときは「常設の `<div role="alert">` を空で置いておき、中身だけ差し替える」「`aria-live="assertive"` を併記する」形を検討します。
+### 手順 3: lazy で読み込む
 
-### 手順 3: テストを書く
-
-`src/UsersList.test.tsx`:
+`src/App.tsx`:
 
 ```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { UsersList } from "./UsersList";
+import { lazy, Suspense, useState } from "react";
 
-describe("UsersList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<UsersList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
-  });
+const HeavyChart = lazy(() =>
+  import("./HeavyChart").then((m) => ({ default: m.HeavyChart }))
+);
 
-  it("読み込みが終わるとユーザーを並べる", async () => {
-    render(<UsersList />);
+export default function App() {
+  const [show, setShow] = useState(false);
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("Bob")).toBeInTheDocument();
-  });
+  return (
+    <main>
+      <h1>パフォーマンス演習</h1>
+      <button onClick={() => setShow(true)}>グラフを表示</button>
 
-  it("エラー時はエラーメッセージを表示する", async () => {
-    server.use(
-      http.get("https://api.example.com/users", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
-
-    render(<UsersList />);
-
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
-  });
-});
+      {show && (
+        <Suspense fallback={<p>読み込み中...</p>}>
+          <HeavyChart />
+        </Suspense>
+      )}
+    </main>
+  );
+}
 ```
 
-### 手順 4: 実行
+`HeavyChart` は **named export** なので `lazy` の中で `default` に変換しています。`export default function HeavyChart() {...}` にすれば変換は不要です。
+
+### 手順 4: ビルドして可視化
 
 ```bash
-npm run test
+npm run build
 ```
 
-3 件すべて緑になれば成功です。
+ビルド完了後、自動で `stats.html` がブラウザで開きます。
+
+- 中央の大きなブロックが React 本体
+- 別の小さな chunk として `HeavyChart` のコードが分かれているはず
+- **Initial bundle**（最初に送られる JS）から `HeavyChart` が外れている
 
 ### 期待出力
 
-```
- PASS  src/UsersList.test.tsx (3)
-   PASS  最初は読み込み中を表示する
-   PASS  読み込みが終わるとユーザーを並べる
-   PASS  エラー時はエラーメッセージを表示する
+`dist/assets/` を見ると、複数の `.js` ファイルがあるはずです。
 
- Test Files  1 passed (1)
-      Tests  3 passed (3)
 ```
+dist/
+├── index.html
+├── assets/
+│   ├── index-XXXXX.js     ← Initial bundle (App.tsx + React)
+│   └── HeavyChart-XXXXX.js ← lazy でロードされる別 chunk
+└── stats.html
+```
+
+開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
+
+- 最初に index-XXXXX.js が読み込まれる
+- 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
+
+の流れが見えます。
 
 ### 変える
 
-- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
-- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
-- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
+- `lazy` の動的 import を **静的 import** に戻してみる（`import { HeavyChart } from "./HeavyChart"`）。再ビルドすると `HeavyChart` のコードが Initial bundle に統合され、`stats.html` 上で 1 つの大きな塊になることを確認
+- `HeavyChart` の中身を増やしてみる（`Array.from({ length: 100000 }, ...)`）。バンドル内のサイズが目に見えて増える
+- `import * as dateFns from "date-fns"` を入れて、tree shaking が効いていない場合に何が起きるか観察（事前に `npm install date-fns`）
 
 ### 自分で書く
 
-- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
-- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
-- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
+- 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
+- `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
+- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
+
+### Next.js での実例
+
+教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
+
+それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
 
 ## まとめ
 
-- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
-- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
-- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
-- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
-- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
-- テストごとに `server.use(...)` でハンドラを上書きできる
-- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
-- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知
+- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
+- **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
+- 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
+- **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
+- Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
+- Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意

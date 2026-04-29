@@ -1,353 +1,341 @@
-# lesson109: 次世代ツールチェイン（Biome / Oxc / Turbopack）
+# lesson109: GitHub Actions で CI
 
 ## ゴール
 
-- 「**Rust 製ツール群** に置き換わりつつある」フロントエンド界隈の構図を理解する
-- Biome / Oxc / Rolldown / Turbopack それぞれの **役割と立ち位置** を区別できる
-- **既存プロジェクトに今すぐ導入するか** を判断できる
-- 速さの数字を **誇張なく** 受け取れる
-- 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
-
-::: tip 前提
-このレッスンは「ESLint / Prettier / Biome」と「Vite の仕組み」の発展編です。基本概念はそれぞれのレッスンで確認してください。
-:::
+- CI / CD の意味と価値を説明できる
+- GitHub Actions のワークフロー YAML の基本構造を読める
+- push / pull_request トリガーで Lint / Test / Build を自動実行できる
+- 失敗時の通知・ステータスバッジ・キャッシュの基本を知る
+- ブランチ保護ルールに **CI 必須** を組み合わせる
+- Vercel / Netlify の Preview Deployment が裏でやっていることを理解する
 
 ## 解説
 
-### なぜ Rust 移行が進むのか
+### CI / CD とは
 
-JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トランスパイラ）は **JavaScript で書かれて** きました。それは「**自分自身でメタ的に開発できる**」という美点があった一方:
+- **CI**（Continuous Integration、継続的インテグレーション）: コードをリポジトリに統合する **そのたびに** 自動でビルド / テスト / Lint を回す仕組み
+- **CD**（Continuous Delivery / Deployment、継続的デリバリー / デプロイ）: 統合に成功したら自動でステージング / 本番にデプロイする仕組み
 
-- **シングルスレッド** 寄りで並列化が難しい
-- **GC のオーバーヘッド**
-- **JS 自体の起動コスト**
+CI が崩れたまま開発を続けると、**「どの変更で壊れたか分からない」** 状態になります。1 つの PR ごとに「壊れていない」を保証することで、main は常に動く状態を保てます。
 
-これがプロジェクトサイズの増加に追いついていません。**Rust** は次の特徴で対抗:
+### GitHub Actions とは
 
-- **並列処理が得意**（fearless concurrency）
-- **GC なし** で予測可能なメモリ使用
-- **コンパイル時の最適化** で実行が速い
-- **WebAssembly に出せる**（CI / IDE 連携）
+GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料・無制限** で実行できます。Private リポジトリは Free プランで月 2,000 分まで（執筆時点）、Pro / Team / Enterprise で枠が増えます。
 
-結果として 2024〜2026 年の間に主要ツールが **Rust ベースに置き換え** が進んでいます。
+主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
 
-### 次世代ツールチェインの全体像
+### 最小のワークフロー
 
-| 役割 | 旧（JS 製） | 新（Rust 製） |
-|---|---|---|
-| バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
-| パーサー / トランスパイラ | Babel | **SWC** / Oxc |
-| Lint | ESLint | **Biome** / Oxlint |
-| Format | Prettier | **Biome** / dprint |
-| 型チェック | tsc | **stc**（試行段階） |
+`.github/workflows/ci.yml`:
 
-それぞれを順に見ていきます。
+```yaml
+name: CI
 
-### Biome
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
 
-[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（lesson108 で扱い済み）。
-
-特徴:
-
-- **設定 1 ファイル**（`biome.json`）
-- **ESLint + Prettier より圧倒的に速い**（35x ベンチマーク）
-- TypeScript / JSX / JSON / CSS をサポート
-- VS Code 拡張あり
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:run
 ```
 
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
-}
+このファイルを **commit + push** すると、GitHub Actions タブに最初の実行が現れ、自動で:
+
+1. Ubuntu の仮想マシンを起動
+2. リポジトリを `checkout`
+3. Node.js 22 をセットアップ（npm キャッシュも有効化）
+4. `npm ci` で依存パッケージをインストール
+5. `npm run test:run` でテストを実行
+
+### 構造を読む
+
+- **`name`**: ワークフローの表示名
+- **`on`**: トリガー条件
+  - `push.branches`: 指定ブランチへの push で実行
+  - `pull_request.branches`: 指定ブランチを **マージ先** にする PR で実行
+  - `schedule`: cron 式で定期実行
+  - `workflow_dispatch`: 手動実行
+- **`jobs`**: 並列実行できる仕事の単位
+- **`runs-on`**: 実行環境（`ubuntu-latest` / `macos-latest` / `windows-latest`）
+- **`steps`**: 順番に実行する処理
+  - `uses: actions/...@v4`: 既製のアクションを使う
+  - `run: ...`: シェルコマンドを実行
+
+### Lint / テスト / ビルドを並列で
+
+実用的には次のような構成です。
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run test:run
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
 ```
 
-#### Biome の限界
+3 つの job が **並列で実行** されます。1 つでも fail すると全体が fail として扱われ、PR ページに赤い X が出ます。
 
-- **TypeScript の型情報を使う高度なルール** は未対応（ESLint の `no-floating-promises` など）
-- 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
-- **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
+### キャッシュで速くする
 
-→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
+`actions/setup-node@v4` の `cache: npm` を指定するだけで、`~/.npm` の中身がキャッシュされます。2 回目以降の `npm ci` が秒速で終わります。
 
-### Oxc / Oxlint
+`pnpm` / `yarn` の場合も同様にキャッシュキーを指定できます。
 
-[Oxc](https://oxc-project.github.io/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
+### マトリクスで複数バージョンをテスト
 
-#### 構成要素
+```yaml
+test:
+  runs-on: ubuntu-latest
+  strategy:
+    matrix:
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }}, cache: npm }
+    - run: npm ci
+    - run: npm run test:run
+```
 
-| 名前 | 役割 |
+これで Node 20 と 22 の両方で同じテストが走ります。複数 OS（`os: [ubuntu, macos, windows]`）も同様。
+
+### 環境変数とシークレット
+
+機密情報（API キー / Vercel トークン等）はリポジトリ設定の **Settings → Secrets and variables → Actions → New repository secret** に登録します。ワークフローからは:
+
+```yaml
+- run: deploy --token $VERCEL_TOKEN
+  env:
+    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+```
+
+YAML やコードに **直接書くと公開されてしまう** ので絶対に避けます。
+
+### ステータスバッジ
+
+`README.md` の冒頭に CI バッジを貼ると、ブランチが「動く状態か」が一目で分かります。
+
+```md
+[![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
+```
+
+緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
+
+### ブランチ保護と CI 必須
+
+「GitHub の PR とコードレビュー」で設定したブランチ保護に **「Require status checks to pass before merging」** を追加し、`lint` / `test` / `build` の各 job を必須に指定します。
+
+これで:
+
+- CI が通っていない PR は **マージ ボタンが押せない**
+- 「テスト書いてあるけど動かしたら fail してた」が起きなくなる
+- 安心して main を信じられる
+
+### Vercel / Netlify との関係
+
+Vercel / Netlify の **Preview Deployment** は、内部で GitHub Actions と似た仕組みを動かしています。PR を作るたびに **そのブランチの内容で本物のサイトを一時デプロイ** してくれて、URL が PR にコメントされます。
+
+CI（GitHub Actions）と Preview Deployment は **役割が違う** ので両方使うのが普通です:
+
+- **CI**（Actions）: テストや Lint で「壊れてないか」を機械的に検証
+- **Preview Deployment**: 「本物の動作を人間がブラウザで確認」する場所
+
+本コースの教材サイトでも、PR を作ると Vercel が自動でプレビュー URL を作ってくれています。
+
+### Lighthouse CI で a11y / パフォーマンスを CI に
+
+「アクセシビリティの自動チェック」と「Core Web Vitals」で扱った **Lighthouse** を CI に組み込めます。
+
+```yaml
+- name: Lighthouse CI
+  uses: treosh/lighthouse-ci-action@v12
+  with:
+    urls: |
+      https://your-preview-url.vercel.app/
+    uploadArtifacts: true
+    temporaryPublicStorage: true
+```
+
+PR ごとに自動で Lighthouse が走り、スコアが下がったら警告できます。
+
+### 通知
+
+CI 失敗時に Slack / Discord / Email に通知する Action も豊富です。
+
+- `slackapi/slack-github-action`
+- `act10ns/slack`
+- 失敗時のみ通知する条件: `if: failure()`
+
+```yaml
+- name: Slack 通知
+  if: failure()
+  uses: slackapi/slack-github-action@v2
+  with:
+    payload: '{"text": "CI failed!"}'
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```
+
+### よく使う公式アクション
+
+| アクション | 用途 |
 |---|---|
-| **oxc_parser** | JavaScript / TypeScript パーサ |
-| **oxlint** | Lint（ESLint 互換ルール） |
-| **oxc_minifier** | minify（terser / esbuild の代替） |
-| **oxc_resolver** | モジュール解決 |
-| **oxc_transformer** | TS / JSX → JS の変換 |
+| `actions/checkout@v4` | リポジトリを checkout |
+| `actions/setup-node@v4` | Node.js セットアップ |
+| `actions/cache@v4` | 任意のディレクトリをキャッシュ |
+| `actions/upload-artifact@v4` | テスト結果やビルド成果物を保存 |
+| `actions/download-artifact@v4` | 保存した成果物を取り出す |
+| `pnpm/action-setup` | pnpm セットアップ（Node とは別途） |
 
-「**Rust で書かれたフロントエンドの基盤一式**」を狙うプロジェクト。
-
-#### Oxlint の最小例
-
-```bash
-npm install -D oxlint
-npx oxlint
-```
-
-ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。
-
-```json
-// .oxlintrc.json
-{
-  "rules": {
-    "no-unused-vars": "error",
-    "no-debugger": "error"
-  }
-}
-```
-
-#### Oxc が他に与える影響
-
-Vite 8（lesson107）が **Rolldown を採用**、Rolldown は **Oxc を内蔵** しています。つまり Oxc は **Vite / Rolldown / 多くの新ツール** の土台になりつつある。
-
-Oxc は **VoidZero**（Evan You が立ち上げた会社）が支援しており、Vite / Rolldown と **同じ会社の同じ方向性** で開発が進んでいます。
-
-### Rolldown
-
-Vite 8 から採用された **Rust 製バンドラ**（lesson107 で扱い済み）。
-
-- **Rollup と同じプラグイン API**
-- **esbuild より速い**（Oxc を内部で使用）
-- **Vite / Rolldown / Oxc が 1 つのチームで開発**
-
-「esbuild と Rollup の両方の良さを Rust で 1 つに」が Rolldown の旗印。Vite 8 のリリースで実用フェーズに入りました。
-
-### SWC
-
-[SWC](https://swc.rs/)（Speedy Web Compiler）は **Rust 製の TypeScript / JSX トランスパイラ**。Babel の置き換え狙い。
-
-特徴:
-
-- Next.js / Parcel 内部で採用
-- Babel より **20〜70 倍速い**
-- プラグインは Rust または WebAssembly
-
-歴史的には Oxc より早く実用化されましたが、**Oxc が後発として** 機能で追いついています。Next.js は引き続き SWC ベース。
-
-### Turbopack
-
-[Turbopack](https://turbo.build/pack) は Vercel 製の **Rust 製バンドラ**。Next.js 専用に近い位置付け。
-
-- Next.js 16 で **`next dev` / `next build` のデフォルト**
-- webpack の **増分ビルド** を更に強化
-- Rolldown と並列に開発されている（**競合関係**）
-
-Vite 系（Vite + Rolldown + Oxc）と Vercel 系（Next.js + Turbopack + SWC）の 2 派が進む構図。
-
-### dprint
-
-[dprint](https://dprint.dev/) は **Rust 製のフォーマッタ**（Prettier 代替）。
-
-```bash
-npm install -D dprint
-```
-
-```jsonc
-// dprint.json
-{
-  "typescript": { "lineWidth": 100, "indentWidth": 2, "semiColons": "always" },
-  "json": {},
-  "markdown": {},
-  "includes": ["**/*.{ts,tsx,js,json,md}"],
-  "excludes": ["dist", "node_modules"],
-  "plugins": [
-    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
-    "https://plugins.dprint.dev/json-0.19.0.wasm",
-    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
-  ]
-}
-```
-
-特徴:
-
-- 各言語のフォーマッタを **WebAssembly プラグイン** として持つ
-- Prettier より少し古めの設計だが速い
-- Deno / 一部 Rust エコシステムで採用
-
-「Biome に注目が集まる中、**Prettier の代替として地味に使える**」位置付け。
-
-### 「Rust 製で速い」の意味するもの
-
-「**ESLint より 50 倍速い**」のような数字は要 **慎重に**。
-
-- **大規模プロジェクト**（10,000+ ファイル）では **数分 → 数秒** の改善で大きな違い
-- **小規模プロジェクト**（100 ファイル以下）では **既に十分速い** ので体感差はわずか
-- **CI 時間** には大きな影響、**保存時 Lint** には微差
-
-判断:
-
-- **CI が長くなって困っている** → 移行価値あり
-- **そうでもない** → 既存ツールで困っていなければ慌てない
-
-### TypeScript の Rust 化
-
-「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
-
-- [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
-- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、**2025 年に発表 + preview リリース**）: 公式の **Go ベース TypeScript**。型チェック / 言語サービスを Go で書き直し、`tsc` 比 10 倍級の高速化を目指す
-
-特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
-
-::: warning
-2026 年現在、これらは **まだ完全互換ではない**。型チェックは tsc / IDE のままで、ビルドだけ SWC / esbuild という現状が続きます。
-:::
-
-### 既存プロジェクトへの導入判断
-
-#### すぐ導入してもよい
-
-- **新規プロジェクト** で Biome 単独
-- **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
-- **Oxlint を ESLint と並走** させて速度を体感
-
-#### 慎重に
-
-- **ESLint プラグインに依存** している既存プロジェクト
-- **`@types/*` を多用** する大規模 TypeScript（型情報を使うルールが必要）
-- **チームの ESLint 知識** が分厚い場合（再学習コスト）
-
-#### 数年待つ
-
-- **TypeScript の Rust 化**（公式 Go 版を待つ）
-- **完全な ESLint プラグイン互換** が出るまで
-
-### ツール選択のフレーム
-
-新規プロジェクトでの 2026 年標準:
-
-```
-言語: TypeScript 5.9
-バンドラ: Vite 8（内部 Rolldown + Oxc）
-        または Next.js 16（内部 Turbopack + SWC）
-Lint:   Biome / Oxlint
-Format: Biome / Prettier
-テスト: Vitest（内部 Vite）/ Playwright
-パッケージ: pnpm / Bun
-```
-
-「**速い + 設定少ない**」を全方位で享受できる構成。
-
-### 5 年後の展望
-
-おそらく続くもの:
-
-- **Rust ベースの拡大**（CI / dev サーバ全般）
-- **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
-- **TypeScript 公式の Go / Rust 化**（高速化）
-
-まだ揺れているもの:
-
-- **Biome vs ESLint** の決着（プラグイン互換次第）
-- **Vite 系 vs Vercel 系** のシェア
-- **WebAssembly 化したツール**（IDE / ブラウザでの実行）
-
-「**まずは安定の ESLint + Prettier、心の準備として Biome / Oxc を試す**」が 2026 年の堅実なスタンス。
+`actions/checkout` のバージョンは年に数回更新されます。最新版は <https://github.com/marketplace?type=actions> で確認できます。
 
 ## 演習
 
 ### ゴール
 
-- Biome と Oxlint をそれぞれ既存プロジェクトに **共存** させる
-- 速度を **同じプロジェクト** で比較する
+- 「GitHub の PR とコードレビュー」で作ったリポジトリに `.github/workflows/ci.yml` を追加する
+- PR を作って CI が走るのを確認する
+- ブランチ保護に CI 必須を追加する
 
-### 手順 1: ベースのプロジェクト
+### 手順 1: テストスクリプトを用意
 
-既存の Vite + React + TS プロジェクトを使うか、新規作成。
-
-```bash
-npm create vite@latest tooling-bench -- --template react-ts
-cd tooling-bench
-npm install
-```
-
-### 手順 2: ESLint で計測
-
-```bash
-# Vite テンプレートには ESLint が入っている
-time npm run lint
-```
-
-時間を記録。
-
-### 手順 3: Biome を導入
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
-```
+リポジトリにテストが何もない場合、最小のものを足します。`package.json` の `scripts` に:
 
 ```json
-// biome.json
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
+  "scripts": {
+    "test:run": "echo 'テスト実行（プレースホルダ）'",
+    "lint": "echo 'Lint 実行（プレースホルダ）'",
+    "build": "echo 'Build 実行（プレースホルダ）'"
+  }
 }
 ```
 
-```bash
-time npx biome check .
+実プロジェクトでは Vitest / ESLint / Vite / Next.js のビルドコマンドを書きます。
+
+### 手順 2: ワークフローを書く
+
+`.github/workflows/ci.yml`（プロジェクトルートから見たパス）:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build
 ```
 
-### 手順 4: Oxlint を試す
+### 手順 3: ブランチで commit + push
 
 ```bash
-npm install -D oxlint
-time npx oxlint .
+git switch -c chore/ci
+mkdir -p .github/workflows
+# 上記 ci.yml を保存
+git add .github package.json
+git commit -m "chore: GitHub Actions で CI を追加"
+git push -u origin chore/ci
 ```
 
-### 手順 5: 結果を比較
+### 手順 4: PR を作って CI を観察
 
-実測値の例（小規模プロジェクト）:
+GitHub のリポジトリ → PR を作成。
 
-| ツール | 時間 | 検出数 |
-|---|---|---|
-| ESLint | 2.5s | 5 |
-| Biome | 0.3s | 4 |
-| Oxlint | 0.1s | 3 |
+PR ページに **「Some checks haven't completed yet」** が出て、しばらくすると **「All checks have passed」** に変わるはずです（プレースホルダなので即終わる）。**Details** リンクから個別の job ログを見られます。
 
-「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
+PR 内で右側の **Checks** タブを開くと、各 step ごとの所要時間とログが時系列で見られます。
+
+### 手順 5: ブランチ保護に CI 必須を追加
+
+リポジトリの **Settings → Branches → main → Edit rule**:
+
+- **Require status checks to pass before merging** にチェック
+- 検索ボックスに `ci` と入力 → 表示されたチェックを **必須** に登録
+- 保存
+
+これ以降、CI が成功していない PR はマージできなくなります。試しに `ci.yml` をわざと壊して push してみると、CI が fail して PR がマージできない状態になります（確認したら戻す）。
 
 ### 期待出力
 
-- 3 つのツールがそれぞれ動き、速度差が見える
-- 検出ルール / 重複が違うので、**ノイズの少ないツール** を選ぶ判断の材料になる
+- PR ページに緑のチェック「All checks have passed」が出る
+- Actions タブにワークフロー実行履歴が並ぶ
+- ブランチ保護でマージボタンが無効化される（CI 失敗時）
 
 ### 変える
 
-- 1000 ファイル規模のプロジェクトで再測定
-- CI でそれぞれを実行し、月のビルド時間を試算
-- IDE 拡張（Biome / Oxlint）を入れて、保存時のレイテンシを比較
+- ジョブを 3 つに分割（lint / test / build）して並列実行に変える。CI 全体の時間が短くなる
+- `runs-on` を `windows-latest` に変えて Windows でも動くか確認（Vite / Next なら通常 OK）
+- `if: github.event_name == 'pull_request'` を追加して、特定の job を PR 時だけ実行
+- `actions/cache@v4` で `~/.cache/Cypress` などをキャッシュして E2E を速くする
 
-### 自分で書く（任意）
+### 自分で書く
 
-- 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
-- dprint を入れて Prettier と比較
-- TypeScript Go 版（`tsgo`）の preview を試す
+- README に CI バッジを貼る
+- Vercel デプロイのプレビュー URL を Lighthouse CI で計測するワークフローを足す（`treosh/lighthouse-ci-action@v12`）
+- Slack 通知を `if: failure()` で組み込む
 
 ## まとめ
 
-- フロントエンドツールが **Rust 製** に置き換わりつつある
-- **Biome**: Lint + Format 1 ツール、設定 1 ファイル、35x 高速
-- **Oxc / Oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
-- **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
-- **SWC / Turbopack**: Next.js / Vercel が独自路線
-- **dprint**: Prettier 代替の Rust 製フォーマッタ
-- **TypeScript 公式の Go 版**（tsgo）が 2025 年に preview リリース、2026 年現在も成熟中
-- 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
-- 既存プロジェクトは「**速度に困ってから**」で良い
-- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
+- **CI** は push / PR のたびに自動でビルド / テスト / Lint を回す仕組み
+- GitHub Actions は **`.github/workflows/*.yml`** に書くだけで動く
+- 構造: `on`（トリガー）→ `jobs`（並列の仕事）→ `steps`（順次のコマンド / アクション）
+- `actions/checkout` + `actions/setup-node` が定番の出発点。`cache: npm` で 2 回目以降が爆速
+- マトリクスで複数 OS / 複数 Node バージョンを並列テストできる
+- シークレットは **Settings → Secrets** に登録し、ワークフロー内で `secrets.NAME` を参照（具体的な記法は本文の YAML 例を参照）
+- ブランチ保護で **CI 必須** に設定すると安全
+- Vercel / Netlify の Preview Deployment は CI とは別の役割（実機確認）
+- Lighthouse CI / Slack 通知 / Artifact 保存などの拡張が豊富

@@ -1,334 +1,398 @@
-# lesson107: Vite の仕組みを軽く
+# lesson107: Git の基本操作
 
 ## ゴール
 
-- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown を中核** に据えて esbuild が担っていた領域を順次置き換えていく方向に進んだ経緯が分かる
-- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
-- 本番ビルドでチャンク分割が起きる理由が言える
-- `import.meta.env` で環境変数を読み込める
-- Vite プラグインの位置付けを把握する
+- Git が「ファイルの履歴を残す」道具であることを説明できる
+- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
+- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
+- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
+- `.gitignore` でコミットしないファイルを除外できる
+- マージコンフリクトの解消手順を 1 度経験する
 
 ## 解説
 
-### Vite の立ち位置
+### Git とは
 
-Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
+**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
 
-特徴:
+なぜ必要か:
 
-- **開発サーバーが速い**（数百 ms で起動）
-- **HMR が一瞬**（保存と同時にブラウザが追随）
-- **本番ビルドはツリーシェイク + 最適化** までやる
-- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
+- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
+- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
+- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
+- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
 
-### 2 段構成の歴史と Rolldown 統一
+2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
 
-Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
+### リポジトリ（repository）と作業ディレクトリ
 
-| 局面 | 使うツール | 役割 |
-|---|---|---|
-| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
-| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
+- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
+- **作業ディレクトリ**: あなたが今編集しているファイル群
 
-開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
+### `git init` で履歴管理を開始
 
-#### Vite 8（2026 年 3 月）で Rolldown を中核に
-
-[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを **中核に据え**、Rollup ベースの本番ビルド経路を Rolldown ベース（`rolldown-vite`）に切り替える方向に進みました。esbuild が担当していた依存事前バンドルや TS/JSX 変換も段階的に Rolldown / Oxc に置き換わっていきますが、移行期では **既定として採用** されつつも esbuild が一部経路に残っており、将来の小バージョンで完全に 1 段化する見込みです。
-
-- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
-- **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
-- 結果として Vite はビルドが **最大 10〜30 倍速** になった
-- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
-
-「esbuild + Rollup の 2 段構成」から「Rolldown 中心」へ移っていく流れ、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
-
-### 開発サーバーの仕組み
-
-Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
-
-#### 古典的 webpack の流れ
-
-1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
-2. ブラウザに 1 つの大きな JS を渡す
-3. 一部修正されると **再バンドル**
-
-→ ファイル数が増えると線形に遅くなる。
-
-#### Vite の流れ
-
-1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
-2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
-3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
-
-→ ファイル数が増えても初回の起動が速い。
-
-#### 例: 何が起きているか
-
-ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
-
-ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
-
-### HMR（Hot Module Replacement）
-
-開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
-
-普通のブラウザリロードと違って:
-
-- フォームに入力した値が **保持** される
-- スクロール位置が保たれる
-- 状態（state）も保たれる（フレームワーク側が対応していれば）
-
-#### 仕組みを大づかみに
-
-1. Vite はファイル変更を **fs.watch** で監視
-2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
-3. **影響モジュールだけ** ブラウザに WebSocket で送る
-4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
-
-React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
-
-### 本番ビルドの仕組み
-
-`vite build` で行われること:
-
-1. **エントリポイント** から依存関係を辿る
-2. **ツリーシェイク** で使われない export を削除
-3. **チャンク分割** で複数ファイルに分ける
-4. **minify** でファイルサイズを削減
-5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
-
-#### チャンク分割（コード分割）
-
-すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
-
-- **ベンダー**（`node_modules`）を別チャンクに
-- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
-
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson104 のバンドルサイズ最適化と繋がる話）。
-
-```ts
-// クリック時に初めて読み込む
-const handleClick = async () => {
-  const { showModal } = await import("./modal");
-  showModal();
-};
-```
-
-#### ハッシュ付きファイル名
-
-`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
-
-### `import.meta.env` で環境変数
-
-Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
+新規プロジェクトを Git 管理下に置くには:
 
 ```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_KEY=do_not_expose
+mkdir my-project
+cd my-project
+git init
 ```
 
-```ts
-console.log(import.meta.env.VITE_API_URL); // OK
-console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
+`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
+
+### 3 つのエリア（変更が辿る道）
+
+Git では変更が次の 3 段階を辿ります。
+
+```
+作業ディレクトリ          ステージング         リポジトリ（履歴）
+（編集中のファイル）  →  （add した変更）  →  （commit した変更）
+       │                      │                      │
+       └─ git add ─────────────                       │
+       └─ git commit -m "..." ────────────────────────┘
 ```
 
-ルール:
+- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
+- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
+- **リポジトリ**: `git commit` で履歴に固定された状態
 
-- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
-- それ以外は Vite が **読み捨てる**（漏洩対策）
-- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
+### 基本コマンド
 
-組み込みで使える環境情報:
+#### `git status`: 今の状態を確認
 
-```ts
-import.meta.env.MODE        // "development" / "production"
-import.meta.env.DEV         // true / false
-import.meta.env.PROD        // true / false
-import.meta.env.BASE_URL    // "/" など
+```bash
+git status
 ```
 
-### プラグイン
+未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
 
-Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
+#### `git add`: ステージングに追加
 
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import svgr from "vite-plugin-svgr";
-import { VitePWA } from "vite-plugin-pwa";
-
-export default defineConfig({
-  plugins: [
-    react(),
-    svgr(),
-    VitePWA({ registerType: "autoUpdate" }),
-  ],
-});
+```bash
+git add file.txt        # 1 ファイル
+git add src/            # ディレクトリ全部
+git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
 ```
 
-代表的なプラグイン:
+#### `git commit`: 履歴に固定
 
-- `@vitejs/plugin-react`: React の HMR + JSX 変換
-- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
-- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
-- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（lesson99）
+```bash
+git commit -m "ボタンの色を変更"
+```
 
-Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
+`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
 
-### Vite と他ツールの関係
+#### `git log`: 履歴を見る
 
-Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
+```bash
+git log              # 詳しく見る
+git log --oneline    # 1 行ずつ簡潔に
+git log --graph      # ブランチをグラフで
+git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
+```
 
-- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
-- **Remix v3 / React Router v7+**: 内部で Vite を採用
-- **Nuxt 3+**: 内部で Vite を採用
-- **Astro**: 内部で Vite を採用
-- **SvelteKit**: 内部で Vite を採用
+#### `git diff`: 変更内容を見る
 
-つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
+```bash
+git diff              # 作業ディレクトリ vs ステージング
+git diff --staged     # ステージング vs リポジトリ
+git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
+```
 
-### 「ハマる」パターン
+### `.gitignore` でコミット対象を絞る
 
-#### `process.env` が `undefined`
+`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
 
-→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
+`.gitignore`（プロジェクトルート）:
 
-#### 環境変数がクライアントに出てこない
+```
+# 依存パッケージ（巨大、再生成可能）
+node_modules/
 
-→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
+# ビルド成果物
+dist/
+build/
 
-#### CommonJS のパッケージで失敗
+# 環境変数（秘匿）。.env* で派生形（.env.local, .env.production.local など）も含めて除外
+.env
+.env.*
+!.env.example
 
-→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
+# OS のメタファイル
+.DS_Store
+Thumbs.db
 
-#### `node:fs` を import してエラー
+# エディタ
+.vscode/
+.idea/
+```
 
-→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
+`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。`.env.example` はテンプレートとしてコミットしたいので `!.env.example` で除外を打ち消しています。
+
+> **補足: `.env` を間違えて push したら revert ではなく secret rotation が先**: `.env` を 1 度でも push してしまうと、`git revert` で履歴を取り消しても **過去のコミットには値が残ったまま**で、git history を遡れば誰でも読めます。**まずやるべきは** 「漏れた値を無効化（rotation）すること」です。API キーは新しいキーに発行し直す、DB のパスワードを変える、トークンを revoke する。GitHub には自動で漏洩を検出する **secret scanning** や、push の時点で止める **push protection** がありますが、自分の責任範囲で値を rotate することが最優先です。履歴自体を消すには `git filter-repo` / `BFG Repo-Cleaner` などのツールが必要で、共有リポジトリでは全員に強制 push の調整が要るため、**「キーは漏れたものとして扱い、すぐ rotate する」のが現実的な初手**です。
+
+### ブランチ: 並行作業の単位
+
+**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
+
+#### ブランチを作って切り替える
+
+```bash
+# 旧来の書き方
+git branch feature/login
+git checkout feature/login
+
+# 現代の書き方（Git 2.23 以降推奨）
+git switch -c feature/login   # -c は「create」
+```
+
+`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
+
+#### ブランチを切り替える
+
+```bash
+git switch main
+git switch feature/login
+```
+
+`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
+
+#### ブランチを一覧
+
+```bash
+git branch          # ローカルブランチ
+git branch -a       # リモート含む全部
+```
+
+### マージ: ブランチを統合
+
+`feature/login` での作業が終わったら、main に統合します。
+
+```bash
+git switch main
+git merge feature/login
+```
+
+これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
+
+### マージコンフリクト
+
+両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
+
+```
+<<<<<<< HEAD
+const message = "こんにちは";
+=======
+const message = "Hello";
+>>>>>>> feature/login
+```
+
+このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
+
+```js
+const message = "Hello, こんにちは";  // 例: 両方を統合
+```
+
+その後:
+
+```bash
+git add path/to/conflicted-file.js
+git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
+```
+
+### リモートリポジトリ（GitHub / GitLab）
+
+`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
+
+#### リモートを追加
+
+GitHub で空の repo を作って、ローカルから紐付け:
+
+```bash
+git remote add origin https://github.com/your-name/your-repo.git
+```
+
+`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
+
+#### push: ローカル → リモート
+
+```bash
+git push -u origin main
+```
+
+`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
+
+#### pull: リモート → ローカル
+
+```bash
+git pull origin main
+```
+
+これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
+
+#### fetch: リモートの内容だけ取得
+
+```bash
+git fetch origin
+```
+
+リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
+
+### よくある初学者のつまずき
+
+1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
+2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
+3. **main で直接作業**: ブランチを切る習慣を最初から
+4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
+
+### 設定の基本
+
+最初の 1 回だけ:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+git config --global init.defaultBranch main
+```
+
+これがないと commit で「誰が」が記録できません。
 
 ## 演習
 
 ### ゴール
 
-- Vite の開発サーバーで **HMR を体感** する
-- ビルド出力のチャンク分割を眺める
-- `import.meta.env` で環境変数を読む
+- ローカルで Git リポジトリを作って commit を 3 回打つ
+- ブランチを作って別の変更を入れ、main にマージする
+- わざとコンフリクトを起こして解消する
 
-### 手順 1: 新規プロジェクト
+### 途中から始める場合
 
-```bash
-npm create vite@latest vite-internals -- --template react-ts
-cd vite-internals
-npm install
-```
+ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
 
-### 手順 2: HMR を試す
+### 手順 1: リポジトリを初期化
 
 ```bash
-npm run dev
+mkdir git-practice
+cd git-practice
+git init
 ```
 
-ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
+### 手順 2: ファイルを作って 1 回目の commit
 
-### 手順 3: ネットワークタブで個別配信を観察
+`README.md`:
 
-DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
-
-### 手順 4: 環境変数
-
-`.env` を作成:
+```md
+# Git 練習用リポジトリ
+```
 
 ```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_TOKEN=xxxxx
+git add README.md
+git commit -m "README を追加"
 ```
 
-`src/App.tsx` に追加:
+### 手順 3: ファイルを増やして 2 回目の commit
 
-```tsx
-console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
-console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
-console.log("MODE:", import.meta.env.MODE);
+`hello.txt`:
+
 ```
-
-ブラウザのコンソールで:
-
-- `VITE_API_URL` は表示される
-- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
-- `MODE` は `"development"`
-
-### 手順 5: 本番ビルド
+Hello, Git!
+```
 
 ```bash
-npm run build
-ls -la dist/assets
-npm run preview
+git status              # 変更が見える
+git add hello.txt
+git commit -m "hello.txt を追加"
+git log --oneline       # 2 件の履歴が見える
 ```
 
-`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
+### 手順 4: ブランチで作業
 
-### 手順 6: 動的 import でチャンクを分割
-
-`src/App.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [text, setText] = useState("");
-
-  const handleClick = async () => {
-    const mod = await import("./heavy");
-    setText(mod.heavyFunction());
-  };
-
-  return (
-    <div>
-      <button onClick={handleClick}>重い処理</button>
-      <p>{text}</p>
-    </div>
-  );
-}
+```bash
+git switch -c feature/greeting
+# hello.txt を編集 → 「Hello, Git! こんにちは。」 に
+git add hello.txt
+git commit -m "挨拶を日本語追記"
 ```
 
-`src/heavy.ts`:
+### 手順 5: main に切り替えて、main 側でも変更
 
-```ts
-export function heavyFunction() {
-  return "計算結果です";
-}
+```bash
+git switch main
+# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」 に
+git add hello.txt
+git commit -m "ビックリマーク追加"
 ```
 
-`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
+これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
+
+### 手順 6: マージ → コンフリクト発生
+
+```bash
+git merge feature/greeting
+```
+
+エラーが出ます:
+
+```
+Auto-merging hello.txt
+CONFLICT (content): Merge conflict in hello.txt
+Automatic merge failed; fix conflicts and then commit the result.
+```
+
+`hello.txt` を開くと:
+
+```
+<<<<<<< HEAD
+Hello, Git!! ビックリマーク追加
+=======
+Hello, Git! こんにちは。
+>>>>>>> feature/greeting
+```
+
+両方を取り込むよう手動で編集:
+
+```
+Hello, Git!! こんにちは。ビックリマーク追加
+```
+
+```bash
+git add hello.txt
+git commit               # エディタが開く → 自動メッセージのまま保存
+git log --oneline --graph
+```
+
+ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
 
 ### 期待出力
 
-- HMR でファイル保存と同時に画面が更新（リロードなし）
-- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
-- `VITE_` プレフィックスの環境変数のみクライアントから読める
-- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
+```
+*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
+|\
+| * abcdef0 (feature/greeting) 挨拶を日本語追記
+* | fedcba9 ビックリマーク追加
+|/
+* 7654321 hello.txt を追加
+* 0987654 README を追加
+```
 
 ### 変える
 
-- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
-- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
-- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
+- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
+- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
+- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
 
-### 自分で書く（任意）
+### 自分で書く
 
-- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
-- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
+- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
+- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
-- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
-- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
-- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
-- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
-- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
-- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
+- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
+- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
+- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
+- `.gitignore` で `node_modules` / `.env` 等を除外
+- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
+- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
+- リモート: `remote add origin URL` / `push` / `pull` / `fetch`

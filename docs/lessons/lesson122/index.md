@@ -1,339 +1,480 @@
-# lesson122: 依存性セキュリティ（npm audit / Dependabot）
+# lesson122: GraphQL と tRPC の地図
 
 ## ゴール
 
-- 「依存パッケージ経由で攻撃される」という **サプライチェーン** リスクを理解する
-- `npm audit` のレポートを読み、優先度を判断できる
-- **Dependabot / Renovate** で更新を自動化できる
-- パッケージを採用する時の判断軸（DL 数 / メンテナンス / 依存の深さ）を持つ
-- ロックファイル / 整合性検証 / SBOM の役割を知る
+- REST と **GraphQL** と **tRPC** の違いを 3 行で言える
+- GraphQL のクエリ / ミューテーション / サブスクリプションの最小例を読める
+- tRPC の「型安全な RPC」の考え方を理解する
+- 自分のプロジェクトで **どれを選ぶか** の判断軸を持つ
+- 関連エコシステム（Apollo Client / urql / Relay / GraphQL Yoga）の位置付けが分かる
 
 ## 解説
 
-### サプライチェーン攻撃とは
+### 3 つの選択肢
 
-「自分のコードは安全」でも、**依存している npm パッケージ** が改ざんされると、そのまま自分のサイトに **攻撃コードが配布** されます。実際に過去:
+API の設計には主に 3 つの流派があります。
 
-- `event-stream` 事件（2018）: 人気ライブラリの管理権限を譲り受けた攻撃者が暗号通貨ウォレット狙いのコードを混入
-- `colors.js` / `faker.js` 事件（2022）: 作者本人が抗議で暴走コードを混入
-- typosquatting: `react-doom`（react-dom の typo）のような偽パッケージ
+| | スタイル | 特徴 |
+|---|---|---|
+| **REST** | リソース指向 + HTTP メソッド | 標準的、CDN キャッシュが効く |
+| **GraphQL** | スキーマ + クエリ言語 | 必要なフィールドだけ取得、複数リソース 1 リクエスト |
+| **tRPC** | 関数呼び出し + TypeScript | 型がそのまま伝わる、クライアント自動生成不要 |
 
-これらは npm 公式に公開されたパッケージ経由で広がります。**依存ツリー** が深くなるほど面が広がり、リスクも増す。
+「**どれが正解** 」ではなく、**プロジェクトとチームに合わせて** 選びます。
 
-### npm audit
-
-`npm audit` は **既知の脆弱性 DB**（GitHub Advisory Database） に対し、現在の依存ツリーをチェックします。
-
-```bash
-npm audit
-```
-
-出力例:
+### REST のおさらいと弱み
 
 ```
-# npm audit report
-
-semver  <5.7.2
-Severity: high
-ReDoS in semver - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
-fix available via `npm audit fix`
-node_modules/semver
-
-5 vulnerabilities (2 high, 3 moderate)
+GET    /users/123          ← 取得
+POST   /users              ← 作成
+PUT    /users/123          ← 更新（全部）
+PATCH  /users/123          ← 更新（一部）
+DELETE /users/123          ← 削除
 ```
 
-### 重要度（Severity）
+長所:
 
-| レベル | 対応の目安 |
-|---|---|
-| **critical** | 即座に対応。本番が止まっても直す |
-| **high** | 計画的に修正、長くて 1 週間 |
-| **moderate** | 月次でまとめて対応 |
-| **low** | 余力で対応 |
+- HTTP メソッドとパスで読みやすい
+- **CDN / プロキシのキャッシュ** が効く
+- 標準なのでツールが豊富（Postman / OpenAPI）
 
-### `npm audit fix`
+弱み:
 
-```bash
-npm audit fix
-```
+- **取得しすぎ / 取得不足**（Over/Under fetching）。`GET /users/123` で名前しか要らないのにフルプロフィールが返る
+- **複数リソースのために何回も呼ぶ**（N+1 問題）
+- **バージョニングが面倒**（v1 / v2 / v3 を共存させる）
 
-semver の範囲内で **自動アップデート** します。安全だが、メジャーバージョン更新が必要なケースは手動。
+### GraphQL
 
-```bash
-npm audit fix --force
-```
+「**1 つのエンドポイント**（POST /graphql）に **クエリ言語** を送って、必要なフィールドだけ取得する」考え方。Facebook が 2015 年に公開。
 
-`--force` で **メジャーアップデート込み** で直してくれますが、**破壊的変更** が混じる可能性があります。CI / 動作確認とセットでないと危険。
+#### スキーマ
 
-### 「audit だけ」では足りない
+```graphql
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  posts: [Post!]!
+}
 
-`npm audit` の限界:
+type Post {
+  id: ID!
+  title: String!
+  body: String!
+  author: User!
+}
 
-- **devDependencies の脆弱性** がノイズになりやすい（本番に届かないものまで警告）
-- **fix なし** の脆弱性は手動で対処するしかない
-- **新しい脆弱性** は DB に登録された後に通知される（ゼロデイには無力）
+type Query {
+  user(id: ID!): User
+  posts(limit: Int = 10): [Post!]!
+}
 
-→ **audit + 自動アップデート + パッケージ選定** の三本柱で守る。
+type Mutation {
+  createPost(title: String!, body: String!): Post!
+}
 
-### Dependabot
-
-GitHub の純正サービス。**依存パッケージのバージョンを自動で PR 作成** してくれます。
-
-`.github/dependabot.yml`:
-
-```yaml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    groups:
-      production:
-        dependency-type: "production"
-      development:
-        dependency-type: "development"
-```
-
-挙動:
-
-- **毎週月曜** に依存をチェック
-- 更新があれば PR を作る（`production` / `development` でグループ化）
-- セキュリティ脆弱性は **常時監視** され、即時 PR
-
-GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
-
-### Renovate
-
-[Renovate](https://docs.renovatebot.com/) は OSS の代替。Dependabot より **設定が柔軟** で、Bot が活発に開発されています。
-
-`renovate.json`:
-
-```json
-{
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":dependencyDashboard"
-  ],
-  "schedule": ["before 9am on monday"],
-  "packageRules": [
-    {
-      "matchPackagePatterns": ["^@types/"],
-      "groupName": "type definitions"
-    },
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true
-    }
-  ]
+type Subscription {
+  postAdded: Post!
 }
 ```
 
-特徴:
+#### クエリ
 
-- **Group で複数パッケージをまとめて** PR
-- `automerge: true` で **CI 通過すれば自動マージ**（patch だけなど安全範囲）
-- Dependency Dashboard の Issue で **全更新を一覧** できる
-- monorepo / 言語 / Docker などへの対応が広い
-
-「Dependabot は標準、Renovate はもっと管理したい場合」の使い分け。
-
-### Socket と OSV-Scanner
-
-audit では拾えない攻撃を補う 2 つのツール。
-
-#### Socket
-
-[socket.dev](https://socket.dev/) は **疑わしいパッケージの挙動** を静的解析で検知。`postinstall` でネットに繋いだ / 環境変数を読んだ / shell を起動した、などのフラグを立てます。
-
-```bash
-npx @socketsecurity/cli scan
-```
-
-GitHub Actions で **PR 単位** に新規依存をスキャンする運用も可能。
-
-#### OSV-Scanner（Google）
-
-```bash
-npx osv-scanner -L package-lock.json
-```
-
-OSV.dev という横断的脆弱性 DB を参照。Python / Go / Rust などにも使えます。
-
-### 整合性検証
-
-`package-lock.json` には各パッケージの **`integrity`** フィールドがあり、ハッシュで完全性を確認します。
-
-```json
-{
-  "node_modules/react": {
-    "version": "19.2.0",
-    "integrity": "sha512-...",
-    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz"
+```graphql
+query {
+  user(id: "123") {
+    name
+    posts(limit: 5) {
+      title
+    }
   }
 }
 ```
 
-`npm ci` は **lock の通りにそのままインストール** し、ハッシュが合わなければエラー。CI ではこれを使って改ざんを検知。
+レスポンス:
 
-### SBOM（Software Bill of Materials）
-
-「ソフトウェアの **部品表**」。何のパッケージをどのバージョンで使っているかを **機械可読な形式**（SPDX / CycloneDX） で出力します。
-
-```bash
-npm sbom --sbom-format=cyclonedx > sbom.json
+```json
+{
+  "data": {
+    "user": {
+      "name": "山田",
+      "posts": [{ "title": "Hello" }, { "title": "GraphQL 楽しい" }]
+    }
+  }
+}
 ```
 
-なぜ必要:
+ポイント:
 
-- 新しい脆弱性が報告された時、**自社のどのプロダクトが影響を受けるか** を即座に確認できる
-- 米国の調達基準では SBOM の提出を求めるケースが増えている
+- **`name` と `posts.title` だけ** 要求 → サーバーはそれだけ返す（**Over fetch を防げる**）
+- **複数リソース**（user + posts） を 1 リクエストで取れる（**N+1 を防げる**）
 
-GitHub には **Dependency Graph** が組み込みで、リポジトリの依存を可視化してくれます。
+#### ミューテーション
 
-### パッケージを採用する時の判断軸
+```graphql
+mutation {
+  createPost(title: "新記事", body: "本文") {
+    id
+    title
+  }
+}
+```
 
-新しい npm パッケージを入れる時、次を見る習慣を。
+書き込みは `mutation` で書きます（query との明示的な区別）。
 
-#### 1. ダウンロード数
+#### サブスクリプション
 
-[npmtrends](https://npmtrends.com/) でダウンロード推移を確認。**月数百万 DL** あると安定。**急増** はバズ後で挙動が変わるかも、**減少** はメンテナンスが止まった可能性。
+```graphql
+subscription {
+  postAdded {
+    id
+    title
+  }
+}
+```
 
-#### 2. メンテナンスの頻度
+WebSocket / SSE 上で **リアルタイムに新着を受信** できます。
 
-GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** をチェック。**3 ヶ月コミットがない** と要注意。
+#### サーバー側の実装
 
-#### 3. 依存の深さ
+人気の選択肢:
 
-`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
+| ライブラリ | 特徴 |
+|---|---|
+| **Apollo Server** | フルスタック。エンタープライズ |
+| **GraphQL Yoga** | 軽量で速い。Next.js / Bun と相性 |
+| **Pothos / TypeGraphQL** | TypeScript 中心のスキーマ定義 |
+| **Hasura / PostGraphile** | DB から自動生成 |
 
-#### 4. ライセンス
+#### クライアント側の主な選択肢
 
-MIT / Apache 2.0 / BSD は OK。**GPL** は公開要件があるので業務利用前に法務確認。
+| ライブラリ | 特徴 |
+|---|---|
+| **Apollo Client** | キャッシュ機能が強い。エコシステム最大 |
+| **urql** | 軽量、設定がシンプル |
+| **Relay** | Meta 製。ページネーション / フラグメントで強力 |
+| **GraphQL Request** | 最小、シンプルな fetch ラッパー |
+| **graphql-codegen** | スキーマ → 型 / Hooks 自動生成 |
 
-#### 5. メンテナーの質
+#### 例: Apollo Client + Next.js
 
-GitHub の **メンテナー一覧** / セキュリティポリシーの整備状況。**1 人メンテナンス** はリスクが集中する。
+```bash
+npm install @apollo/client graphql
+```
 
-#### 6. 代替案
+```tsx
+import { ApolloClient, InMemoryCache, gql } from "@apollo/client";
 
-「**標準で書ける** ことを依存追加で済ませていないか」を再検討。`Date.now()` / `fetch` / `Intl` / `Set` など、**ブラウザ / Node 標準で書ける** ものは依存を入れない方がよい。
+const client = new ApolloClient({
+  uri: "/api/graphql",
+  cache: new InMemoryCache(),
+});
 
-### ゼロデイへの備え
+const data = await client.query({
+  query: gql`
+    query {
+      user(id: "123") { name }
+    }
+  `,
+});
+```
 
-audit に載る前の脆弱性（ゼロデイ）への対処は限定的:
+#### GraphQL の弱み
 
-- **GitHub Advisory** をウォッチ
-- **新パッケージの即採用は避ける**（少なくとも数日寝かせる）
-- **`postinstall` を実行しないインストール**（`--ignore-scripts`）を CI で
-- **lockfile を厳しく**（`npm ci`、`pnpm install --frozen-lockfile`）
+- **CDN キャッシュが効きにくい**（POST 1 本のため）
+- **学習コスト**（スキーマ言語、N+1 解決の DataLoader、フラグメント）
+- **小規模では過剰**（モノリスな自社 API なら REST / tRPC で十分）
+- **ファイルアップロード** は専用拡張が必要
 
-### おすすめの基本セット
+### tRPC
 
-最小構成:
+「**TypeScript の関数を、そのままクライアントから呼ぶ**」発想。Next.js / TypeScript 専用と言って良い構造。
 
-1. **Dependabot Alerts ON**（GitHub の Security タブ）
-2. **Dependabot version updates** で週次 PR
-3. **CI で `npm audit --omit=dev`** を実行（本番依存だけチェック）
-4. **`npm ci`** で lockfile 通りインストール
-5. **SBOM をビルド成果物に含める**（後で照会できる）
+特徴:
 
-これで「**最低限** のサプライチェーン対策」になります。
+- **API スキーマを書かない**（TypeScript の型がスキーマ）
+- **クライアントが型を自動取得**（`import type` の延長）
+- **コード生成が要らない**
+
+#### サーバー側
+
+```ts
+// server/router.ts
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
+
+const t = initTRPC.create();
+
+export const appRouter = t.router({
+  hello: t.procedure
+    .input(z.object({ name: z.string() }))
+    .query(({ input }) => `Hello, ${input.name}`),
+
+  createPost: t.procedure
+    .input(z.object({ title: z.string(), body: z.string() }))
+    .mutation(async ({ input }) => {
+      // DB に保存
+      return { id: "p1", ...input };
+    }),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+#### Next.js の Route Handler に乗せる
+
+```ts
+// app/api/trpc/[trpc]/route.ts
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { appRouter } from "@/server/router";
+
+const handler = (req: Request) =>
+  fetchRequestHandler({
+    endpoint: "/api/trpc",
+    req,
+    router: appRouter,
+    createContext: () => ({}),
+  });
+
+export { handler as GET, handler as POST };
+```
+
+#### クライアント側
+
+```ts
+// utils/trpc.ts
+import { createTRPCReact } from "@trpc/react-query";
+import type { AppRouter } from "@/server/router";
+
+export const trpc = createTRPCReact<AppRouter>();
+```
+
+```tsx
+const { data } = trpc.hello.useQuery({ name: "world" });
+//        ^? string  ← サーバーから自動推論
+```
+
+ポイント:
+
+- 「**サーバーで関数を変えたら**、**クライアントの呼び出し側で即型エラー**」
+- IDE で **オートコンプリート** がそのまま効く
+- スキーマ言語を書かない / コード生成しない / **TypeScript ファースト**
+
+### REST / GraphQL / tRPC の選び方
+
+#### こういう時は **REST**
+
+- 公開 API（外部の開発者向け / SDK 配布）
+- CDN キャッシュを最大限活かしたい
+- HTTP の知識だけで読める「**普通**」が欲しい
+- 多言語クライアント（iOS / Android / Web）でも動く
+
+#### こういう時は **GraphQL**
+
+- フロントから **複数リソースを 1 回で** 取りたい
+- フィールド過不足の最適化が大事
+- 大規模 / 多チーム（バックエンドとフロントの **契約** をスキーマで明示）
+- リアルタイム要件（Subscription）
+
+#### こういう時は **tRPC**
+
+- フロント / バックが **同じ TypeScript リポジトリ**
+- 自社専用 API（外部公開しない）
+- 型の一貫性を **何より優先** したい
+- 小〜中規模で **手数を最小** にしたい（Next.js + tRPC が定番）
+
+### 共存もアリ
+
+「**REST + tRPC**」「**GraphQL + tRPC**」のような組合せもよく見ます:
+
+- 公開 API は REST / GraphQL
+- 自社の Next.js 内部は tRPC
+
+「**外向き / 内向きで分ける**」のは現実的な解。
+
+### Server Components 時代の API
+
+Next.js の App Router では **Server Component が直接 DB を叩ける**（`async function` の中で `prisma.user.findFirst({...})`）ようになりました。これは **「Web フロントが API を呼ぶ」発想を崩します**。
+
+- 初期表示は **Server Component が直接 DB / 外部 API**
+- 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
+
+「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代です。
+
+### よくある質問
+
+#### 「GraphQL は重い」は本当？
+
+DataLoader を使った **N+1 対策** をやれば、REST の何倍も軽くなることもあります。逆に **無対策だと重い**。エコシステムの知識が要る。
+
+#### 「tRPC は本番に強い？」
+
+Vercel / T3 Stack（Next.js + tRPC + Prisma）は実本番で多数事例あり。エンタープライズの大規模では **tRPC v11 + Server Actions** で十分。
+
+#### REST + Zod + OpenAPI で似たことができる？
+
+できます。`tsoa` / `zod-openapi` / `Hono + zod-openapi` で **REST に型** を載せた構成は最近人気。**「tRPC 風 REST」** と呼ばれます。
 
 ## 演習
 
 ### ゴール
 
-- `npm audit` を読む
-- Dependabot を有効にして PR が来る状態を作る
-- 新しいパッケージを採用する判断材料を集める
+- 同じ「**ユーザー一覧 + 詳細**」を REST / GraphQL / tRPC の **3 通り** で書いて比較する
+- それぞれの **コード量 / 型の通り方 / DX** を体感する
 
-### 手順 1: 既存プロジェクトで audit
-
-```bash
-cd /path/to/your-project
-npm audit
-npm audit --json | jq '.metadata.vulnerabilities'
-```
-
-`.metadata.vulnerabilities` で重要度ごとの件数が JSON で見えます。
-
-### 手順 2: 自動修正を試す
+### 手順 1: ベースの Next.js
 
 ```bash
-npm audit fix       # semver 範囲内で自動更新
-git diff package*.json
+npx create-next-app@latest api-styles --ts --app
+cd api-styles
 ```
 
-修正後は **必ず動作確認 + テスト**。
+### 手順 2: REST 版
 
-### 手順 3: Dependabot を有効化
+`app/api/users/route.ts`:
 
-`.github/dependabot.yml`:
+```ts
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
 
-```yaml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule: { interval: "weekly" }
-    groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+export async function GET() {
+  return Response.json(users);
+}
 ```
 
-GitHub の **Settings → Code security → Dependabot alerts** を ON。`Settings → Code security → Dependabot security updates` も ON。
+`app/users-rest/page.tsx`:
 
-### 手順 4: パッケージ採用の練習
+```tsx
+type User = { id: string; name: string; email: string };
 
-候補: `dayjs` / `date-fns` / `luxon`
+export default async function Page() {
+  const res = await fetch("http://localhost:3000/api/users", { cache: "no-store" });
+  const users: User[] = await res.json();
+  return (
+    <ul>
+      {users.map((u) => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
 
-それぞれを次の観点で比較:
+REST は **クライアント側で型** を別途定義するのがネック（ずれると壊れる）。
 
-- npmtrends の DL 推移
-- GitHub のメンテナンス頻度
-- Bundlephobia のサイズと依存
-- TypeScript 型定義の有無
-- ライセンス
-
-採用する 1 つを決めて、`npm install` する。
-
-### 手順 5: SBOM を出す
+### 手順 3: tRPC 版
 
 ```bash
-npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json
-ls -la sbom.json
+npm install @trpc/server @trpc/client @trpc/react-query @tanstack/react-query zod superjson
 ```
+
+`server/router.ts`:
+
+```ts
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
+
+const t = initTRPC.create();
+
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
+
+export const appRouter = t.router({
+  listUsers: t.procedure.query(() => users),
+  getUser: t.procedure.input(z.object({ id: z.string() })).query(({ input }) =>
+    users.find((u) => u.id === input.id),
+  ),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+`app/api/trpc/[trpc]/route.ts`:
+
+```ts
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { appRouter } from "@/server/router";
+
+const handler = (req: Request) =>
+  fetchRequestHandler({
+    endpoint: "/api/trpc",
+    req,
+    router: appRouter,
+    createContext: () => ({}),
+  });
+
+export { handler as GET, handler as POST };
+```
+
+`utils/trpc.ts` / Provider 設定 / Client での使用は tRPC 公式の Quickstart に従う。`trpc.listUsers.useQuery()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
+
+### 手順 4: GraphQL 版
+
+```bash
+npm install graphql graphql-yoga
+```
+
+`app/api/graphql/route.ts`:
+
+```ts
+import { createYoga, createSchema } from "graphql-yoga";
+
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
+
+const yoga = createYoga({
+  schema: createSchema({
+    typeDefs: `
+      type User { id: ID! name: String! email: String! }
+      type Query { users: [User!]! user(id: ID!): User }
+    `,
+    resolvers: {
+      Query: {
+        users: () => users,
+        user: (_: unknown, { id }: { id: string }) => users.find((u) => u.id === id),
+      },
+    },
+  }),
+  graphqlEndpoint: "/api/graphql",
+  fetchAPI: { Response },
+});
+
+export const GET = yoga;
+export const POST = yoga;
+```
+
+`http://localhost:3000/api/graphql` で GraphiQL が開いてクエリを試せます。
 
 ### 期待出力
 
-- `npm audit` で脆弱性の表が出る（または `0 vulnerabilities`）
-- Dependabot を有効化すると **数時間〜1 日で初回の PR / Alert** が来る
-- パッケージ比較の表ができ、採用根拠を説明できる
-- SBOM の JSON が生成される
+- 3 通りで同じデータが取得できる
+- tRPC 版は **クライアント側に型を一切書かない** のに型が通る
+- GraphQL 版は **必要なフィールドだけ** 要求する記述ができる
 
 ### 変える
 
-- `dependabot.yml` の `interval` を `daily` に変えて頻度を上げる
-- `automerge: true` のルールで patch 更新を自動マージにする
-- CI に `npm audit --omit=dev --audit-level=high` を追加して **high 以上で fail** にする
+- tRPC で `getUser` を呼んでみる。`input` を間違えると **クライアントの型エラー** が出ることを確認
+- GraphQL で **複数リソース** を 1 リクエストで取得する（user + その投稿）
+- REST に Zod を入れて、レスポンスの型を保証する
 
 ### 自分で書く（任意）
 
-- Renovate を導入し、Dashboard Issue で全更新を一覧する
-- Socket / OSV-Scanner を CI に組み込む
-- 自社で許可するライセンスを決め、許可外があれば fail するルールを CI に書く
+- T3 Stack（Next.js + tRPC + Prisma + Tailwind）の最小例を作る
+- 既存の REST API を GraphQL でラップする（Apollo / Yoga）
+- 公開 API を REST、内部 API を tRPC、で分ける構成を作る
 
 ## まとめ
 
-- 自分のコードが安全でも **依存パッケージ経由** で攻撃される（サプライチェーン）
-- **`npm audit`** で既知の脆弱性をチェック。Severity に従って対応
-- 自動修正は `npm audit fix`、メジャー込みなら `--force`（要動作確認）
-- **Dependabot / Renovate** で依存更新を自動 PR 化
-- `npm audit` の補完に **Socket / OSV-Scanner**
-- **lockfile + `npm ci` + integrity** で改ざん検知
-- **SBOM** で「自社の何が影響を受けるか」を素早く特定
-- 新しいパッケージは **DL 数 / メンテ頻度 / 依存の深さ / ライセンス** で判断
-- 「**標準で書けるなら依存しない**」が最大の防御
+- **REST** は標準で **CDN キャッシュが効く**。公開 API / 多言語クライアントに強い
+- **GraphQL** は **必要なフィールドだけ** / **複数リソース 1 回**。大規模・多チーム / リアルタイム
+- **tRPC** は **型がそのまま伝わる**。Next.js + TypeScript モノレポで圧倒的 DX
+- **どれが正解** ではなく、プロジェクトとチームに合わせて選ぶ
+- 共存（外向き REST + 内向き tRPC）も実用解
+- Next.js App Router の **Server Components / Server Actions** が「API すら不要」の選択肢として加わった

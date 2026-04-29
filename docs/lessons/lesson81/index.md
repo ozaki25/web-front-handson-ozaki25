@@ -1,297 +1,329 @@
-# lesson81: Server Actions の最小形
+# lesson81: Route Handlers（`app/api/.../route.ts`）
 
 ## ゴール
 
-- `<form action={fn}>` に **関数** を渡してサーバー側で処理できることを理解します。
-- `"use server"` の配置ルール（ファイル先頭 or 関数先頭、async 必須、Client 内には書けない）を覚えます。
-- `FormData.get("...")` で送信値を取り出し、サーバー側の配列に追加できます。
-- `revalidatePath` の仕組みを図で把握し、送信後に一覧が自動更新される流れを追えます。
+- Next.js で HTTP API エンドポイントを作れる（`GET` / `POST`）
+- Server Actions との使い分けの指針を持つ
+- 3 章 の「型ガード」の型ガードを **サーバー側の入力検証** と **クライアント側の受信検証** 両方に使える
+- Proxy との **ランタイムと役割の違い**（どちらも Node.js 既定、Route Handlers はデータ / Proxy は前処理）を理解する
 
 ## 解説
 
-### `preventDefault` が要らなくなる
+### Server Actions と Route Handlers の違い
 
-2 章 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（4 章）でも `onSubmit` の中で同じことをしていました。
+5 章 の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
 
-React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React が送信イベントを **自動で止めて** その関数を呼んでくれます。結果として、以下の対比になります。
+一方、もっと一般的な用途、例えば:
 
-| 書き方 | 送信のデフォルトを止める |
-|---|---|
-| 2 章 の素の JS | `event.preventDefault()` を手書き |
-| 4 章 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
-| **本レッスンの `<form action={fn}>`** | **React が自動で止める** |
+- モバイルアプリ・別サイトから API を叩きたい
+- `fetch('/api/todos')` で JSON を取得・送信したい
+- 認証ヘッダや CORS を扱いたい
 
-`preventDefault` という呼び出しが消えることに注目しておきましょう。
+といった場面では **Route Handlers** を使います。
 
-### Server Actions とは
+使い分け:
 
-`<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
+| 用途 | Server Actions | Route Handlers |
+|---|---|---|
+| 同一 Next.js 内のフォーム送信 | こちらが基本 | 補助的 |
+| 外部クライアント（モバイル・他サイト）が叩く | 不可 | こちらが基本 |
+| 戻り値を UI に結合 | `useActionState` で楽 | 手動で `fetch` + state |
+| 認証ヘッダや CORS が必要 | 向かない | 向く |
 
-- クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
-- 戻り値はありません（あっても無視されます。戻り値を使いたいときは `useActionState` を使います）。
-- 関数は **必ず `async`** です。
+両方が使えるときは Server Actions を優先するのが楽です。**外部から叩く可能性があるなら Route Handlers** と覚えてください。
 
-### `"use server"` の配置ルール
+### Route Handlers の書き方
 
-Server Action であることを示すには、次のどちらかの場所に `"use server"` と書きます。
-
-1. **ファイル先頭に書く**: そのファイル内で `export` されている **async 関数すべて** が Server Action になります。最もよく使う形です。
-   ```ts
-   // app/actions.ts
-   "use server";
-
-   export async function addTodo(formData: FormData) {
-     // サーバー側で動く
-   }
-
-   export async function deleteTodo(id: string) {
-     // これも Server Action
-   }
-   ```
-
-2. **関数の先頭行に書く**: その関数だけが Server Action になります。Server Component の中にインラインで定義する場合に使います。
-   ```tsx
-   export default async function Page() {
-     async function addTodo(formData: FormData) {
-       "use server";
-       // この関数だけ Server Action
-     }
-     return <form action={addTodo}>...</form>;
-   }
-   ```
-
-ルール:
-
-- **必ず async 関数** です。同期関数に `"use server"` は書けません。
-- **Client Component の中（`"use client"` のファイル内）には書けません**。Client から使いたいときは、別ファイルで `"use server"` を書いて `import` します。
-- `"use server"` を書いたファイルからの **`export` は async 関数だけ** にするのが安全です。値（普通の `const`）や非 async 関数を `export` するとビルド時に警告やエラーが出ることがあります。
-- 例外として **型の `export type`** は問題ありません（TypeScript の型情報はビルド後の JS には残らないためです）。
-
-本コースでは **(1) のファイル先頭パターン** を使います（分離が分かりやすいためです）。
-
-### データの保存先（本コースでの割り切り）
-
-本コースではデータベースは使いません。代わりに、`app/actions.ts` のモジュールトップレベルに **ただの配列** を置いて、擬似的な永続化とします。
-
-**開発時（dev）の注意**: StackBlitz や `next dev` では、`app/actions.ts` を編集するたびにモジュールが再評価され、`const todos: Todo[] = []` が初期化し直されて中身が消えます。動作確認のコツは「**追加したら actions.ts を編集しない**」です。本物の永続化が必要な場合は DB を使うのが正攻法です。
+`app/api/xxx/route.ts` を作り、HTTP メソッド名の関数を `export` します。
 
 ```ts
-// app/actions.ts
-"use server";
-import type { Todo } from "./types";
+// app/api/todos/route.ts
+import { NextResponse } from "next/server";
 
-const todos: Todo[] = [];
+const todos = [{ id: "1", text: "牛乳を買う" }];
+
+export async function GET() {
+  return NextResponse.json({ todos });
+}
+
+export async function POST(request: Request) {
+  const body = await request.json();
+  // body.text を todos に追加して返す
+  return NextResponse.json({ ok: true });
+}
 ```
 
-> **補足: HMR でも消したくないときは `globalThis` に退避**: `next dev` の HMR は **モジュールごと** に再評価するため、`const todos = []` は再評価で空に戻ります。学習中に「保存しただけで TODO が消える」が気になるなら、グローバルオブジェクト（プロセス内で 1 つ）に退避する次の書き方を使えます。
->
-> ```ts
-> "use server";
-> import type { Todo } from "./types";
->
-> const g = globalThis as unknown as { __todos?: Todo[] };
-> g.__todos ??= [];
-> const todos: Todo[] = g.__todos;
-> ```
->
-> `globalThis` はモジュール再評価をまたいでも値を持ち続けるため、HMR で配列が初期化されません。**本番では別インスタンスで動くため依然消える** ので、これはあくまで「学習中の dev で消えにくくする」だけのトリックです。本番は DB / KV を使います。
+- ファイル名は **`route.ts`** 固定（`page.tsx` とは別のファイル）
+- URL は `app/api/todos/route.ts` → `/api/todos`
+- `GET` / `POST` / `PUT` / `DELETE` / `PATCH` を同じファイルに並べられる
+- 戻り値は **`NextResponse`（`next/server` から import）を基本に統一** します。素の `Response.json(...)` でも動きますが、Cookie 操作・リダイレクト・型補完が揃っているので `NextResponse` を推奨
 
-- サーバーのプロセスが生きている間は `todos` が残ります（同じプロセス内の呼び出しは同じ配列を共有します）。
-- **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（「Vercel にデプロイする」末尾でも再度注意を書きます）。
+### 入力検証と受信検証
 
-### `revalidatePath` の仕組み
+Route Handlers を作るときに **型ガード**（3 章 の「型ガード」） が活きます。
 
-Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッシュされます。Server Action が配列を変更しても、そのままではキャッシュされた古い画面が残ります。
+- **サーバー側**: `POST` の中で `await request.json()` した値は **型が `any`** になる（外部から何が来るか分からない）。そのまま `body.text` を使うと TS の型チェックは効くが、実行時は壊れうる
+- **クライアント側**: `fetch('/api/todos')` で受け取った JSON も **何が返るか TS からは見えない**。同じく検証が必要
 
-`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** されます。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画されます。
+役割分離:
 
-```mermaid
-sequenceDiagram
-  participant Browser as ブラウザ
-  participant Page as /todos page.tsx (Server)
-  participant Action as addTodo (Server Action)
-  participant Store as todos 配列
+- サーバー側は **入力検証** → 不正なリクエストを弾く
+- クライアント側は **受信検証** → サーバーが想定と違う JSON を返してきたときに壊れないようにする
 
-  Browser->>Page: アクセス
-  Page->>Store: 配列を読む
-  Store-->>Page: [] (空)
-  Page-->>Browser: 空の一覧
+両方で「型ガード」の `isTodo` のような型ガードを書きます。実務では Zod などのスキーマバリデーションライブラリが多く使われますが、本コースでは型ガードの基礎だけを押さえます。
 
-  Browser->>Action: <form action> で送信
-  Action->>Store: push(new)
-  Action->>Page: revalidatePath('/todos')
-  Note right of Page: キャッシュ無効化
-  Action-->>Browser: 完了
-  Browser->>Page: 再レンダリング(自動)
-  Page->>Store: 配列を読む
-  Store-->>Page: [new]
-  Page-->>Browser: 更新された一覧
-```
+### ランタイムの話
+
+Next.js の「サーバー側で動くもの」には **2 つのランタイム** があります。
+
+- **Node.js ランタイム**: `fs` など Node API が使える
+- **Edge ランタイム**: `fs` などは使えない。起動が速く、世界中のエッジで動く
+
+Next.js 16 では Route Handlers と Proxy の **どちらも既定が Node.js** になりました（以前の Middleware は Edge 既定でしたが、Proxy への改名にあわせて Node.js 既定に）。`export const runtime = "edge"` を明示すれば Edge で動かすこともできます。両者の違いは **役割** です。
+
+- **Route Handlers**: データを返す / 受けるエンドポイント（REST / Webhook）
+- **Proxy**: リクエスト前の軽量な分岐（認証ガード / リダイレクト）
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/types.ts` の `isTodo` 型ガードは3 章 の「型ガード」と揃えた形なので、3 章 を先に終えていなくてもそのまま貼って使えます。既に「Server Actions の最小形」「送信状態とエラー表示」で `app/types.ts` を作っている場合は、下記の型ガードを追記する形で構いません。
 
-<details>
-<summary>出発点のファイル（TODO の最小出発点）</summary>
+### ゴール
 
-**`app/todos/page.tsx`**（空でもよい。本文の手順 3 で全量置き換えます）
+- `/api/todos` に `GET` と `POST` を実装する
+- サーバー側で `isTodoInput` 型ガードで入力検証
+- クライアント側で `isTodoArray` 型ガードで受信検証
+- DevTools Console から `fetch` を叩いて動作確認
 
-```tsx
-export default function TodosPage() {
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </>
-  );
-}
-```
+### 手順
 
-`app/types.ts` と `app/actions.ts` は、本文の手順 1・手順 2 で新規作成するので事前準備は不要です。
+1. これまでのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
+2. `app/types.ts` に `Todo` 型を置く（既にあるなら再利用）
+3. `app/api/todos/route.ts` を新規作成
+4. `app/todos/page.tsx`（Client 検証用の画面）を更新
 
-</details>
-
-### 前回のプロジェクトを開く
-
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順 1: `Todo` 型を用意
-
-3 章 で決めた `Todo` 型を、Next.js プロジェクトでも再利用します。`app/types.ts` を作ります。
+### `app/types.ts`
 
 ```ts
 export type Todo = {
   id: string;
   text: string;
 };
-```
 
-### 手順 2: `app/actions.ts` を作る
-
-先頭に `"use server"` を書きます。モジュールトップレベルに配列とアクションを書きます。
-
-```ts
-"use server";
-
-import { revalidatePath } from "next/cache";
-import type { Todo } from "./types";
-
-const todos: Todo[] = [];
-
-export async function listTodos(): Promise<Todo[]> {
-  return todos;
+// 型ガード: unknown から Todo に絞り込む
+export function isTodo(value: unknown): value is Todo {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.id === "string" && typeof obj.text === "string";
 }
 
-// 戻り値の型（3 章 「判別共用体」そのもの）
-export type AddTodoResult = { ok: true } | { ok: false; error: string };
+// 配列全体を検証
+export function isTodoArray(value: unknown): value is Todo[] {
+  return Array.isArray(value) && value.every(isTodo);
+}
 
-export async function addTodo(formData: FormData): Promise<AddTodoResult> {
-  const text = String(formData.get("text") ?? "").trim();
-  if (text.length === 0) {
-    return { ok: false, error: "空のままでは追加できません" };
+// 「text だけの入力」を検証するガード（id はサーバー側で作る）
+export function isTodoInput(value: unknown): value is { text: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.text === "string" && obj.text.trim().length > 0;
+}
+```
+
+3 章 の「型ガード」で `isTodo` の骨格を書きました。ここで配列用と入力用の派生を追加しています。
+
+### `app/api/todos/route.ts`
+
+```ts
+import { NextResponse } from "next/server";
+import type { Todo } from "../../types";
+import { isTodoInput } from "../../types";
+
+// モジュールトップレベルでインメモリ保持（「Server Actions の最小形」と同じ割り切り）
+const todos: Todo[] = [];
+
+export async function GET() {
+  return NextResponse.json({ todos });
+}
+
+export async function POST(request: Request) {
+  const body: unknown = await request.json();
+
+  // サーバー側の入力検証
+  if (!isTodoInput(body)) {
+    return NextResponse.json(
+      { ok: false, error: "text が必要です" },
+      { status: 400 },
+    );
   }
-  todos.push({ id: crypto.randomUUID(), text });
-  revalidatePath("/todos");
-  return { ok: true };
+
+  const newTodo: Todo = { id: crypto.randomUUID(), text: body.text.trim() };
+  todos.push(newTodo);
+  return NextResponse.json({ ok: true, todo: newTodo });
 }
 ```
 
 ポイント:
 
-- `"use server"` はファイルの **1 行目** に書きます。
-- `const todos: Todo[] = []` が「永続化の代わり」です。サーバーが生きている間だけ保持されます。
-- `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
-- `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
-- `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
-- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体**（discriminated union） そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。
+- `await request.json()` の戻り値は `unknown`（実際は `any` だが、今回は意図的に `unknown` で受けて検証を強制）
+- `isTodoInput` で検証し、失敗したら 400 を返す
+- 成功時は `ok: true` と作成した Todo を返す
 
-### 手順 3: `/todos` を本物のページにする
+### DevTools Console からの動作確認
 
-`app/todos/page.tsx` を書き換えます。
+プレビューを別タブで開き、Console で次を実行します。
+
+```js
+// GET
+const res = await fetch("/api/todos");
+const data = await res.json();
+console.log(data); // { todos: [] }
+
+// POST（正常）
+const res2 = await fetch("/api/todos", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ text: "本を返す" }),
+});
+console.log(await res2.json());
+// { ok: true, todo: { id: "...", text: "本を返す" } }
+
+// POST（異常: text 欠落）
+const res3 = await fetch("/api/todos", {
+  method: "POST",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ foo: "bar" }),
+});
+console.log(res3.status); // 400
+console.log(await res3.json());
+// { ok: false, error: "text が必要です" }
+```
+
+### Client 側の受信検証
+
+`app/todos/page.tsx`（Server Component）に、受信した JSON を型ガードで検証する Client Component を組み合わせます。
+
+`app/todos/TodoFetcher.tsx`（新規）:
 
 ```tsx
-import { addTodo, listTodos } from "../actions";
+"use client";
 
-export default async function TodosPage() {
-  const todos = await listTodos();
+import { useEffect, useState } from "react";
+import type { Todo } from "../types";
+import { isTodoArray } from "../types";
 
+export function TodoFetcher() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/todos");
+        const data: unknown = await res.json();
+
+        // 受信検証: サーバーが想定と違う形を返したら拒否する
+        if (typeof data !== "object" || data === null || !("todos" in data)) {
+          setError("レスポンスの形式が不正です");
+          return;
+        }
+        const maybeTodos = (data as { todos: unknown }).todos;
+        if (!isTodoArray(maybeTodos)) {
+          setError("todos が Todo 配列ではありません");
+          return;
+        }
+
+        setTodos(maybeTodos);
+      } catch (e) {
+        setError("通信に失敗しました");
+      }
+    })();
+  }, []);
+
+  if (error) return <p className="error">エラー: {error}</p>;
   return (
-    <>
-      <h1>TODO 一覧</h1>
-      <form action={addTodo}>
-        <input type="text" name="text" placeholder="やることを入力" />
-        <button type="submit">追加</button>
-      </form>
-      <ul>
-        {todos.map((todo) => (
-          <li key={todo.id}>{todo.text}</li>
-        ))}
-      </ul>
-    </>
+    <ul>
+      {todos.map((t) => (
+        <li key={t.id}>{t.text}</li>
+      ))}
+    </ul>
   );
 }
 ```
 
 ポイント:
 
-- このファイルは Server Component です（`"use client"` を書きません）。
-- `<form action={addTodo}>` に関数を直接渡しています。
-- `event.preventDefault()` も `onSubmit` も書いていません。React が自動で止めます。
-- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（1 章 で学んだ `name` 属性がここで効いています）。
+- `data: unknown` で受ける。これで TS は型ガードなしでは `data.todos` に触らせない
+- `isTodoArray` で検証、失敗時はエラー state にする
+- 3 章 の「型ガード」で学んだ `unknown` → `Todo` の絞り込みを **そのまま実務で使う** 形
 
 ### 期待出力
 
-1. `/todos` を開くと、入力欄・追加ボタン・空の `<ul>` が見えます。
-2. 「買い物」と入力して「追加」を押す → `<ul>` に「買い物」が 1 件追加されます。
-3. 「課題」を入力して追加 → 2 件目として「課題」が追加されます。
-4. ブラウザの DevTools → Network タブを見ると、送信時に POST が飛び、200 で返ってきています。
-5. **リロードしても消えません**（サーバープロセスが生きているためです）。ただし StackBlitz を開き直したり、プロジェクトを再起動すると配列がリセットされ、すべて消えます。
+- `/api/todos` に GET → `{ todos: [...] }` JSON が返る
+- POST で追加できる、正常時 200、text 欠落時 400
+- `/todos` ページで一覧が表示される。サーバーが壊れた JSON を返すとエラーメッセージが出る
 
-### 変えてみる
+### 変える
 
-1. `addTodo` の中で `console.log("addTodo", text)` を追加しましょう。StackBlitz のターミナル側にログが出ることを確認します（Server Actions はサーバーで動く証拠です）。
-2. `revalidatePath("/todos")` をコメントアウトして、追加ボタンを押すとどうなるか試しましょう。一覧が更新されなくなります（手動で再読み込みすると更新されます）。確認したら戻します。
-3. `<input>` の `placeholder` を自分の好きなテキストに変えましょう。
-
-### スコープ外
-
-- 送信中のボタン無効化、空入力エラー表示は本レッスンでは扱いません。最小形に集中します。
-- `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
+- `app/api/todos/route.ts` に `DELETE` メソッドを追加してみる（`request.url` からクエリ `?id=xxx` を取って削除）
+- `isTodoInput` で「text が 100 文字以上なら弾く」を足してみる
+- サーバー側の `NextResponse.json({ ok: false, error: "..." }, { status: 400 })` の status を他の値（422 や 500）に変えて挙動を比べる
 
 ### 自分で書く
 
-`/memo` という別ページを作り、`addMemo`（サーバー側に `const memos: string[] = []` を持つ）で「メモを追加して下に並べる」だけの最小アプリを作ってみましょう。`types.ts` や `actions.ts` は新しく別ファイルで作っても、既存の `actions.ts` に追記しても構いません。
+- `/api/posts/route.ts` に `GET` を実装し、適当な記事 3 件を JSON で返す
+- `/posts` ページで Client 側から `fetch` して、`isPostArray` 型ガードで検証して表示する
+
+### 実務では
+
+本コースでは型ガードを手書きしましたが、実務では **Zod** のようなスキーマバリデーションライブラリがよく使われます。`z.object({ text: z.string().min(1) }).parse(body)` の 1 行で同じ検証が書けるため、プロジェクトが育ったら Zod の導入を検討する価値があります。
+
+### 別オリジンから叩かれる場合（CORS の最小例）
+
+Route Handlers は **Server Actions と違い、別オリジンから直接 fetch できる** 形態です。ブラウザは別オリジンへの POST など「単純でないリクエスト」を送る前に **OPTIONS（プリフライト）リクエスト** を自動で投げ、サーバーから許可ヘッダが返ったら本リクエストを送ります。
+
+```ts
+// app/api/todos/route.ts
+export async function POST(request: Request) {
+  // ... 通常の処理 ...
+  return NextResponse.json(
+    { ok: true },
+    {
+      headers: {
+        "Access-Control-Allow-Origin": "https://allowed.example.com",
+        "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+        "Access-Control-Allow-Headers": "Content-Type",
+      },
+    },
+  );
+}
+
+// プリフライト用の OPTIONS ハンドラ
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "https://allowed.example.com",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+```
+
+ポイント:
+
+- **同一オリジン**（自分のサイト内）から叩く場合は CORS 設定は不要（`fetch("/api/todos")` で動く）
+- **別オリジンから Cookie を送りたい** 場合は `Access-Control-Allow-Credentials: true` と、`Access-Control-Allow-Origin: *` ではなく **特定オリジンの明示** が必要
 
 ## まとめ
 
-- `<form action={fn}>` に関数を渡すと、React が自動で送信を止めて `fn` を呼びます。`preventDefault` は要りません。
-- Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
-- データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
-- `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
-
-### コラム: `revalidateTag`
-
-`revalidatePath` はパス単位で無効化します。もっと細かく、「`fetch` にタグを付けておき、その **タグ** だけ無効化する」方法もあります。
-
-```ts
-// 読み込み側: タグを付ける
-await fetch(url, { next: { tags: ["todos"] } });
-
-// Server Action 側: タグで無効化
-import { revalidateTag } from "next/cache";
-revalidateTag("todos");
-```
-
-複数ページで同じデータを使っているときに便利です。本コースでは扱いませんが、実務では頻出です。
-
-### コラム: Server Actions の CSRF 自動保護
-
-`<form action={fn}>` でサーバーに POST が飛びますが、**これは Next.js の Server Actions が内部で CSRF を防いでいる** からこそ安全に使えます。具体的には:
-
-- アクションごとに **暗号化された ID** が割り当てられ、フォーム送信時に確認される
-- リクエストの **Origin ヘッダ** と Host ヘッダの一致がチェックされる（`next.config.ts` の `serverActions.allowedOrigins` で許可リスト追加可能）
-
-このため、別オリジンのサイトから埋め込んだフォームでは Server Actions を呼べません。**自前で CSRF トークンを発行する必要はありません**。一方、`<form action="/api/...">` のように Route Handler を直接叩く場合はこの保護が効かないため、別途 Origin 検証 / トークンが必要です。
+- Route Handlers は `app/api/.../route.ts` の HTTP API
+- 戻り値は `NextResponse.json(...)` に統一
+- Server Actions と Route Handlers は棲み分け（表を参照）
+- サーバー側は **入力検証**、クライアント側は **受信検証** の両方で型ガードを使う
+- 3 章 の「型ガード」の `isTodo` がそのまま実務で使える
+- Proxy / Route Handlers はどちらも Next.js 16 から既定 Node.js。役割（Route Handlers = データのやり取り / Proxy = 軽量な前処理）で分担する

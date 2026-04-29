@@ -1,123 +1,127 @@
-# lesson43: 関数の型
+# lesson43: オブジェクトの型と type エイリアス
 
 ## ゴール
 
-- 関数の **引数** と **戻り値** に型を付けられる。
-- 戻り値を返さない関数の型 `void` を理解し、使い分けられる。
-- 「関数そのものの型」（関数型）を書き、変数に代入できる。
+- オブジェクトの「形」を型で書ける（オブジェクト型リテラル）。
+- `type` エイリアスで型に名前を付けられる。
+- `export type` / `import type` で型を別ファイルから使い回せる。
 
 ## 解説
 
-### 2 章 の関数を TS 化する
+### オブジェクトの型を書く
 
-2 章 の「関数」では、数値を合計する関数を書きました。
-
-```js
-function add(a, b) {
-  return a + b;
-}
-```
-
-この関数は `add(1, 2)` なら `3` を返しますが、`add("1", "2")` と呼ぶと `"12"` を返します（文字列結合になる）。引数に何を渡してよいかは、呼ぶ側の「気持ち」だけが頼りです。
-
-TS では、引数と戻り値に型を付けてこの「気持ち」を明文化できます。
-
-### 引数と戻り値の型注釈
-
-関数宣言で、各引数の名前のあとに `: 型名`、引数リストの閉じ括弧の後ろに `: 戻り値の型` を書きます。
+2 章 の「オブジェクト」で、オブジェクトを使って「人」や「TODO」のような複数の値をまとめました。TS ではそのオブジェクトの **形** を型で書けます。
 
 ```ts
-function add(a: number, b: number): number {
-  return a + b;
-}
-```
-
-- `a: number` / `b: number`: 引数はどちらも数値。
-- `: number`: 戻り値は数値。
-- 体の中で `return` する値がこの型と合っていないとエラーになる。
-
-アロー関数でも同じ場所に書きます。
-
-```ts
-const add = (a: number, b: number): number => {
-  return a + b;
+const user: { name: string; age: number } = {
+  name: "Alice",
+  age: 20,
 };
 ```
 
-### 戻り値の型は推論に任せてもよい
+- `{ name: string; age: number }` が **オブジェクト型リテラル**。波括弧の中に「プロパティ名: 型」を並べる。
+- プロパティの区切りは **セミコロン `;`**（カンマでも通るが、TS では `;` が慣例）。
+- 値のオブジェクト（右辺）はプロパティの区切りが **カンマ `,`**。左と右で記号が違うので注意する。
 
-戻り値の型は、`return` している値から TS が自動で決めてくれます（型推論）。普段は省略することが多いです。
+このオブジェクトに、宣言した形と違う値を入れるとエラーになる。
 
 ```ts
-function add(a: number, b: number) {
-  return a + b; // 戻り値は number と推論される
-}
+const user: { name: string; age: number } = {
+  name: "Alice",
+  age: "二十", // ここで赤線
+};
 ```
 
-このレッスンでは学習目的で、あえて戻り値の型も書きます。関数がどんな型を返すのかを **意図として** 書き残すと、実装が意図とずれたときに TS が止めてくれるからです。
-
-### 戻り値がない関数は `void`
-
-`console.log` のように、何かを実行するだけで **値を返さない** 関数があります。この「値を返さない」を表す型が `void` です。
-
-```ts
-function greet(name: string): void {
-  console.log(`Hello, ${name}`);
-}
-
-greet("Alice"); // 呼び出すだけ。戻り値は使わない
+```
+Type 'string' is not assignable to type 'number'.
 ```
 
-- `void` 型の関数を `return` 付きで書くと、`return;`（値なし）か、そもそも `return` を書かないかのどちらか。
-- `void` と書いた関数の戻り値を使おうとすると、TS は警告する。
-
-### 関数そのものの型（関数型）
-
-「この変数には、数値 2 つを受け取って数値を返す関数が入る」と書きたい場面があります。関数の型は次のように書きます。
+プロパティが足りない / 余っている場合もエラーになる。
 
 ```ts
-const add: (a: number, b: number) => number = (a, b) => a + b;
+const user: { name: string; age: number } = {
+  name: "Alice",
+}; // age が足りない
 ```
 
-左辺の `: (a: number, b: number) => number` が **関数型** です。
-
-- `(a: number, b: number)`: 引数の型。名前は何でもよいが、書く必要がある。
-- `=>`: この矢印は「関数の型を表す矢印」。アロー関数の `=>` と見た目は同じだが、文法上の位置が違う。
-- `number`: 戻り値の型。
-
-左辺で型を決めてしまっているので、右辺のアロー関数では引数の型注釈を省略できます（型推論が働く）。
-
-関数を **引数として受け取る関数** でも同じ書き方が使えます。
-
-```ts
-function twice(fn: (n: number) => number, value: number): number {
-  return fn(fn(value));
-}
-
-twice((n) => n + 1, 10); // 12
+```
+Property 'age' is missing in type '{ name: string; }' but required in type '{ name: string; age: number; }'.
 ```
 
-関数型を使うと「関数を受け渡すときの契約」を型で書けるようになります。2 章 の「配列の変換」の `map` / `filter` に渡す関数も、実は TS のライブラリ側で関数型が定義されています。
+### `type` エイリアスで名前を付ける
 
-### 引数の数が合わないのもエラー
-
-TS は「宣言した数と違う数の引数で呼び出す」こともエラーにします。
+同じオブジェクト型を何か所も書くのは大変です。`type` キーワードで型に **名前** を付けられます。
 
 ```ts
-function add(a: number, b: number): number {
-  return a + b;
+type User = {
+  name: string;
+  age: number;
+};
+
+const alice: User = { name: "Alice", age: 20 };
+const bob: User = { name: "Bob", age: 25 };
+```
+
+- `type 名前 = 型の中身;` の形。末尾のセミコロンを忘れない。
+- 慣習として、型の名前は **大文字で始める**（`User`、`Todo` など）。変数とぶつかりにくくするため。
+- `type` エイリアスは「型に別名を付けるだけ」なので、コンパイル後の JS には残らない（実行時には影響しない）。
+
+関数の引数にも使える。
+
+```ts
+function printUser(user: User): void {
+  console.log(`${user.name} (${user.age})`);
 }
 
-add(1);       // エラー: 引数が足りない
-add(1, 2, 3); // エラー: 引数が多い
+printUser(alice);
 ```
 
-典型的なメッセージはこうなります。
+### 型を別ファイルに置く（`export type` / `import type`）
 
+同じ型をあちこちのファイルで使う場面では、型だけをまとめたファイルを作ります。慣習的に `types.ts` という名前にすることが多いです。
+
+```ts
+// src/types.ts
+export type User = {
+  name: string;
+  age: number;
+};
 ```
-Expected 2 arguments, but got 1.
-Expected 2 arguments, but got 3.
+
+`export type` と書くと、この型を他のファイルから読み込めるようになります。
+
+使う側は `import type` で読み込みます。
+
+```ts
+// src/main.ts
+import type { User } from "./types";
+
+const alice: User = { name: "Alice", age: 20 };
+console.log(alice);
 ```
+
+- `import type { ... } from "./types";` と書く。`import` の後ろに `type` が付いているのがポイント。
+- `import type` で読み込んだ名前は **型の場所でしか使えない**（値としては使えない）。これは TS が「この import はコンパイル後の JS からは完全に消してよい」と判断できるようにするための書き方。
+- 普通の `import { User }` でも動くが、`import type` のほうが意図がはっきりして、ビルド後のサイズにも優しい。
+
+### TODO 1 件を型にする
+
+リスト系のアプリでよくある「項目 1 件」のオブジェクトは、たとえばこういう形になります。
+
+```js
+{ id: "abc123", text: "牛乳を買う" }
+```
+
+この形を TS で書くと次のようになります。
+
+```ts
+type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+このレッスンでは、`id` と `text` の 2 プロパティだけの最小の `Todo` 型を作り、**全プロパティが必須** の形だけを書きます。「未完了 / 完了」の状態や「メモ」のようなオプショナルなプロパティは扱いません。
 
 ## 演習
 
@@ -125,157 +129,165 @@ Expected 2 arguments, but got 3.
 
 このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-### 手順 1: `add` を TS 化する
+### 手順 1: `User` 型を書く
 
 `src/main.ts` の中身を以下に置き換える。
 
 ```ts
-function add(a: number, b: number): number {
-  return a + b;
+type User = {
+  name: string;
+  age: number;
+};
+
+const alice: User = { name: "Alice", age: 20 };
+const bob: User = { name: "Bob", age: 25 };
+
+function printUser(user: User): void {
+  console.log(`${user.name} (${user.age})`);
 }
 
-console.log(add(1, 2));
-console.log(add(10, 20));
+printUser(alice);
+printUser(bob);
 ```
+
+#### 期待出力
+
+```
+Alice (20)
+Bob (25)
+```
+
+### 手順 2: わざとプロパティを欠けさせてエラーを見る
+
+次のように書き換えて、赤線が出る場所を確認する。
+
+```ts
+const charlie: User = { name: "Charlie" };
+```
+
+期待されるメッセージ:
+
+```
+Property 'age' is missing in type '{ name: string; }' but required in type 'User'.
+```
+
+続けて、余分なプロパティも試す。
+
+```ts
+const dave: User = { name: "Dave", age: 30, email: "dave@example.com" };
+```
+
+期待されるメッセージ:
+
+```
+Object literal may only specify known properties, and 'email' does not exist in type 'User'.
+```
+
+「`User` 型に `email` というプロパティは定義されていない」と教えてくれている。
+
+### 手順 3: `types.ts` を作って `Todo` 型を置く
+
+1. StackBlitz で `src/` の下に新しいファイル `types.ts` を作る。
+2. 中身を次のように書く。
+
+```ts
+// src/types.ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+3. `src/main.ts` を次のように書き換える。
+
+```ts
+import type { Todo } from "./types";
+
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" },
+  { id: "a2", text: "本を返す" },
+];
+
+function printTodo(todo: Todo): void {
+  console.log(`- [${todo.id}] ${todo.text}`);
+}
+
+for (const todo of todos) {
+  printTodo(todo);
+}
+```
+
+`Todo[]` は「`Todo` の配列」を意味する型注釈。ここでは「配列の各要素が `Todo` 型」とだけ理解しておけばよい。
 
 #### 期待出力
 
 Console に次のように出る。
 
 ```
-3
-30
+- [a1] 牛乳を買う
+- [a2] 本を返す
 ```
 
-### 手順 2: わざと間違えてエラーを見る
+### 手順 4: 型に合わない値を入れてエラーを見る
 
-次のように呼び出しを変えて、それぞれのエラーを確認する。確認したら元に戻すこと。
+`printTodo` に TODO ではないものを渡してみる。
 
 ```ts
-console.log(add("1", "2"));
+printTodo({ id: "a3" }); // text が足りない
 ```
 
 期待されるメッセージ:
 
 ```
-Argument of type 'string' is not assignable to parameter of type 'number'.
+Argument of type '{ id: string; }' is not assignable to parameter of type 'Todo'.
+  Property 'text' is missing in type '{ id: string; }' but required in type 'Todo'.
 ```
 
+続けて、`id` に数値を入れてみる。
+
 ```ts
-console.log(add(1));
+printTodo({ id: 3, text: "書類を出す" });
 ```
 
 期待されるメッセージ:
 
 ```
-Expected 2 arguments, but got 1.
+Type 'number' is not assignable to type 'string'.
 ```
-
-```ts
-function add(a: number, b: number): number {
-  return `${a}${b}`; // 文字列を返してしまう
-}
-```
-
-期待されるメッセージ:
-
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-最後のパターンは「戻り値の型注釈が、実装のミスを捕まえてくれる」例です。
-
-### 手順 3: `void` 型の関数
-
-次のコードを追記して動かす。
-
-```ts
-function greet(name: string): void {
-  console.log(`Hello, ${name}`);
-}
-
-greet("Alice");
-greet("Bob");
-```
-
-#### 期待出力
-
-```
-Hello, Alice
-Hello, Bob
-```
-
-次に、戻り値を使おうとしてみる。
-
-```ts
-const result = greet("Alice");
-console.log(result.toUpperCase());
-```
-
-`result` は `void` 型なので、`.toUpperCase()` を呼ぶと次のようなメッセージが出る。
-
-```
-Property 'toUpperCase' does not exist on type 'void'.
-```
-
-「`void` 型に `toUpperCase` というプロパティは存在しない」という意味。`void` は「値が無いことを表す型」なので、そもそも値として使ってはいけない、と TS が教えてくれている。
-
-### 手順 4: 関数型を書いてみる
-
-次のコードを書く。
-
-```ts
-const multiply: (a: number, b: number) => number = (a, b) => a * b;
-
-function twice(fn: (n: number) => number, value: number): number {
-  return fn(fn(value));
-}
-
-console.log(multiply(3, 4));
-console.log(twice((n) => n + 1, 10));
-console.log(twice((n) => n * 2, 5));
-```
-
-#### 期待出力
-
-```
-12
-12
-20
-```
-
-- `multiply(3, 4)` は `12`。
-- `twice((n) => n + 1, 10)` は「10 に 1 を足す」を 2 回で `12`。
-- `twice((n) => n * 2, 5)` は「5 を 2 倍」を 2 回で `20`。
 
 ### 変えてみる
 
-`twice` に、数値ではなく文字列を返す関数を渡してみる。
+`types.ts` の `Todo` 型の `text` プロパティを一時的に `number` に変えてみる。
 
 ```ts
-twice((n) => `number: ${n}`, 10);
+export type Todo = {
+  id: string;
+  text: number; // わざと変える
+};
 ```
 
-期待されるメッセージ:
+`main.ts` の配列で定義した各 `{ id: ..., text: "..." }` の `text` の下に一斉に赤線が出るのを確認する。型を 1 か所変えると、その型を **import している全ファイル** で整合性のチェックが走るのが TS の強み。
 
-```
-Type 'string' is not assignable to type 'number'.
-```
-
-`twice` の引数 `fn` は `(n: number) => number` 型なので、文字列を返す関数は渡せない、と教えてくれる。
+確認できたら `text: string` に戻す。
 
 ### 自分で書く
 
-次の条件を満たす関数を何も見ずに書く。
+`types.ts` に **新しい型** `User` を追記する（`Todo` はそのまま残す）。
 
-1. `subtract(a: number, b: number): number` — 引き算して返す関数。
-2. `printUser(name: string, age: number): void` — `"Alice (20)"` のように Console に出すだけの関数。
-3. 関数型 `(s: string) => string` を持つ変数 `shout` に、「文字列を受け取って大文字にして `!` を足して返す関数」を代入する。
+```ts
+export type User = {
+  id: string;
+  name: string;
+  age: number;
+};
+```
 
-書けたら、それぞれを 1 回ずつ呼び出して期待通りに動くことを確認する。
+`main.ts` から `import type { User } from "./types";` で読み込み、`User` 型の配列を 3 件作って、各ユーザーの `name` と `age` を Console に出す関数を書く。`printUser(user: User): void` の形。
+
+書けたら、わざと `age` に文字列を入れるなどしてエラーメッセージを確認してから戻す。
 
 ## まとめ
 
-- 関数の引数と戻り値に型を付けると、呼び出し側と実装の両方のミスを TS が事前に止めてくれる。
-- 値を返さない関数は `void` を戻り値の型として使う。`void` の戻り値は値として使えない。
-- 関数そのものの型は `(引数名: 型) => 戻り値の型` で書ける。関数を受け渡すときの「契約」になる。
+- オブジェクト型は `{ プロパティ名: 型; ... }` で書く。区切りはセミコロン。
+- `type 名前 = ...` で型に名前を付けられる。型の名前は大文字始まりが慣習。
+- 型を別ファイルに置くときは `export type`、使う側は `import type` で読み込む。型専用の import と明示できる。

@@ -1,435 +1,190 @@
-# lesson52: tsconfig.json を読む
+# lesson52: React ってなに？
 
 ## ゴール
 
-- `strict` の各オプションが何を厳しくしているか分かる
-- `target` / `module` / `moduleResolution` の 3 つの関係を説明できる
-- `paths` でパスエイリアス（`@/*`）を設定できる
-- `jsx` / `lib` / `types` の役割を理解する
-- Vite / Next.js / Node 用の tsconfig.json の差を読める
+- React が何を解決する道具なのかを、自分の言葉で説明できる
+- Vite / npm / `package.json` / `npm run dev` の役割をざっくり理解する
+- StackBlitz の React + Vite（TypeScript）テンプレートから、自分の文字を画面に出せる
 
 ## 解説
 
-TypeScript プロジェクトのルートに置く `tsconfig.json` は、**型チェックとコンパイル** の挙動を決める設定ファイルです。フレームワークが自動生成してくれるので普段は触る機会も少ないですが、新しいツールを入れる時 / 「なぜか型エラー」を解決する時に **読めると話が早い** です。
+### ここまでの立ち位置
 
-このレッスンでは「現場で出てくる項目」だけを取り上げます。すべてを覚える必要はありません。
+2 章 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。フォーム入力を受け取って `<ul>` に `<li>` を追加したり、削除ボタンで消したり、`localStorage` に保存して復元したり、といった操作も体験しました。
 
-### 全体構造
+そこまでできるのなら、React はなぜ必要なのでしょうか。
 
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "ESNext",
-    "moduleResolution": "bundler",
-    "strict": true,
-    "jsx": "react-jsx",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "skipLibCheck": true,
-    "noEmit": true,
-    "paths": {
-      "@/*": ["./src/*"]
-    }
-  },
-  "include": ["src"],
-  "exclude": ["node_modules", "dist"]
+### React が解決すること
+
+素の JS で画面を書き換えるコードを思い出してください。例えば「リストに 1 件追加する」ためには、次のような手順が必要でした。
+
+1. 新しい `<li>` 要素を `document.createElement` で作る
+2. その中に文字を入れる
+3. 削除ボタンを作って `<li>` の中にくっつける
+4. `<ul>` に `appendChild` で追加する
+
+「画面をこう変えたい」という気持ちから遠い、**手順の羅列**になりがちです。項目数が増えたり、削除・並び替え・ハイライトなど状態の種類が増えると、どの DOM をどう更新するかを 1 つずつ書かないといけません。バグも混入しやすいです。
+
+React の発想はこうです。
+
+> **画面（UI）を「今の状態」から計算される結果として書く**
+
+コードの書き方は「今、配列がこうなっているなら、画面はこういう形です」と宣言するだけ。追加・削除で配列が変わると、React が「前の画面」と「新しい画面」を比べて、**変わった箇所だけ** DOM に反映してくれます。
+
+### 「仮想 DOM」という言葉は使わない
+
+古い記事では「仮想 DOM」という言葉で説明されていることがあります。本コースでは次のような現代的な表現を使います。
+
+- React は UI を「JS のツリー」として保持している
+- 状態が変わるたびに、新しいツリーを作って前のツリーと比較する
+- 差があった部分だけ、本物の DOM に反映する
+
+要は「全部書き換えるのではなく、変化した差分だけ反映する」仕組みだと覚えておけば十分です。
+
+### コンポーネントという単位
+
+React では、画面を**コンポーネント**という部品に分けて組み立てます。コンポーネントは「JSX を返す関数」です。
+
+```tsx
+function Hello() {
+  return <h1>Hello, React</h1>;
 }
 ```
 
-中心になるのは `compilerOptions`。それ以外に「どのファイルを対象にするか」を `include` / `exclude` で指定します。
+この `Hello` をアプリのどこかで `<Hello />` と書くと、その場所に `<h1>Hello, React</h1>` が展開されます。自作の HTML タグを増やしていくようなイメージです。
 
-### `strict` ファミリー
+### Vite / npm / `package.json` の最低限
 
-`"strict": true` は **複数の strict オプションを一気に ON** にする「バンドル」です。ON にすると以下が同時に効きます。
+素の JS なら `<script defer src="./script.js">` と書けば動きました。React + TypeScript では、TS を JS に変換したり、開発中に保存するとブラウザを自動更新したりする仕組みが必要です。その仕組みをまとめて提供してくれるのが **Vite**（ヴィート） です。
 
-| オプション | 何を禁じるか |
-|---|---|
-| `noImplicitAny` | 暗黙の `any`（型注釈なしの引数など） |
-| `strictNullChecks` | `null` / `undefined` を別型として扱う |
-| `strictFunctionTypes` | 関数の引数の型を厳密にチェック |
-| `strictBindCallApply` | bind / call / apply の引数チェック |
-| `strictPropertyInitialization` | クラスのプロパティが初期化されているか |
-| `noImplicitThis` | `this` が `any` になる場面を禁じる |
-| `alwaysStrict` | 出力に `"use strict"` を付ける |
-| `useUnknownInCatchVariables` | `catch (e)` の `e` を `unknown` 型に |
+Vite は次の 2 つを担います。
 
-**新規プロジェクトでは必ず `"strict": true`** を付けます。後から戻す方が大変です。
+- **開発サーバー**: ファイルを保存するたびに画面を自動更新（`npm run dev`）
+- **ビルド**: 本番公開用に最適化したファイルを出力（`npm run build`）
 
-#### さらに厳しくしたい時
+そして Vite 本体や React 本体などの「外部ライブラリ」をダウンロード・管理する道具が **npm**（Node Package Manager） です。npm は `package.json` というファイルを見て、「このプロジェクトはどのライブラリを使っていて、どのコマンドで起動するか」を判断します。
+
+`package.json` の `scripts` セクションだけ見れば、とりあえず十分です。例えば次のような形です。
 
 ```json
 {
-  "noUncheckedIndexedAccess": true,
-  "exactOptionalPropertyTypes": true,
-  "noFallthroughCasesInSwitch": true,
-  "noImplicitOverride": true
-}
-```
-
-特に `noUncheckedIndexedAccess` は `arr[0]` の型を `T | undefined` にします。バグを防げる一方、書き味が硬くなるので **新規プロジェクトでは入れて、既存に追加するなら計画的** に。
-
-### `target` / `module` / `moduleResolution` の関係
-
-3 つはセットで覚えます。
-
-#### `target`
-
-「**出力する JavaScript の構文バージョン**」。
-
-- `ES2015` / `ES2020` / `ES2022` / `ES2023` / `ESNext`
-- 例: `target: "ES5"` だと `class` が `function` のプロトタイプ書き換えに変換される
-- **2026 年は `ES2022` 以上が無難**。古いブラウザ対応は Vite / Next.js のビルドが別途やる
-
-#### `module`
-
-「**出力するモジュール形式**」。
-
-- `CommonJS`: `require` / `module.exports`
-- `ESNext` / `ES2020`: `import` / `export`
-- `NodeNext`: Node.js の最新 ESM/CJS 共存ルールに合わせる
-
-最近のフロント / バンドラ前提なら `"module": "ESNext"`、Node.js 単体なら `"module": "NodeNext"` を選びます。
-
-#### `moduleResolution`
-
-「**`import` を書いた時にどうやってファイルを探すか**」。
-
-| 値 | 用途 |
-|---|---|
-| `bundler` | Vite / webpack / Bun などバンドラを使う場合の **推奨**（TypeScript 5.0+） |
-| `nodenext` | Node.js（ESM / CJS 切替を解釈） |
-| `node10` | 古い Node 互換（旧称 `node`、メンテナンスのみ） |
-| `classic` | 非常に古い。使わない |
-
-`bundler` は **TypeScript 5.0 で追加** された値です。「拡張子を書かなくていい」「`package.json` の `exports` を解釈する」などモダンバンドラの挙動に合わせてあります。新規 Vite / Next.js では原則 `bundler` を選びます。
-
-### `paths` でパスエイリアス
-
-```json
-{
-  "compilerOptions": {
-    "baseUrl": ".",
-    "paths": {
-      "@/*": ["./src/*"]
-    }
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
   }
 }
 ```
 
-これで:
+`npm run dev` と打つと、npm は `scripts.dev` に書かれているコマンド（ここでは `vite`）を実行します。Vite が開発サーバーを立ち上げて、ブラウザで表示できる状態になります。
 
-```ts
-import Button from "../../../components/Button"; // 深い相対パス
-import Button from "@/components/Button";          // 短い別名
+### StackBlitz なら自動で走る
+
+StackBlitz の React + Vite テンプレートを開くと、次のことが自動で起きます。
+
+1. `npm install`（`package.json` に書かれたライブラリをダウンロード）
+2. `npm run dev`（Vite 開発サーバーを起動）
+3. プレビューエリアに画面が表示される
+
+本コースでは `npm install` や `npm run dev` を **知っておく程度** でよく、コマンドを手で打つことはほとんどありません。それでも「StackBlitz の裏では Vite が動いている」「設定は `package.json` に書かれている」ことだけ頭に入れておくと、後で応用が利きます。
+
+### `App.tsx` の位置
+
+Vite の React + TS テンプレートでは、画面の入口となるファイルが 2 つあります。
+
+- `src/main.tsx`: React を起動する（ここは基本触らない）
+- `src/App.tsx`: 画面の中身を書く（本コースではここを中心に触る）
+
+`main.tsx` の中で `<App />` をブラウザに流し込んでいます。イメージとしてはこうです。
+
+```tsx
+// src/main.tsx（テンプレートに最初から入っている）
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import App from "./App";
+
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <App />
+  </StrictMode>
+);
 ```
 
-注意点:
+`StrictMode` は「開発中に問題を見つけやすくするラッパー」です。今は気にしなくてよいです。
 
-- TypeScript は **型チェックのためだけ** に解釈する。**実行時の解決は別**
-- バンドラ（Vite / webpack / esbuild）にも **同じエイリアスを教える** 必要がある
-- Vite なら `vite.config.ts` の `resolve.alias`、Next.js は **tsconfig.json から自動で読む**
-- `paths` に書く値は **ベースとなる位置からの相対パス**。`create-next-app` は `"@/*": ["./src/*"]` ではなく `"@/*": ["./*"]` を出力するなど、**プロジェクトに `src/` があるかどうか** で値が変わるので、自動生成された値をそのまま使うのが安全
-
-### `jsx`
-
-JSX をどう変換するか。
-
-| 値 | 説明 |
-|---|---|
-| `preserve` | JSX を変換せず、そのまま出力（バンドラに任せる） |
-| `react` | `React.createElement(...)` に変換（古い形） |
-| `react-jsx` | 新しい変換（`react/jsx-runtime` を自動 import）。**2026 年の標準** |
-| `react-jsxdev` | 開発時の `react-jsx`。デバッグ情報付き |
-
-新規 React / Next.js プロジェクトでは `"jsx": "react-jsx"`（または Next.js が自動指定する `"preserve"`）です。
-
-### `lib`
-
-「**型定義としてどこまで使えるか**」。
-
-```json
-{ "lib": ["ES2023", "DOM", "DOM.Iterable"] }
-```
-
-- `DOM`: ブラウザ API（`document` / `window` / `fetch` など）の型を有効化
-- `ES2023`: `Array.prototype.toSorted` などの型を有効化
-- `DOM.Iterable`: `for (const el of nodeList)` を許可
-- Node.js 用なら `DOM` を入れない
-
-### `types`
-
-「**自動で読み込む型パッケージ** を制限する」。
-
-```json
-{ "types": ["vite/client", "node"] }
-```
-
-`@types/*` が `node_modules` に入っていると **デフォルトで全部読み込まれる**ので、テスト用と実装用の型がぶつかる事故が起きます。`types` を指定すると **明示したものだけ** に絞れます。
-
-### `include` / `exclude`
-
-```json
-{
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "**/*.test.ts"]
-}
-```
-
-`include` がディレクトリを指す場合、`*.ts` / `*.tsx` / `*.d.ts` などの拡張子だけを拾います。**テストファイルだけ別の tsconfig** を使うことがよくあります。
-
-### `noEmit`
-
-```json
-{ "noEmit": true }
-```
-
-「**型チェックだけして JS を出力しない**」設定。バンドラが TS → JS の変換を担当する場合は `noEmit: true` にします。Vite / Next.js は `tsc` を使わず esbuild / SWC で変換するので、ほぼ常に `noEmit: true`。
-
-`tsc` を **型チェック専用ツール** として使う、というのが現代の TS の主な役割です。
-
-### `tsconfig.json` のバリエーション
-
-#### Vite + React（`npm create vite -- --template react-ts` の生成例）
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "useDefineForClassFields": true,
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "module": "ESNext",
-    "skipLibCheck": true,
-    "moduleResolution": "bundler",
-    "allowImportingTsExtensions": true,
-    "isolatedModules": true,
-    "moduleDetection": "force",
-    "noEmit": true,
-    "jsx": "react-jsx",
-    "strict": true,
-    "noUnusedLocals": true,
-    "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
-  },
-  "include": ["src"]
-}
-```
-
-特徴:
-
-- `moduleResolution: "bundler"` + `allowImportingTsExtensions: true` でバンドラ前提
-- `isolatedModules` は **ファイル単位で型情報なく変換** されることを保証する。Vite / esbuild の前提
-- `noEmit: true` で型チェック専用
-
-#### Next.js（自動生成）
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "lib": ["dom", "dom.iterable", "esnext"],
-    "allowJs": true,
-    "skipLibCheck": true,
-    "strict": true,
-    "noEmit": true,
-    "esModuleInterop": true,
-    "module": "esnext",
-    "moduleResolution": "bundler",
-    "resolveJsonModule": true,
-    "isolatedModules": true,
-    "jsx": "preserve",
-    "incremental": true,
-    "plugins": [{ "name": "next" }],
-    "paths": { "@/*": ["./*"] }
-  },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts"],
-  "exclude": ["node_modules"]
-}
-```
-
-特徴:
-
-- `jsx: "preserve"`（Next.js 内部で React Compiler / SWC が JSX を変換）
-- `plugins: [{ name: "next" }]` で Next.js 用の補完が効く
-- `next-env.d.ts` を `include` に入れて、Next.js が用意するグローバル型を読む
-
-#### Node.js（CLI ツールなど）
-
-```json
-{
-  "compilerOptions": {
-    "target": "ES2022",
-    "module": "NodeNext",
-    "moduleResolution": "NodeNext",
-    "outDir": "dist",
-    "strict": true,
-    "esModuleInterop": true,
-    "skipLibCheck": true,
-    "types": ["node"]
-  },
-  "include": ["src"]
-}
-```
-
-特徴:
-
-- `tsc` で実際に **JS を出力する** ので `noEmit` を外し、`outDir` を指定
-- `module: "NodeNext"` + `moduleResolution: "NodeNext"` で Node の ESM / CJS ルールに従う
-
-### よくある落とし穴
-
-#### `paths` を設定したのにビルドで失敗
-
-→ TypeScript の `paths` は **型情報専用**。実行時は **バンドラ側にも** 同じエイリアスを教える必要があります。
-
-#### `strict` を ON にしたら大量のエラー
-
-→ 一度に全部直すのが大変なら、ファイル単位で `// @ts-nocheck` を一時的に置く / `noImplicitAny` だけ先に ON にする / 古い箇所だけ別の `tsconfig` で扱う、と段階的に進めます。
-
-#### `skipLibCheck: false` にしたら謎のエラー
-
-→ 依存パッケージの型が壊れていると `node_modules` の中まで型チェックして失敗します。**実用上 `true` がほぼ常識**。
-
-#### Next.js で `jsx: "react-jsx"` を上書きしたい
-
-→ 上書きせずに **Next.js の生成値（`"preserve"`）に従う**。`react-jsx` への変換は Next.js のビルドが内部で行います。
-
-### tsconfig は **継承** できる
-
-```json
-// tsconfig.base.json
-{
-  "compilerOptions": {
-    "strict": true,
-    "moduleResolution": "bundler"
-  }
-}
-```
-
-```json
-// tsconfig.json
-{
-  "extends": "./tsconfig.base.json",
-  "compilerOptions": { "outDir": "dist" },
-  "include": ["src"]
-}
-```
-
-モノレポでは **共通設定を 1 つの base** に書き、各パッケージで `extends` するのが定番です。
-
-`@tsconfig/strictest` / `@tsconfig/node20` のような **公式バンドル** も npm にあり、`extends: "@tsconfig/strictest/tsconfig"` と書くだけで強い設定一式が読み込めます。
+本コースで意識的に編集するのは、基本的に `src/App.tsx` です。
 
 ## 演習
 
+### 途中から始める場合
+
+このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+
 ### ゴール
 
-- 既存の Vite + React + TS プロジェクトの `tsconfig.json` を読み解く
-- いくつかのオプションを変えて型チェックの挙動を変化させる
+- StackBlitz の React + Vite（TS）テンプレートから新しいプロジェクトを起動する
+- `src/App.tsx` を編集して「Hello, React」とあなたの名前を画面に表示する
+- `package.json` を開いて `scripts.dev` の値を確認する
 
-### 手順 1: 新規プロジェクト
+### 手順
 
-```bash
-npm create vite@latest tsconfig-sample -- --template react-ts
-cd tsconfig-sample
-npm install
-```
+1. ブラウザで直リンク [https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts](https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts) を開く（**Vite + React + TypeScript** のテンプレートが立ち上がる。本コースでは旧 Create React App ではなく必ずこの Vite 版を使う）
+2. 左のファイルツリーから `src/App.tsx` を開く
+3. 中身を下記の内容に書き換える
+4. 右のプレビューで確認する
 
-### 手順 2: tsconfig.json を眺める
-
-`tsconfig.json`（または `tsconfig.app.json`）を開いて、解説で出てきた項目がどう書かれているか確認します。
-
-### 手順 3: わざと「ゆるい」コードを書く
-
-`src/App.tsx` に追加:
+### `src/App.tsx`
 
 ```tsx
-function add(a, b) {  // 引数の型がない
-  return a + b;
+function App() {
+  const userName = "Alice";
+  return (
+    <div>
+      <h1>Hello, React</h1>
+      <p>こんにちは、{userName} さん</p>
+    </div>
+  );
 }
 
-const value = null as null | string;
-console.log(value.length);  // null チェックなし
+export default App;
 ```
 
-このまま `npx tsc --noEmit` を実行すると、`strict: true` のせいでエラーが出ます。
-
-```
-src/App.tsx(2,13): error TS7006: Parameter 'a' implicitly has an 'any' type.
-src/App.tsx(7,13): error TS18047: 'value' is possibly 'null'.
-```
-
-### 手順 4: strict を変えて挙動を見る
-
-`tsconfig.json` の `compilerOptions` に追加:
-
-```json
-"strict": false,
-"noImplicitAny": true
-```
-
-これで:
-
-- `noImplicitAny` は ON のまま、引数の型なしエラーは出続ける
-- `strictNullChecks` は OFF になり、`value.length` のエラーは消える
-
-`strict` は便利な「親スイッチ」ですが、個別の項目を明示することで「**何を厳しくしているか**」が読みやすくなります。
-
-### 手順 5: paths を設定する
-
-`tsconfig.json`:
-
-```json
-"baseUrl": ".",
-"paths": { "@/*": ["./src/*"] }
-```
-
-`vite.config.ts`:
-
-```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import path from "node:path";
-
-export default defineConfig({
-  plugins: [react()],
-  resolve: {
-    alias: { "@": path.resolve(__dirname, "src") },
-  },
-});
-```
-
-`src/main.tsx` で:
-
-```tsx
-import App from "@/App";
-```
-
-`@/App` が解決できるはずです。
+`{userName}` の部分は JSX の中に JS の変数を埋め込む書き方です。
 
 ### 期待出力
 
-- `npx tsc --noEmit` で型エラーが出る → strict を緩めると消える
-- `@/...` の import が IDE / ビルドの両方で動く
+プレビューに次の 2 行が表示されます。
+
+```
+Hello, React
+こんにちは、Alice さん
+```
+
+見出しの `Hello, React` が `<h1>` の大きな文字、`こんにちは、Alice さん` が `<p>` の通常の大きさで並びます。
 
 ### 変える
 
-- `noUncheckedIndexedAccess: true` を追加して `const arr = [1, 2, 3]; arr[10].toString()` がエラーになることを確認
-- `target: "ES2022"` を `target: "ES5"` に変えて、`tsc` の出力（`outDir` を一時的に指定）が ES5 構文になることを観察
-- `jsx: "react-jsx"` を `jsx: "preserve"` に変えてビルドの出力差を見る
+- `const userName = "Alice";` の `"Alice"` をあなたの名前に書き換えて保存する。保存するとプレビューが自動で更新されることを確認する
+- `<h1>Hello, React</h1>` を `<h1>Hello, 世界</h1>` に変えて保存。これも即反映されるはず
 
-### 自分で書く（任意）
+### 自分で書く
 
-- `tsconfig.base.json` を作って `extends` する形にリファクタする
-- モノレポ風に `apps/web/tsconfig.json` と `packages/ui/tsconfig.json` を作って共通設定を共有する
-- `@tsconfig/strictest` を入れて、最強の strict を踏んだ時に出るエラーを 1 つずつ潰す
+- 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
+- 変数の型は今は書かなくてよい（3 章 でやった型注釈は、次の lesson で必要に応じて使う）
+
+### `package.json` を覗く小タスク
+
+1. 左のファイルツリーから `package.json` を開く
+2. `"scripts"` の中を見つける
+3. `"dev": "vite"` のような行があることを確認する
+
+StackBlitz が自動で走らせているのは、この `vite` コマンドです。手元で同じことをやるなら、ターミナルで `npm install` → `npm run dev` と打つ流れになります。
 
 ## まとめ
 
-- `tsconfig.json` の中心は `compilerOptions`。`include` / `exclude` で対象ファイルを絞る
-- `strict` は複数の strict オプションをまとめる **親スイッチ**。新規プロジェクトでは必須
-- `target` / `module` / `moduleResolution` の 3 点セットで「出力 JS / モジュール形式 / 探索方法」が決まる
-- `moduleResolution: "bundler"` が **2026 年のフロント標準**
-- `paths` でパスエイリアスを定義。**実行時はバンドラにも教える**
-- `jsx: "react-jsx"` が React 17 以降のデファクト
-- `lib` で使える型、`types` で読み込む型パッケージを制御
-- `noEmit: true` にして **型チェック専用** にし、変換はバンドラに任せるのが現代流
-- `extends` でベース設定を継承できる。`@tsconfig/strictest` などの公式バンドルもある
+- React は「画面を今の状態から計算する」発想の道具。差分だけを DOM に反映する
+- 画面は**コンポーネント**（JSX を返す関数）の組み合わせで作る
+- Vite は開発サーバーとビルドを担当し、`npm run dev` で起動する
+- `package.json` の `scripts` セクションに、起動やビルドのコマンドがまとまっている
+- StackBlitz を使う限り、`npm install` も `npm run dev` も自動で走る。コマンドは知っておく程度で OK
+- 編集するのは基本的に `src/App.tsx`

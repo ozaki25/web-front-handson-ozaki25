@@ -1,208 +1,235 @@
-# lesson79: 動的ルート
+# lesson79: Server Actions の最小形
 
 ## ゴール
 
-- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
-- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
-- 2 章 で学んだ `find` を再利用して、配列から 1 件だけ取り出せます。
+- `<form action={fn}>` に **関数** を渡してサーバー側で処理できることを理解します。
+- `"use server"` の配置ルール（ファイル先頭 or 関数先頭、async 必須、Client 内には書けない）を覚えます。
+- `FormData.get("...")` で送信値を取り出し、サーバー側の配列に追加できます。
+- `revalidatePath` の仕組みを図で把握し、送信後に一覧が自動更新される流れを追えます。
 
 ## 解説
 
-### 動的ルートとは
+### `preventDefault` が要らなくなる
 
-「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
+2 章 では、素の JS で `<form>` の送信を止めるために `event.preventDefault()` を書きました。React（4 章）でも `onSubmit` の中で同じことをしていました。
 
-App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
+React 19 + Next.js の `<form action={fn}>` に **関数** を渡すと、React が送信イベントを **自動で止めて** その関数を呼んでくれます。結果として、以下の対比になります。
 
-```
-app/
-└── posts/
-    ├── page.tsx            → /posts（一覧）
-    └── [id]/
-        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
-```
+| 書き方 | 送信のデフォルトを止める |
+|---|---|
+| 2 章 の素の JS | `event.preventDefault()` を手書き |
+| 4 章 の「フォームと制御コンポーネント」の React `onSubmit` | `e.preventDefault()` を手書き |
+| **本レッスンの `<form action={fn}>`** | **React が自動で止める** |
 
-`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
+`preventDefault` という呼び出しが消えることに注目しておきましょう。
 
-### `params` は Promise になった
+### Server Actions とは
 
-Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
+`<form action={fn}>` の `fn` に、**サーバー側で実行される関数** を渡せるのが **Server Actions** です。ブラウザ側のフォーム送信が自動で HTTP リクエストに包まれ、サーバーに届き、指定した関数が走ります。
 
-> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
+- クライアント JS を書かなくても、サーバー側で値を受け取って処理できます。
+- 戻り値はありません（あっても無視されます。戻り値を使いたいときは `useActionState` を使います）。
+- 関数は **必ず `async`** です。
 
-型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
+### `"use server"` の配置ルール
 
-```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  // id を使って処理
-}
-```
+Server Action であることを示すには、次のどちらかの場所に `"use server"` と書きます。
 
-`PageProps<"/posts/[id]">` の文字列は、**この `page.tsx` があるルート** を書きます。`[id]` の部分がそのまま `params.id` の型に反映されます（`string` 型）。
+1. **ファイル先頭に書く**: そのファイル内で `export` されている **async 関数すべて** が Server Action になります。最もよく使う形です。
+   ```ts
+   // app/actions.ts
+   "use server";
 
-- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
-- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
-- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
+   export async function addTodo(formData: FormData) {
+     // サーバー側で動く
+   }
 
-### `find` で 1 件だけ取り出す
+   export async function deleteTodo(id: string) {
+     // これも Server Action
+   }
+   ```
 
-2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
+2. **関数の先頭行に書く**: その関数だけが Server Action になります。Server Component の中にインラインで定義する場合に使います。
+   ```tsx
+   export default async function Page() {
+     async function addTodo(formData: FormData) {
+       "use server";
+       // この関数だけ Server Action
+     }
+     return <form action={addTodo}>...</form>;
+   }
+   ```
+
+ルール:
+
+- **必ず async 関数** です。同期関数に `"use server"` は書けません。
+- **Client Component の中（`"use client"` のファイル内）には書けません**。Client から使いたいときは、別ファイルで `"use server"` を書いて `import` します。
+- `"use server"` を書いたファイルからの **`export` は async 関数だけ** にするのが安全です。値（普通の `const`）や非 async 関数を `export` するとビルド時に警告やエラーが出ることがあります。
+- 例外として **型の `export type`** は問題ありません（TypeScript の型情報はビルド後の JS には残らないためです）。
+
+本コースでは **(1) のファイル先頭パターン** を使います（分離が分かりやすいためです）。
+
+### データの保存先（本コースでの割り切り）
+
+本コースではデータベースは使いません。代わりに、`app/actions.ts` のモジュールトップレベルに **ただの配列** を置いて、擬似的な永続化とします。
+
+**開発時（dev）の注意**: StackBlitz や `next dev` では、`app/actions.ts` を編集するたびにモジュールが再評価され、`const todos: Todo[] = []` が初期化し直されて中身が消えます。動作確認のコツは「**追加したら actions.ts を編集しない**」です。本物の永続化が必要な場合は DB を使うのが正攻法です。
 
 ```ts
-const target = posts.find((p) => p.id === id);
+// app/actions.ts
+"use server";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
 ```
 
-- 見つかったとき: その要素を返します。
-- 見つからないとき: `undefined` を返します。
+> **補足: HMR でも消したくないときは `globalThis` に退避**: `next dev` の HMR は **モジュールごと** に再評価するため、`const todos = []` は再評価で空に戻ります。学習中に「保存しただけで TODO が消える」が気になるなら、グローバルオブジェクト（プロセス内で 1 つ）に退避する次の書き方を使えます。
+>
+> ```ts
+> "use server";
+> import type { Todo } from "./types";
+>
+> const g = globalThis as unknown as { __todos?: Todo[] };
+> g.__todos ??= [];
+> const todos: Todo[] = g.__todos;
+> ```
+>
+> `globalThis` はモジュール再評価をまたいでも値を持ち続けるため、HMR で配列が初期化されません。**本番では別インスタンスで動くため依然消える** ので、これはあくまで「学習中の dev で消えにくくする」だけのトリックです。本番は DB / KV を使います。
 
-なので、詳細ページでは次のような流れになります。
+- サーバーのプロセスが生きている間は `todos` が残ります（同じプロセス内の呼び出しは同じ配列を共有します）。
+- **StackBlitz や Vercel でサーバーが再起動すると消えます**。本物の永続化には DB が必要ですが本コースでは扱いません（「Vercel にデプロイする」末尾でも再度注意を書きます）。
 
-1. 一覧を `fetch` で全部取ってくる（Server Component）。
-2. `await params` で URL の `id` を取り出す。
-3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは 404 を返す。
+### `revalidatePath` の仕組み
 
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作ります。
+Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッシュされます。Server Action が配列を変更しても、そのままではキャッシュされた古い画面が残ります。
 
-### 実務では「単件 fetch」が原則
+`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** されます。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画されます。
 
-学習用の演習では `posts` 一覧をまるごと fetch して `find` で 1 件選び出していますが、**実務ではこの書き方を本番に持ち込みません**。一覧が 1 万件あれば「1 件のページを表示するために 1 万件をネットワーク越しに取ってくる」ことになり、転送量・実行時間ともに無駄が大きく、外部 API への過剰呼び出しにもなります。
+```mermaid
+sequenceDiagram
+  participant Browser as ブラウザ
+  participant Page as /todos page.tsx (Server)
+  participant Action as addTodo (Server Action)
+  participant Store as todos 配列
 
-JSONPlaceholder の場合は **`/posts/${id}` で単件取得できる** ので、実務寄りに書くなら次のようにします。
+  Browser->>Page: アクセス
+  Page->>Store: 配列を読む
+  Store-->>Page: [] (空)
+  Page-->>Browser: 空の一覧
 
-```ts
-const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-if (!res.ok) {
-  // 見つからなかったときの処理（notFound() など）
-}
-const post: Post = await res.json();
+  Browser->>Action: <form action> で送信
+  Action->>Store: push(new)
+  Action->>Page: revalidatePath('/todos')
+  Note right of Page: キャッシュ無効化
+  Action-->>Browser: 完了
+  Browser->>Page: 再レンダリング(自動)
+  Page->>Store: 配列を読む
+  Store-->>Page: [new]
+  Page-->>Browser: 更新された一覧
 ```
-
-加えて、変更頻度の低いデータなら `{ next: { revalidate: 60 } }` のような **時間ベースの再検証** を付けたり、ビルド時に静的生成する `generateStaticParams` で **既知の `id` 一覧を SSG する** 戦略もあります。本コースでは概念に集中するため `find` のままにしますが、本番に持ち込む前に「単件 API があれば単件 fetch、なければキャッシュ戦略を考える」を頭に入れておきます。
-
-### searchParams は今回扱わない
-
-URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。これも Next.js 15 以降 Promise 化されていますが、**このレッスンでは扱いません**。「小さなアプリを仕上げる」の中で「指定された ID にハイライトを付ける」演習で初めて使います。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。TODO 機能はこのレッスンから新規に作り始めるので、`app/todos/page.tsx` が存在する必要はありません（下の出発点の最小形で十分です）。
 
 <details>
-<summary>出発点のファイル（`/posts` 部分）</summary>
+<summary>出発点のファイル（TODO の最小出発点）</summary>
 
-**`app/posts/page.tsx`**
+**`app/todos/page.tsx`**（空でもよい。本文の手順 3 で全量置き換えます）
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
+export default function TodosPage() {
   return (
     <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
-          </li>
-        ))}
-      </ul>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
     </>
   );
 }
 ```
 
-**`app/posts/loading.tsx`**
-
-```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
-}
-```
+`app/types.ts` と `app/actions.ts` は、本文の手順 1・手順 2 で新規作成するので事前準備は不要です。
 
 </details>
 
 ### 前回のプロジェクトを開く
 
-「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順 1: 一覧ページを詳細リンク付きに更新
+### 手順 1: `Todo` 型を用意
 
-`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
+3 章 で決めた `Todo` 型を、Next.js プロジェクトでも再利用します。`app/types.ts` を作ります。
 
-```tsx
-import Link from "next/link";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
+```ts
+export type Todo = {
+  id: string;
+  text: string;
 };
+```
 
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+### 手順 2: `app/actions.ts` を作る
 
-  return (
-    <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <Link href={`/posts/${post.id}`}>
-              <strong>#{post.id}</strong> {post.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
+先頭に `"use server"` を書きます。モジュールトップレベルに配列とアクションを書きます。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+// 戻り値の型（3 章 「判別共用体」そのもの）
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
+
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
 }
 ```
 
-### 手順 2: 動的ルートのファイルを作る
+ポイント:
 
-`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
+- `"use server"` はファイルの **1 行目** に書きます。
+- `const todos: Todo[] = []` が「永続化の代わり」です。サーバーが生きている間だけ保持されます。
+- `addTodo` は `async` です。`FormData` から `formData.get("text")` で取り出します。
+- `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
+- `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
+- **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体**（discriminated union） そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。
+
+### 手順 3: `/todos` を本物のページにする
+
+`app/todos/page.tsx` を書き換えます。
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+import { addTodo, listTodos } from "../actions";
 
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  // URL の id は string、API の id は number なので揃える
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    return (
-      <>
-        <h1>見つかりません</h1>
-        <p>ID: {id} の記事は存在しない。</p>
-      </>
-    );
-  }
+export default async function TodosPage() {
+  const todos = await listTodos();
 
   return (
     <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
     </>
   );
 }
@@ -210,36 +237,61 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 
 ポイント:
 
-- `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
-- `await params` してから `id` を取り出します。
-- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。
+- このファイルは Server Component です（`"use client"` を書きません）。
+- `<form action={addTodo}>` に関数を直接渡しています。
+- `event.preventDefault()` も `onSubmit` も書いていません。React が自動で止めます。
+- `<input name="text">` の `name` 属性が `FormData.get("text")` のキーと一致しています（1 章 で学んだ `name` 属性がここで効いています）。
 
 ### 期待出力
 
-1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
-2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
-3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
-4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
+1. `/todos` を開くと、入力欄・追加ボタン・空の `<ul>` が見えます。
+2. 「買い物」と入力して「追加」を押す → `<ul>` に「買い物」が 1 件追加されます。
+3. 「課題」を入力して追加 → 2 件目として「課題」が追加されます。
+4. ブラウザの DevTools → Network タブを見ると、送信時に POST が飛び、200 で返ってきています。
+5. **リロードしても消えません**（サーバープロセスが生きているためです）。ただし StackBlitz を開き直したり、プロジェクトを再起動すると配列がリセットされ、すべて消えます。
 
 ### 変えてみる
 
-1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
-2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
-3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`PageProps<"/posts/[postId]">` に合わせて書き直します（グローバル型なので再ビルドすると自動で型が切り替わります）。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
+1. `addTodo` の中で `console.log("addTodo", text)` を追加しましょう。StackBlitz のターミナル側にログが出ることを確認します（Server Actions はサーバーで動く証拠です）。
+2. `revalidatePath("/todos")` をコメントアウトして、追加ボタンを押すとどうなるか試しましょう。一覧が更新されなくなります（手動で再読み込みすると更新されます）。確認したら戻します。
+3. `<input>` の `placeholder` を自分の好きなテキストに変えましょう。
+
+### スコープ外
+
+- 送信中のボタン無効化、空入力エラー表示は本レッスンでは扱いません。最小形に集中します。
+- `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
 
 ### 自分で書く
 
-`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
-
-- URL: `/users/1`
-- API: `https://jsonplaceholder.typicode.com/users`
-- 表示: `name` と `email`、`phone`
-
-`PageProps<"/users/[id]">` の型定義、`await params`、`find` の 3 点が書ければ合格です。
+`/memo` という別ページを作り、`addMemo`（サーバー側に `const memos: string[] = []` を持つ）で「メモを追加して下に並べる」だけの最小アプリを作ってみましょう。`types.ts` や `actions.ts` は新しく別ファイルで作っても、既存の `actions.ts` に追記しても構いません。
 
 ## まとめ
 
-- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
-- Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
-- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
+- `<form action={fn}>` に関数を渡すと、React が自動で送信を止めて `fn` を呼びます。`preventDefault` は要りません。
+- Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
+- データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
+- `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
+
+### コラム: `revalidateTag`
+
+`revalidatePath` はパス単位で無効化します。もっと細かく、「`fetch` にタグを付けておき、その **タグ** だけ無効化する」方法もあります。
+
+```ts
+// 読み込み側: タグを付ける
+await fetch(url, { next: { tags: ["todos"] } });
+
+// Server Action 側: タグで無効化
+import { revalidateTag } from "next/cache";
+revalidateTag("todos");
+```
+
+複数ページで同じデータを使っているときに便利です。本コースでは扱いませんが、実務では頻出です。
+
+### コラム: Server Actions の CSRF 自動保護
+
+`<form action={fn}>` でサーバーに POST が飛びますが、**これは Next.js の Server Actions が内部で CSRF を防いでいる** からこそ安全に使えます。具体的には:
+
+- アクションごとに **暗号化された ID** が割り当てられ、フォーム送信時に確認される
+- リクエストの **Origin ヘッダ** と Host ヘッダの一致がチェックされる（`next.config.ts` の `serverActions.allowedOrigins` で許可リスト追加可能）
+
+このため、別オリジンのサイトから埋め込んだフォームでは Server Actions を呼べません。**自前で CSRF トークンを発行する必要はありません**。一方、`<form action="/api/...">` のように Route Handler を直接叩く場合はこの保護が効かないため、別途 Origin 検証 / トークンが必要です。

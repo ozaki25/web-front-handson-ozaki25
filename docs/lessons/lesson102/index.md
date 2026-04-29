@@ -1,439 +1,327 @@
-# lesson102: E2E テスト — Playwright
+# lesson102: 画像とフォントの最適化
 
 ## ゴール
 
-- E2E テストとユニット / コンポーネントテストの違いを説明できる
-- Playwright をプロジェクトにセットアップできる
-- `page.goto` / `page.getByRole` / `page.click` でブラウザ操作を書ける
-- Playwright の **`expect`** で UI の状態を検証できる
-- ヘッドレスモードと UI モード（`--ui`）の使い分けを知る
-- 失敗時のスクリーンショット / トレース / ビデオの仕組みを理解する
-- E2E は「ビジネスクリティカルな経路」だけに絞る判断軸を持てる
+- 画像が **LCP の最重要要因** であることを理解する
+- 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
+- `next/image` がやってくれる自動最適化の中身を説明できる
+- フォントが **CLS** と LCP にどう効くかを理解する
+- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
+- Self-hosted フォントと Google Fonts の使い分けを知る
 
 ## 解説
 
-### E2E テストの位置付け
+### 画像が LCP の最重要要因
 
-これまでに学んだテストの違いを再確認します。
+ほとんどのページで **LCP（最大コンテンツ）はヒーロー画像** が選ばれます。だから「LCP を改善する」は事実上「画像を最適化する」とほぼ同義です。
 
-| 種類 | 範囲 | 速度 | 頻度 |
-|---|---|---|---|
-| ユニット (Vitest) | 関数 1 つ | 速い（ms） | 多い（70%） |
-| コンポーネント (RTL) | コンポーネント | 中間（数十 ms） | 中間（20%） |
-| E2E (Playwright) | アプリ全体 | 遅い（秒） | 少ない（10%） |
+### 画像最適化 5 つの技
 
-E2E は **本物のブラウザを起動して、ユーザーが実際にやる操作の流れ全体を再現** します。「フォームに入力 → 送信 → 別ページに遷移 → 一覧に表示される」のような **複数画面にまたがる経路** を 1 つのテストで検証できます。
+#### 1. フォーマット: WebP / AVIF を使う
 
-代償は速度と安定性です。E2E は本物のブラウザを起動するぶん遅く、ネットワーク事情で fail することもあります。だから「最重要パスだけ」に絞るのが鉄則です。
+JPEG / PNG はもう古い選択肢です。現代は:
 
-### Playwright とは
+- **WebP**: ブラウザ対応率 95% 超。JPEG より 25-35% 軽い
+- **AVIF**: 比較的新しい。WebP よりさらに 30% 軽い。ブラウザ対応率は約 95%
 
-**Playwright** は Microsoft 製の E2E テストフレームワークです。2026 年現在、Cypress と並ぶ二大選択肢で、新規プロジェクトでは Playwright が選ばれることが増えています。
+両者は **可逆 / 非可逆** 両方サポート。古いブラウザ用に JPEG をフォールバックで残すのが定番です。
 
-特徴:
+#### 2. サイズ: 表示サイズに合わせる
 
-- Chromium / Firefox / WebKit（Safari エンジン）の **3 ブラウザを 1 つの API で** 操作できる
-- **自動待機**: 要素が現れるまで自動で待つので、`waitFor(...)` を書かなくてよい
-- **トレース・ビデオ・スクリーンショット** が失敗時に自動保存される
-- **codegen** で操作を録画してテストコードを生成できる
-- **UI モード**（`npx playwright test --ui`）で対話的にデバッグできる
+3000×2000 の写真を `<img width="300" height="200">` で表示すると、**3000×2000 のファイルがそのまま転送** されます。これが LCP を遅らせる最大の原因です。
 
-### セットアップ
+対策:
 
-Vite + React プロジェクトに Playwright を追加します。
+- **複数解像度** を用意して `srcset` で適切な一枚を選ばせる
+- ビルド時に **自動リサイズ** するツール（`next/image`、`vite-plugin-image-optimizer` 等）を使う
 
-```bash
-npm install -D @playwright/test
-npx playwright install   # ブラウザ本体（Chromium / Firefox / WebKit）をダウンロード
+```html
+<img
+  src="/photo-400.jpg"
+  srcset="/photo-400.jpg 400w, /photo-800.jpg 800w, /photo-1200.jpg 1200w"
+  sizes="(max-width: 600px) 100vw, 800px"
+  alt="海辺で撮影した記念写真"
+/>
 ```
 
-> StackBlitz のブラウザ環境では `npx playwright install` でブラウザ本体を取れない場合があります。Playwright はローカル環境で動かすのが基本です。本レッスンは「読みながら手元で試す」前提で進めてください。
+`sizes` は CSS のメディアクエリと同じ書き方で「表示サイズの目安」を伝えます。ブラウザがそれを見て `srcset` から最適な 1 枚を選びます。
 
-`playwright.config.ts` を作成（最小形）:
+> **`alt` は意味のある文を入れる**: `alt="..."` のような placeholder は本番のコードに残してはいけません。スクリーンリーダーがその文字列を読み上げる形で利用者に届きます。`alt` には **画像が伝えたい情報** を 1 文で書き、見出し近くの装飾画像のように **何の情報も足さない** 画像なら `alt=""`（空文字）を指定します。空文字を指定するとスクリーンリーダーはその要素を読み飛ばします。`alt` 属性自体を省略すると「ファイル名を読み上げる」最悪のフォールバックになるので、必ず `alt=""` を明示します。
 
-```ts
-import { defineConfig, devices } from "@playwright/test";
+#### 3. 遅延読み込み: `loading="lazy"`
 
-const isCI = !!process.env.CI;
+画面外の画像は **読み込みを遅らせて** 後から取りに行きます。
 
-export default defineConfig({
-  testDir: "./e2e",
-  retries: isCI ? 2 : 0,                 // CI では失敗時に 2 回まで再実行
-  reporter: isCI ? "github" : "list",    // CI では GitHub Actions 連携形式
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",             // 失敗時にトレースを保存
-  },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    // 必要に応じて WebKit / Firefox を足す
-  ],
-  webServer: {
-    // CI では prod build を preview 配信して E2E（dev サーバーは HMR で揺れやすい）
-    command: isCI ? "npm run build && npm run preview" : "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !isCI,
-  },
-});
+```html
+<!-- ページ最初に見える画像（first view）: eager -->
+<img src="/hero.jpg" loading="eager" fetchpriority="high" alt="サイトのトップビジュアル: 海辺の夕焼け" />
+
+<!-- 画面外の画像: lazy -->
+<img src="/below-fold.jpg" loading="lazy" alt="記事中の図表" />
 ```
 
-`webServer` を書いておくと、テスト実行時に **自動でアプリを起動** してから E2E を回してくれます。`retries` / `projects` / 環境別の `command` を最初から入れておくと、後で CI に乗せるときに迷いません。
+- **`loading="lazy"`**: ブラウザがスクロール位置に応じて読み込み開始
+- **`loading="eager"`**: 即時読み込み（既定）
+- **`fetchpriority="high"`**: ヒーロー画像で優先度を上げる（LCP の最強の武器）
 
-`package.json` に scripts を追加:
+`loading="lazy"` を **first view の画像に付けてはいけません**（LCP が悪化）。ページの最重要画像には `fetchpriority="high"` を付けるのが 2026 年の定番です。
 
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
+#### 4. プレースホルダ: ぼかし画像の先出し
+
+LQIP（Low Quality Image Placeholder）と呼ばれる手法です。本物が読み込まれるまで、極小サイズのぼかし画像を表示しておきます。
+
+```html
+<!-- placeholder-blur と 本物の差し替え -->
+<img
+  src="/placeholder-blur.jpg"  /* 数 KB の小さい画像 */
+  data-src="/full.jpg"          /* 本物 */
+  ...
+/>
+```
+
+`next/image` の `placeholder="blur"` がこれを自動でやってくれます。
+
+#### 5. `<picture>` でフォーマットを分岐
+
+WebP / AVIF をサポートしていないブラウザに JPEG をフォールバックで返すには `<picture>` を使います。
+
+```html
+<picture>
+  <source srcset="/photo.avif" type="image/avif" />
+  <source srcset="/photo.webp" type="image/webp" />
+  <img src="/photo.jpg" alt="海辺で撮影した記念写真" width="800" height="600" />
+</picture>
+```
+
+ブラウザは上から順に対応形式を探し、最初に対応している `<source>` を使います。すべて非対応なら最後の `<img>` を使います。
+
+### `next/image` は全部やってくれる
+
+5 章 で扱った `<Image>` コンポーネントは、上記 5 つの最適化を **設定なしで** 全部やります。
+
+- フォーマット自動変換（WebP / AVIF）
+- 表示サイズに応じた `srcset` 生成
+- `loading="lazy"`（first view を除く自動判定は手動が確実）
+- `placeholder="blur"` でぼかし
+- `<picture>` 相当のフォールバック
+
+Next.js 以外の環境では同等の自動化は手作業が必要なので、Next.js が選ばれる理由の 1 つになっています。
+
+### フォントが CLS と LCP に効く
+
+フォントの読み込み挙動が悪いと:
+
+- **CLS 悪化**: フォントが切り替わった瞬間にテキスト幅が変わってレイアウトがズレる
+- **LCP 悪化**: テキストが LCP 要素なら、フォント読み込み完了まで描画されない
+
+主な現象:
+
+- **FOIT**（Flash of Invisible Text）: フォント読み込み中、テキストが **見えない**
+- **FOUT**（Flash of Unstyled Text）: フォント読み込み中、フォールバックフォントで一瞬表示 → 切り替わり
+
+### `font-display: swap`
+
+CSS の `@font-face` で `font-display: swap` を指定すると、**FOUT** モードになります。フォールバックフォントで先に表示し、本物のフォントが届いたら差し替えます。
+
+```css
+@font-face {
+  font-family: "MyFont";
+  src: url("/fonts/myfont.woff2") format("woff2");
+  font-display: swap;
 }
 ```
 
-### 最小の E2E テスト
+`swap` は LCP に有利（テキストが先に表示される）ですが、CLS は出やすくなります。トレードオフです。`optional` を選ぶと「100ms 以内に読み込めなければ諦める」という慎重派の挙動になります。
 
-`e2e/home.spec.ts`:
+### `<link rel="preload">` で先読み
 
-```ts
-import { test, expect } from "@playwright/test";
+クリティカルなフォント（first view で使う）は **`<link rel="preload">`** でブラウザに「優先して読んでね」と伝えます。
 
-test("トップページに見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-});
-
-test("About リンクをクリックすると /about に移動する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
-});
+```html
+<link
+  rel="preload"
+  href="/fonts/myfont.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
 ```
 
-ポイント:
+これで HTML パース中に並行して読み込みが始まり、CSS で `@font-face` が見つかった時にはほぼ準備完了の状態になります。LCP / CLS 双方に効きます。
 
-- `page.goto("/")` で baseURL（`http://localhost:5173`）に対して相対パスで遷移
-- `page.getByRole(...)` は React Testing Library と **同じセレクタ思想**（アクセシビリティロール優先）
-- `expect(...).toBeVisible()` 等は **自動で待ってくれる**（要素が出るまで最大 5 秒待つ）
-- すべて `await` を付けて呼ぶ（非同期）
+### `next/font` は全部やってくれる
 
-Playwright と Testing Library のクエリ API はほぼ同じ書き味です。両方を使うチームでは認知コストが下がる利点があります。
+Next.js では `next/font` が自動で:
 
-### よく使う操作
+- フォントをビルド時にダウンロード（self-host 化、Google Fonts への外部リクエスト削減）
+- サブセット化（必要な文字だけ抽出）
+- preload リンクを HTML に自動挿入
+- `font-display: swap` を既定にする
+- フォールバックフォントの幅メトリクスを近づけて CLS を抑制
 
-```ts
-// 遷移
-await page.goto("/login");
+```tsx
+import { Inter } from "next/font/google";
 
-// クリック
-await page.getByRole("button", { name: "送信" }).click();
+const inter = Inter({ subsets: ["latin"], display: "swap" });
 
-// 入力
-await page.getByLabel("お名前").fill("Alice");
-await page.getByPlaceholder("検索").fill("React");
-
-// セレクト
-await page.getByLabel("地域").selectOption("Tokyo");
-
-// チェックボックス
-await page.getByLabel("同意する").check();
-
-// キーボード
-await page.keyboard.press("Enter");
-await page.getByLabel("検索").press("Enter");
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>{children}</body>
+    </html>
+  );
+}
 ```
 
-### よく使うアサーション
+`next/font/google` は Google Fonts を自動 self-host 化、`next/font/local` は手元の `.woff2` をビルドに組み込みます。
 
-```ts
-// 要素が見える / 見えない
-await expect(page.getByText("ようこそ")).toBeVisible();
-await expect(page.getByText("エラー")).not.toBeVisible();
+### Self-host vs Google Fonts CDN
 
-// テキストを含む
-await expect(page.locator("h1")).toHaveText("こんにちは、Alice さん");
+| 方式 | 利点 | 欠点 |
+|---|---|---|
+| Google Fonts CDN（`<link href="fonts.googleapis.com">`） | セットアップ簡単 | 外部ドメインへの追加 DNS / 接続 / プライバシー懸念 |
+| Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
+| `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
 
-// URL の確認
-await expect(page).toHaveURL("/dashboard");
-await expect(page).toHaveURL(/\/posts\/\d+/);
+2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
 
-// 値が入っている
-await expect(page.getByLabel("名前")).toHaveValue("Alice");
+### サブセット化
 
-// 件数
-await expect(page.getByRole("listitem")).toHaveCount(3);
-```
+日本語フォント（`Noto Sans JP` 等）はファイルが MB 単位で巨大です。**実際に使う文字だけを抽出した「サブセット」** を配信しないと一気に LCP / CLS が悪化します。
 
-すべて **自動リトライ付き**。「fetch が終わってから出る要素」を待たなくても、`expect(...).toBeVisible()` 自体が最大 5 秒間繰り返しチェックします。
+- ラテン文字だけのページなら `subsets: ["latin"]` で 30KB 程度
+- 日本語ページは `Noto Sans JP` の **第一水準漢字 + 平仮名 + 片仮名 + 数字 + 記号** に絞ったサブセットを用意（数百 KB 程度）
 
-### UI モードで開発する
-
-`npm run e2e:ui` を起動すると、Playwright の UI モードが立ち上がります。
-
-- テスト一覧から個別に実行できる
-- 各ステップの **ブラウザの状態をタイムライン** で確認できる
-- 失敗時の **DOM スナップショット** をクリックで遡れる
-- 「locator picker」で画面要素を選ぶと、推奨セレクタが自動生成される
-
-最初に E2E を書く時は **UI モード必須** です。「どこでクリックすればいいか」「次の状態は何か」を見ながら書けるので、習得が一気に楽になります。
-
-### Codegen で操作を録画
-
-ゼロからテストを書くのは大変です。Playwright には **画面操作を録画してコードを生成する** 機能があります。
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、人間が普通にサイトを操作します。クリック・入力・遷移のたびに、対応する Playwright コードが横のパネルに自動で出てきます。それをコピペして整形すれば、テストの叩き台が一気にできます。
-
-複雑な経路でも、まずは codegen で粗い形を作ってから手で詰めるワークフローが定番です。
-
-### 失敗時の証拠保存
-
-`playwright.config.ts` に `trace: "on-first-retry"` を書いておくと、失敗時に **トレース** が自動保存されます。トレースには:
-
-- 各ステップで送信されたリクエスト
-- DOM スナップショット
-- スクリーンショット
-- ビデオ
-
-が入っており、`npx playwright show-trace trace.zip` で UI モードと同じインターフェースで再生できます。**CI で起きた fail を後から再現できる** のが強みです。
-
-### MSW を E2E でも使う（軽く紹介）
-
-MSW のハンドラは E2E でも流用できます。Playwright の `page.route(...)` でブラウザ側の fetch を MSW Service Worker 経由で横取りする構成にすれば、ユニット / コンポーネント / E2E の **3 層で同じモックレスポンス** を使い回せます。
-
-設定はやや複雑なので本コースでは触れませんが、本格運用ではこのパターンを取ると「ハンドラ定義の二重管理」が無くせる点だけ覚えておいてください。
-
-### E2E はどこに書くか
-
-E2E は遅いので、**書くべき経路** を絞ります。実務でよく投資されるのは:
-
-1. **ログイン → サインイン関連**
-2. **メイン購入 / 課金フロー**
-3. **新規登録 → 重要な初回操作**
-4. **データを書き換える系（CRUD）の代表的な 1 経路**
-
-「すべての画面を網羅する」ような E2E は壊れまくり、メンテコストで死にます。**ビジネスが止まる経路だけ** を 20〜30 ケースくらい用意して守るのが現実解です。
+ビルド時にサブセット化するツール（`subset-font` パッケージ等）や、`next/font/google` の `subsets` 指定で自動化できます。
 
 ## 演習
 
 ### ゴール
 
-- 簡単な Vite + React アプリを起動状態にする
-- Playwright をセットアップする
-- 「トップから About ページに遷移」「フォーム入力 → 送信」の 2 経路を E2E でテストする
-- UI モードで動きを観察する
+- 既存の Next.js プロジェクト（または新規）に `<Image>` を入れる前後で Lighthouse の LCP を比較する
+- `next/font/google` で Google Fonts を self-host 化する
+- DevTools Network タブで画像 / フォントの読み込み順序を観察する
 
-### 途中から始める場合
+### 手順 1: 画像最適化の前後比較（Next.js）
 
-ローカル環境で `create-vite` で React + TS テンプレートを作ります（StackBlitz では Playwright のブラウザ本体を取得できないため、ローカル前提）。
+1. 5 章 で作った Next.js プロジェクト or 新規 `create-next-app` で:
 
-```bash
-npm create vite@latest my-e2e-sample -- --template react-ts
-cd my-e2e-sample
-npm install
-```
+   ```bash
+   npx create-next-app@latest perf-image --typescript --tailwind=false --app
+   cd perf-image
+   ```
 
-### 手順 1: アプリにページを 2 つ追加（ライブラリなしの最小ルーティング）
+2. `app/page.tsx` に大きな画像を **素の `<img>` で** 配置（最初は最適化なし）:
 
-`src/App.tsx` をシンプルに書き換え。`location.pathname` で表示を切り替えるだけの自家製ルーティングを使います（学習用に最小化）。
+   ```tsx
+   export default function Page() {
+     return (
+       <main>
+         <h1>画像比較</h1>
+         <img
+           src="https://picsum.photos/2400/1600"
+           alt="サンプル"
+           style={{ width: 600, height: 400 }}
+         />
+       </main>
+     );
+   }
+   ```
 
-> **補足: この `<a onClick={preventDefault}>` は学習用の最小例**: 自家製ルーティングは `Cmd + クリック`（新タブ）/ `中クリック` / 右クリックメニューの「リンクを開く」のようなブラウザ標準操作を全て壊します。実プロダクトでは **React Router**（Vite 用）や **Next.js の `<Link>`** を使い、自前の `preventDefault` 実装は避けます。本レッスンは Playwright の挙動確認に集中するためにあえて最小化しています。
+3. `npm run build && npm run start` でビルド済みを起動し、Lighthouse を Mobile で計測。LCP / 全体スコアをメモ
+
+4. `<img>` を `<Image>` に置き換え:
+
+   ```tsx
+   import Image from "next/image";
+
+   export default function Page() {
+     return (
+       <main>
+         <h1>画像比較</h1>
+         <Image
+           src="https://picsum.photos/2400/1600"
+           alt="サンプル"
+           width={600}
+           height={400}
+           priority
+         />
+       </main>
+     );
+   }
+   ```
+
+   `next.config.ts` に `picsum.photos` を許可:
+
+   ```ts
+   const nextConfig = {
+     images: {
+       remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
+     },
+   };
+   export default nextConfig;
+   ```
+
+5. もう一度ビルド + Lighthouse。LCP が大幅に改善するはず（数秒 → 1 秒以下）
+
+### 手順 2: `next/font` でフォント
+
+`app/layout.tsx`:
 
 ```tsx
-import { useState } from "react";
+import { Inter } from "next/font/google";
 
-export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+});
 
-  function go(to: string) {
-    window.history.pushState({}, "", to);
-    setPath(to);
-  }
-
-  if (path === "/about") {
-    return (
-      <main>
-        <h1>About</h1>
-        <p>このページは about です。</p>
-        <a
-          href="/"
-          onClick={(e) => {
-            e.preventDefault();
-            go("/");
-          }}
-        >
-          Home に戻る
-        </a>
-      </main>
-    );
-  }
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <main>
-      <h1>Home</h1>
-      <p>Playwright のサンプル。</p>
-      <a
-        href="/about"
-        onClick={(e) => {
-          e.preventDefault();
-          go("/about");
-        }}
-      >
-        About
-      </a>
-
-      <hr />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) setSubmitted(name);
-        }}
-      >
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button type="submit">送信</button>
-      </form>
-
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </main>
+    <html lang="ja" className={inter.className}>
+      <body>{children}</body>
+    </html>
   );
 }
 ```
 
-### 手順 2: Playwright をインストール
+ビルドして Network タブで:
 
-```bash
-npm install -D @playwright/test
-npx playwright install
-```
+- 自分のドメイン（`localhost:3000`）から `.woff2` が配信される
+- `fonts.googleapis.com` への外部リクエストが消える
+- HTML の `<head>` に `<link rel="preload" as="font">` が自動挿入されている
 
-### 手順 3: 設定ファイル
+### 手順 3: 画像のフォーマット確認
 
-`playwright.config.ts`:
+Network タブの **Type** 列で:
 
-```ts
-import { defineConfig } from "@playwright/test";
+- `<img>` 直書き: `jpeg` / `png`
+- `<Image>`: `webp` / `avif`（ブラウザ対応に応じて）
 
-export default defineConfig({
-  testDir: "./e2e",
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",
-  },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-  },
-});
-```
-
-`package.json` の scripts に追加:
-
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
-}
-```
-
-### 手順 4: テストを書く
-
-`e2e/sample.spec.ts`:
-
-```ts
-import { test, expect } from "@playwright/test";
-
-test("トップに Home の見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
-});
-
-test("About リンクで /about に遷移する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
-  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
-});
-
-test("フォーム送信で挨拶が表示される", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("お名前").fill("Alice");
-  await page.getByRole("button", { name: "送信" }).click();
-  await expect(page.getByText("こんにちは、Alice さん")).toBeVisible();
-});
-```
-
-### 手順 5: 実行
-
-UI モードで動きを見ながら:
-
-```bash
-npm run e2e:ui
-```
-
-CI / 自動実行用（ヘッドレス）:
-
-```bash
-npm run e2e
-```
+「Response Headers」の `content-type` も確認できます。
 
 ### 期待出力
 
-UI モードでは画面右側にテスト一覧、中央にブラウザのプレビューが出ます。各テストをクリックすると、各ステップごとの DOM スナップショットが時系列で見られます。
-
-ヘッドレスでは:
-
-```
-Running 3 tests using 1 worker
-
-  ok 1 [chromium] › sample.spec.ts:4:1 › トップに Home の見出しが表示される
-  ok 2 [chromium] › sample.spec.ts:9:1 › About リンクで /about に遷移する
-  ok 3 [chromium] › sample.spec.ts:16:1 › フォーム送信で挨拶が表示される
-
-3 passed (3.5s)
-```
+- 同じ画像でもファイルサイズが半分以下に縮む
+- LCP の数値が劇的に改善
+- フォントの FOIT / FOUT がほぼ気にならないレベル
 
 ### 変える
 
-- `<button>送信</button>` の `<button>` を `<div onclick="...">` に変えてみる。テストの `getByRole("button", ...)` が要素を見つけられず fail する。a11y 的に正しいタグ選びがテストにも効くと体感
-- `playwright.config.ts` の `webServer.command` を `npm run preview` に変えてみる（本番ビルド済みを配信するモード）。本番ビルドで E2E を回せる
-- 失敗するテストを 1 つ作って、`trace.zip` が生成されることを確認。`npx playwright show-trace trace.zip` で再生
+- `<Image priority>` を外してみる。LCP がやや悪化する（`priority` は first view の画像に必須）
+- `next/font/google` の `display: "swap"` を `display: "block"` に変えると、FOIT になることを確認
+- `<Image>` の `placeholder="blur"` を試す（ローカル画像を使う場合のみ）。読み込み中にぼかしが見える
 
 ### 自分で書く
 
-- 「フォームを空のまま送信しても挨拶が出ない」テストを足す
-- `page.getByLabel("お名前")` を `page.locator("input")` のような **実装に依存したセレクタ** に変えてみる。動くが、`<input>` が複数あったら壊れる、という弱さを体感
-
-### codegen を試す（任意）
-
-サーバーを `npm run dev` で別ターミナルから起動した状態で:
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、リンクをクリックしたりフォームに入力したりすると、横のパネルにテストコードが自動生成されます。コピペして `e2e/auto.spec.ts` を作ってみると、自分で書いたものとの違いが見られます。
+- 普段使う画像を `<picture>` でラップして、AVIF / WebP / JPEG のフォールバック構造を手書きで作る
+- `<link rel="preload">` を `<head>` に追加して、特定の画像 / フォントを先読みさせる
 
 ## まとめ
 
-- E2E は本物のブラウザでアプリ全体を動かすテスト。**最重要パスだけ** に絞る
-- **Playwright** は 3 ブラウザを 1 API で扱える、自動待機 / トレース / codegen 完備
-- 設定は `playwright.config.ts` の `webServer` で `npm run dev` の自動起動が定番
-- API は Testing Library と似た書き味（`getByRole` / `getByLabel`）
-- アサーションも `expect(...).toBeVisible()` 等が自動リトライ
-- **UI モード** で対話的にデバッグ、**codegen** で操作を録画してテストコード生成
-- 失敗時の **トレース** で CI のエラーをローカル再現
-- MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
-- ローディング表示には `role="status"` または `aria-busy="true"` を付け、`getByRole('status')` で待ち合わせると、見た目が変わってもテストが安定する
+- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
+- 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
+- **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
+- フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
+- **`font-display: swap`** + **`<link rel="preload">`** が基本
+- **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化

@@ -1,444 +1,487 @@
-# lesson114: React Hook Form の基本
+# lesson114: Web Components 入門
 
 ## ゴール
 
-- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
-- RHF を `npm install` してフォームに導入できる
-- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
-- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
-- `formState.errors` でエラーメッセージを表示できる
-- `defaultValues` で初期値を入れる
-- `watch` / `setValue` / `reset` の使い分けを知る
+- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
+- Shadow DOM でスタイルと DOM を外から隔離できる
+- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
+- `<slot>` で外側から中身を差し込める
+- React との使い分けを判断できる
 
 ## 解説
 
-### 制御コンポーネントの限界
+### Web Components とは
 
-これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
+**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
 
-```tsx
-const [name, setName] = useState("");
-const [email, setEmail] = useState("");
-const [message, setMessage] = useState("");
-// ...
-<input value={name} onChange={(e) => setName(e.target.value)} />
-<input value={email} onChange={(e) => setEmail(e.target.value)} />
-<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
-```
+| 柱 | 役割 |
+|---|---|
+| Custom Elements | 自作の HTML タグを定義 |
+| Shadow DOM | スタイルと DOM を隔離 |
+| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
 
-シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
+作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
 
-- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
-- **コードが冗長**: state と setter の宣言が増える
-- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
-- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
+### なぜ今 Web Components を知るか
 
-これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
+2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
 
-### React Hook Form とは
+- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
+- 会社共通のデザインシステムを **React 依存にせず** 配布したい
+- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
 
-RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
+React コンポーネントは React の中でしか動きません。Web Components は **どこでも動く**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
 
-- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
-- **少ないコード** で大きなフォームを書ける
-- **バリデーション + エラー管理** が組み込み
+### Custom Elements の最小形
 
-2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
-
-### インストール
-
-```bash
-npm install react-hook-form
-```
-
-### 最小のフォーム
-
-`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
-
-```tsx
-import { useForm } from "react-hook-form";
-
-type FormValues = {
-  name: string;
-  email: string;
-};
-
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
-
-  function onSubmit(data: FormValues) {
-    console.log(data);
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-required="true"
-          aria-invalid={errors.name ? "true" : "false"}
-          {...register("name", { required: "必須です" })}
-        />
-        {errors.name && <p role="alert">{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-required="true"
-          aria-invalid={errors.email ? "true" : "false"}
-          {...register("email", { required: "必須です" })}
-        />
-        {errors.email && <p role="alert">{errors.email.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        送信
-      </button>
-    </form>
-  );
-}
-```
-
-主な要素:
-
-- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
-- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
-- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
-- **`formState.errors`**: バリデーションエラーが格納される
-- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
-
-### バリデーションオプション
-
-`register` の第 2 引数で各種ルールを指定できます。
-
-```tsx
-{...register("password", {
-  required: "パスワードは必須です",
-  minLength: { value: 8, message: "8 文字以上で入力してください" },
-  maxLength: { value: 100, message: "100 文字以内で入力してください" },
-  pattern: {
-    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
-    message: "英字と数字を混ぜてください",
-  },
-})}
-```
-
-`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
-
-```tsx
-{...register("age", {
-  validate: (value) => {
-    if (value < 18) return "18 歳以上である必要があります";
-    if (value > 120) return "値が大きすぎます";
-    return true; // OK
-  },
-})}
-```
-
-### `defaultValues` で初期値
-
-編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
-
-```tsx
-const { register, handleSubmit } = useForm<FormValues>({
-  defaultValues: {
-    name: "Alice",
-    email: "alice@example.com",
-  },
-});
-```
-
-非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
-
-```tsx
-const { register, handleSubmit, reset } = useForm<FormValues>();
-
-useEffect(() => {
-  fetch("/api/me")
-    .then((r) => r.json())
-    .then((user) => reset(user));
-}, [reset]);
-```
-
-### `watch` で値を購読
-
-特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
-
-```tsx
-const { watch, register } = useForm<FormValues>();
-const subscribe = watch("subscribe");
-
-return (
-  <>
-    <label>
-      <input type="checkbox" {...register("subscribe")} />
-      購読する
-    </label>
-
-    {subscribe && (
-      <div>
-        <label>頻度</label>
-        <select {...register("frequency")}>
-          <option value="daily">毎日</option>
-          <option value="weekly">毎週</option>
-        </select>
-      </div>
-    )}
-  </>
-);
-```
-
-`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
-
-### `setValue` でプログラム的に値を設定
-
-```tsx
-const { setValue } = useForm<FormValues>();
-
-// 別のボタンや非同期処理から値を入れる
-setValue("name", "Bob");
-```
-
-「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
-
-### `reset` でフォームを初期化
-
-送信成功後にフォームを空にする:
-
-```tsx
-async function onSubmit(data: FormValues) {
-  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
-  reset();  // 入力をクリア
-}
-```
-
-### 送信中の表示
-
-`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
-
-```tsx
-const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
-
-return (
-  <button type="submit" disabled={isSubmitting}>
-    {isSubmitting ? "送信中..." : "送信"}
-  </button>
-);
-```
-
-`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
-
-### アクセシブルなエラー表示
-
-「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
-
-```tsx
-<input
-  id="email"
-  type="email"
-  aria-invalid={errors.email ? "true" : "false"}
-  aria-describedby={errors.email ? "email-error" : undefined}
-  {...register("email", { required: "メールは必須です" })}
-/>
-{errors.email && (
-  <p id="email-error" role="alert">
-    {errors.email.message}
-  </p>
-)}
-```
-
-これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
-
-### エラー表示は色だけに頼らない
-
-フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
-
-1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
-2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
-3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
-
-CSS 例:
-
-```css
-.form-error {
-  color: #b91c1c;
-}
-@media (prefers-color-scheme: dark) {
-  .form-error {
-    color: #fca5a5;
+```js
+class HelloWorld extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = "<p>Hello, Web Components!</p>";
   }
 }
+
+customElements.define("hello-world", HelloWorld);
 ```
+
+HTML で使う:
+
+```html
+<hello-world></hello-world>
+```
+
+ルール:
+
+- クラスは **`HTMLElement` を継承** する
+- `customElements.define(タグ名, クラス)` で登録
+- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
+
+### ライフサイクル
+
+Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
+
+```js
+class MyCounter extends HTMLElement {
+  connectedCallback() {
+    // DOM に追加された時
+    this.render();
+  }
+
+  disconnectedCallback() {
+    // DOM から外された時。リスナー解除などのクリーンアップ
+  }
+
+  static observedAttributes = ["count"];
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    // 監視対象の属性が変わった時
+    if (name === "count") this.render();
+  }
+
+  render() {
+    const count = this.getAttribute("count") ?? "0";
+    this.innerHTML = `<strong>Count: ${count}</strong>`;
+  }
+}
+
+customElements.define("my-counter", MyCounter);
+```
+
+```html
+<my-counter count="3"></my-counter>
+```
+
+`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
+
+### Shadow DOM でスタイルを隔離
+
+普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
+
+```js
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
+        :host {
+          display: block;
+          padding: 16px;
+          border: 1px solid #ccc;
+          border-radius: 8px;
+        }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2>カードタイトル</h2>
+      <p>カードの中身</p>
+    `;
+  }
+}
+customElements.define("my-card", MyCard);
+```
+
+```html
+<my-card></my-card>
+```
+
+- `attachShadow({ mode: "open" })` で shadow tree を作る
+- `:host` は **このカスタム要素自身** を指すセレクタ
+- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
+
+`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
+
+### `<slot>` で外から中身を差し込む
+
+React の `children` に相当するのが `<slot>` です。
+
+```js
+class FancyBox extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
+        header { font-weight: bold; margin-bottom: 8px; }
+      </style>
+      <header><slot name="title">デフォルトタイトル</slot></header>
+      <div><slot>本文が入ります</slot></div>
+    `;
+  }
+}
+customElements.define("fancy-box", FancyBox);
+```
+
+使う側:
+
+```html
+<fancy-box>
+  <span slot="title">カスタムタイトル</span>
+  <p>ここが本文です。</p>
+</fancy-box>
+```
+
+- `<slot>` は **名前なし** のデフォルトスロット
+- `<slot name="title">` は **名前付き** スロット
+- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
+
+### プロパティ / イベント
+
+ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
+
+```js
+class MyToggle extends HTMLElement {
+  #checked = false;
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.render();
+  }
+
+  get checked() { return this.#checked; }
+  set checked(value) {
+    this.#checked = Boolean(value);
+    this.render();
+    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <button>${this.#checked ? "ON" : "OFF"}</button>
+    `;
+    // render() で innerHTML を書き換えるたびに古い button は消えるので、
+    // クリックリスナーは render() 内で「新しい button」に対してだけ付ける
+    this.shadowRoot.querySelector("button").addEventListener("click", () => {
+      this.checked = !this.checked;
+    });
+  }
+}
+customElements.define("my-toggle", MyToggle);
+```
+
+使う側:
+
+```html
+<my-toggle></my-toggle>
+
+<script>
+  const toggle = document.querySelector("my-toggle");
+  toggle.addEventListener("change", (e) => {
+    console.log("ON/OFF:", e.detail.checked);
+  });
+</script>
+```
+
+- プロパティは **クラスの getter / setter** として定義
+- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
+
+### `<template>` で DOM のクローン元を用意
+
+大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
+
+```html
+<template id="card-template">
+  <style>
+    :host { display: block; border: 1px solid #ccc; padding: 12px; }
+  </style>
+  <slot name="title"></slot>
+  <slot></slot>
+</template>
+
+<script>
+  const tpl = document.getElementById("card-template");
+  class MyCardTpl extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({ mode: "open" });
+      shadow.appendChild(tpl.content.cloneNode(true));
+    }
+  }
+  customElements.define("my-card-tpl", MyCardTpl);
+</script>
+```
+
+`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
+
+### React との使い分け
+
+「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
+
+| | Web Components | React |
+|---|---|---|
+| 動く場所 | どの HTML ページでも | React アプリの中だけ |
+| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
+| 型 | TypeScript と相性が微妙 | 強い |
+| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
+| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
+
+**原則**:
+
+- **アプリ内部** の UI → React で書く（DX が圧倒的）
+- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
+- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
+
+React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
+
+ただし、Custom Element が `dispatchEvent` で投げる **CustomEvent**（例: `change` / `select`）を `onChange` のような JSX プロパティで受ける機能は **入っていません**。React のイベントシステムは標準 DOM イベントを合成イベントに繋ぐ仕組みで、Custom Element の独自 CustomEvent は対象外です。CustomEvent を購読したい場合は **`ref` + `addEventListener`** が現実解です。
+
+```tsx
+import { useEffect, useRef } from "react";
+
+function ToggleHost() {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ checked: boolean }>).detail;
+      console.log(detail);
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, []);
+
+  return <my-toggle ref={ref} />;
+}
+```
+
+::: warning TypeScript で使うときは型宣言が必要
+JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。React 19 では `react` モジュールの `JSX` 名前空間を拡張する形が公式の作法です。
+
+```ts
+import "react";
+
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "my-toggle": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      >;
+    }
+  }
+}
+```
+
+`Lit` を使うとデコレータ経由で型が付くので、TypeScript と組み合わせるなら Lit が現実解です。
+:::
+
+### Lit の存在
+
+Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
+
+```js
+import { LitElement, html, css } from "lit";
+
+class MyCard extends LitElement {
+  static styles = css`
+    :host { display: block; padding: 16px; border: 1px solid #ccc; }
+  `;
+  render() {
+    return html`<h2>タイトル</h2><slot></slot>`;
+  }
+}
+customElements.define("my-card", MyCard);
+```
+
+Web Components を本格的に書くなら Lit が現在のデファクト。Google / Adobe / Shopify も使っています。
 
 ## 演習
 
 ### ゴール
 
-- React + TS プロジェクトに RHF を導入する
-- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
-- 必須 / メールパターン / 最大長 のバリデーションを実装
-- 送信時に「送信中...」、成功で「送信しました！」を表示
+- Counter の Web Component を作る
+- Shadow DOM でスタイル隔離を確認する
+- `<slot>` で外から中身を差し込む
 
-### 途中から始める場合
-
-これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest rhf-sample -- --template react-ts
-cd rhf-sample
+npm create vite@latest web-components-sample -- --template vanilla-ts
+cd web-components-sample
 npm install
-npm install react-hook-form
 ```
 
-### `src/ContactForm.tsx`
+### 手順 2: index.html
 
-> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Web Components Demo</title>
+    <style>
+      /* 外側の CSS（Shadow DOM で隔離されるはず） */
+      h2 { color: red; }
+      body { font-family: sans-serif; padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <h2>外側の h2（赤いはず）</h2>
 
-```tsx
-import { useForm } from "react-hook-form";
-import { useState } from "react";
+    <my-card>
+      <span slot="title">内側のタイトル</span>
+      <p>スロットに入る本文</p>
+    </my-card>
 
-type FormValues = {
-  name: string;
-  email: string;
-  message: string;
-};
+    <my-counter start="5"></my-counter>
+    <p id="log">イベントログ: -</p>
 
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
+```
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
+### 手順 3: src/main.ts
 
-  async function onSubmit(data: FormValues) {
-    // 実際は fetch で送信。ここでは 1 秒待つだけ
-    await new Promise((r) => setTimeout(r, 1000));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
+```ts
+// my-card
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2><slot name="title">デフォルトタイトル</slot></h2>
+      <div><slot></slot></div>
+    `;
+  }
+}
+customElements.define("my-card", MyCard);
+
+// my-counter
+class MyCounter extends HTMLElement {
+  #count = 0;
+
+  static observedAttributes = ["start"];
+
+  attributeChangedCallback(name: string, _old: string, value: string) {
+    if (name === "start") {
+      this.#count = Number(value);
+      this.render();
+    }
   }
 
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.#count = Number(this.getAttribute("start") ?? "0");
+    this.render();
+  }
 
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          aria-describedby={errors.name ? "name-error" : undefined}
-          {...register("name", {
-            required: "お名前は必須です",
-            maxLength: { value: 50, message: "50 文字以内で入力してください" },
-          })}
-        />
-        {errors.name && (
-          <p id="name-error" role="alert" className="form-error">
-            {errors.name.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          aria-describedby={errors.email ? "email-error" : undefined}
-          {...register("email", {
-            required: "メールは必須です",
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: "メールアドレスの形式が正しくありません",
-            },
-          })}
-        />
-        {errors.email && (
-          <p id="email-error" role="alert" className="form-error">
-            {errors.email.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          aria-describedby={errors.message ? "message-error" : undefined}
-          {...register("message", {
-            required: "メッセージは必須です",
-            minLength: { value: 10, message: "10 文字以上で入力してください" },
-          })}
-        />
-        {errors.message && (
-          <p id="message-error" role="alert" className="form-error">
-            {errors.message.message}
-          </p>
-        )}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
-  );
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
+        button { padding: 4px 12px; }
+        strong { min-width: 40px; text-align: center; }
+      </style>
+      <button id="dec">-</button>
+      <strong>${this.#count}</strong>
+      <button id="inc">+</button>
+    `;
+    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
+      this.#count++;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
+      this.#count--;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+  }
 }
+customElements.define("my-counter", MyCounter);
+
+// ログ
+const log = document.getElementById("log")!;
+document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
+  const ce = e as CustomEvent<{ count: number }>;
+  log.textContent = `イベントログ: count = ${ce.detail.count}`;
+});
 ```
 
-### `src/App.tsx`
+### 手順 4: 起動して確認
 
-```tsx
-import { ContactForm } from "./ContactForm";
-
-export default function App() {
-  return <ContactForm />;
-}
+```bash
+npm run dev
 ```
+
+ブラウザで以下を確認します。
+
+1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
+2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
+3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
+4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
 
 ### 期待出力
 
-- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
-- メールに `abc` を入れて送信 → メール形式エラー
-- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
-- DevTools の Console に送信値が出る
-
-`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
+- Shadow DOM の中の h2 は青、外側の h2 は赤
+- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
 
 ### 変える
 
-- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
-- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
-- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
+- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認。**注意**: `closed` のままだと `this.shadowRoot!.getElementById(...)` が null 参照で実行時エラーになるため、観察できたら `open` に戻してから他の手順に進む
+- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
+- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
+- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
-- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
+- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
+- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
+- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
 
 ## まとめ
 
-- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
-- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
-- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
-- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
-- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
-- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
-- `isSubmitting` で送信中の UI 制御
+- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
+- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
+- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
+- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
+- プロパティは getter / setter、通知は `CustomEvent` で
+- 本格運用するなら **Lit** が今のデファクト
+- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
+- React 19 以降は Custom Elements の props / event 受け渡しが自然

@@ -1,191 +1,189 @@
-# lesson80: エラーと見つからないページ
+# lesson80: 送信状態とエラー表示
 
 ## ゴール
 
-- レンダリング中に発生した例外を `error.tsx` で捕まえて、壊れた画面の代わりにエラー画面を出せます。
-- `notFound()` を呼んで `not-found.tsx` を表示できます。
-- `error.tsx` が担当する範囲と、Server Actions のフォームエラー（「送信状態とエラー表示」）の担当範囲が **別物** であることを理解しています。
+- `useActionState` の正しいシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を覚えます。
+- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せます。
+- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書けます。
+- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を間違えずに使えます。
 
 ## 解説
 
-### ページの事故を 2 種類に分ける
+### なぜエラー用の別フックが必要か
 
-Web アプリで出会う「いつもの画面が出ない」状況は、Next.js では次の 2 つに分けて扱います。
+「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
 
-1. **存在しない URL / データ**: 記事 ID が存在しない、ユーザーが削除済みなど。→ `not-found.tsx`
-2. **実行中の例外**: fetch が失敗、`throw new Error(...)` が飛んだ、など。→ `error.tsx`
+エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
-この 2 つをそれぞれ専用のファイルで受け止めます。
-
-### `not-found.tsx` と `notFound()`
-
-該当データが見つからないときは、**`next/navigation`** から `notFound()` 関数を呼び出します。すると同じディレクトリ（またはその上位ディレクトリ）の `not-found.tsx` が表示されます。
-
-```
-app/
-└── posts/
-    └── [id]/
-        ├── page.tsx
-        └── not-found.tsx
-```
-
-```tsx
-// app/posts/[id]/page.tsx
-import { notFound } from "next/navigation";
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  // ...探す
-  const post = posts.find((p) => String(p.id) === id);
-  if (!post) {
-    notFound(); // ここで実行は止まり、not-found.tsx に切り替わる
-  }
-  return <div>{post.title}</div>;
-}
-```
-
-- `notFound()` は呼ぶだけで良いです。`return` は書きません（書いても問題はありませんが、`notFound()` が例外を投げる仕組みで実行を止めるため、それ以降は走りません）。
-- `not-found.tsx` はそのディレクトリに置きます。上位のディレクトリに置いておけば、配下のページ全部で共通利用できます。
-
-> **`notFound()` は HTTP ステータスも 404 にする**: 単に「見つかりません」と画面に書くだけだと、HTTP ステータスは **200 OK** のままです。検索エンジンは 200 で返ってきたページを「正常に表示されている」と判断し、**「見つかりません」というページをインデックスに入れてしまう** （= ソフト 404）リスクがあります。`notFound()` を呼ぶと Next.js が **正しく 404 ステータス** を返すため、検索エンジンに「このページは存在しない」と伝わります。SEO の観点でも `notFound()` は重要です。
-
-### `error.tsx`
-
-レンダリング中に `throw` された例外を捕まえるのが `error.tsx` です。**Client Component として書く必要があります**（`"use client"` が必要です）。エラーの情報とリトライ関数を props で受け取ります。
-
-::: tip 4 章 の Error Boundary との関係
-これは 4 章 の **「Error Boundary と Suspense」** で自作したクラスコンポーネント版 Error Boundary を、Next.js が **ファイル規約** に押し込めた仕組みです。`error.tsx` を置くと Next.js が裏で Error Boundary を組み立てて配下のページを包んでくれます。
-:::
-
-```
-app/
-└── posts/
-    └── [id]/
-        ├── page.tsx
-        └── error.tsx
-```
+### `useActionState` のシグネチャ（絶対に覚える）
 
 ```tsx
 "use client";
 
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
-};
+import { useActionState } from "react";
+import { addTodo } from "./actions";
 
-export default function Error({ error, reset }: Props) {
+type AddTodoState = { error?: string };
+
+const initialState: AddTodoState = {};
+
+const [state, formAction, isPending] = useActionState(addTodo, initialState);
+```
+
+- 第 1 引数: **action**（Server Action の関数）
+- 第 2 引数: **初期状態**
+- 戻り値: `[state, formAction, isPending]` の 3 要素タプル
+
+引数の順に注意してください。**action が第 1 引数**、初期状態が第 2 引数です。逆にしないでください。
+
+戻り値の中身:
+
+- `state`: 現在のアクション戻り値（`action` が最後に `return` したもの）。初回は `initialState` です。
+- `formAction`: **`<form action={formAction}>` に渡す**、ラップ済みの関数です。元の action ではなくこちらを渡します。
+- `isPending`: 送信中かどうかの真偽値です。
+
+### Server Action のシグネチャを変える
+
+`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
+
+```ts
+"use server";
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {}; // 成功
+}
+```
+
+- 第 1 引数が `prevState`（前回のアクションの戻り値）です。使わなくても受け取る必要があります。
+- 第 2 引数が `FormData` です。
+- 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
+
+「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
+
+### `useFormStatus` は `<form>` の **子** で呼ぶ
+
+`useFormStatus` は「そのフォームが送信中かどうか」を取るフックです。重要な制約があります。
+
+- **import 元は `react-dom`** です（`react` ではありません）。
+- **`<form>` の子コンポーネント内で呼ぶ必要があります**。フォーム本体（`<form>` を return しているコンポーネント）の中では呼べません。
+
+```tsx
+"use client";
+
+import { useFormStatus } from "react-dom";
+
+export function SubmitButton() {
+  const { pending } = useFormStatus();
   return (
-    <div>
-      <h1>問題が発生した</h1>
-      <p>{error.message}</p>
-      <button onClick={reset}>もう一度試す</button>
-    </div>
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
   );
 }
 ```
 
-- 1 行目に `"use client"` を書きます。
-- `error` は `Error` オブジェクトです。本番ビルドでは `message` は潰されます（情報漏れ防止）。開発中は読めます。
-- `reset()` を呼ぶとページを再レンダリングしようとします。
+送信ボタンを別コンポーネントに切り出し、その中で `useFormStatus()` を呼びます。これが定番パターンです。
 
-### `error.tsx` の範囲は「レンダリング中」
+### import 元の違い（詰まる人が多い）
 
-ここが混同しやすいポイントです。**`error.tsx` はレンダリング中の例外だけを拾います**。
+両者は見た目が似ていますが import 元が違います。**太字で強調**:
 
-- Server Component の中で `throw` / `fetch` 失敗 → `error.tsx` で拾えます。
-- Server Actions のフォーム送信で「空入力」のようなバリデーションエラー → `error.tsx` では **拾いません**。
+- **`useActionState` は `react` から**
+- **`useFormStatus` は `react-dom` から**
 
-Server Actions のフォームエラーは、例外を投げる代わりに **戻り値でエラー情報を返す** 設計になっています。「送信状態とエラー表示」で扱う `useActionState` がその受け皿です。フォーム送信のエラーを `error.tsx` に落とそうとしても動かないので、混同しないでください。
+間違えると「そんな export はない」というエラーが出ます。最初のうちは毎回見比べながら書くと良いです。
 
-まとめると:
+### 冪等性と二重送信への備え
 
-| 事故の種類 | 担当 |
-|---|---|
-| 存在しない ID / ユーザー | `notFound()` + `not-found.tsx` |
-| fetch 失敗・レンダリング中の `throw` | `error.tsx` |
-| フォームの入力エラー | 「送信状態とエラー表示」の `useActionState`（戻り値） |
+`isPending` でボタンを `disabled` にすれば、ユーザーが送信中にもう一度ボタンを押すことは防げます。ただし、これはクライアント側の親切な UI でしかなく、本番では次のような事態に備えてサーバー側でも対策します。
+
+- ユーザーが「送信」を押した直後に **ネットワーク切断** で結果が返ってこず、**手動でリロード後に再送信** する
+- ブラウザの戻る/進む / フォームの再送信ダイアログで **同じリクエストが 2 回飛ぶ**
+
+「同じ操作が 2 回届いても結果が変わらない」という性質を **冪等性** と呼びます。Server Action / API を冪等にする実務の定番パターンは次のとおりです。
+
+- **クライアントが `requestId`（ランダム UUID）を生成して送る**: サーバーは `requestId` を DB のユニーク制約付きで保存し、2 回目は無視する
+- **state machine**: TODO の `status` が `done` のときに再度 `done` 化する操作は no-op にする
+- **upsert / `ON CONFLICT DO NOTHING`**: 同じ ID の挿入を 2 回受けてもエラーにせず無視
+
+本コースでは扱いませんが、`useActionState` で `isPending` を見て disabled にする UI 側の対策と、Server 側の冪等性は **両方そろってはじめて安全** という前提を頭に入れておきます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「動的ルート」で作った `/posts/[id]` を前提にしています。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Actions の最小形」の `addTodo` を前提にしています。
 
 <details>
 <summary>出発点のファイル</summary>
 
-**`app/posts/page.tsx`**
+**`app/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+**`app/actions.ts`**
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export type AddTodoResult = { ok: true } | { ok: false; error: string };
+
+export async function addTodo(formData: FormData): Promise<AddTodoResult> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
+}
+```
+
+**`app/todos/page.tsx`**
 
 ```tsx
-import Link from "next/link";
+import { addTodo, listTodos } from "../actions";
 
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+export default async function TodosPage() {
+  const todos = await listTodos();
 
   return (
     <>
-      <h1>記事一覧</h1>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
       <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <Link href={`/posts/${post.id}`}>
-              <strong>#{post.id}</strong> {post.title}
-            </Link>
-          </li>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
         ))}
       </ul>
     </>
   );
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    return (
-      <>
-        <h1>見つかりません</h1>
-        <p>ID: {id} の記事は存在しない。</p>
-      </>
-    );
-  }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
-}
-```
-
-**`app/posts/loading.tsx`**
-
-```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
 }
 ```
 
@@ -195,111 +193,175 @@ export default function Loading() {
 
 これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順 1: `not-found.tsx` を置く
+### 手順の進め方（重要）
 
-`app/posts/[id]/not-found.tsx` を新規作成します。
+本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全です。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進めましょう。
 
-```tsx
-import Link from "next/link";
+順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短いです。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すと良いです:
 
-export default function NotFound() {
-  return (
-    <>
-      <h1>記事が見つからない</h1>
-      <p>指定された ID の記事は存在しない。</p>
-      <Link href="/posts">一覧に戻る</Link>
-    </>
-  );
+1. 新しいファイル `app/todos/TodoForm.tsx` を先に **作るだけ作る**（import する `addTodo` の型不一致でエラーが出るが、そのまま進めます）
+2. `app/todos/page.tsx` で `<form>` ブロックを `<TodoForm />` に差し替え
+3. 最後に `app/actions.ts` の `addTodo` を `(prevState, formData) => newState` 形に書き換え
+
+このドキュメント上の掲載は **「どれを書けばいいか」を最初に見せる** ために 手順 1（actions.ts）から順に並べていますが、手を動かす順番は上記の 1 → 2 → 3 でも構いません。どちらでも最終的には同じ形になります。
+
+### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
+
+`app/actions.ts` を書き換えます。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export type AddTodoState = { error?: string };
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
 }
-```
 
-### 手順 2: 詳細ページで `notFound()` を呼ぶ
-
-`app/posts/[id]/page.tsx` を書き換えます。見つからないときは `notFound()` を呼ぶ形に変更します。
-
-```tsx
-import { notFound } from "next/navigation";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    notFound();
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のまま追加はできない" };
   }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
 }
 ```
 
-### 手順 3: `error.tsx` を置く
+- 戻り値を `AddTodoState` 型にし、成功時は `{}`、失敗時は `{ error: "..." }` を返します。
+- `prevState` は受け取りますが今回は使いません（それで OK です）。
 
-`app/posts/[id]/error.tsx` を新規作成します。
+### 手順 2: フォームを Client Component に切り出す
+
+`useActionState` は Client Component のフックなので、フォーム部分だけを別ファイルに分離します。
+
+`app/todos/TodoForm.tsx`:
 
 ```tsx
 "use client";
 
-type Props = {
-  error: Error & { digest?: string };
-  reset: () => void;
-};
+import { useActionState } from "react";
+import { useFormStatus } from "react-dom";
+import { addTodo, type AddTodoState } from "../actions";
 
-export default function Error({ error, reset }: Props) {
+const initialState: AddTodoState = {};
+
+function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
+}
+
+export function TodoForm() {
+  const [state, formAction, isPending] = useActionState(addTodo, initialState);
+
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.error && <p className="error">{state.error}</p>}
+      {isPending && <p>通信中...</p>}
+    </form>
+  );
+}
+```
+
+ポイント:
+
+- 1 行目 `"use client"` です。
+- **`useActionState` は `react` から import** します。
+- **`useFormStatus` は `react-dom` から import** します。
+- `<form action={formAction}>` に渡すのは **`formAction`** です（`addTodo` ではありません）。
+- `SubmitButton` を別コンポーネントに切り出して、その中で `useFormStatus()` を呼びます。
+- `state.error` があるときだけ `<p>` に赤文字で表示します。
+- `isPending` でも「通信中...」を出します（冗長ですが違いを確認するためです）。
+
+### 手順 3: `/todos` ページで差し替える
+
+`app/todos/page.tsx` の `<form>` を `<TodoForm />` に差し替えます。
+
+```tsx
+import { listTodos } from "../actions";
+import { TodoForm } from "./TodoForm";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
   return (
     <>
-      <h1>読み込み中に問題が発生した</h1>
-      <p>{error.message}</p>
-      <button onClick={reset}>もう一度試す</button>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
     </>
   );
 }
 ```
 
-### 手順 4: わざとエラーを起こす
+`page.tsx` は Server Component のままです。Client の `TodoForm` を呼ぶだけなので `"use client"` は不要です。
 
-`app/posts/[id]/page.tsx` の fetch URL をタイポで壊します（例: `typicodee`）。
+### 手順 4: エラー用の CSS
 
-```tsx
-const res = await fetch("https://jsonplaceholder.typicodee.com/posts");
+`app/globals.css` にエラー表示のスタイルを追加します。
+
+```css
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
+}
+
+@media (prefers-color-scheme: dark) {
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
+  }
+}
 ```
-
-このままでは `res.json()` の手前で fetch が失敗し、例外が飛びます。`error.tsx` が表示されます。
 
 ### 期待出力
 
-1. `/posts/1` にアクセス → タイポ URL のせいで `error.tsx` の「読み込み中に問題が発生した」が表示されます。
-2. 「もう一度試す」ボタン → 同じエラーが再発します（URL を直さない限り）。
-3. URL を正しい `typicode.com` に戻して再読み込み → 通常どおり記事が表示されます。
-4. `/posts/999` にアクセス（存在しない ID）→ `not-found.tsx` の「記事が見つからない」と「一覧に戻る」リンクが表示されます。
-5. エラー画面と not-found 画面は **別のファイルで扱われている** ことを確認しましょう。
+1. `/todos` を開いて、何も入力せずに「追加」を押す → 下に赤文字で「空のまま追加はできない」が表示されます（薄い赤背景）。
+2. 「買い物」と入力して「追加」を押す → エラー表示が消え、一覧に「買い物」が追加されます。
+3. 何度か連打する → 送信中はボタンが disabled（グレー）になり「送信中...」と表示されます。隣に「通信中...」も出ます。
+4. DevTools の Network タブを開いておくと、送信ごとに POST が飛んでいるのが見えます。
+
+### よくある間違い
+
+- `useActionState` を `react-dom` から import しようとして「export がない」エラーになる → `react` から import します。
+- `useFormStatus` を `<form>` を返しているコンポーネント自身で呼んでしまう → `pending` が常に `false` になります。子コンポーネントに切り出しましょう。
+- `useActionState(initialState, addTodo)` のように引数を逆にする → 型エラーです。**action が第 1 引数**、初期状態が第 2 引数です。
+- `<form action={addTodo}>` と元の関数を渡す → エラー状態がうまく繋がりません。`<form action={formAction}>` と **ラップ済み** の関数を渡しましょう。
 
 ### 変えてみる
 
-1. `not-found.tsx` にイラストや再検索用のテキストを足して、よりユーザーに優しい表示にしましょう。
-2. `error.tsx` の「もう一度試す」の下に `<Link href="/">トップに戻る</Link>` を追加しましょう。
-3. `notFound()` を呼ぶ代わりに直接 `throw new Error("not found")` としてみましょう → `error.tsx` が出ることを確認します（`notFound()` を使わないと 404 ではなく 500 系扱いになる、という違いを体感できます）。
+1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちを」など）。
+2. エラーの種類を増やしましょう: 先頭の空白文字だけで追加しようとしたときは「空白だけでは追加できない」、5 文字以下のみ許可して「5 文字以内にする」など、`addTodo` 側の判定を足してみましょう。
+3. `useActionState` の初期状態を `{ error: "まずは何か入力" }` にして、初期表示でエラーが出る挙動を確認しましょう（確認したら `{}` に戻します）。
 
 ### 自分で書く
 
-「存在しないユーザー ID のときの `not-found.tsx`」を `/users/[id]/` 配下に自力で追加してみましょう（「動的ルート」の「自分で書く」で `/users/[id]/page.tsx` を作っていればその続きです）。見た目は posts 側と同じレベルで良いです。
+「Server Actions の最小形」の「自分で書く」で作った `/memo` ページを、同じ要領で「空入力エラー + 送信中無効化」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出し、`SubmitButton` で `useFormStatus` を使います。
 
 ## まとめ
 
-- 「見つからない」ときは `notFound()` + `not-found.tsx` です。
-- 「レンダリング中の例外」は `error.tsx` です（`"use client"` 必須）。
-- 2 つは担当範囲が違います。
+- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚えましょう。
+- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
+- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
+- **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。

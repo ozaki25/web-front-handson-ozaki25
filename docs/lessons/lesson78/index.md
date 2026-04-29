@@ -1,316 +1,305 @@
-# lesson78: `next/font` でフォント
+# lesson78: エラーと見つからないページ
 
 ## ゴール
 
-- Web フォントを `next/font/google` と `next/font/local` で読み込めます。
-- `font.className` をルートレイアウトの `<html>` や `<body>` に付けて、全ページに適用できます。
-- `display` のデフォルトが `"swap"` であること（システムフォント → Web フォントへ差し替わる）を理解できます。
-- 適用前と適用後の見た目の違いを目で確認できます。
+- レンダリング中に発生した例外を `error.tsx` で捕まえて、壊れた画面の代わりにエラー画面を出せます。
+- `notFound()` を呼んで `not-found.tsx` を表示できます。
+- `error.tsx` が担当する範囲と、Server Actions のフォームエラー（「送信状態とエラー表示」）の担当範囲が **別物** であることを理解しています。
 
 ## 解説
 
-### `<link href="...">` でフォント読み込みの何が辛いか
+### ページの事故を 2 種類に分ける
 
-素の HTML では、Google Fonts の使い方として次のように書くのが定番でした。
+Web アプリで出会う「いつもの画面が出ない」状況は、Next.js では次の 2 つに分けて扱います。
 
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">
+1. **存在しない URL / データ**: 記事 ID が存在しない、ユーザーが削除済みなど。→ `not-found.tsx`
+2. **実行中の例外**: fetch が失敗、`throw new Error(...)` が飛んだ、など。→ `error.tsx`
+
+この 2 つをそれぞれ専用のファイルで受け止めます。
+
+### `not-found.tsx` と `notFound()`
+
+該当データが見つからないときは、**`next/navigation`** から `notFound()` 関数を呼び出します。すると同じディレクトリ（またはその上位ディレクトリ）の `not-found.tsx` が表示されます。
+
+```
+app/
+└── posts/
+    └── [id]/
+        ├── page.tsx
+        └── not-found.tsx
 ```
 
-これだと次の問題があります。
+```tsx
+// app/posts/[id]/page.tsx
+import { notFound } from "next/navigation";
 
-- **外部ホストに毎回アクセス**: ユーザーのブラウザが `fonts.googleapis.com` と `fonts.gstatic.com` の 2 つに追加接続する。
-- **プライバシー**: Google にユーザーの IP が送られる（国・地域によっては規制対象）。
-- **フォントファイルが重い**: 全グリフが送られてしまう可能性がある。
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  // ...探す
+  const post = posts.find((p) => String(p.id) === id);
+  if (!post) {
+    notFound(); // ここで実行は止まり、not-found.tsx に切り替わる
+  }
+  return <div>{post.title}</div>;
+}
+```
 
-`next/font` はこれらを解決します。
+- `notFound()` は呼ぶだけで良いです。`return` は書きません（書いても問題はありませんが、`notFound()` が例外を投げる仕組みで実行を止めるため、それ以降は走りません）。
+- `not-found.tsx` はそのディレクトリに置きます。上位のディレクトリに置いておけば、配下のページ全部で共通利用できます。
 
-- **ビルド時に自サーバーへフォントファイルをコピー**（自ホスト化）。ユーザーは Google に直接アクセスしません。
-- 使っている文字だけを含む **サブセット** を自動生成します。
-- フォントの CSS 変数やクラス名を React 側から参照できるようにします。
+> **`notFound()` は HTTP ステータスも 404 にする**: 単に「見つかりません」と画面に書くだけだと、HTTP ステータスは **200 OK** のままです。検索エンジンは 200 で返ってきたページを「正常に表示されている」と判断し、**「見つかりません」というページをインデックスに入れてしまう** （= ソフト 404）リスクがあります。`notFound()` を呼ぶと Next.js が **正しく 404 ステータス** を返すため、検索エンジンに「このページは存在しない」と伝わります。SEO の観点でも `notFound()` は重要です。
 
-### `next/font/google` の使い方
+### `error.tsx`
+
+レンダリング中に `throw` された例外を捕まえるのが `error.tsx` です。**Client Component として書く必要があります**（`"use client"` が必要です）。エラーの情報とリトライ関数を props で受け取ります。
+
+::: tip 4 章 の Error Boundary との関係
+これは 4 章 の **「Error Boundary と Suspense」** で自作したクラスコンポーネント版 Error Boundary を、Next.js が **ファイル規約** に押し込めた仕組みです。`error.tsx` を置くと Next.js が裏で Error Boundary を組み立てて配下のページを包んでくれます。
+:::
+
+```
+app/
+└── posts/
+    └── [id]/
+        ├── page.tsx
+        └── error.tsx
+```
 
 ```tsx
-import { Inter } from "next/font/google";
+"use client";
 
-const inter = Inter({ subsets: ["latin"] });
+type Props = {
+  error: Error & { digest?: string };
+  reset: () => void;
+};
 
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function Error({ error, reset }: Props) {
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <div>
+      <h1>問題が発生した</h1>
+      <p>{error.message}</p>
+      <button onClick={reset}>もう一度試す</button>
+    </div>
   );
 }
 ```
 
-- `next/font/google` から **使いたいフォント名を名前付き import** します（`Inter`、`Roboto`、`Noto_Sans_JP` など）。
-- 関数として呼び出し、`subsets` を指定します（`["latin"]` / `["japanese"]` など）。
-- 戻り値の `inter` は `{ className, style, variable }` を持つオブジェクトです。
-- `className` を `<html>` か `<body>` に付けると、そのフォントが配下全体に適用されます。
+- 1 行目に `"use client"` を書きます。
+- `error` は `Error` オブジェクトです。本番ビルドでは `message` は潰されます（情報漏れ防止）。開発中は読めます。
+- `reset()` を呼ぶとページを再レンダリングしようとします。
 
-### `display` のデフォルトは `"swap"`
+### `error.tsx` の範囲は「レンダリング中」
 
-`next/font` の `display` オプションのデフォルトは **`"swap"`** です。**フォント読込中はシステムフォント（ゴシックなど）で表示し、Web フォントが届いたら差し替わる** 動きになります。
+ここが混同しやすいポイントです。**`error.tsx` はレンダリング中の例外だけを拾います**。
 
-- 初期表示が速い（FOIT = Flash of Invisible Text が起きにくい）
-- 代わりに、読み込み完了の瞬間にフォントが切り替わる FOUT（Flash of Unstyled Text）が起きる可能性がある
+- Server Component の中で `throw` / `fetch` 失敗 → `error.tsx` で拾えます。
+- Server Actions のフォーム送信で「空入力」のようなバリデーションエラー → `error.tsx` では **拾いません**。
 
-本レッスンではこのデフォルトをそのまま使います。`display` を明示する必要はありません。
+Server Actions のフォームエラーは、例外を投げる代わりに **戻り値でエラー情報を返す** 設計になっています。「送信状態とエラー表示」で扱う `useActionState` がその受け皿です。フォーム送信のエラーを `error.tsx` に落とそうとしても動かないので、混同しないでください。
 
-### フォント差し替え時の CLS と `next/font` の自動対策
+まとめると:
 
-「読込中はシステムフォント → 届いたら Web フォント」と差し替わるとき、文字幅の差で **要素の高さや改行位置がずれて画面がガタッと動く** ことがあります。これは Core Web Vitals の **CLS**（Cumulative Layout Shift）として計測される、SEO 上もマイナスの現象です。
-
-`next/font` はこの対策を **自動で** 入れています。
-
-- フォントメトリクス（`ascent-override` / `descent-override` / `size-adjust` 等）を **ビルド時に計測** し、フォールバックフォントの寸法を Web フォントに近づけて `@font-face` に書き出す
-- 結果として「フォントが入れ替わってもレイアウトが大きく動かない」状態を作ってくれる
-
-学習者は何も書かなくて構いませんが、「実務で他のフォント読み込み手段（`<link>` 直書きなど）を使うときは CLS 対策を自分でやる必要がある」「`next/font` を使えばこの最適化が自動で付く」が `next/font` を使う一番の理由です。
-
-複数フォントを使う場合は、メインに使う 1 つだけ `preload: true`（既定）にし、残りは `preload: false` にするとリクエスト数を減らせます。
-
-### `next/font/local` の使い方
-
-ローカルの `.woff2` ファイルを使う場合は次のように書きます。
-
-```tsx
-import localFont from "next/font/local";
-
-const myFont = localFont({
-  src: "./MyFont.woff2",
-});
-```
-
-本コースでは Google Fonts のみを扱うので `next/font/google` に集中します。`next/font/local` は存在だけ知っておきましょう。
-
-### 日本語フォントの注意
-
-日本語の Google Font（`Noto Sans JP` など）は、ラテン文字より **グリフ数が遥かに多い** ため、サブセットを指定しないと重くなりがちです。本演習では `Noto_Sans_JP` を使いつつ、全体には `Inter` を、見出しにだけ日本語フォントを当てる形を試します。
-
-### `font.className` の正体
-
-`next/font` の `className` は、**ビルド時に生成される固有のクラス名** です（見た目は `__className_abc123` のような自動生成の文字列になります）。中身は `font-family`、`font-weight`、`font-display: swap` などの CSS 宣言が自動的に書き込まれています。
-
-学習者が自分で `@font-face { ... }` を書く必要はありません。`className` を付けるだけで完結します。
+| 事故の種類 | 担当 |
+|---|---|
+| 存在しない ID / ユーザー | `notFound()` + `not-found.tsx` |
+| fetch 失敗・レンダリング中の `throw` | `error.tsx` |
+| フォームの入力エラー | 「送信状態とエラー表示」の `useActionState`（戻り値） |
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/layout.tsx` に `next/font/google` の import と `className` を足すだけなので、このレッスンより前のプロジェクトが無くても動きます。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「動的ルート」で作った `/posts/[id]` を前提にしています。
+
+<details>
+<summary>出発点のファイル</summary>
+
+**`app/posts/page.tsx`**
+
+```tsx
+import Link from "next/link";
+
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  return (
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <Link href={`/posts/${post.id}`}>
+              <strong>#{post.id}</strong> {post.title}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
+
+**`app/posts/[id]/page.tsx`**
+
+```tsx
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  const post = posts.find((p) => String(p.id) === id);
+
+  if (!post) {
+    return (
+      <>
+        <h1>見つかりません</h1>
+        <p>ID: {id} の記事は存在しない。</p>
+      </>
+    );
+  }
+
+  return (
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
+  );
+}
+```
+
+**`app/posts/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
+}
+```
+
+</details>
 
 ### 前回のプロジェクトを開く
 
-これまでのプロジェクトを開き直しましょう。
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順 1: 適用前の見た目を記録する
+### 手順 1: `not-found.tsx` を置く
 
-まず、`/about` を開いてスクショを 1 枚撮っておきます（または目で覚えておきます）。これが「システムフォント」の状態です。
-
-ASCII 図で表すと次のような雰囲気です（ブラウザやフォント設定で変わります）。
-
-```
-+---------------------------------------+
-| Home | About | Todos                  |
-+---------------------------------------+
-|  自己紹介                             |  ← システムゴシック
-|  Web フロントエンドを学び中です。    |     角ばった一般的な表示
-|                                       |
-|  好きなもの                           |
-|  [画像] コーヒー                      |
-|  [画像] 本                            |
-|  [画像] 散歩                          |
-+---------------------------------------+
-```
-
-日本語は OS のシステムフォント（macOS なら Hiragino、Windows なら Yu Gothic、など）で表示されています。
-
-### 手順 2: `Inter` をルートレイアウトに適用
-
-`app/layout.tsx` を次のように書き換えます。
+`app/posts/[id]/not-found.tsx` を新規作成します。
 
 ```tsx
-import type { ReactNode } from "react";
 import Link from "next/link";
-import { Inter } from "next/font/google";
-import "./globals.css";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata = {
-  title: "My Next App",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default function NotFound() {
   return (
-    <html lang="ja" className={inter.className}>
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
+    <>
+      <h1>記事が見つからない</h1>
+      <p>指定された ID の記事は存在しない。</p>
+      <Link href="/posts">一覧に戻る</Link>
+    </>
   );
 }
 ```
 
-ポイント:
+### 手順 2: 詳細ページで `notFound()` を呼ぶ
 
-- `import { Inter } from "next/font/google";` を追加。
-- `const inter = Inter({ subsets: ["latin"] });` をモジュール先頭に。
-- `<html>` の `className={inter.className}` を付与。
-
-保存すると、StackBlitz のビルドが走り、プレビューが更新されます。
-
-### 期待出力: 適用後の見た目
-
-もう一度 `/about` を開きます。今度は **欧文部分が Inter** で表示されます。日本語はまだシステムフォントのままです。
-
-ASCII 図で表すとこう変わります。
-
-```
-+---------------------------------------+
-| Home | About | Todos   ← Inter に変化 |
-+---------------------------------------+
-|  自己紹介                             |  ← 日本語はシステムフォント
-|  Web フロントエンドを学び中です。    |     Web → Web は Inter で表示
-|                                       |
-|  Cards                                |  ← ラテン文字は丸みのある Inter
-+---------------------------------------+
-```
-
-英字の「Home / About / Todos」、本文中の「Web」などの **ラテン文字が Inter に変わっている** ことを、適用前スクショと見比べて確認します。
-
-どこが違って見えるかのヒント:
-
-- Inter は可読性重視の現代的なサンセリフ。特に数字とアルファベットの字形（例: `a`、`g`、`1`、`4`）が、システムゴシックと見分けやすいです。
-- 字間（トラッキング）も少し広くなります。
-
-### 手順 3: 日本語は `Noto_Sans_JP` を見出しに当てる
-
-日本語の本文も Web フォントにしたい場合は、`Noto_Sans_JP` を併用します。ここでは「見出しだけ `Noto_Sans_JP`、本文は Inter + システム日本語フォント」の使い分けをやってみます。
-
-`app/layout.tsx` を次のように拡張します。
+`app/posts/[id]/page.tsx` を書き換えます。見つからないときは `notFound()` を呼ぶ形に変更します。
 
 ```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { Inter, Noto_Sans_JP } from "next/font/google";
-import "./globals.css";
+import { notFound } from "next/navigation";
 
-const inter = Inter({ subsets: ["latin"] });
-const notoJp = Noto_Sans_JP({
-  subsets: ["latin"],
-  weight: ["500", "700"],
-});
-
-export const metadata = {
-  title: "My Next App",
+type Post = {
+  id: number;
+  title: string;
+  body: string;
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
+  const post = posts.find((p) => String(p.id) === id);
+
+  if (!post) {
+    notFound();
+  }
+
   return (
-    <html lang="ja" className={inter.className}>
-      <body>
-        <header className={`site-header ${notoJp.className}`}>
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
   );
 }
 ```
 
-ポイント:
+### 手順 3: `error.tsx` を置く
 
-- 2 つのフォントを同時に呼べます。
-- `Noto_Sans_JP` は **アンダースコア区切り** のインポート名です（ハイフン付きのフォント名はアンダースコアに置き換わります）。
-- `weight` を `["500", "700"]` に絞って、不要なウェイトをダウンロードさせません。
-- `className` は **テンプレートリテラルで複数合成** できます（`${notoJp.className}` をヘッダーだけに付与）。
+`app/posts/[id]/error.tsx` を新規作成します。
 
-> `subsets` に `"japanese"` を指定すると日本語グリフも含まれますが、**ファイルが大きくなる** ので本演習では `"latin"` のみにし、日本語はシステムフォントに任せる割り切りにします。必要な読者は `subsets: ["latin", "japanese"]` を試してみてください。
+```tsx
+"use client";
 
-### 期待出力（再度の対比）
+type Props = {
+  error: Error & { digest?: string };
+  reset: () => void;
+};
 
-ブラウザで `/about` を開いて手順 2 との違いを見ます。
-
+export default function Error({ error, reset }: Props) {
+  return (
+    <>
+      <h1>読み込み中に問題が発生した</h1>
+      <p>{error.message}</p>
+      <button onClick={reset}>もう一度試す</button>
+    </>
+  );
+}
 ```
-+---------------------------------------+
-| Home | About | Todos   ← Noto Sans JP |
-+---------------------------------------+
-|  自己紹介   ← 本文は Inter + システム  |
-|  ...                                  |
-+---------------------------------------+
+
+### 手順 4: わざとエラーを起こす
+
+`app/posts/[id]/page.tsx` の fetch URL をタイポで壊します（例: `typicodee`）。
+
+```tsx
+const res = await fetch("https://jsonplaceholder.typicodee.com/posts");
 ```
 
-ヘッダーの文字が Noto Sans JP の統一感ある字形になり、本文と少し印象が変わります。ヘッダーの日本語は現時点では入っていないので、差分は欧文（Home / About / Todos）の字形で見ることになります。
+このままでは `res.json()` の手前で fetch が失敗し、例外が飛びます。`error.tsx` が表示されます。
+
+### 期待出力
+
+1. `/posts/1` にアクセス → タイポ URL のせいで `error.tsx` の「読み込み中に問題が発生した」が表示されます。
+2. 「もう一度試す」ボタン → 同じエラーが再発します（URL を直さない限り）。
+3. URL を正しい `typicode.com` に戻して再読み込み → 通常どおり記事が表示されます。
+4. `/posts/999` にアクセス（存在しない ID）→ `not-found.tsx` の「記事が見つからない」と「一覧に戻る」リンクが表示されます。
+5. エラー画面と not-found 画面は **別のファイルで扱われている** ことを確認しましょう。
 
 ### 変えてみる
 
-1. `<html lang="ja" className={inter.className}>` を `<html lang="ja" className={notoJp.className}>` に変えて、全体が Noto Sans JP になった見た目を確認しましょう（字面が丸くなる）。
-2. `Inter` の呼び出しに `{ subsets: ["latin"], weight: ["400", "700"] }` を渡してみましょう。weight の指定で読み込まれるファイル数が変わります（DevTools → Network で確認）。
-3. いったん `className={inter.className}` を外して保存し、システムフォントに戻った見た目をもう一度目に焼き付けてから、付け直しましょう。切り替わりの一瞬（FOUT）が体感できることがあります。
-
-### スコープ外
-
-- `variable` font の詳細、CSS 変数 (`--font-inter`) 連携は扱いません。
-- `display` の他の値（`"block"`、`"fallback"`、`"optional"`）は扱いません。デフォルト `"swap"` のみ。
-- 有料フォントサービス（Adobe Fonts など）との連携は扱いません。
+1. `not-found.tsx` にイラストや再検索用のテキストを足して、よりユーザーに優しい表示にしましょう。
+2. `error.tsx` の「もう一度試す」の下に `<Link href="/">トップに戻る</Link>` を追加しましょう。
+3. `notFound()` を呼ぶ代わりに直接 `throw new Error("not found")` としてみましょう → `error.tsx` が出ることを確認します（`notFound()` を使わないと 404 ではなく 500 系扱いになる、という違いを体感できます）。
 
 ### 自分で書く
 
-`Roboto` や `Lato` など別の Google Font を 1 つ選び、`<html>` に適用してみましょう。`import { Roboto } from "next/font/google"` のようにインポートし、`subsets: ["latin"]` を指定するだけです。字形の違いを `/about` の見出しや本文で観察します。
+「存在しないユーザー ID のときの `not-found.tsx`」を `/users/[id]/` 配下に自力で追加してみましょう（「動的ルート」の「自分で書く」で `/users/[id]/page.tsx` を作っていればその続きです）。見た目は posts 側と同じレベルで良いです。
 
 ## まとめ
 
-- `next/font/google` から使いたいフォントを import し、`subsets` を指定して呼び出すだけでフォントの自動最適化が有効になります。
-- 戻り値の `className` を `<html>` や `<body>` に付けると、配下全体に適用されます。
-- `display` のデフォルトは **`"swap"`**（先にシステムフォントで描画し、読み込みが済んだら差し替わる FOUT 挙動）です。
+- 「見つからない」ときは `notFound()` + `not-found.tsx` です。
+- 「レンダリング中の例外」は `error.tsx` です（`"use client"` 必須）。
+- 2 つは担当範囲が違います。

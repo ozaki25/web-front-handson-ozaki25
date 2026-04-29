@@ -1,610 +1,160 @@
-# lesson69: TODO アプリを React で作る
-
-2 章 の「TODO アプリを作る」で素の JS + DOM で作った TODO アプリを、4 章 で学んだ React + TS に移植します。同時に **localStorage で保存・復元** する形を React で書き直し、**オブジェクト state のイミュータブル更新** も扱います。
-
-想定時間は **60〜120 分** です。焦らず段階的に組み立てましょう。
+# lesson69: Next.js ってなに？
 
 ## ゴール
 
-- 機能ごとに React コンポーネントを分割して組み立てられます。
-- `import type` で別ファイルの型を使えます。
-- `useState` の **初期値関数** を使って localStorage から復元できます。
-- `useEffect` で localStorage に保存できます。
-- オブジェクト state のイミュータブル更新（`setX(prev => ({ ...prev, ... }))`）が書けます。
-- 初期値関数を使わない **誤実装の書き戻しバグ** を体験してから、正しい形に直せます。
+- Next.js が何を担うフレームワークなのか、React との関係を自分の言葉で説明できます。
+- App Router のファイルベースルーティングの基本ルール（`app/page.tsx` がトップページ）を理解します。
+- 画面に出る部品がデフォルトで **Server Component** として動くことを知ります。
+- StackBlitz の Next.js テンプレートから最小のプロジェクトを立ち上げてトップページを表示できます。
 
 ## 解説
 
-### 2 章 の「TODO アプリを作る」で作ったものを思い出す
+### React と Next.js の関係
 
-2 章 の「TODO アプリを作る」で、素の HTML + JS + localStorage で TODO アプリを作りました。構成は次のようなものでした。
+4 章 までで学んだ React は、**UI を組み立てるためのライブラリ** でした。画面の見た目とその更新の仕組み（state / props / 再レンダリング）は React が担当します。
 
-- `<input>` と「追加」ボタン、`<ul>` の一覧、各 `<li>` に「削除」ボタン
-- `todos` という配列を JS で持つ
-- 追加: 配列に push → 画面を描き直す
-- 削除: 配列から filter → 画面を描き直す
-- localStorage に保存・復元
+一方で、実際に Web アプリを作ろうとすると、React 単体では足りないものが出てきます。
 
-これを React で書き直すとどう変わるでしょうか。主な違いは次の 3 点です。
+- URL に応じてページを切り替える仕組み（ルーティング）
+- SEO やシェア用にページごとのタイトルや OG 画像を設定する仕組み
+- 一部の処理をサーバーで先に走らせ、初期表示を速くする仕組み
+- データ取得やフォーム送信をサーバーに任せる仕組み
 
-1. **配列を `useState` で持つ**: 自分で `render()` を呼ばなくても、`setTodos` を呼べば自動で描き直されます。
-2. **コンポーネントに分割する**: 入力欄、一覧、1 件、の 3 つに分けて見通しを良くします。
-3. **配列の更新はイミュータブル**: `push` / `splice` は使わず、新しい配列を作ります（「イベントと配列のイミュータブル更新」で学びました）。
+こうした「React の周りに必要な土台」を一式まとめて提供するのが **Next.js** です。Next.js は React を内部で使っているので、React のコンポーネントの書き方はそのまま使えます。React の上に乗る大きめの枠組み、と考えてください。
 
-### 使う型（3 章 の `Todo`）
+このコースで使うバージョンは **Next.js 16** / **React 19.2** です。
 
-3 章 の「TypeScript ってなに？」〜「オブジェクトの型と type エイリアス」で `types.ts` に次の型を育ててきました。
+### App Router とは
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  status: "open" | "done";
-  memo?: string;
-};
-```
+Next.js には現在 2 つのルーター（URL の担当部分）があります。
 
-今回は `status` と `memo` は使いません（統合ですが、必要最小限にとどめます）。実装中は `id` と `text` だけ参照します。
+- 古い方: `pages/` ディレクトリを使う Pages Router
+- 新しい方: `app/` ディレクトリを使う **App Router**
 
-### コンポーネント分割の設計
+本コースでは新しい **App Router** のみを扱います。古い `pages/` ルーターは使いません。
 
-今回は 3 つに分けます。
+App Router は **ファイルベースルーティング** です。つまり、`app/` 以下のディレクトリ構造がそのまま URL になります。
 
 ```
-App
-├── TodoInput   ← 入力欄 + 追加ボタン
-└── TodoList    ← 一覧全体
-    └── TodoItem (todos.length 個)   ← 1 行
+app/
+├── page.tsx           → /
+├── about/
+│   └── page.tsx       → /about
+└── todos/
+    └── page.tsx       → /todos
 ```
 
-各コンポーネントの props は次のとおりです。
+`page.tsx` という名前のファイルが、その URL で表示される中身を書く場所です。ディレクトリ名がそのまま URL のパスになります。
 
-```ts
-// TodoInput の props
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
+### Server Component がデフォルト
 
-// TodoList の props
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-};
+App Router のもう 1 つの大きな特徴は、**コンポーネントが既定でサーバー側で実行される** ことです。これを **Server Component** と呼びます。
 
-// TodoItem の props
-type TodoItemProps = {
-  todo: Todo;
-  onDelete: (id: string) => void;
-};
-```
+今までの React（4 章）は、すべてブラウザ（クライアント）で動いていました。App Router ではまずサーバーで React を動かし、その結果をブラウザに届けます。
 
-**状態の持ち主** は一番上の `App` です。`TodoInput` は「追加しました」を `onAdd` で伝えるだけ。`TodoList` と `TodoItem` は描画と削除イベントの伝達だけを担います（「親子コンポーネントの連携」で学んだ state lifting の応用です）。
+- Server Component: サーバーで動きます。データベース接続やファイル読み込みなど、秘密情報を扱えます。`useState` や `onClick` は使えません。
+- Client Component: ブラウザで動きます。`useState` / イベント / ブラウザ API が使えます。先頭に `"use client"` と書いて明示します。
 
-### localStorage と `useEffect` の組み合わせ（ここで注意が必要）
+最初は「書いたコンポーネントは何もしなければサーバー側で動く」とだけ覚えておけば十分です。
 
-素直に書くと次のようにしたくなります。
+### `app/page.tsx` の最小形
+
+App Router で最初に書くトップページは、こんな形です。
 
 ```tsx
-// NG: 誤った実装
-const [todos, setTodos] = useState<Todo[]>([]);
-
-useEffect(() => {
-  const saved = localStorage.getItem("todos");
-  if (saved) setTodos(JSON.parse(saved));
-}, []);
-
-useEffect(() => {
-  localStorage.setItem("todos", JSON.stringify(todos));
-}, [todos]);
+export default function Page() {
+  return (
+    <main>
+      <h1>Hello, Next.js</h1>
+      <p>最初のページ。</p>
+    </main>
+  );
+}
 ```
 
-一見正しそうに見えます。でも **この書き方には落とし穴があります**。
+- ファイル名は `page.tsx` 固定です。
+- `export default` で関数コンポーネントを 1 つ返します。
+- 関数名は何でも構いません（慣例で `Page` とすることが多いです）。
 
-初回レンダリング直後のタイミングを追うと、
-
-1. `useState([])` で `todos = []`（空配列）で初期化されます
-2. 初回レンダリング完了
-3. 2 つ目の `useEffect`（保存用）が動く → `localStorage.setItem("todos", "[]")` で **localStorage を空配列で上書きしてしまう**
-4. 1 つ目の `useEffect`（読み込み用）が動く → もう遅い
-
-つまり **ページを開くたびに一度 `localStorage` が空になります**。以後のセッションで追加した内容は保存されますが、タブを開き直すと毎回 `todos` が空にリセットされる（ように見える）のです。
-
-#### 解決策: `useState` の初期値関数
-
-この問題を一番シンプルに避ける書き方が **`useState` の初期値関数** です。
-
-```tsx
-// OK: 正しい実装
-const [todos, setTodos] = useState<Todo[]>(() => {
-  try {
-    const saved = localStorage.getItem("todos");
-    return saved ? JSON.parse(saved) : [];
-  } catch {
-    return [];
-  }
-});
-
-useEffect(() => {
-  localStorage.setItem("todos", JSON.stringify(todos));
-}, [todos]);
-```
-
-`useState(initialValue)` の `initialValue` に **関数を渡す** と、その関数は **コンポーネントの初回レンダリングのときだけ** 実行されます。ここで `localStorage` から読み込みます。
-
-- 初回レンダリングで `todos` にはすでに復元済みの配列が入っています
-- その後 `useEffect([todos])` が動きますが、そのときの `todos` は復元済みなので同じ内容を書き戻すだけです
-- 空配列で上書きするバグは起きません
-
-`try` / `catch` で囲んでいるのは、`localStorage` に不正な JSON が保存されていた場合（何かの事故で壊れた場合）に `JSON.parse` が例外を投げるためです。2 章 の「fetch で API から取得する」で学んだ `try` / `catch` の復習になっています。
-
-### オブジェクト state のイミュータブル更新
-
-「イベントと配列のイミュータブル更新」では配列の state 更新（`[...prev, newItem]` など）を扱いました。オブジェクトを state にするときも同じ発想が必要になります。
-
-```tsx
-type Settings = { theme: "light" | "dark"; fontSize: number };
-const [settings, setSettings] = useState<Settings>({ theme: "light", fontSize: 16 });
-
-// NG: 直接書き換えは効かない
-settings.theme = "dark";
-setSettings(settings); // 同じオブジェクトなので React は変化を検知できない
-
-// OK: 新しいオブジェクトを作って渡す
-setSettings((prev) => ({ ...prev, theme: "dark" }));
-```
-
-`prev => ({ ...prev, ... })` のパターンは今後も頻出します。今回の TODO では直接使いませんが、演習の末尾でこの形に触れます。
+これだけで、`/`（トップページ）にアクセスしたときにこの JSX が表示されます。
 
 ## 演習
 
 ### 途中から始める場合
 
-「カスタムフック」までで作ったプロジェクト（`useTodos` カスタムフックを含む）があればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンはステップ 1 から新規に組み直す前提でも進められるように書いていますが、`useTodos` を先に持っていると `App.tsx` をそのフックベースに差し替える形で学べます。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。
 
-<details>
-<summary>出発点のファイル（<code>useTodos</code> 版）</summary>
+### 使う環境
 
-**`src/types.ts`**
+本コース5 章 ではすべて StackBlitz の **Next.js**（TypeScript）テンプレートを使います。4 章 の React + Vite テンプレートとは別物なので、新しく作り直してください。
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-  done: boolean;
-};
-```
+### 手順
 
-**`src/useTodos.ts`**
-
-```ts
-import { useState } from "react";
-import type { Todo } from "./types";
-
-export function useTodos() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  const addTodo = (text: string) => {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    setTodos((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), text: trimmed, done: false },
-    ]);
-  };
-
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const toggleTodo = (id: string) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    );
-  };
-
-  return { todos, addTodo, deleteTodo, toggleTodo };
-}
-```
-
-**`src/TodoInput.tsx`**
+1. 直リンク <https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world> を開きます（Next.js の hello-world テンプレートが Node を内部で動かす WebContainers 上で立ち上がります。初回は依存インストールに数十秒〜 1 分ほどかかります）。
+2. プロジェクトが起動したら、左側のファイルツリーから `app/page.tsx` を開きます。
+3. 中身をすべて消し、次のコードに置き換えます。
 
 ```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    onAdd(text);
-    setText("");
-  }
-
+export default function Page() {
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="やることを入力"
-      />
-      <button type="submit">追加</button>
-    </form>
-  );
-}
-```
-
-**`src/TodoList.tsx`**
-
-```tsx
-import type { Todo } from "./types";
-
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-  onToggle: (id: string) => void;
-};
-
-export function TodoList({ todos, onDelete, onToggle }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p>TODO はまだありません。</p>;
-  }
-
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          <label>
-            <input
-              type="checkbox"
-              checked={todo.done}
-              onChange={() => onToggle(todo.id)}
-            />
-            <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
-              {todo.text}
-            </span>
-          </label>
-          <button type="button" onClick={() => onDelete(todo.id)}>
-            削除
-          </button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-```
-
-**`src/App.tsx`**
-
-```tsx
-import { useTodos } from "./useTodos";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-
-export default function App() {
-  const { todos, addTodo, deleteTodo, toggleTodo } = useTodos();
-
-  return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO（useTodos 版）</h1>
-      <TodoInput onAdd={addTodo} />
-      <TodoList todos={todos} onDelete={deleteTodo} onToggle={toggleTodo} />
+    <main>
+      <h1>Hello, Next.js</h1>
+      <p>最初のページ。</p>
     </main>
   );
 }
 ```
 
-本レッスンでは、ステップ 6 〜 8 で `App.tsx` を localStorage 連携版に書き換えます。`TodoItem` コンポーネント（本レッスンで切り出すもの）と `TodoList` を入れ替える部分は本文の手順どおりに進めてください。`useTodos` を使わず `App.tsx` で直接 state を持つ構成で進める場合は、本文ステップ 1 からの指示に従って新規に組めば OK です。
+保存すると、右側のプレビューに **「Hello, Next.js」と「最初のページ。」** が表示されます。
 
-</details>
+### 期待出力
 
-### 到達する完成形
+- プレビュー画面の一番上に大きな文字で「Hello, Next.js」、その下に「最初のページ。」が並びます。
+- URL バーには `/` で始まるパス（StackBlitz のプレビュー URL）が表示されます。
+- StackBlitz の下部ターミナルに `Ready` などのメッセージが出ています。
 
-<div style="font-family:system-ui, sans-serif; max-width:480px; margin:8px 0;">
-  <div style="font-weight:600; margin-bottom:12px;">私の TODO</div>
-  <div style="display:flex; gap:8px; margin-bottom:16px;">
-    <input style="flex:1; padding:8px 12px; border:1px solid #cbd5e1; background:#f8fafc;" placeholder="新しい TODO を入力" readonly />
-    <button style="padding:8px 16px; border:1px solid #1e40af; background:#1e40af; color:white;" disabled>追加</button>
-  </div>
-  <ul style="list-style:none; padding:0; margin:0;">
-    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #e2e8f0;">
-      <span>牛乳を買う</span>
-      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
-    </li>
-    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0; border-bottom:1px solid #e2e8f0;">
-      <span>引き継ぎドキュメントを書く</span>
-      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
-    </li>
-    <li style="display:flex; justify-content:space-between; align-items:center; padding:6px 0;">
-      <span>本を返す</span>
-      <button style="padding:2px 10px; border:1px solid #64748b; background:#fff;" disabled>削除</button>
-    </li>
-  </ul>
-</div>
+### 変えてみる
 
-- 入力して「追加」を押すと一覧末尾に追加されます
-- 各項目の「削除」ボタンで、その 1 件だけが消えます
-- ページをリロード（タブを閉じて開き直し）しても、追加した TODO は残っています
-- 入力欄が空のまま「追加」を押してもエラーにはせず、単に追加しません（`.trim()` が空ならスキップ）
-
-### ステップ 1: StackBlitz で React + Vite（TS）テンプレートを開く
-
-StackBlitz のトップから「React + Vite + TypeScript」を選びます（もしくは「useEffect の基本」までで作ったプロジェクトをそのまま使っても構いません。本レッスンは新規プロジェクトの方が整理しやすいです）。`npm install` と `npm run dev` は自動で実行されます。
-
-### ステップ 2: `types.ts` で `Todo` 型を用意する
-
-`src/types.ts` を新規作成します。3 章 で育てた型の最小版を書きます。
-
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-3 章 の「配列・ユニオン・リテラル型・オプショナル」で追加した `status` と `memo` は今回は使わないので省略します。5 章 で Server Actions 版に移植するときに拡張します。
-
-### ステップ 3: `TodoInput` コンポーネントを作る
-
-`src/TodoInput.tsx` を新規作成します。
+1. `<h1>` の文字を `自己紹介アプリの入り口` に変えて保存します。プレビューが更新されることを確認しましょう。
+2. `<p>` を 2 行に増やします。
 
 ```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    onAdd(trimmed);
-    setText("");
-  }
-
+export default function Page() {
   return (
-    <form onSubmit={handleSubmit}>
-      <input
-        type="text"
-        value={text}
-        onChange={(event) => setText(event.target.value)}
-        placeholder="新しい TODO を入力"
-      />
-      <button type="submit">追加</button>
-    </form>
-  );
-}
-```
-
-「フォームと制御コンポーネント」で扱った制御コンポーネントの形です。`onSubmit` で `preventDefault()` を呼んでいます（5 章 の「Server Actions の最小形」の Server Actions ではこれが不要になります）。空文字列は追加しません。
-
-### ステップ 4: `TodoItem` コンポーネントを作る
-
-`src/TodoItem.tsx` を新規作成します。
-
-```tsx
-import type { Todo } from "./types";
-
-type TodoItemProps = {
-  todo: Todo;
-  onDelete: (id: string) => void;
-};
-
-export function TodoItem({ todo, onDelete }: TodoItemProps) {
-  return (
-    <li>
-      <span>{todo.text}</span>
-      <button type="button" onClick={() => onDelete(todo.id)}>
-        削除
-      </button>
-    </li>
-  );
-}
-```
-
-`import type` で `Todo` 型を取り込んでいます（3 章 の「オブジェクトの型と type エイリアス」の形）。`onDelete(todo.id)` で親に削除要求を渡します。
-
-### ステップ 5: `TodoList` コンポーネントを作る
-
-`src/TodoList.tsx` を新規作成します。
-
-```tsx
-import type { Todo } from "./types";
-import { TodoItem } from "./TodoItem";
-
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-};
-
-export function TodoList({ todos, onDelete }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p>TODO はまだありません。</p>;
-  }
-
-  return (
-    <ul>
-      {todos.map((todo) => (
-        <TodoItem key={todo.id} todo={todo} onDelete={onDelete} />
-      ))}
-    </ul>
-  );
-}
-```
-
-「配列を描画する」の `.map` + `key` パターンです。`key={todo.id}` を忘れないでください。`todos.length === 0` のときの早期 return は「条件で出し分ける」で学んだ条件表示の形です。
-
-### ステップ 6: `App.tsx` で全体を組み立てる（最初はバグあり版）
-
-`src/App.tsx` を次のように書きます。**意図的にバグのある版** から始めて、次のステップで直します。
-
-```tsx
-import { useState, useEffect } from "react";
-import type { Todo } from "./types";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-
-export default function App() {
-  // NG: このバグあり版では useState([]) にして useEffect で後から読み込む
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  useEffect(() => {
-    const saved = localStorage.getItem("todos");
-    if (saved) setTodos(JSON.parse(saved));
-  }, []);
-
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
-  }
-
-  return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
+    <main>
+      <h1>自己紹介アプリの入り口</h1>
+      <p>最初のページ。</p>
+      <p>これから少しずつページを増やす。</p>
     </main>
   );
 }
 ```
 
-`crypto.randomUUID()` はブラウザ組み込みで、衝突しない ID 文字列を返します（`"xxxxxxxx-xxxx-..."` 形式）。
+### ファイル構造を眺める
 
-**期待出力**（バグあり版）: TODO を何件か追加できます。削除もできます。ただし、ブラウザのタブを閉じて開き直す、または F5 でリロードすると、**前回追加した TODO が消えている** ことがあります。
+左側のツリーから以下を開いて中身を確認しましょう。書き換えは不要です。
 
-### ステップ 7: バグを「観察」する
+- `app/layout.tsx`: 全ページ共通の外側の枠（`<html>` と `<body>` の中身）。「共通レイアウトを作る」で触ります。
+- `app/page.tsx`: 今書き換えたトップページ。
+- `package.json`: 依存パッケージと `scripts`。`"dev"`, `"build"`, `"start"` などが並んでいます。
 
-このバグは **DevTools の Local Storage** を見れば確実に観察できます。画面表示の動きで判断するのではなく、「Local Storage の値がどう変わるか」を直接見るのが本筋です。**StrictMode の二重実行は気にしないで OK**（2 回呼ばれても 1 回呼ばれても、根本原因 = 初回レンダリング後の `useEffect` が空配列で上書きする、は同じです）。
+`app/` 以下にディレクトリを作って `page.tsx` を置けば、それがそのまま URL になります。
 
-実際に以下を試しましょう。
+### 自分で書く
 
-1. プレビューで「牛乳を買う」を追加（画面に表示される）
-2. DevTools（F12）→ **Application** タブ → **Local Storage** → プロジェクトの URL を選ぶ
-3. `todos` キーの **値を見る**: `[{"id":"...","text":"牛乳を買う"}]` のような文字列が入っているはず
-4. プレビューの **再読み込み** ボタンを押す（StackBlitz なら右上の更新アイコン）
-5. **画面は空**。同じ場所の `todos` キーをもう一度見ると、**値は `[]`（空配列）に上書きされている**
-
-「画面が空に戻る」だけだと「ブラウザがキャッシュしてないだけ？」と疑問が残りますが、**Local Storage の値が `[]` に変わった** のを目で見れば、起動のたびに空配列で上書きされていると確実に判断できます。
-
-**何が起きたか**:
-
-1. ページ読み込み → `useState<Todo[]>([])` で `todos` が空配列で初期化
-2. 初回レンダリング完了
-3. 保存用の `useEffect([todos])` が動く → 空配列を `localStorage` に書き込む（**ここで上書き!**）
-4. 読み込み用の `useEffect([])` が動く → localStorage にはもう空配列しかない
-5. `setTodos([])`（空配列をセット、もともと空だから何も変わらない）
-
-つまり **起動のたびに空配列で上書きする** ので、永続化が機能していないのです。
-
-### ステップ 8: `useState` の初期値関数で直す
-
-`App.tsx` の先頭部分を次のように書き換えます。
-
-```tsx
-import { useState, useEffect } from "react";
-import type { Todo } from "./types";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-
-export default function App() {
-  const [todos, setTodos] = useState<Todo[]>(() => {
-    try {
-      const saved = localStorage.getItem("todos");
-      return saved ? JSON.parse(saved) : [];
-    } catch {
-      return [];
-    }
-  });
-
-  useEffect(() => {
-    localStorage.setItem("todos", JSON.stringify(todos));
-  }, [todos]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((todo) => todo.id !== id));
-  }
-
-  return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
-    </main>
-  );
-}
-```
-
-変更点:
-
-- `useState([])` の `[]` の代わりに **関数** を渡しています（`() => { ... }`）。この関数は初回レンダリングのときだけ実行されます
-- `try` / `catch` で `JSON.parse` の失敗（不正なデータが保存されていた場合）を拾います
-- 読み込み用の `useEffect` を削除しました（初期値関数に吸収されました）
-
-一度 DevTools で Local Storage の `todos` を削除してから試すと分かりやすいです。
-
-**期待出力**（正しい版）:
-
-1. 「牛乳を買う」「本を返す」を追加
-2. タブを閉じる / F5 リロード
-3. 一覧に 2 件残っている
-
-### ステップ 9: オブジェクト state のイミュータブル更新（追加演習）
-
-おまけ演習として、「画面の設定」を state で持つ例を作ります。`App.tsx` に次を足します。
-
-```tsx
-type Settings = { showCount: boolean };
-
-// App コンポーネント内
-const [settings, setSettings] = useState<Settings>({ showCount: true });
-
-// 末尾の JSX 内、<h1> の横などに追加
-<label>
-  <input
-    type="checkbox"
-    checked={settings.showCount}
-    onChange={(event) =>
-      setSettings((prev) => ({ ...prev, showCount: event.target.checked }))
-    }
-  />
-  件数を表示
-</label>
-{settings.showCount && <p>合計 {todos.length} 件</p>}
-```
-
-`setSettings((prev) => ({ ...prev, showCount: ... }))` で、新しいオブジェクトを作って渡しています。`prev` を直接書き換えません。これがオブジェクト state の基本形です。
-
-**期待出力**: チェックボックスをオン / オフすると「合計 N 件」の表示が切り替わります。
-
-### ステップ 10: 最低限のスタイルを当てる
-
-好みで、`App.tsx` の `<main>` にインラインスタイルを入れていますが、これを `src/App.css` などに切り出しても構いません。Flexbox や `gap` を使って、入力欄と追加ボタンを横並びにすると見やすくなります。1 章 の知識で十分対応できる範囲なので、時間があれば見た目を整えてみましょう。
+`app/page.tsx` を何も見ずに書き直してみましょう。`export default function ... { return (...) }` の形だけがポイントなので、ここが書ければ合格です。
 
 ## まとめ
 
-- 機能ごとにコンポーネントを分けると、props とイベントハンドラの流れが見通しやすくなる
-- `import type` で別ファイルの型を取り込み、props にも state にも使い回せる
-- `useState` の初期値関数で localStorage 書き戻しバグを避けられる
-- オブジェクト state は `prev => ({ ...prev, ... })` でイミュータブルに更新する
+- Next.js は React の上に「ルーティング」「サーバー実行」「メタデータ」などの土台を載せたフレームワークです。
+- 本コースでは **App Router**（`app/` ディレクトリ）のみを扱います。`pages/` 形式は使いません。
+- `app/page.tsx` がトップページ（`/`）の中身です。ディレクトリ名がそのまま URL になります。
+- 書いたコンポーネントは何もしなければ **Server Component** としてサーバー側で動きます。
+
+### コラム: RSC ペイロードって何？
+
+Server Component の結果は、実は **HTML そのもの** としてブラウザに届くわけではありません。Next.js はサーバー側で React をレンダリングし、その結果を **React が読める特殊な形式**（RSC ペイロードと呼ばれる）に変換してブラウザに送ります。ブラウザ側の React はそれを受け取って、ページのツリーに差し込みます。
+
+ブラウザの「ソースを表示」で見える HTML は、初回表示用に別で生成された HTML です。ページ遷移（「ページを増やしてリンクで移動する」の `<Link>`）では、RSC ペイロードだけが追加で送られてきて、必要な部分だけがツリーに差し替わります。
+
+本コースでは RSC ペイロードの詳細までは踏み込みませんが、「Server Component は HTML を直接返すのとは違う仕組みで動いている」とだけ覚えておけば、後の章で困りません。

@@ -1,476 +1,216 @@
-# lesson74: Route Groups で整理する
+# lesson74: Server Component でデータを取得する
 
 ## ゴール
 
-- `(group)/` という括弧付きディレクトリ名の意味を理解し、URL を変えずにファイル側だけを意味のある単位で整理できます。
-- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されることを確認できます。
-- 「公開側」と「アプリ側」で共通レイアウトを分けたい、という典型的な使いどころを体験できます。
+- `async` な Server Component を書けるようになります。
+- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
+- `loading.tsx` でローディング UI を挟めるようになります。
+- Next.js 16 の Server Component での fetch は **既定でキャッシュしない** ことを知り、キャッシュしたいときの書き方（`"use cache"` ディレクティブ / `fetch` オプション）を見分けられます。
 
 ## 解説
 
-### 前回までに作ったもの
+### Server Component は `async` にできる
 
-「共通レイアウトを作る」で、全ページ共通のヘッダー・フッターを `app/layout.tsx` にまとめました。`/`、`/about`、`/todos` のどのページにアクセスしても、上にナビ・下にフッターが出る状態です。
+4 章 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
 
-一方で、今後アプリが大きくなると次のような悩みが出ます。
+```tsx
+export default async function Page() {
+  const data = await fetch("https://...").then((r) => r.json());
+  return <div>{data.title}</div>;
+}
+```
 
-- `/about` は公開ページなのでサイドバーは不要
-- `/todos` はアプリ内ページなので、左にサイドメニューがあると便利
+- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
+- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
 
-「ページの種類ごとに追加レイアウトを変えたい」のに、URL 体系は `/`、`/about`、`/todos` のままにしたい。このとき役立つのが **Route Groups** です。
+ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（4 章 の「useEffect の基本」末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
 
-### `(group)/` の意味
+### `loading.tsx` でローディング UI
 
-App Router では、ディレクトリ名を `( )` で囲むと **URL には登場しない** 仕組みがあります。これが Route Groups です。
+`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
 
 ```
 app/
-├── (public)/
-│   ├── page.tsx          → /
-│   └── about/
-│       └── page.tsx      → /about
-└── (app)/
-    ├── layout.tsx        → (app) 配下だけに適用
-    └── todos/
-        └── page.tsx      → /todos
+└── posts/
+    ├── page.tsx       ← データ取得込みのページ
+    └── loading.tsx    ← 取得中に表示される
 ```
 
-- `(public)` というディレクトリ名は URL には出ません。`app/(public)/page.tsx` の URL は `/` です。
-- 同じく `(app)` も URL には出ません。`app/(app)/todos/page.tsx` の URL は `/todos` です。
-- 結果として、**URL は `/`、`/about`、`/todos` のまま変わりません**。ファイルの置き場所だけが整理されます。
+`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
 
-### グループ内の `layout.tsx`
+### Next.js 16 のキャッシュは「明示的に opt-in」
 
-Route Groups の嬉しさは、グループ直下に `layout.tsx` を置けることです。この `layout.tsx` は、**そのグループ配下のページだけ** に適用されます。
+Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったため、Next.js 15 以降は **fetch のデフォルトがキャッシュしない** 動作に切り替わっています。毎リクエストで取り直します。
 
-- `app/(app)/layout.tsx` を置くと、`/todos` には適用されるが、`/` や `/about` には適用されない
-- 逆に `app/(public)/layout.tsx` を置くと、`/` と `/about` には適用されるが、`/todos` には適用されない
-- `app/layout.tsx`（ルートレイアウト）は引き続き全ページに適用される
+キャッシュしたい場合は明示的に指定します。書き方は 2 系統あります。
 
-つまり、レイアウトの構造は「ルートレイアウト → グループレイアウト → page」のように入れ子になります。
+#### 従来の方法: `fetch` のオプション
 
-```mermaid
-graph TD
-  classDef root fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
-  classDef group fill:#1b4965,stroke:#62b6cb,color:#ffffff;
-  classDef page fill:#3a2d5c,stroke:#c4a6ff,color:#ffffff;
+第 2 引数で挙動を切り替える、以前から使える書き方です。
 
-  Root["app/layout.tsx (全ページ共通)"]:::root
-  Public["(public) は layout.tsx なし"]:::group
-  App["app/(app)/layout.tsx (サイドバー)"]:::group
-  Home["/ page.tsx"]:::page
-  About["/about page.tsx"]:::page
-  Todos["/todos page.tsx"]:::page
+```tsx
+// (1) 強くキャッシュ: 一度取ったらずっと使い回す
+await fetch(url, { cache: "force-cache" });
 
-  Root --> Public
-  Root --> App
-  Public --> Home
-  Public --> About
-  App --> Todos
+// (2) 一定時間ごとに再取得: 60 秒間はキャッシュ、60 秒経ったら次のアクセスで新しく取る
+await fetch(url, { next: { revalidate: 60 } });
+
+// (3) タグ単位で無効化: Server Actions から revalidateTag('posts') を呼ぶとこのキャッシュが切れる
+await fetch(url, { next: { tags: ["posts"] } });
 ```
 
-図の色はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965` / `#3a2d5c`、文字 `#ffffff`）を指定しています。
+#### 新しい方法: `"use cache"` ディレクティブ（Cache Components）
 
-### 並列・インターセプトは扱わない
+Next.js 16 で導入された **Cache Components** のパターンです。コンポーネントや関数の先頭に `"use cache"` と書くと、その結果全体をキャッシュ対象にします。`next.config.ts` で `cacheComponents: true` を有効にしたときに使えます。
 
-App Router には `@slot/page.tsx`（並列ルート）や `(.)path`（インターセプトルート）といったさらに発展的な機能もありますが、本コースでは **Route Groups まで** にとどめます。
+```tsx
+// next.config.ts
+const nextConfig = {
+  cacheComponents: true, // Cache Components を有効化
+};
+export default nextConfig;
+```
+
+```tsx
+// 関数単位: fetch をまとめてキャッシュ
+import { cacheLife, cacheTag } from "next/cache";
+
+async function getPosts() {
+  "use cache";
+  cacheLife("hours"); // 1 時間単位でキャッシュ
+  cacheTag("posts");  // 'posts' タグで無効化対象にする
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  return res.json();
+}
+```
+
+```tsx
+// コンポーネント単位: 描画結果ごとキャッシュ
+async function PostList() {
+  "use cache";
+  const posts = await fetch("https://jsonplaceholder.typicode.com/posts").then((r) => r.json());
+  return <ul>{posts.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+}
+```
+
+- **`"use cache"` を書いた関数 / コンポーネント全体** がキャッシュされる
+- `cacheLife("minutes" | "hours" | "days" | "weeks" | ...)` でキャッシュ寿命を設定
+- `cacheTag("...")` で `revalidateTag` から無効化できるタグを付ける
+- 書く場所はファイル先頭（ファイル全体）/ 関数先頭 / コンポーネント先頭のいずれか
+
+> **補足: `cacheComponents` を有効にしていない状態で `"use cache"` を書くとビルドエラー**: `next.config.ts` で `cacheComponents: true` を入れていないファイルに `"use cache"` を書くと、`Error: "use cache" requires the cacheComponents experimental flag to be enabled` のようなエラーで **ビルドが落ちます**。本レッスンの演習では `cacheComponents` を有効にしないので、キャッシュしたい場合は `fetch` オプション（`force-cache` / `next.revalidate` / `next.tags`）の方を使います。
+
+本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。「キャッシュしたいときに 2 系統の選択肢がある」ことだけ頭に入れておけば十分です。本格的に使うのは実務に入ってからで構いません。
+
+ここで話しているキャッシュは **Server Component のデータ取得** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`app/layout.tsx`**
-
-```tsx
-import Link from "next/link";
-import "./globals.css";
-
-export const metadata = {
-  title: "My Next App",
-};
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
-    <html lang="ja">
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Page() {
-  return (
-    <>
-      <h1>ようこそ</h1>
-      <p>このアプリについてはヘッダーのリンクから。</p>
-    </>
-  );
-}
-```
-
-**`app/about/page.tsx`**
-
-```tsx
-import "./about.css";
-
-export default function AboutPage() {
-  return (
-    <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </>
-  );
-}
-```
-
-**`app/about/about.css`**（「ページを増やしてリンクで移動する」と同じ。`.cards` / `.card` のスタイル中心に必要なものを貼ってください）
-
-**`app/todos/page.tsx`**
-
-```tsx
-export default function TodosPage() {
-  return (
-    <>
-      <h1>TODO 一覧</h1>
-      <p>TODO 一覧はここに実装する。</p>
-    </>
-  );
-}
-```
-
-**`app/globals.css`**
-
-```css
-.site-header ul {
-  display: flex;
-  gap: 1rem;
-  list-style: none;
-  padding: 1rem;
-  background: #f5f5f5;
-}
-
-.site-header a {
-  text-decoration: none;
-  color: #0070f3;
-}
-
-.site-footer {
-  padding: 1rem;
-  border-top: 1px solid #ddd;
-  color: #555;
-}
-
-@media (prefers-color-scheme: dark) {
-  .site-header ul {
-    background: #1f1f1f;
-  }
-  .site-header a {
-    color: #4ea2ff;
-  }
-  .site-footer {
-    border-top-color: #333;
-    color: #bbb;
-  }
-}
-```
-
-</details>
+このレッスンの記事一覧演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート(<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>)を開けば、本文の手順だけで完結します。中心となるのは `app/posts/page.tsx` と `app/posts/loading.tsx` の新規作成です。手順 3 のヘッダーリンク追加は `app/layout.tsx` にナビがあれば足せますが、無ければスキップして構いません。
 
 ### 前回のプロジェクトを開く
 
-これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
+これまでのレッスンで作ったプロジェクトを開き直しましょう。
 
-### 現状の確認
+### 手順 1: `/posts` ページを作る
 
-現在のファイル構成は次のようになっているはずです。
-
-```
-app/
-├── layout.tsx       ← 全ページ共通のヘッダー・フッター
-├── page.tsx         → /
-├── about/
-│   ├── page.tsx     → /about
-│   └── about.css
-└── todos/
-    └── page.tsx     → /todos
-```
-
-この構成を、次の形に変えます。
-
-```
-app/
-├── layout.tsx
-├── (public)/
-│   ├── page.tsx
-│   └── about/
-│       ├── page.tsx
-│       └── about.css
-└── (app)/
-    ├── layout.tsx   ← 新規。サイドバーを置く
-    └── todos/
-        └── page.tsx
-```
-
-### 手順 1: `(public)` グループを作る
-
-StackBlitz のファイルツリーで、`app/` の直下に新しいフォルダを作ります。名前は `(public)` です（括弧も含めてそのまま入力します）。
-
-作れたら、次のファイル・フォルダを `(public)/` の中に **移動** します。
-
-- `app/page.tsx` → `app/(public)/page.tsx`
-- `app/about/` フォルダごと → `app/(public)/about/`
-
-移動は StackBlitz の UI 上でドラッグするか、右クリックメニューの「Move」で行います。
-
-### 手順 2: `(app)` グループを作る
-
-同じ要領で、`app/` 直下に `(app)` というフォルダを新規作成します。
-
-- `app/todos/` フォルダごと → `app/(app)/todos/`
-
-これで `(public)` と `(app)` の 2 つのグループに分かれました。
-
-### 手順 3: 動作確認（`layout.tsx` 追加前）
-
-この時点で、ブラウザから `/`、`/about`、`/todos` の 3 つの URL を確認しましょう。
-
-- URL は **変わりません**（Route Groups なので `( )` は URL に出ません）
-- 見た目も **変わりません**（`app/layout.tsx` のヘッダー・フッターは全ページに適用されたままです）
-
-「ファイルを動かしても URL が壊れない」ことが Route Groups の第一印象です。
-
-### 手順 4: `(app)/layout.tsx` を作る
-
-`app/(app)/layout.tsx` を新規作成します。ここに「アプリ用のサイドバー」を置きます。
+`app/posts/page.tsx` を新規作成します。
 
 ```tsx
-import Link from "next/link";
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
 
-export default function AppLayout({ children }: LayoutProps<"/todos">) {
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
   return (
-    <div className="app-shell">
-      <aside className="app-sidebar">
-        <h2>アプリメニュー</h2>
-        <nav>
-          <ul>
-            <li>
-              <Link href="/todos">TODO 一覧</Link>
-            </li>
-            <li>
-              <Link href="/">ホームに戻る</Link>
-            </li>
-          </ul>
-        </nav>
-      </aside>
-      <section className="app-main">{children}</section>
-    </div>
+    <>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
+    </>
   );
 }
 ```
 
-ポイント:
+- `async function` で書いています（Server Component だから許されます）。
+- `fetch` も `response.json()` も `await` が必要です（2 章 で学んだ fetch と同じです）。
+- `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
+- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
 
-- このファイルは `(app)` グループ配下の `layout.tsx` なので、`/todos` にだけ適用されます。`/` や `/about` には影響しません。
-- `children` には `(app)` 配下の各 `page.tsx` が差し込まれます（今回は `/todos` だけ）。
-- `"use client"` は不要です。`<Link>` を並べるだけで、クリックで動く JS は書いていません（Server Component のままで OK）。
+> **補足: `Post[]` への型キャストは「信頼している」だけ**: `await res.json()` の戻り値は実際は `unknown` で、上のコードは「外部 API は約束通りの形を返してくる」と **信じている** 状態です。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように **実行時に形をチェック** します。
 
-### 手順 5: サイドバーの CSS
+### 手順 2: `loading.tsx` を置く
 
-`app/globals.css` の末尾に次を追加します。
+`app/posts/loading.tsx` を新規作成します。
 
-```css
-.app-shell {
-  display: flex;
-  gap: 1rem;
-  align-items: flex-start;
+```tsx
+export default function Loading() {
+  return <p>読み込み中...</p>;
 }
+```
 
-.app-sidebar {
-  flex: 0 0 200px;
-  padding: 1rem;
-  background: #f5f5f5;
-  border-right: 1px solid #ddd;
-}
+- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
+- ファイル名は `loading.tsx` 固定です。
 
-.app-sidebar h2 {
-  margin-top: 0;
-  font-size: 1rem;
-}
+### 手順 3: ヘッダーにリンクを追加
 
-.app-sidebar ul {
-  list-style: none;
-  padding: 0;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-}
+`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
 
-.app-sidebar a {
-  color: #0070f3;
-  text-decoration: none;
-}
-
-.app-main {
-  flex: 1;
-}
-
-/* ダークモード配慮 */
-@media (prefers-color-scheme: dark) {
-  .app-sidebar {
-    background: #1f1f1f;
-    border-right-color: #333;
-    color: #e5e7eb;
-  }
-  .app-sidebar a {
-    color: #4ea2ff;
-  }
-}
-
-/* 画面が狭いときは縦積み */
-@media (max-width: 640px) {
-  .app-shell {
-    flex-direction: column;
-  }
-  .app-sidebar {
-    flex: 0 0 auto;
-    width: 100%;
-    border-right: none;
-    border-bottom: 1px solid #ddd;
-  }
-}
+```tsx
+<li>
+  <Link href="/posts">Posts</Link>
+</li>
 ```
 
 ### 期待出力
 
-ブラウザで `/about` と `/todos` を開き比べます。
-
-**`/about`（サイドバーなし）:**
-
-```
-+-----------------------------------------+
-| Home | About | Todos   ← ルートレイアウト |
-+-----------------------------------------+
-|                                         |
-| 自己紹介                                |
-| ...                                     |
-|                                         |
-+-----------------------------------------+
-| © 2026 My Next App                      |
-+-----------------------------------------+
-```
-
-**`/todos`（サイドバーあり）:**
-
-```
-+-----------------------------------------+
-| Home | About | Todos   ← ルートレイアウト |
-+-----------------------------------------+
-| アプリメニュー |                        |
-| - TODO 一覧   |  TODO 一覧              |
-| - ホームに戻る|  (ページ固有の内容)     |
-|               |                         |
-+-----------------------------------------+
-| © 2026 My Next App                      |
-+-----------------------------------------+
-```
-
-確認したいポイント:
-
-- **URL は `/`、`/about`、`/todos` のまま変わらない**（`(public)` や `(app)` はどちらも URL に出ない）
-- **`/about` にはサイドバーが出ない**（`(app)/layout.tsx` の適用範囲外）
-- **`/todos` にはサイドバーが出る**（`(app)/layout.tsx` の適用範囲内）
-- ルートレイアウト（ヘッダー・フッター）は 3 ページすべてに出る
-
-この「同じ URL 体系のまま、一部のページだけに追加レイアウトを付けられる」のが Route Groups の狙いです。
+1. ブラウザで `/posts` を開きます。
+2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
+3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
+4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
 
 ### 変えてみる
 
-1. `(app)/layout.tsx` のサイドバーに「新規作成」のリンク（仮に `/todos/new`）を足してみましょう（リンク先のページはまだ作らなくて構いません）。
-2. `(public)/layout.tsx` を新規作成して、`/` と `/about` にだけ「Welcome!」と書かれた小さなバナーを上に出してみましょう。`/todos` には出ないことを確認します。
-3. 手順の途中で、`(app)` を誤って `app/app/` のような括弧なしのディレクトリに作ったら URL がどうなるか試してみましょう（`/app/todos` のように URL に反映されてしまうはずです）。確認したら元に戻します。
+1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
+2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
+3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
+
+### キャッシュ指定を試す（任意）
+
+`fetch` の第 2 引数に以下を指定して挙動の違いを見てみましょう。すぐに分かる変化ではないので、「エラーにならない」ことを確認するだけで良いです。
+
+```tsx
+const res = await fetch(
+  "https://jsonplaceholder.typicode.com/posts",
+  { next: { revalidate: 60 } },
+);
+```
 
 ### 自分で書く
 
-何も見ずに、次の構造を組めるか挑戦しましょう。
-
-- `(marketing)` グループの中に `/pricing` ページを作り、`(marketing)/layout.tsx` で「製品ページ共通の帯」を上に出す
-- `/pricing` ではその帯が出るが、`/about` では出ないことを確認する
-
-必要なファイルは `app/(marketing)/layout.tsx` と `app/(marketing)/pricing/page.tsx` の 2 つだけです。
+`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
 
 ## まとめ
 
-- ディレクトリ名を `( )` で囲むと URL に出ない「グループ」になります。URL 体系を変えずにファイル配置だけを整理できます。
-- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されます。
-- 典型的な使いどころは「公開ページ / アプリ側ページ」のような大きな 2 分割です。
-- 本コースで扱うのはここまで。並列ルート（`@slot`）やインターセプトルート（`(.)path`）は本コースでは扱いません。
+- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
+- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
+- Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ**（Cache Components） を使います。
+- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
+
+### コラム: `loading.tsx` の裏で動く Suspense
+
+`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
+
+本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。

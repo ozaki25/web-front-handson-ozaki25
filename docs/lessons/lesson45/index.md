@@ -1,164 +1,136 @@
-# lesson45: `interface` と `type` の使い分け
+# lesson45: 配列・ユニオン・リテラル型・オプショナル
 
 ## ゴール
 
-- `interface` 宣言でオブジェクトの形に名前を付けられる。
-- `extends` で `interface` を継承して、既存の型を拡張できる。
-- `type` と `interface` の書き分けと、それぞれが得意とする場面を説明できる。
-- 本コースでは `type` を基本に使う方針を理解する。
+- 配列の型を `T[]` / `Array<T>` の 2 通りで書ける。
+- 「この型 **または** あの型」を表す **ユニオン型**（`|`）を書ける。
+- 「特定の値のみ許す」 **リテラル型** を書ける。
+- 省略可能なプロパティ `?:` を書ける。
+- 「オブジェクトの型と type エイリアス」の `Todo` 型に `status: "open" | "done"` と `memo?: string` を足して、育てた `Todo` 型で配列を扱える。
 
 ## 解説
 
-### `interface` でオブジェクトの形に名前を付ける
+### 配列の型
 
-「オブジェクトの型と type エイリアス」では `type` エイリアスでオブジェクトの型に名前を付けました。TS にはもう 1 つ、**`interface`** という構文があります。`interface` はオブジェクトの「形」に名前を付けるための専用構文です。
-
-```ts
-interface User {
-  name: string;
-  age: number;
-}
-
-const alice: User = { name: "Alice", age: 20 };
-```
-
-- `interface 名前 { ... }` の形。`type` と違い **末尾の `=` やセミコロンは書かない**。
-- 中身の書き方（プロパティ名と型、区切りのセミコロン）は `type` のオブジェクト型リテラルと同じ。
-- 慣習として大文字で始める（`User`、`Todo` など）。
-
-同じ型が必要な場所で呼び出せるのも `type` と同じです。
+2 章 で書いた配列に型を付けていきます。配列の型は 2 通りの書き方があります。どちらも意味は同じです。
 
 ```ts
-function printUser(user: User): void {
-  console.log(`${user.name} (${user.age})`);
-}
-
-printUser(alice);
+const numbers: number[] = [1, 2, 3];
+const names: Array<string> = ["Alice", "Bob"];
 ```
 
-型として見たときの振る舞いは、上のようなシンプルなオブジェクトの場合はほとんど `type` と同じです。違うのは **書き方** と **拡張の仕方**、そして **書けない型の種類** です。
+- `number[]`: 「数値の配列」。短くて読みやすいので普段はこちら。
+- `Array<number>`: 「`Array` という型に `number` を流し込んだもの」。ジェネリクス（「ジェネリクス入門」で扱う）の書き方。
 
-### `extends` で継承する
-
-`interface` は `extends` で **別の `interface` を継承** できます。継承すると、元のプロパティを全部引き継いだうえで、新しいプロパティを足せます。
+どちらも、中身の型が合わないとエラーになる。
 
 ```ts
-interface User {
-  id: string;
-  name: string;
-}
-
-interface AdminUser extends User {
-  role: "admin";
-  permissions: string[];
-}
-
-const admin: AdminUser = {
-  id: "u001",
-  name: "Alice",
-  role: "admin",
-  permissions: ["read", "write"],
-};
+const numbers: number[] = [1, 2, "3"];
 ```
 
-- `AdminUser` は `User` のプロパティ（`id` と `name`）に加え、`role` と `permissions` を持つ。
-- `extends` の右にカンマで並べれば、**複数の `interface`** も継承できる。
+```
+Type 'string' is not assignable to type 'number'.
+```
 
-継承したプロパティを欠けさせるとエラーになります。
+### ユニオン型 `|`
+
+「文字列 **または** 数値」のように、複数の型のどれかを受け入れる型を **ユニオン型** と呼びます。
 
 ```ts
-const admin: AdminUser = {
-  id: "u001",
-  role: "admin",
-  permissions: ["read", "write"],
-}; // name が足りない
+let id: string | number;
+id = "abc123"; // OK
+id = 42;        // OK
+id = true;      // エラー
 ```
 
 ```
-Property 'name' is missing in type '{ id: string; role: "admin"; permissions: string[]; }' but required in type 'AdminUser'.
+Type 'boolean' is not assignable to type 'string | number'.
 ```
 
-### `type` でも同じことは書ける
+ユニオン型の値を使うときは、どちらの型の操作でも共通して使える部分しか呼べません。例えば `string | number` に対しては文字列だけが持つ `.toUpperCase()` は呼べません。使い分けたいときは `typeof` で絞り込みます（このコースでは深追いしない）。
 
-`type` エイリアスでも、**交差型** `&` を使えば継承に似たことが書けます。
+### リテラル型
+
+TS では **値そのもの** を型として使えます。これを **リテラル型** と呼びます。
+
+```ts
+let answer: "yes";
+answer = "yes"; // OK
+answer = "no";  // エラー
+```
+
+```
+Type '"no"' is not assignable to type '"yes"'.
+```
+
+これだけだと使い道がありませんが、ユニオン型と組み合わせると強力です。
+
+```ts
+let status: "open" | "done" | "archived";
+status = "open";     // OK
+status = "done";     // OK
+status = "archived"; // OK
+status = "todo";     // エラー
+```
+
+```
+Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
+```
+
+「この変数には `"open"` か `"done"` か `"archived"` のどれかしか入らない」ということが型で書けます。2 章 で文字列リテラルを比較していた部分（`if (status === "done")` など）が、typo まで含めて TS が守ってくれるようになります。
+
+### オプショナルプロパティ `?:`
+
+オブジェクトのプロパティのうち「あってもなくてもよい」ものは、名前の後ろに `?` を付けます。
 
 ```ts
 type User = {
-  id: string;
   name: string;
+  email?: string;
 };
 
-type AdminUser = User & {
-  role: "admin";
-  permissions: string[];
-};
+const alice: User = { name: "Alice" };                          // OK
+const bob: User = { name: "Bob", email: "bob@example.com" };    // OK
 ```
 
-`User & { ... }` は「`User` のプロパティ **かつ** `{ role, permissions }` のプロパティを両方持つ型」という意味。`interface extends` とほぼ同じ結果になります。
+- `email?: string` は「`email` は省略してもよい。書くなら `string`」という意味。
+- 省略した場合、`user.email` の型は `string | undefined` になる（`undefined` も入りうる、ということ）。
 
-### `type` だけが書けるもの
-
-次のような型は `interface` では書けません。`type` 専用です。
-
-1. **ユニオン型**（`A | B`）
-
-    ```ts
-    type Id = string | number;
-    ```
-
-    `interface Id = string | number;` のようには書けない。
-
-2. **交差型**（`A & B`）
-
-    `interface` を `extends` で合成するのとは別に、既存の型同士を `&` で組み合わせるのは `type` の役目。
-
-3. **リテラル型 / プリミティブ型のエイリアス**
-
-    ```ts
-    type Status = "open" | "done";
-    type Age = number;
-    ```
-
-4. **Utility Types の結果に名前を付ける**
-
-    「Utility Types で仕上げる」で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
-
-    ```ts
-    type TodoDraft = Partial<Todo>;
-    ```
-
-このあたりは「`interface` はオブジェクトの形の宣言専用。それ以外の型操作は `type` で」と覚えておくとよいです。
-
-### 使い分けの指針
-
-両方書けるのでどちらを使うべきか迷いますが、本コースでは次の方針で進めます。
-
-- **基本は `type`** に統一する
-  - オブジェクト型・ユニオン・交差・Utility Types を **同じ書き方（`type ...=`）で書ける** ので、読者側の認知コストが低い。
-  - 3 章 で `status: "open" | "done"` のようなユニオン・リテラル型が多用されるため、`type` で書けない場面は実質ない。
-- `interface` は「存在を知っている」状態にする
-  - 外部ライブラリの型定義（`@types/...`）では `interface` が多用される。読めるようにしておく必要がある。
-  - 将来チームで書く際に `interface` を選ぶ流儀もある。読み書きの両方できるようにしておけば困らない。
-
-要するに「どちらも書けるようになってから、本コースでは `type` で揃える」という立ち位置です。
-
-### 宣言マージについて（本編では扱わない）
-
-`interface` には「同じ名前の `interface` を複数書くとプロパティが合体する」 **宣言マージ** という挙動があります。
+`undefined` が入りうるので、使う側では存在チェックが必要になります。
 
 ```ts
-interface User {
-  name: string;
+function printEmail(user: User): void {
+  if (user.email) {
+    console.log(user.email.toUpperCase());
+  } else {
+    console.log("メールなし");
+  }
 }
-
-interface User {
-  age: number;
-}
-
-// ここで User は { name: string; age: number; } と同等
 ```
 
-便利に見えますが、読み手が「どこでマージされているか」を追わなければならず、意図しない衝突も起こりえます。本コースでは **この機能は使いません**。`type` に統一する方針と合わせて、「1 つの型は 1 つの宣言で書く」と覚えておいてください。
+`if (user.email)` を付けずに `user.email.toUpperCase()` とだけ書くと、TS が次のように止めます。
+
+```
+'user.email' is possibly 'undefined'.
+```
+
+### `Todo` 型を育てる
+
+「オブジェクトの型と type エイリアス」の `Todo` 型を次の形に育てます。
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+- `status`: `"open"` か `"done"` のどちらか。必須。
+- `memo?`: 省略可能な自由記述のメモ。書くなら文字列。
+
+これで「未完了 / 完了」を型レベルで表せるようになり、`Todo[]` は「育った `Todo` の配列」になります。
 
 ## 演習
 
@@ -178,32 +150,127 @@ export type Todo = {
 
 </details>
 
-### 手順 1: `interface Todo` で書き直す
+### 手順 1: 配列の型に慣れる
 
-これまでのレッスンで作った `src/types.ts` の `Todo` 型（`type` で書いたもの）を、一度 `interface` で書き直して挙動を確かめます。
-
-`src/types.ts` を次のように書き換える。
+`src/main.ts` の中身を以下に置き換える。
 
 ```ts
-// src/types.ts
-export interface Todo {
-  id: string;
-  text: string;
+const numbers: number[] = [1, 2, 3];
+const names: Array<string> = ["Alice", "Bob", "Charlie"];
+
+for (const n of numbers) {
+  console.log(n);
+}
+
+for (const name of names) {
+  console.log(name);
 }
 ```
 
-`src/main.ts` はこれまでと同じで動くことを確認する。
+#### 期待出力
+
+```
+1
+2
+3
+Alice
+Bob
+Charlie
+```
+
+わざと要素の型を間違えてみる。
+
+```ts
+const numbers: number[] = [1, 2, "3"];
+```
+
+期待されるメッセージ:
+
+```
+Type 'string' is not assignable to type 'number'.
+```
+
+確認したら `[1, 2, 3]` に戻す。
+
+### 手順 2: ユニオン型とリテラル型
+
+```ts
+let id: string | number;
+
+id = "abc123";
+console.log(id);
+
+id = 42;
+console.log(id);
+```
+
+#### 期待出力
+
+```
+abc123
+42
+```
+
+次に `true` を代入してみる。
+
+```ts
+id = true;
+```
+
+期待されるメッセージ:
+
+```
+Type 'boolean' is not assignable to type 'string | number'.
+```
+
+赤線を確認したら、**`id = true;` の行は消して** 次に進む（残しておくと後続コードが実行されない可能性がある）。続けて、リテラル型のユニオンを試す。
+
+```ts
+let status: "open" | "done" | "archived";
+status = "open";
+console.log(status);
+status = "done";
+console.log(status);
+status = "todo"; // typo わざと
+```
+
+期待されるメッセージ:
+
+```
+Type '"todo"' is not assignable to type '"open" | "done" | "archived"'.
+```
+
+確認したら `status = "todo";` の行を消すか、正しい値（`"archived"` など）に直す。
+
+### 手順 3: `Todo` 型を育てる
+
+`src/types.ts` を次の形に書き換える。
+
+```ts
+// src/types.ts
+export type Todo = {
+  id: string;
+  text: string;
+  status: "open" | "done";
+  memo?: string;
+};
+```
+
+`src/main.ts` を次の形に書き換える。
 
 ```ts
 import type { Todo } from "./types";
 
 const todos: Todo[] = [
-  { id: "a1", text: "牛乳を買う" },
-  { id: "a2", text: "本を返す" },
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
+  { id: "a3", text: "ゴミを出す", status: "open" },
 ];
 
 function printTodo(todo: Todo): void {
-  console.log(`- [${todo.id}] ${todo.text}`);
+  const mark = todo.status === "done" ? "x" : " ";
+  const memoText = todo.memo ? ` (memo: ${todo.memo})` : "";
+  console.log(`[${mark}] ${todo.text}${memoText}`);
 }
 
 for (const todo of todos) {
@@ -214,153 +281,94 @@ for (const todo of todos) {
 #### 期待出力
 
 ```
-- [a1] 牛乳を買う
-- [a2] 本を返す
+[ ] 牛乳を買う
+[x] 本を返す (memo: 駅前の図書館)
+[ ] ゴミを出す
 ```
 
-`type Todo = { ... }` を `interface Todo { ... }` に変えても、**使う側は何も書き換えずに動く** ことを確認する。`import type { Todo }` もそのまま使える。
+`memo` を持つ項目だけ `(memo: ...)` が付き、完了しているものは `[x]`、未完了は `[ ]` になる。
 
-### 手順 2: わざとプロパティを欠けさせてエラーを見る
+### 手順 4: 型のミスを見つけてもらう
 
-`main.ts` に次の行を足す。
+次の 3 つをそれぞれ試し、メッセージを確認する。確認したら元に戻す。
 
 ```ts
-const broken: Todo = { id: "a3" };
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "todo" }, // typo
+];
 ```
 
-期待されるメッセージ:
-
 ```
-Property 'text' is missing in type '{ id: string; }' but required in type 'Todo'.
+Type '"todo"' is not assignable to type '"open" | "done"'.
 ```
-
-エラーの文面は `type` のときと同じく「`Todo` 型に `text` が足りない」と出る。`interface` か `type` かは、エラーメッセージの見え方にほぼ影響しない。確認できたらこの行は消す。
-
-### 手順 3: `interface AdminUser extends User` を書く
-
-`src/types.ts` に `User` と `AdminUser` を追記する。
 
 ```ts
-// src/types.ts
-export interface Todo {
-  id: string;
-  text: string;
-}
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う" }, // status が足りない
+];
+```
 
-export interface User {
-  id: string;
-  name: string;
-}
+```
+Property 'status' is missing in type '{ id: string; text: string; }' but required in type 'Todo'.
+```
 
-export interface AdminUser extends User {
-  role: "admin";
-  permissions: string[];
+```ts
+function printTodo(todo: Todo): void {
+  console.log(todo.memo.toUpperCase());
 }
 ```
 
-`src/main.ts` の末尾に次のコードを追加する。
-
-```ts
-import type { AdminUser } from "./types";
-
-const admin: AdminUser = {
-  id: "u001",
-  name: "Alice",
-  role: "admin",
-  permissions: ["read", "write"],
-};
-
-console.log(`${admin.name}: ${admin.role} / ${admin.permissions.join(", ")}`);
+```
+'todo.memo' is possibly 'undefined'.
 ```
 
-#### 期待出力
-
-```
-- [a1] 牛乳を買う
-- [a2] 本を返す
-Alice: admin / read, write
-```
-
-### 手順 4: 継承したプロパティを欠けさせる
-
-`admin` オブジェクトから `name` を消してみる。
-
-```ts
-const admin: AdminUser = {
-  id: "u001",
-  role: "admin",
-  permissions: ["read", "write"],
-};
-```
-
-期待されるメッセージ:
-
-```
-Property 'name' is missing in type '{ id: string; role: "admin"; permissions: string[]; }' but required in type 'AdminUser'.
-```
-
-`User` から継承した `name` も、`AdminUser` を使う側では必須として扱われる。確認できたら元に戻す。
-
-### 手順 5: `interface` で書けないものを試す
-
-`interface` ではユニオン型を書けないことを確かめる。`types.ts` に次を足してみる。
-
-```ts
-export interface Id = string | number;
-```
-
-赤線が出る。期待されるメッセージ（環境により文面は前後するが、いずれにせよ構文エラーになる）:
-
-```
-'=' expected.
-```
-
-`Interface name cannot be reserved word ...` のように別の文面で出ることもあります。意図は同じで、**`interface` の宣言構文は `interface 名前 { ... }` だけなので、`= 型` を書く場所がない**（= ユニオン型は `interface` では表現できない）ということです。確認できたら行ごと消して、`type` で書き直す。
-
-```ts
-export type Id = string | number;
-```
-
-こちらは通る。
+最後のパターンは、オプショナルプロパティが `undefined` になりうることを TS が警告してくれている例。`if (todo.memo)` を挟んでから `toUpperCase()` するのが正しい使い方。
 
 ### 変えてみる
 
-`AdminUser` を `type` + 交差型で書き直して、挙動が同じことを確認する。
+`printTodo` の中で「未完了の TODO のテキストを大文字にして目立たせる」実装にしてみる。
 
 ```ts
-export type AdminUser = User & {
-  role: "admin";
-  permissions: string[];
-};
+function printTodo(todo: Todo): void {
+  if (todo.status === "open") {
+    console.log(`TODO: ${todo.text.toUpperCase()}`);
+  } else {
+    console.log(`DONE: ${todo.text}`);
+  }
+}
 ```
 
-`main.ts` の呼び出し側を書き換える必要はない。`User & { ... }` の形でも `interface extends` でも、呼び出し側から見たら区別がつかない。
+期待出力:
 
-確認できたら、3 章 の他レッスンで使いやすいように **`Todo` を `type` に戻して** おく。
-
-```ts
-// src/types.ts
-export type Todo = {
-  id: string;
-  text: string;
-};
 ```
-
-`User` と `AdminUser` は `interface` / `type` どちらで残しても構わない。3 章 の他レッスンの演習では `Todo` 型だけ使うので、`Todo` だけは `type` で揃えておけば他のレッスンとズレない。
+TODO: 牛乳を買う
+DONE: 本を返す
+TODO: ゴミを出す
+```
 
 ### 自分で書く
 
-次の型を **`type` + 交差型** と **`interface` + `extends`** の 2 通りで書き、両方が同じように使えることを確認する。
+`Todo` 型の配列 `todos` に対して、次の 2 つの関数を書く。
 
-- `Animal` 型: `{ name: string; legs: number; }`
-- `Dog` 型: `Animal` に `breed: string` を足した形
+1. `countOpen(todos: Todo[]): number` — `status === "open"` の件数を返す。
+2. `filterDone(todos: Todo[]): Todo[]` — `status === "done"` のものだけを新しい配列で返す。
 
-書けたら、`Dog` 型の値を 1 件作って `name` と `breed` を Console に出す。どちらの書き方でも `main.ts` の呼び出し側が変わらないことを実感する。
+呼び出して結果を Console に出す。使える道具は2 章 で学んだ `for...of`、`filter`、`length` など。どれを使っても構わない。
+
+### スコープ外の明記
+
+TS には「列挙型」を作る `enum` や、値を型に格上げする `as const` という機能もあります。**本コースでは扱いません**。理由は次の通り。
+
+- `"open" | "done"` のようなリテラル型ユニオンで、列挙型が担う用途のほとんどは代替できる。
+- `enum` はランタイムにコードを生成するため、`import type` で消せない副作用を持つ。
+- `as const` は学習コストに対してこのコースのゴール（Next.js で小さなアプリ）への寄与が薄い。
+
+使う場面に出会ったら、そのときに公式ドキュメントを読めば十分追いつけます。
 
 ## まとめ
 
-- `interface 名前 { ... }` でオブジェクトの形に名前を付けられる。`type` とほぼ同じ使い方ができる。
-- `interface` は `extends` で継承できる。`type` は `&`（交差型）で同じことができる。
-- ユニオン型・リテラル型・Utility Types の結果に名前を付けるのは **`type` のみ** ができる。
-- 宣言マージという機能もあるが、本コースでは使わない。
-- **本コースは `type` を基本** に使う。読者として `interface` も読める状態にしておき、書くときは `type` に揃える。3 章 の他レッスンの `types.ts` は `type Todo = { ... }` に戻しておく。
+- 配列の型は `T[]` / `Array<T>` の 2 通り。普段は `T[]`。
+- ユニオン型 `A | B` で「どちらでも受け入れる」が書ける。
+- リテラル型とユニオン型を組み合わせると、`"open" | "done"` のように「決まった値だけ許す」型が書ける。
+- `?:` で省略可能なプロパティを書ける。使う側では `undefined` を意識した分岐が必要。
+- `enum` / `as const` は本コースでは扱わない。

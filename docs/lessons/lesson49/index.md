@@ -1,139 +1,89 @@
-# lesson49: 判別共用体（discriminated union）
+# lesson49: ジェネリクス入門
 
 ## ゴール
 
-- オブジェクトのユニオン型に「種類を表す文字列リテラルのプロパティ」を付ける形（**判別共用体**）を書ける。
-- `switch (state.kind)` で各ケースに分岐すると、TS が自動的に型を絞り込んでくれることを体験する。
-- 画面の状態（ローディング / 成功 / エラー）を判別共用体で表現し、1 つの型でまるごと扱えるようになる。
-- この形が4 章 の「useReducer で複雑な state」の `Action` 型で再登場する流れを理解する。
+- 「どんな型にも使える関数」を書くための仕組みである **ジェネリクス**（型パラメータ `<T>`）を理解する。
+- `first<T>(arr: T[]): T | undefined` を自分で書けて、数値配列でも文字列配列でも `Todo` 配列でも動かせる。
+- 呼び出し側で型パラメータを明示的に書かなくても、**型推論** が働いて正しい型になることを確認できる。
 
 ## 解説
 
-### 判別共用体とは
+### 「どんな型でも受け入れる関数」を書きたい
 
-「配列・ユニオン・リテラル型・オプショナル」でユニオン型 `A | B` を、「型ガード」で `in` 演算子による絞り込みを学びました。これをさらに読み書きしやすくしたのが **判別共用体**（discriminated union、タグ付きユニオンとも呼ばれます）です。
-
-ポイントは **全ケースで共通の名前のプロパティ** を持ち、その値は **それぞれ別のリテラル型** にすることです。
+配列の先頭の要素を返す関数を書いてみます。数値配列なら次のように書けます。
 
 ```ts
-type Shape =
-  | { kind: "circle"; radius: number }
-  | { kind: "square"; side: number }
-  | { kind: "rectangle"; width: number; height: number };
-```
-
-- 共通プロパティ `kind` は全ケースで存在する。
-- `kind` の値は `"circle"` / `"square"` / `"rectangle"` とケースごとに違うリテラル。
-- それ以外のプロパティ（`radius`、`side`、`width` / `height`）はケース固有。
-
-この「`kind` という共通プロパティの値で種類を見分ける」形を判別共用体と呼びます。共通プロパティの名前は `kind` でも `type` でも `tag` でも構いませんが、本コースでは **`kind`** に統一します（`type` は予約語ではないものの、型注釈の文脈で紛らわしいため）。
-
-### `switch` で自動絞り込み
-
-判別共用体の最大の嬉しさは、`switch` で **何も書かずに型が絞り込まれる** 点です。
-
-```ts
-function area(shape: Shape): number {
-  switch (shape.kind) {
-    case "circle":
-      return Math.PI * shape.radius ** 2;
-    case "square":
-      return shape.side ** 2;
-    case "rectangle":
-      return shape.width * shape.height;
-  }
+function firstNumber(arr: number[]): number | undefined {
+  return arr[0];
 }
 ```
 
-- `case "circle":` のブロックでは `shape` の型が `{ kind: "circle"; radius: number }` に絞られている。`shape.radius` が使える。
-- `case "square":` の中では `shape.side`、`case "rectangle":` の中では `shape.width` / `shape.height` が使える。
-- `in` 演算子も `typeof` もカスタム型ガードも書いていないのに、TS が `kind` の値から自動で絞り込む。
+- 配列が空なら `arr[0]` は `undefined` なので、戻り値の型は `number | undefined`。
+- 文字列配列でも同じことをしたい場合、`firstString(arr: string[]): string | undefined` をもう 1 つ書く必要がある。
+- `Todo` 配列でも同じことをしたくなったら、さらにもう 1 つ。
 
-`switch` の条件に「**判別用プロパティ**」を指定するだけで、各 `case` が局所的な型付けになる。これが判別共用体を使う一番大きな動機です。
+明らかに繰り返しです。中身の処理はどれも `return arr[0];` で同じ。違うのは **配列の要素の型と戻り値の型だけ**。
 
-### 網羅性チェックとの組み合わせ
+### ジェネリクス: 型を引数として受け取る
 
-「`unknown` と `never`」で学んだ `never` による網羅性チェックを組み合わせると、ケース追加時に漏れを検出できます。
+関数が **値** を引数で受け取るのと同じように、TS は **型** を引数で受け取れます。これを **ジェネリクス**（総称型）と呼びます。
 
 ```ts
-function area(shape: Shape): number {
-  switch (shape.kind) {
-    case "circle":
-      return Math.PI * shape.radius ** 2;
-    case "square":
-      return shape.side ** 2;
-    case "rectangle":
-      return shape.width * shape.height;
-    default: {
-      const _exhaustive: never = shape;
-      return _exhaustive;
-    }
-  }
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
 }
 ```
 
-`Shape` に新しいケースを足すと、`default` 節の `_exhaustive` に赤線が出て、`area` を直し忘れていることを教えてくれます。
+- `<T>`: 関数名の直後に書く **型パラメータ**。`T` は「まだ決まっていない型」の仮の名前。
+- 慣習的に `T`（Type の頭文字）を使う。複数あれば `T, U, V` や `TKey, TValue` のように付ける。
+- 引数 `arr: T[]`: 「`T` の配列」。
+- 戻り値 `T | undefined`: 「`T`、または空配列のときは `undefined`」。
 
-### 画面の状態を判別共用体で表す
-
-実用面でよく登場するのが **画面の状態** です。データを取ってきて表示する画面は、ざっくり 3 つの状態を取ります。
-
-- まだ読み込み中（ローディング）
-- 成功してデータがある
-- 失敗してエラーメッセージがある
-
-これを判別共用体で 1 つの型にまとめます。
+この関数を呼び出すとき、`T` には **呼び出したときの値の型が自動で入ります**。
 
 ```ts
-import type { Todo } from "./types";
-
-type TodoState =
-  | { kind: "loading" }
-  | { kind: "success"; todos: Todo[] }
-  | { kind: "error"; message: string };
+const n = first([1, 2, 3]);         // T = number、n は number | undefined
+const s = first(["a", "b", "c"]);   // T = string、s は string | undefined
 ```
 
-- `"loading"` のときは他に何もいらない。
-- `"success"` のときだけ `todos` がある。
-- `"error"` のときだけ `message` がある。
+これが **型推論** です。呼び出し側が `<number>` のように書かなくても、渡した値の型から TS が決めてくれます。
 
-これを使う関数は、`switch` で自然に分岐できる。
+### 明示的に書くこともできる
+
+型推論に任せず、呼び出し側で `<型>` を明示する書き方もあります。
 
 ```ts
-function describe(state: TodoState): string {
-  switch (state.kind) {
-    case "loading":
-      return "読み込み中...";
-    case "success":
-      return `${state.todos.length} 件の TODO があります`;
-    case "error":
-      return `エラー: ${state.message}`;
-  }
+const n = first<number>([1, 2, 3]);
+```
+
+普段は型推論に任せるほうが読みやすいですが、推論の結果が期待と違うときや、配列が空で推論のヒントがないときには明示します。
+
+```ts
+const empty = first([]); // T = never と推論されてしまう
+const empty2 = first<number>([]); // T = number と明示
+```
+
+空配列 `[]` には型のヒントがないため、TS は `T` の候補を絞れず **最も狭い `never`** を選びます。`never[]` は何も入れられない型なので、その後の処理で結局困ります。空配列を渡すケースでは `<number>` のように **使う側が型を明示** すれば期待どおりに動きます。
+
+### 型パラメータは「使う側が決める」
+
+ジェネリクスは「関数を書く側」ではなく「関数を使う側」が型を決める仕組みです。`first` の実装は `T` が何であるかを知りません。だから `T` の中身（`.toUpperCase()` や `.toFixed()` など）を呼ぶことはできません。
+
+```ts
+function first<T>(arr: T[]): T | undefined {
+  return arr[0].toUpperCase(); // エラー
 }
 ```
 
-- `case "loading":` のブロックでは `state` に `todos` も `message` もない。
-- `case "success":` のブロックでは `state.todos` だけある。`state.message` と書くと赤線が出る。
-- `case "error":` のブロックでは `state.message` だけある。
-
-**存在しないプロパティにアクセスしようとすると TS が止めてくれる**。これが判別共用体の安全性です。
-
-### 2 章 の JS との違い（オブジェクトリテラル辞書ではなく型で）
-
-2 章 までは、似たようなことを「オブジェクトリテラル辞書」や「`if` チェーン」で書いていました。判別共用体を使うと、**型定義を見るだけでどんな状態があるかが一目で分かる**、**各状態で使えるプロパティが TS に守られる** という 2 つの利点が一気に手に入ります。
-
-### `kind` 以外の名前を使うとき
-
-既存のライブラリやサンプルでは、共通プロパティ名に `type`（HTTP のアクション種別など）を使っているものをよく見ます。
-
-```ts
-type Action =
-  | { type: "add"; text: string }
-  | { type: "delete"; id: string }
-  | { type: "toggle"; id: string };
+```
+Property 'toUpperCase' does not exist on type 'T'.
 ```
 
-これも立派な判別共用体です。名前の選び方は、**そのデータが自然に呼ばれる語に合わせる** くらいで十分。本コースでは画面の状態には `kind`、Redux 風の動作には `type` を使い分けます（どちらも中身の仕組みは同じ）。
+「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。この「中身に触らず通すだけの関数」が、ジェネリクスが最も活きる形です。
+
+### `Array.prototype.map` もジェネリクス
+
+実は2 章 で使った `map` / `filter` も TS の世界ではジェネリクス関数です。`map` は「`T[]` を受け取って、`(t: T) => U` の関数で変換して `U[]` を返す」という形で定義されています。ライブラリの内部ではこの形の型定義が大量に書かれていて、私たちは呼び出すだけで恩恵を受けています。
 
 ## 演習
 
@@ -141,196 +91,137 @@ type Action =
 
 このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
 
-### 手順 1: `Shape` の判別共用体
+### 手順 1: `first` を書く
 
 `src/main.ts` の中身を以下に置き換える。
 
 ```ts
-type Shape =
-  | { kind: "circle"; radius: number }
-  | { kind: "square"; side: number }
-  | { kind: "rectangle"; width: number; height: number };
-
-function area(shape: Shape): number {
-  switch (shape.kind) {
-    case "circle":
-      return Math.PI * shape.radius ** 2;
-    case "square":
-      return shape.side ** 2;
-    case "rectangle":
-      return shape.width * shape.height;
-    default: {
-      const _exhaustive: never = shape;
-      return _exhaustive;
-    }
-  }
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
 }
 
-console.log(area({ kind: "circle", radius: 2 }));
-console.log(area({ kind: "square", side: 3 }));
-console.log(area({ kind: "rectangle", width: 4, height: 5 }));
+const n = first([1, 2, 3]);
+const s = first(["a", "b", "c"]);
+const empty = first<number>([]);
+
+console.log(n);
+console.log(s);
+console.log(empty);
 ```
 
 #### 期待出力
 
 ```
-12.566370614359172
-9
-20
+1
+a
+undefined
 ```
 
-エディタで `case "circle":` の中の `shape` にマウスを乗せると `{ kind: "circle"; radius: number }` と出る。`kind` の値で型が絞られていることが確認できる。
+- `n` は `1`（数値）。
+- `s` は `"a"`（文字列）。
+- `empty` は `undefined`（空配列なので 0 番目がない）。
 
-### 手順 2: わざと他ケースのプロパティを触る
+エディタで `n` にマウスを乗せると `const n: number | undefined` と表示される。`s` は `const s: string | undefined`。型が正しく推論されていることを確認する。
 
-`case "circle":` の中で `shape.side` を参照してみる。
+### 手順 2: `Todo` 配列でも動くことを確認する
 
-```ts
-case "circle":
-  return Math.PI * shape.side ** 2;
-```
-
-期待されるメッセージ:
-
-```
-Property 'side' does not exist on type '{ kind: "circle"; radius: number; }'.
-```
-
-`"circle"` のケースでは `side` は存在しないので、触らせてもらえない。確認できたら `shape.radius` に戻す。
-
-### 手順 3: `TodoState` を書く
-
-「配列・ユニオン・リテラル型・オプショナル」で作った `src/types.ts` の `Todo` をそのまま使う。`src/main.ts` を次の内容に置き換える。
+`src/main.ts` を次の形に書き換える（`types.ts` は「配列・ユニオン・リテラル型・オプショナル」で作ったものをそのまま使う）。
 
 ```ts
 import type { Todo } from "./types";
 
-type TodoState =
-  | { kind: "loading" }
-  | { kind: "success"; todos: Todo[] }
-  | { kind: "error"; message: string };
-
-function describe(state: TodoState): string {
-  switch (state.kind) {
-    case "loading":
-      return "読み込み中...";
-    case "success":
-      return `${state.todos.length} 件の TODO があります`;
-    case "error":
-      return `エラー: ${state.message}`;
-    default: {
-      const _exhaustive: never = state;
-      return _exhaustive;
-    }
-  }
+function first<T>(arr: T[]): T | undefined {
+  return arr[0];
 }
 
-const s1: TodoState = { kind: "loading" };
-const s2: TodoState = {
-  kind: "success",
-  todos: [
-    { id: "a1", text: "牛乳を買う", status: "open" },
-    { id: "a2", text: "本を返す", status: "done" },
-  ],
-};
-const s3: TodoState = { kind: "error", message: "ネットワーク切断" };
+const todos: Todo[] = [
+  { id: "a1", text: "牛乳を買う", status: "open" },
+  { id: "a2", text: "本を返す", status: "done", memo: "駅前の図書館" },
+];
 
-console.log(describe(s1));
-console.log(describe(s2));
-console.log(describe(s3));
+const topTodo = first(todos);
+
+if (topTodo) {
+  console.log(`先頭の TODO: ${topTodo.text} (status: ${topTodo.status})`);
+} else {
+  console.log("TODO はありません");
+}
 ```
 
 #### 期待出力
 
 ```
-読み込み中...
-2 件の TODO があります
-エラー: ネットワーク切断
+先頭の TODO: 牛乳を買う (status: open)
 ```
 
-### 手順 4: ケース追加で網羅性が崩れる様子
+`topTodo` の型は `Todo | undefined` になっている（`if` で絞り込むと、中では `Todo` として `.text` や `.status` にアクセスできる）。
 
-`TodoState` に `"empty"` を追加してみる。
+### 手順 3: わざと型を間違えてエラーを見る
+
+`first` の中で `T` の中身を使おうとしてみる。
 
 ```ts
-type TodoState =
-  | { kind: "loading" }
-  | { kind: "success"; todos: Todo[] }
-  | { kind: "error"; message: string }
-  | { kind: "empty" };
-```
-
-`describe` の本体は触らない。すると `default:` の `const _exhaustive: never = state;` に赤線が出る。
-
-期待されるメッセージ:
-
-```
-Type '{ kind: "empty"; }' is not assignable to type 'never'.
-```
-
-「`"empty"` のケースが処理されていない」と TS が教えてくれる。`case "empty":` を足して処理を書くと赤線が消える。
-
-```ts
-case "empty":
-  return "TODO はまだありません";
-```
-
-実行して `describe({ kind: "empty" })` が `TODO はまだありません` を返すことを確認する。
-
-### 手順 5: わざと存在しないプロパティを触る
-
-`case "error":` のブロックで、`state.todos` を触ろうとしてみる。
-
-```ts
-case "error":
-  return `エラー: ${state.message} (${state.todos.length} 件)`;
+function first<T>(arr: T[]): T | undefined {
+  return arr[0].toUpperCase();
+}
 ```
 
 期待されるメッセージ:
 
 ```
-Property 'todos' does not exist on type '{ kind: "error"; message: string; }'.
+Property 'toUpperCase' does not exist on type 'T'.
 ```
 
-`"error"` のケースに `todos` は存在しない。判別共用体は **そのケースで本当にあるプロパティだけにアクセスを許可する**。確認できたら `state.todos` の部分は消す。
+続けて、呼び出し側で配列ではないものを渡してみる。
+
+```ts
+const n = first(123);
+```
+
+期待されるメッセージ:
+
+```
+Argument of type 'number' is not assignable to parameter of type 'unknown[]'.
+```
+
+「配列を渡してくれないと `T[]` にならない」と TS が止めてくれている。確認したら `first([1, 2, 3])` に戻す。
 
 ### 変えてみる
 
-共通プロパティの名前を `kind` から `type` に変えてみる。
+配列の最後の要素を返す `last` を書いてみる。
 
 ```ts
-type TodoState =
-  | { type: "loading" }
-  | { type: "success"; todos: Todo[] }
-  | { type: "error"; message: string };
+function last<T>(arr: T[]): T | undefined {
+  return arr[arr.length - 1];
+}
+
+console.log(last([1, 2, 3]));
+console.log(last(["a", "b", "c"]));
+console.log(last<number>([]));
 ```
 
-`switch (state.type)` に変えれば、`kind` のときと完全に同じように動く。呼び出し側のオブジェクトリテラルも `{ type: "loading" }` のように変える。**名前が変わっても挙動は同じ** ことを確認する。
+期待出力:
 
-確認できたら `kind` に戻す（本コースでは状態には `kind` を使う）。
+```
+3
+c
+undefined
+```
 
 ### 自分で書く
 
-次の判別共用体と関数を自分で書く。
+次の 2 つの関数をジェネリクスで書く。
 
-```ts
-type FetchResult<T> =
-  | { kind: "idle" }
-  | { kind: "loading" }
-  | { kind: "success"; data: T }
-  | { kind: "error"; message: string };
-```
+1. `second<T>(arr: T[]): T | undefined` — 配列の 2 番目の要素を返す（なければ `undefined`）。
+2. `wrapInArray<T>(value: T): T[]` — 値を 1 つ受け取り、それだけを入れた配列を返す。
 
-- この `FetchResult` はジェネリクスの形。`T` にどんな型を入れても使える。
-- `function render(r: FetchResult<string>): string` を書き、`"idle"` は `"待機中"`、`"loading"` は `"読み込み中"`、`"success"` は `data` をそのまま、`"error"` は `message` を返すようにする。
-- `default:` で `const _: never = r;` の網羅性チェックを付ける。
+書けたら、数値・文字列・`Todo` の 3 パターンで呼び出し、期待通りの型が推論されていること（エディタでマウスオーバーして確認）と、期待通りの出力が出ることを確認する。
 
-書けたら 4 パターンの `FetchResult<string>` を作って呼び出し、期待通りの文字列が返ることを確認する。
+`wrapInArray` のヒント: `function wrapInArray<T>(value: T): T[] { return [value]; }` で書ける。
 
 ## まとめ
 
-- **判別共用体** は「全ケースで共通の名前のプロパティを持ち、値が別々のリテラル」のユニオン型。
-- `switch (x.kind)` で分岐するだけで、各 `case` の中の型が自動で絞り込まれる。
-- 存在しないプロパティを触ろうとすると TS が止めてくれる。
-- `never` による網羅性チェックと組み合わせると、ケース追加時に処理漏れを検出できる。
-- 共通プロパティの名前は `kind` / `type` / `tag` のどれでもよい。本コースでは状態表現に `kind`、動作表現に `type` を使う。
+- ジェネリクスは「関数が型を引数として受け取る仕組み」。`<T>` で仮の型名を宣言する。
+- `first<T>(arr: T[]): T | undefined` のように書くと、数値配列でも文字列配列でも `Todo` 配列でも、**同じ実装** で型安全に動く。
+- 呼び出し側では通常 `<型>` を書かず、型推論に任せる。空配列などで推論のヒントがないときだけ明示する。
+- 実装の中では `T` の中身に触れない（`T` が何かを知らないから）。「中身に触らず通すだけ」の関数がジェネリクスの得意分野。

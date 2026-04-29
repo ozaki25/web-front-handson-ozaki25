@@ -1,176 +1,210 @@
-# lesson66: `useMemo` で計算のメモ化
+# lesson66: カスタムフック（`useTodos` に抽出）
+
+2 章 の「スコープとクロージャ」で `makeCounter()` / `makeFilter(status)` という関数を書きました。「関数が state を閉じ込める（クロージャ）」という形です。React のカスタムフックは **同じ仕組みを React の文脈で使う** 形と思ってください。2 章 の「スコープとクロージャ」の延長線上にあります。
 
 ## ゴール
 
-- `useMemo` で重い計算の結果をメモ化できる
-- 依存配列 `[deps]` の意味を理解する
-- 「まず普通に書き、計測してから最適化する」という原則を持つ
-- `useCallback` / `React.memo` / React Compiler との関係を俯瞰できる
+- 複数のフックを組み合わせたロジックを、再利用可能なカスタムフックに切り出せる
+- `use` プレフィックスの命名規則を守れる
+- フックのルール（トップレベルで呼ぶ、他のフックの中でだけ呼ぶ）を理解する
 
 ## 解説
 
-### 再レンダリングのたびに走る計算
+### カスタムフックとは
 
-React は state や props が変わるたびにコンポーネント関数を再実行します。関数の中で書いた計算も、**毎回やり直し** です。
+カスタムフックは **「フックを使う関数」** を切り出したものです。`useState` / `useEffect` / 他のフックを組み合わせて、自前の「新しいフック」を作れます。
+
+命名規則は 1 つだけ。**`use` で始まる関数名** にします。
 
 ```tsx
-function TodoList({ todos }: { todos: Todo[] }) {
-  const [keyword, setKeyword] = useState("");
+function useTodos() {
+  const [todos, setTodos] = useState<Todo[]>([]);
 
-  // 毎回のレンダリングでフィルタリングが走る
-  const filtered = todos.filter((t) => t.text.includes(keyword));
+  const addTodo = (text: string) => {
+    setTodos((prev) => [...prev, { id: crypto.randomUUID(), text, done: false }]);
+  };
 
-  return (
-    <>
-      <input value={keyword} onChange={(e) => setKeyword(e.target.value)} />
-      <ul>
-        {filtered.map((t) => (
-          <li key={t.id}>{t.text}</li>
-        ))}
-      </ul>
-    </>
-  );
+  const deleteTodo = (id: string) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  return { todos, addTodo, deleteTodo };
 }
 ```
 
-`todos` が 100 件くらいならこのまま書いても全く問題ありません。ただ、1 万件以上の配列で毎回フィルタするような場面では、再計算をスキップしたくなります。
-
-そのための仕組みが **`useMemo`** です。
-
-### `useMemo` の形
+これを使う側は、単に呼ぶだけ。
 
 ```tsx
-import { useMemo } from "react";
-
-const filtered = useMemo(() => {
-  return todos.filter((t) => t.text.includes(keyword));
-}, [todos, keyword]);
+function App() {
+  const { todos, addTodo, deleteTodo } = useTodos();
+  // あとは好きに使う
+}
 ```
 
-- 第 1 引数: 値を返す関数
-- 第 2 引数: **依存配列**。この中の値が前回と同じなら、関数を呼び直さず前回の結果を使い回す
-- 戻り値: 第 1 引数の関数の戻り値
+使う側のコンポーネントからは **state の管理が見えなくなり**、`useTodos` の戻り値だけを触る形になります。似た処理を 2 つのコンポーネントで使いたいときも、フック 1 つ書けば共有できます。
 
-「`todos` か `keyword` が変わったときだけ再計算する」という書き方になります。
+### 2 章 の「スコープとクロージャ」との対応
 
-### 依存配列を忘れるとどうなるか
+2 章 の「スコープとクロージャ」で書いた `makeCounter()` を思い出してください。
 
-依存配列を `[]`（空配列）にすると、初回レンダリングの結果がずっと使い回されます。`keyword` を変えても `filtered` が更新されないバグになります。
+```js
+function makeCounter() {
+  let count = 0;
+  return () => {
+    count = count + 1;
+    return count;
+  };
+}
 
-```tsx
-// NG: keyword が変わっても filtered が更新されない
-const filtered = useMemo(() => {
-  return todos.filter((t) => t.text.includes(keyword));
-}, []);
+const counterA = makeCounter();
+const counterB = makeCounter();
 ```
 
-依存配列は **関数の中で参照している「外の値」すべて** を入れるのが原則です。忘れると静かなバグになります。
+`counterA` と `counterB` はそれぞれ **独立した `count` を閉じ込めた関数** でした。
 
-### まず普通に書く、計測してから最適化
+カスタムフックも発想は同じです。`useTodos()` を呼び出した **コンポーネントごとに、独立した `todos` state を持つ**。クロージャで変数を閉じ込める代わりに、React の state が閉じ込められる、という違いだけです。
 
-`useMemo` は便利そうに見えますが、**乱用すると逆にコードが読みにくくなり、メモ化自体のコスト（依存配列のチェック、前回値の保持）で遅くなる** こともあります。
+### フックのルール
 
-原則:
+フックには **2 つのルール** があります。これは `useState` / `useEffect` / カスタムフック、すべてに共通です。
 
-1. まず **`useMemo` なし** で書く
-2. 「画面がカクつく」「数千〜数万件の配列を扱う」など、**実際に遅いと感じたときだけ** `useMemo` を検討する
-3. React DevTools Profiler（「React DevTools」）で **本当に速くなったか計測** してから採用する
+1. **コンポーネントや他のフックの「トップレベル」でのみ呼ぶ**
+   - `if` の中、`for` の中、コールバックの中では呼ばない
+   - 理由: React はフックを呼ぶ順番で state を識別している。順番が変わると壊れる
+2. **React 関数（コンポーネントまたはカスタムフック）の中でだけ呼ぶ**
+   - 普通の JS 関数の中では呼べない
 
-「念のため」で書いた `useMemo` は、ほとんどの場合で邪魔になります。
+カスタムフックは「フックを呼ぶ関数」なので、命名を `use` で始めると ESLint プラグインがこのルールを自動でチェックしてくれます。
 
-### コラム（折りたたみ）: `useCallback` と `React.memo`
+### なぜフックを切り出すのか
 
-`useMemo` は **値** のメモ化ですが、関連する仕組みがもう 2 つあります。
+単にコンポーネントを分けるのと違い、**state のロジックだけ** を切り出せます。UI は各コンポーネントが自由に書いて、state の振る舞いだけ共通化する、という分け方ができます。
 
-:::details useCallback / React.memo / React Compiler
+- `useTodos` は state 管理だけ
+- `TodoList` / `TodoInput` などの UI コンポーネントは表示だけ
+- 「TODO の件数を表示するバッジ」など別の UI を追加したくなっても、`useTodos` をもう 1 回呼ぶだけで state が手に入る
 
-**`useCallback`**: 関数のメモ化。毎回のレンダリングで新しく作られる関数の参照を安定させます。
+### いつフックに切り出すか
 
-```tsx
-const handleDelete = useCallback(
-  (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  },
-  [], // 依存なし、常に同じ関数参照を返す
-);
-```
+「state ロジックは全部カスタムフックに切り出す」と覚えると、**1 箇所でしか使わないフック** が量産されてコード全体の見通しが落ちます。実務でフックに切り出すかどうかの判断は、ざっくり次のいずれかが当てはまるときに限るのが扱いやすいです。
 
-**`React.memo`**: コンポーネントのメモ化。props が変わらなければ再レンダリングをスキップします。
+- **2 箇所以上で同じロジックを書きたくなったとき**（重複の解消）
+- **テストしたいロジックがある**（コンポーネントから切り離すとテストが書きやすい）
+- **3 つ以上の `useState` / `useEffect` が絡み合ってきて、コンポーネントの本体が読みづらいとき**
 
-```tsx
-import { memo } from "react";
+逆に、
 
-export const TodoItem = memo(function TodoItem({ todo, onDelete }: Props) {
-  return <li>{todo.text}</li>;
-});
-```
+- 1 箇所でしか使わない
+- 5 行未満の小さな state ロジック
+- UI と密に連動していて切り出すと逆に読みづらくなる
 
-`React.memo` で包んだ子コンポーネントに `useCallback` で関数 props を渡すと、親の再レンダリングで子がスキップされるようになります。
-
-**React Compiler** は React チームが進めている自動最適化ツールで、2025 年に 1.0 が出て、Next.js 16 でも組み込みオプションとして安定化が進んでいます（experimental フラグが不要になった環境が増加）。Compiler が有効な環境では、**`useMemo` / `useCallback` / `React.memo` の手動メモ化は原則不要** になる方向です。とはいえ既存コードや Compiler 未対応の状況では手動メモ化が現役なので、本コースでは **手動を学んだ上で、Compiler が成熟したら不要になる** という二段構えで覚えます。
-
-本コースのスタンスは明確です。
-
-- **今**: 手動メモ化（`useMemo`）の意味を押さえる
-- **将来**: Compiler が成熟したら自動で済むようになる。その時は道具の使い方が変わる
-- **読者がやるべきこと**: 手動メモ化を押さえたうえで、「Compiler がある」ことを知識として頭の端に置くだけでよい
-
-:::
+このようなケースは **コンポーネントの中に置いたままで OK** です。「再利用できそうだから切り出す」より「**重複が起きてから切り出す**」方が結果として良い設計になります。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。
+「親子コンポーネントの連携」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` に `done` を追加し、`src/useTodos.ts` を新規作成してロジックを抽出します。
 
-### ゴール
+<details>
+<summary>出発点のファイル（本レッスンで <code>done</code> を追加）</summary>
 
-- 大きな配列の合計を `useMemo` でメモ化する
-- 別の state を変えても、依存配列にその値が入っていなければ再計算されないことを確認する
+**`src/types.ts`**
 
-### 手順
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
 
-1. StackBlitz の React + Vite（TS）テンプレートを開く
-2. `src/App.tsx` を以下に書き換える
-3. プレビューを確認する
-
-### `src/App.tsx`
+**`src/TodoInput.tsx`**
 
 ```tsx
-import { useMemo, useState } from "react";
-import "./App.css";
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-const BIG_NUMBERS = Array.from({ length: 10000 }, (_, i) => i + 1);
+type TodoInputProps = {
+  onAdd: (text: string) => void;
+};
+
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    onAdd(trimmed);
+    setText("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit} className="todo-input">
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
+  );
+}
+```
+
+**`src/TodoList.tsx`**
+
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+};
+
+export function TodoList({ todos, onDelete }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p className="empty">まだタスクがありません</p>;
+  }
+
+  return (
+    <ul className="todo-list">
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          {todo.text}
+          <button onClick={() => onDelete(todo.id)}>削除</button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+**`src/App.tsx`**
+
+```tsx
+import { useState } from "react";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+import type { Todo } from "./types";
 
 function App() {
-  const [multiplier, setMultiplier] = useState(1);
-  const [color, setColor] = useState<"red" | "blue">("blue");
+  const [todos, setTodos] = useState<Todo[]>([]);
 
-  // 重い計算（ここでは 1 万件の合計）
-  const total = useMemo(() => {
-    console.log("computing total...");
-    return BIG_NUMBERS.reduce((a, b) => a + b, 0) * multiplier;
-  }, [multiplier]);
+  function handleAdd(text: string) {
+    const newTodo: Todo = { id: crypto.randomUUID(), text };
+    setTodos((prev) => [...prev, newTodo]);
+  }
+
+  function handleDelete(id: string) {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  }
 
   return (
     <>
-      <h1>useMemo のデモ</h1>
-
-      <section className="box">
-        <h2>合計</h2>
-        <p style={{ color }}>total = {total.toLocaleString()}</p>
-        <button onClick={() => setMultiplier((m) => m + 1)}>
-          multiplier +1（合計が再計算される）
-        </button>
-      </section>
-
-      <section className="box">
-        <h2>無関係な state</h2>
-        <p>現在の色: {color}</p>
-        <button onClick={() => setColor((c) => (c === "blue" ? "red" : "blue"))}>
-          色を切り替え（合計は再計算されないはず）
-        </button>
-      </section>
+      <h1>TODO（親子連携版）</h1>
+      <TodoInput onAdd={handleAdd} />
+      <TodoList todos={todos} onDelete={handleDelete} />
     </>
   );
 }
@@ -178,60 +212,224 @@ function App() {
 export default App;
 ```
 
-### `src/App.css`
+本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props に `onToggle` を追加します。演習本体のコードがそのまま上書きになります。
 
-```css
-.box {
-  border: 1px solid #ccc;
-  padding: 12px;
-  margin: 12px 0;
-  border-radius: 4px;
-  color: #222;
-  background-color: #fff;
-}
+</details>
 
-.box button {
-  padding: 6px 10px;
-  cursor: pointer;
-}
+### ゴール
 
-@media (prefers-color-scheme: dark) {
-  .box {
-    color: #eee;
-    background-color: #202020;
-    border-color: #555;
-  }
+- ここまでの React レッスンで作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する
+- 戻り値は `{ todos, addTodo, deleteTodo, toggleTodo }` の 4 つ
+- `App` から `useTodos()` を呼び出して使う
+- **localStorage 連携は今回は扱わない**
+
+### 手順
+
+1. 「親子コンポーネントの連携」か「useEffect の基本」の React プロジェクトをコピーして新規に開く（別プロジェクトでも可）
+2. `src/types.ts` は3 章 で作った `Todo` 型をそのまま使う
+3. `src/useTodos.ts` を新規作成（カスタムフック）
+4. `src/TodoInput.tsx`、`src/TodoList.tsx` は既存のままでよい
+5. `src/App.tsx` で `useTodos()` を呼び出す形に書き換える
+
+### `src/types.ts`
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+  done: boolean;
+};
+```
+
+### `src/useTodos.ts`
+
+```ts
+import { useState } from "react";
+import type { Todo } from "./types";
+
+export function useTodos() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+
+  const addTodo = (text: string) => {
+    const trimmed = text.trim();
+    if (trimmed.length === 0) return;
+    setTodos((prev) => [
+      ...prev,
+      { id: crypto.randomUUID(), text: trimmed, done: false },
+    ]);
+  };
+
+  const deleteTodo = (id: string) => {
+    setTodos((prev) => prev.filter((t) => t.id !== id));
+  };
+
+  const toggleTodo = (id: string) => {
+    setTodos((prev) =>
+      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
+    );
+  };
+
+  return { todos, addTodo, deleteTodo, toggleTodo };
 }
 ```
 
+ポイント:
+
+- ファイル名は `useTodos.ts`（拡張子は `.ts` で OK、JSX を書かないので `.tsx` 不要）
+- `use` で始まる関数名
+- 戻り値はオブジェクトで 4 要素を返す
+- `addTodo` の中で `trim` して空文字を弾く
+
+### `src/TodoInput.tsx`
+
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+
+type TodoInputProps = {
+  onAdd: (text: string) => void;
+};
+
+export function TodoInput({ onAdd }: TodoInputProps) {
+  const [text, setText] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    onAdd(text);
+    setText("");
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <input
+        value={text}
+        onChange={(e) => setText(e.target.value)}
+        placeholder="やることを入力"
+      />
+      <button type="submit">追加</button>
+    </form>
+  );
+}
+```
+
+### `src/TodoList.tsx`
+
+```tsx
+import type { Todo } from "./types";
+
+type TodoListProps = {
+  todos: Todo[];
+  onDelete: (id: string) => void;
+  onToggle: (id: string) => void;
+};
+
+export function TodoList({ todos, onDelete, onToggle }: TodoListProps) {
+  if (todos.length === 0) {
+    return <p>TODO はまだありません。</p>;
+  }
+
+  return (
+    <ul>
+      {todos.map((todo) => (
+        <li key={todo.id}>
+          <label>
+            <input
+              type="checkbox"
+              checked={todo.done}
+              onChange={() => onToggle(todo.id)}
+            />
+            <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
+              {todo.text}
+            </span>
+          </label>
+          <button type="button" onClick={() => onDelete(todo.id)}>
+            削除
+          </button>
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### `src/App.tsx`
+
+```tsx
+import { useTodos } from "./useTodos";
+import { TodoInput } from "./TodoInput";
+import { TodoList } from "./TodoList";
+
+export default function App() {
+  const { todos, addTodo, deleteTodo, toggleTodo } = useTodos();
+
+  return (
+    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
+      <h1>私の TODO（useTodos 版）</h1>
+      <TodoInput onAdd={addTodo} />
+      <TodoList todos={todos} onDelete={deleteTodo} onToggle={toggleTodo} />
+    </main>
+  );
+}
+```
+
+- `App` は state を直接持っていません
+- `useTodos()` を呼ぶだけで、state と操作関数が手に入る
+- `App` は「UI を組み立てるだけ」に役割が絞られた
+
 ### 期待出力
 
-- 画面に「合計」と「無関係な state」の 2 つのボックス
-- 初回に Console に `computing total...` が 1 回出る
-- 「multiplier +1」ボタンを押すたびに Console に `computing total...` が出る（依存配列に `multiplier` が入っているため）
-- 「色を切り替え」ボタンを何度押しても Console には `computing total...` が **出ない**（依存配列に `color` は入っていないため）
-
-これが `useMemo` の効果です。`color` の変更では再レンダリングは起きますが、`total` の計算はスキップされます。
+- 画面に入力欄 + 追加ボタン + 一覧
+- 追加すると一覧に増え、チェックボックスで完了状態切り替え、削除ボタンで消える
+- 機能は以前と変わらない。**コード構造が整理された** ことが今回のポイント
 
 ### 変える
 
-- 依存配列を `[]` に変える → `multiplier` を増やしても `total` が更新されなくなる（バグ）。確認したら戻す
-- `useMemo` を外して `const total = ... * multiplier` に戻す → 色を切り替えるだけでも `computing total...` が出るようになる。1 万件程度なら体感差はほぼないが、再計算が走っていることは Console から確認できる
+- `useTodos()` を **2 回呼び出す** とどうなるか試す:
+  ```tsx
+  const { todos } = useTodos();
+  const { todos: todos2 } = useTodos();
+  ```
+  それぞれ独立した state になる。2 章 の「スコープとクロージャ」の `counterA` / `counterB` と同じ形
+- `useTodos` の戻り値にカスタムな派生値を加える: `const doneCount = todos.filter((t) => t.done).length;` を計算して返す
 
 ### 自分で書く
 
-- 「偶数だけを取り出す」処理を `useMemo` で書く
-- ヒント: `const evens = useMemo(() => BIG_NUMBERS.filter((n) => n % 2 === 0), []);`
-- `BIG_NUMBERS` は固定なので依存配列は `[]` で OK
+`useCounter(initial: number)` カスタムフックを作ります。戻り値は `{ count, increment, decrement, reset }` です。
 
-### React DevTools Profiler
+まずは何も見ずに自分で書いてみてください。詰まったら段階的にヒントを開きます。
 
-「本当にスキップされているか」は React DevTools Profiler で計測できます。
+::: details ヒント A: 設計（最初に詰まったらここ）
+
+- `useTodos` と同じ「**フックを使う関数 = カスタムフック**」のパターン
+- フック内部で `useState` を 1 つ使い、戻り値のオブジェクトに 4 つのキーを並べる
+- 4 つのキーのうち 1 つは `count`、残り 3 つは「カウントを変える関数」
+
+:::
+
+::: details ヒント B: シグネチャ（さらに詰まったら）
+
+```ts
+function useCounter(initial: number): {
+  count: number;
+  increment: () => void;
+  decrement: () => void;
+  reset: () => void;
+} {
+  // ここに useState と 3 つの関数を書く
+}
+```
+
+:::
+
+::: details ヒント C: 実装イメージ（最終手段）
+
+`const [count, setCount] = useState(initial)` を作り、`setCount((c) => c + 1)` のように **関数形式の setter** で 3 つの操作関数を書きます。`reset` は `setCount(initial)` です。
+
+:::
 
 ## まとめ
 
-- `useMemo(() => 計算, [deps])` で重い計算をメモ化できる
-- 依存配列の値が変わらなければ、前回の結果を使い回す
-- 依存配列を忘れると静かなバグの原因になる
-- まず普通に書き、本当に遅いときだけ `useMemo` を検討する
-- `useCallback` / `React.memo` / React Compiler は発展的な話題として頭の端に置く
+- カスタムフックは `use` で始まる関数。内部で他のフックを呼べる
+- state のロジックだけを切り出して、UI 側を身軽にできる
+- 2 章 の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
+- フックのルールは 2 つ: トップレベルで呼ぶ / React 関数（コンポーネントまたはフック）の中でだけ呼ぶ

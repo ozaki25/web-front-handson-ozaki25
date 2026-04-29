@@ -1,424 +1,397 @@
-# lesson96: セマンティック HTML とアクセシビリティの基礎
+# lesson96: テスト入門 — Vitest でユニットテスト
 
 ## ゴール
 
-- なぜアクセシビリティ（a11y）に配慮するかを自分の言葉で説明できる
-- セマンティック HTML が a11y の土台になる理由を理解する
-- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）の役割を説明できる
-- 見出し階層（`<h1>`〜`<h6>`）を正しく並べられる
-- 画像の `alt` 属性とフォームの `<label>` の役割を説明できる
-- WCAG の **コントラスト比** の基準（AA / AAA）を知っている
+- なぜテストを書くか、何が報われるかを自分の言葉で説明できる
+- Vitest をプロジェクトにセットアップできる
+- `describe` / `it` / `expect` の基本構文を読める・書ける
+- 純粋関数（純関数）のユニットテストを書ける
+- watch モードで「コードを直したらテストが即走る」体験を得る
+- テストピラミッド（ユニット 70% / 結合 20% / E2E 10%）の考え方を知る
 
 ## 解説
 
-### なぜアクセシビリティ（a11y）に配慮するか
+### なぜテストを書くか
 
-アクセシビリティ（accessibility、略して **a11y**）は「**すべてのユーザーがウェブを使える状態** にする」取り組みです。対象は次のような利用者です。
+「テストは時間の無駄」と感じる人もいます。しかし実務では次のリターンがあります。
 
-- **視覚に関するもの**: 全盲 / 弱視 / 色覚特性のある人（スクリーンリーダーを使う、拡大表示する、コントラストが低いと読めない）
-- **聴覚に関するもの**: 聴覚を使いにくい人（動画の字幕が必要）
-- **運動に関するもの**: マウスを使いにくい人（キーボードや音声コマンドで操作する）
-- **認知に関するもの**: 複雑な UI や素早い動きが苦手な人
+1. **デグレ防止**: 一度直したバグが、別の修正でまた壊れることを自動検知
+2. **リファクタリングの安心感**: テストが通っていれば、内部実装を大胆に書き換えられる
+3. **設計のフィードバック**: テストが書きにくいコードは、責務が混ざっている兆候。設計改善のシグナル
+4. **ドキュメント代わり**: テストが「この関数はこう動く」の生きた説明になる
 
-さらに **誰にとっても役立つ** 場面も多くあります。
+逆にテストが要らない / 後回しでよいケース:
 
-- スマホを片手で操作する状況（大きなタップ領域が欲しい）
-- 日差しの強い屋外（高コントラストが欲しい）
-- 満員電車で音が出せない（字幕が欲しい）
-- キーボード派の開発者（Tab で操作したい）
+- 試作で捨てる前提のコード
+- 1 度だけ使うスクリプト
+- UI のピクセル単位の見た目（人間の目で確認する方が速い）
 
-2026 年現在、**WCAG 2.2**（Web Content Accessibility Guidelines 2.2）が国際標準で、政府・公共機関や大企業のサイトでは AA 準拠が事実上の必須になっています。開発者の側でも「動くだけ」ではなく「みんなが使える」を最低ラインとして出荷するのが当たり前になってきました。
+本コースは学習教材なのでテストは書いていませんが、**実務に出るときの必修科目** です。
 
-### セマンティック HTML が土台
+### テストピラミッド
 
-**セマンティック HTML** とは「見た目ではなく **意味** を表す HTML を書く」ことです。タイトルには `<h1>`、本文の段落には `<p>`、ナビゲーションには `<nav>` のように、タグに役割を持たせます。
+テストには規模の違いがあります。
 
-見た目だけなら `<div>` と CSS だけでも作れますが、**機械（ブラウザ / スクリーンリーダー / 検索エンジン / AI エージェント）には意味が伝わりません**。
+| 種類 | 速度 | 安定 | 範囲 | 比率の目安 |
+|---|---|---|---|---|
+| ユニット | 速い（ms） | 安定 | 関数 1 つ | 70% |
+| コンポーネント / 結合 | 中間 | 中間 | コンポーネント / 複数モジュール | 20% |
+| E2E | 遅い（秒） | 不安定 | アプリ全体 | 10% |
 
-NG（見た目だけ）:
+ピラミッドの考え方は **「下が広く、上が狭い」** です。ユニットを多く書き、E2E は最重要パスだけに絞ります。E2E は「ログイン → 商品購入」のような **失敗するとビジネス的に致命的な経路** に投資する、というのが 2026 年の定番です。
 
-```html
-<div class="big-text">記事タイトル</div>
-<div class="paragraph">本文...</div>
-<div class="link" onclick="go()">続きを読む</div>
+本レッスンでは **Vitest でユニットテスト**（純粋関数のテスト）を扱います。コンポーネントテスト（Testing Library）、API モック（MSW）、E2E（Playwright）はそれぞれ別の章で扱います。
+
+### Vitest とは
+
+**Vitest** は Vite の上で動くテストランナーです。Jest（昔からある定番）と同じ書き方で、**Vite と同じ設定（TypeScript / JSX / 環境変数 / プラグイン）が自動で効く** のが大きな利点です。冷起動が Jest より一桁速いと言われています。
+
+2026 年現在、新規プロジェクトでは **Vitest が第一候補** です。Jest は既存資産との互換のために残るケースが多いです。
+
+### Vitest のセットアップ
+
+新規 Vite プロジェクトに Vitest を入れるとき:
+
+```bash
+npm install -D vitest @vitejs/plugin-react jsdom
 ```
 
-OK（意味を持たせる）:
+`vitest.config.ts` を作成:
 
-```html
-<h1>記事タイトル</h1>
-<p>本文...</p>
-<a href="/next">続きを読む</a>
+```ts
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",  // ブラウザ風 DOM を提供（コンポーネントテスト用）
+    globals: true,         // describe / it / expect を import なしで使える
+    setupFiles: ["./vitest.setup.ts"], // 共通の前処理を書く場合
+  },
+});
 ```
 
-スクリーンリーダーは `<h1>` を「見出しレベル 1」と読み上げます。`<a>` を「リンク」と説明します。`<div>` ではそれが起きません。
+`package.json` に scripts を足す:
 
-**「a11y のために ARIA を足す」より前に、「セマンティック HTML を正しく書く」ことが 7〜8 割を占める** と覚えてください。
-
-### ランドマーク要素でページを 5 つの場所に分ける
-
-ページは大きく次の 5 つの **ランドマーク**（目印）に分けられます。スクリーンリーダーはこれらの要素を「ランドマーク一覧」で見せてくれるので、「ヘッダーに飛ぶ」「メイン本文に飛ぶ」が即座にできます。
-
-| タグ | 役割 |
-|---|---|
-| `<header>` | ページ上部。サイトロゴやナビが入る |
-| `<nav>` | ナビゲーション。主要リンクをまとめる場所 |
-| `<main>` | ページの **メインコンテンツ**。1 ページに 1 つだけ |
-| `<aside>` | 補足情報・サイドバー |
-| `<footer>` | ページ下部。コピーライト・連絡先など |
-
-典型的な構成:
-
-```html
-<body>
-  <header>
-    <h1>私のブログ</h1>
-    <nav>
-      <a href="/">ホーム</a>
-      <a href="/posts">記事一覧</a>
-      <a href="/about">自己紹介</a>
-    </nav>
-  </header>
-
-  <main>
-    <h2>今日の記事</h2>
-    <p>本文...</p>
-  </main>
-
-  <aside>
-    <h2>関連記事</h2>
-    <ul>
-      <li><a href="/posts/1">別の記事</a></li>
-    </ul>
-  </aside>
-
-  <footer>
-    <p>&copy; 2026 オザキ</p>
-  </footer>
-</body>
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  }
+}
 ```
 
-`<header>` と `<footer>` はページ全体のもの以外に、`<article>` や `<section>` の中にも置けます（そのブロックのヘッダー / フッターになる）。
+- `npm run test`: **watch モード** で起動。ファイル変更を検知して再実行
+- `npm run test:run`: 1 回だけ実行（CI 用）
 
-### 見出し階層は飛ばさない
+> **CI で動かす最小例**: GitHub Actions なら `.github/workflows/test.yml` に下記を置くだけで PR / push 時に毎回テストが走ります。
+>
+> ```yaml
+> name: test
+> on: [push, pull_request]
+> jobs:
+>   test:
+>     runs-on: ubuntu-latest
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: 22
+>           cache: npm
+>       - run: npm ci
+>       - run: npm run test:run
+> ```
 
-`<h1>`〜`<h6>` は **必ず 1 つずつ降りていく** のが原則です。`<h1>` の次に急に `<h3>` を使うと、スクリーンリーダーの読み上げで「2 段下がった！何か抜けた？」と混乱します。
+### 最小のテスト
 
-```html
-<!-- NG: h1 → h3 で h2 が飛んでいる -->
-<h1>記事タイトル</h1>
-<h3>サブセクション</h3>
+テストファイルは `*.test.ts` / `*.test.tsx` / `*.spec.ts` の命名で書きます。Vitest が自動で見つけて実行します。
 
-<!-- OK: h1 → h2 → h3 の順 -->
-<h1>記事タイトル</h1>
-<h2>章</h2>
-<h3>サブセクション</h3>
+```ts
+// src/math.ts
+export function add(a: number, b: number): number {
+  return a + b;
+}
 ```
 
-また `<h1>` は **1 ページに 1 つ** が基本です（HTML5 の `<section>` 内でも `<h1>` を使える仕様はありますが、対応のばらつきがあるので本コースでは 1 ページ 1 個に統一します）。
+```ts
+// src/math.test.ts
+import { describe, it, expect } from "vitest";
+import { add } from "./math";
 
-### 画像には `alt`、フォーム入力には `<label>`
+describe("add", () => {
+  it("正の数を 2 つ足す", () => {
+    expect(add(2, 3)).toBe(5);
+  });
 
-スクリーンリーダーは画像の中身を「見る」ことはできません。代わりに **`alt` 属性** のテキストを読み上げます。
+  it("負の数も足せる", () => {
+    expect(add(-1, -2)).toBe(-3);
+  });
 
-```html
-<!-- 情報を持つ画像: 内容を説明 -->
-<img src="/graph.png" alt="2026 年の売上グラフ。4 月で前年比 20% 増" />
-
-<!-- 装飾だけの画像: 空文字で OK（読み飛ばされる） -->
-<img src="/decoration.png" alt="" />
+  it("0 を足すと変わらない", () => {
+    expect(add(10, 0)).toBe(10);
+  });
+});
 ```
 
-`alt` を書かないと、スクリーンリーダーはファイル名（`graph.png`）を読み上げてしまい、意味を伝えられません。**飾りなら空文字、情報を持つなら説明文** が原則です。
+3 つの基本構造:
 
-フォームも同じで、`<input>` には **`<label>`** を必ず紐付けます。
+- **`describe(名前, () => {...})`**: テストをグループ化
+- **`it(条件, () => {...})`**: 1 つのテストケース。`test(...)` でも同じ
+- **`expect(値).toBe(期待値)`**: アサーション（期待を表明）
 
-```html
-<!-- NG: input 単独はラベルなし -->
-<p>お名前</p>
-<input type="text" />
+`globals: true` を有効にしているので、`import` を省いてもエラーにはなりませんが、**明示的に import するのが推奨** です（IDE の補完が効くため）。
 
-<!-- OK: label と for / id で紐付ける -->
-<label for="name">お名前</label>
-<input id="name" type="text" />
+### よく使うアサーション
 
-<!-- OK: label で input を包む -->
-<label>
-  お名前
-  <input type="text" />
-</label>
+```ts
+expect(value).toBe(5);              // === で比較（プリミティブ）
+expect(obj).toEqual({ a: 1 });      // 構造比較（オブジェクト / 配列）
+expect(arr).toContain("apple");     // 配列が要素を含むか
+expect(str).toMatch(/hello/);       // 文字列が正規表現にマッチするか
+expect(value).toBeNull();           // null かどうか
+expect(value).toBeUndefined();      // undefined かどうか
+expect(value).toBeTruthy();         // truthy（真値）か
+expect(value).toBeFalsy();          // falsy（偽値）か
+expect(fn).toThrow("エラーメッセージ"); // 関数が例外を投げるか
+expect(arr).toHaveLength(3);        // 配列 / 文字列の長さ
 ```
 
-`<label>` があると、スクリーンリーダーは「お名前、テキスト入力、空」のように読み上げます。ラベル部分をクリックすると入力欄にフォーカスが移るので、晴眼者にも扱いやすくなります。
+`toBe` と `toEqual` の使い分けは要注意。
 
-### コントラスト比: 見える色の組み合わせを選ぶ
-
-文字色と背景色のコントラストが低いと、弱視の人や日差しの強い環境では読めません。WCAG は **数値の基準** を定めています。
-
-| 対象 | AA（実用レベル） | AAA（高水準） |
-|---|---|---|
-| 通常のテキスト（〜18px） | 4.5:1 以上 | 7:1 以上 |
-| 大きなテキスト（18pt 太字 or 24px 以上） | 3:1 以上 | 4.5:1 以上 |
-| UI 部品の境界線・アイコン | 3:1 以上 | — |
-
-コントラスト比は **Chrome DevTools の Elements タブ** で確認できます。スタイルペインで色をクリックすると、自動で計算してくれます。Lighthouse の Accessibility スコアも 4.5:1 未満を警告してくれます。
-
-数字を自分で計算する必要はありません。実務では次のような定番ツールを使います。
-
-- Chrome DevTools（CSS の color プロパティをクリック）
-- WebAIM Contrast Checker（<https://webaim.org/resources/contrastchecker/>）
-- Figma のコントラストチェッカープラグイン
-
-ダークモードで `color: #808080` のような中間色を使うと、背景がダーク（`#1a1a1a`）でもライト（`#ffffff`）でもギリギリ読めない、という事故が起きがちです。ライト / ダーク双方でチェックする習慣をつけてください。
-
-### `lang` 属性で言語を明示する
-
-ページの言語を `<html lang="ja">` で指定します。スクリーンリーダーが適切な発音（日本語 / 英語）で読み上げるのに使われます。
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    ...
+```ts
+expect({ a: 1 }).toBe({ a: 1 });    // NG: 別オブジェクトなので fail
+expect({ a: 1 }).toEqual({ a: 1 }); // OK: 構造が同じなので pass
 ```
 
-本コースのこれまでの演習でもすべて `lang="ja"` を付けてきました。**サイトごとに 1 回設定するだけで良い** 基本です。
+オブジェクト / 配列は `toEqual`、それ以外は `toBe` と覚えてください。
+
+### `beforeEach` と `afterEach`
+
+各テストの前後に共通処理を入れたい場合に使います。
+
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
+describe("Counter", () => {
+  let count: number;
+
+  beforeEach(() => {
+    count = 0;  // 各テスト前にリセット
+  });
+
+  it("増やすと 1 になる", () => {
+    count++;
+    expect(count).toBe(1);
+  });
+
+  it("リセット後も 0 から始まる", () => {
+    expect(count).toBe(0);  // beforeEach のおかげで毎回 0 から
+  });
+});
+```
+
+### 非同期コードのテスト
+
+`async / await` で書くと自然に通ります。
+
+```ts
+import { describe, it, expect } from "vitest";
+
+async function fetchUser(id: number) {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve({ id, name: "Alice" }), 10)
+  );
+}
+
+describe("fetchUser", () => {
+  it("ユーザーを取得する", async () => {
+    const user = await fetchUser(1);
+    expect(user).toEqual({ id: 1, name: "Alice" });
+  });
+});
+```
+
+「Promise のテスト」を意識しなくても、関数を `async` にして `await` を書くだけで OK です。
+
+### watch モードで開発する
+
+`npm run test` で立ち上がる watch モードでは、
+
+- ファイル変更を検知して自動再実行
+- 失敗したテストを表示しっぱなしにして、対応するファイルを直すと即パス確認
+- キーボード操作で **filter**（特定のテストだけ実行）/ **rerun**（全部再実行）/ **quit** ができる
+
+開発しながらテストを書く / 直す体験は、watch モードがあるとないとで雲泥の差です。
 
 ## 演習
 
 ### ゴール
 
-- `<div>` だらけのページをセマンティック HTML に書き換える
-- 見出し階層を正しく並べ直す
-- 画像に適切な `alt` 属性を付ける
-- フォームに `<label>` を付ける
-- DevTools でコントラスト比を確認する
+- Vitest をセットアップできる
+- 「文字列を処理する関数」のユニットテストを 5 件書ける
+- watch モードで「直したら即通る」を体感する
 
 ### 途中から始める場合
 
-このレッスンは独立しています。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開いて、下の出発点のコードを貼ってください。
+新規 StackBlitz の Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-vanilla-ts>）を開きます。テンプレートには Vitest が入っていないので追加します。
 
-<details>
-<summary>出発点のコード（`div` だらけの NG パターン）</summary>
+### 手順 1: Vitest をインストール
 
-**`index.html`**
+ターミナル（StackBlitz の場合は下部の Terminal タブ）で:
 
-```html
-<!DOCTYPE html>
-<html>
-  <head>
-    <meta charset="UTF-8" />
-    <title>a11y の練習</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <div class="top">
-      <div class="logo">私のブログ</div>
-      <div class="menu">
-        <div onclick="location.href='/'">ホーム</div>
-        <div onclick="location.href='/posts'">記事一覧</div>
-      </div>
-    </div>
-
-    <div class="body">
-      <div class="title">今日の記事</div>
-      <div class="para">本文です。本文です。本文です。</div>
-
-      <div class="sub">サブセクション</div>
-      <div class="para">サブ本文です。</div>
-
-      <img src="https://placehold.co/300x200.png" />
-
-      <div class="form">
-        <div>お名前</div>
-        <input type="text" />
-        <div>メール</div>
-        <input type="email" />
-        <div onclick="submit()">送信</div>
-      </div>
-    </div>
-
-    <div class="bottom">
-      <div>&copy; 2026 オザキ</div>
-    </div>
-  </body>
-</html>
+```bash
+npm install -D vitest
 ```
 
-**`style.css`**
+> 注: 本レッスンはコンポーネントテストではないので `@vitejs/plugin-react` / `jsdom` は不要です。React Testing Library のレッスンで足します。
 
-```css
-body {
-  font-family: sans-serif;
-  color: #cccccc;
-  background: #ffffff;
-  margin: 0;
-}
-.top, .bottom { background: #e0e0e0; padding: 16px; }
-.menu div { display: inline-block; margin-right: 12px; cursor: pointer; color: #4da6ff; }
-.title { font-size: 24px; font-weight: bold; }
-.sub { font-size: 18px; font-weight: bold; }
-.para { margin: 8px 0; }
-.body { padding: 16px; }
-.form div[onclick] { display: inline-block; background: #eeeeee; color: #aaaaaa; padding: 6px 12px; cursor: pointer; }
+### 手順 2: 設定ファイルを作る
+
+プロジェクトルートに `vitest.config.ts` を作成:
+
+```ts
+import { defineConfig } from "vitest/config";
+
+export default defineConfig({
+  test: {
+    globals: true,
+  },
+});
 ```
 
-</details>
+`package.json` の `scripts` に以下を追加:
 
-### 手順
-
-1. `index.html` を **セマンティック HTML** に書き換えます（下の完成形を参照）。
-2. `style.css` の **コントラスト比** を上げて、文字が読みやすくなるよう修正します。
-3. DevTools で確認します。
-
-### `index.html` の完成形
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>a11y の練習</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <header>
-      <h1>私のブログ</h1>
-      <nav>
-        <a href="/">ホーム</a>
-        <a href="/posts">記事一覧</a>
-      </nav>
-    </header>
-
-    <main>
-      <article>
-        <h2>今日の記事</h2>
-        <p>本文です。本文です。本文です。</p>
-
-        <h3>サブセクション</h3>
-        <p>サブ本文です。</p>
-
-        <img
-          src="https://placehold.co/300x200.png"
-          alt="記事の挿絵（プレースホルダ画像）"
-          width="300"
-          height="200"
-        />
-      </article>
-
-      <section aria-labelledby="contact-heading">
-        <h2 id="contact-heading">お問い合わせ</h2>
-        <form>
-          <p>
-            <label for="name">お名前</label>
-            <input id="name" type="text" />
-          </p>
-          <p>
-            <label for="email">メール</label>
-            <input id="email" type="email" />
-          </p>
-          <button type="submit">送信</button>
-        </form>
-      </section>
-    </main>
-
-    <footer>
-      <p>&copy; 2026 オザキ</p>
-    </footer>
-  </body>
-</html>
-```
-
-変更点の理由:
-
-- `<div class="top">` → `<header>`、`<div class="menu">` → `<nav>`、`<div class="body">` → `<main>`、`<div class="bottom">` → `<footer>` にしてランドマーク化
-- `<div class="title">` → `<h2>`、`<div class="sub">` → `<h3>` で見出し階層を明示（`<h1>` はサイトタイトルで使っている）
-- クリック可能な `<div>` を `<a>` / `<button type="submit">` に変更（キーボードで操作できるようになる）
-- `<img>` に `alt` / `width` / `height` を付与
-- `<input>` に `<label>` を紐付け
-- `<html lang="ja">` で言語を明示
-
-### `style.css` の完成形
-
-```css
-body {
-  font-family: sans-serif;
-  color: #1a1a1a;        /* #cccccc → #1a1a1a（コントラスト比を大幅に改善）*/
-  background: #ffffff;
-  margin: 0;
-}
-
-header, footer {
-  background: #1e3a8a;   /* #e0e0e0 → #1e3a8a */
-  color: #ffffff;
-  padding: 16px;
-}
-
-header h1 {
-  margin: 0 0 8px 0;
-}
-
-nav a {
-  color: #ffffff;        /* #4da6ff → #ffffff（青背景に白文字）*/
-  margin-right: 16px;
-}
-
-main {
-  max-width: 720px;
-  margin: 0 auto;
-  padding: 24px 16px;
-}
-
-button[type="submit"] {
-  background: #1e3a8a;   /* #eeeeee → 濃い青 */
-  color: #ffffff;        /* #aaaaaa → 白 */
-  padding: 8px 16px;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-}
-
-button[type="submit"]:focus {
-  outline: 3px solid #60a5fa;  /* フォーカスリングを明示 */
-  outline-offset: 2px;
+```json
+{
+  "scripts": {
+    "test": "vitest"
+  }
 }
 ```
+
+### 手順 3: テスト対象のコードを書く
+
+`src/string-utils.ts` を作成:
+
+```ts
+export function reverse(s: string): string {
+  return s.split("").reverse().join("");
+}
+
+export function isPalindrome(s: string): boolean {
+  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return cleaned === reverse(cleaned);
+}
+
+export function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + "...";
+}
+```
+
+### 手順 4: テストを書く
+
+`src/string-utils.test.ts` を作成:
+
+```ts
+import { describe, it, expect } from "vitest";
+import { reverse, isPalindrome, truncate } from "./string-utils";
+
+describe("reverse", () => {
+  it("文字列を反転する", () => {
+    expect(reverse("hello")).toBe("olleh");
+  });
+
+  it("空文字は空文字のまま", () => {
+    expect(reverse("")).toBe("");
+  });
+});
+
+describe("isPalindrome", () => {
+  it("回文は true", () => {
+    expect(isPalindrome("racecar")).toBe(true);
+    expect(isPalindrome("level")).toBe(true);
+  });
+
+  it("回文でなければ false", () => {
+    expect(isPalindrome("hello")).toBe(false);
+  });
+
+  it("大文字小文字を無視する", () => {
+    expect(isPalindrome("RaceCar")).toBe(true);
+  });
+
+  it("記号と空白を無視する", () => {
+    expect(isPalindrome("A man, a plan, a canal: Panama")).toBe(true);
+  });
+});
+
+describe("truncate", () => {
+  it("最大長以内なら変えない", () => {
+    expect(truncate("hello", 10)).toBe("hello");
+  });
+
+  it("超えたら切り詰めて ... を付ける", () => {
+    expect(truncate("hello world", 5)).toBe("hello...");
+  });
+
+  it("ちょうどなら変えない", () => {
+    expect(truncate("hello", 5)).toBe("hello");
+  });
+});
+```
+
+### 手順 5: 実行
+
+```bash
+npm run test
+```
+
+Vitest が起動し、watch モードで全テストが走ります。すべて緑のチェックで pass すれば成功です。
 
 ### 期待出力
 
-- ページ上部の見出しが大きく表示され、下のナビが横に並ぶ
-- 本文の見出しが 2 段階に階層化されて表示される
-- 画像が表示される（`alt` はマウスオーバーで一部のブラウザで表示される）
-- フォームの「お名前」「メール」をクリックすると入力欄にフォーカスが移る
-- Tab キーで「ホーム」リンク → 「記事一覧」リンク → お名前入力 → メール入力 → 送信ボタンと順に移動できる
-- 送信ボタンにフォーカスを移すと、太い青のフォーカスリングが見える
+```
+ PASS  src/string-utils.test.ts (10)
+   PASS  reverse (2)
+     PASS  文字列を反転する
+     PASS  空文字は空文字のまま
+   PASS  isPalindrome (4)
+     PASS  回文は true
+     PASS  回文でなければ false
+     PASS  大文字小文字を無視する
+     PASS  記号と空白を無視する
+   PASS  truncate (3)
+     PASS  最大長以内なら変えない
+     PASS  超えたら切り詰めて ... を付ける
+     PASS  ちょうどなら変えない
 
-### 確認ポイント（DevTools）
+ Test Files  1 passed (1)
+      Tests  10 passed (10)
+```
 
-Chrome の DevTools で以下を確認します。
-
-1. **Elements タブ**: `<h1>` `<h2>` `<h3>` が見出し階層として並んでいる。`<main>` `<header>` `<footer>` `<nav>` がランドマークとして使われている
-2. **Lighthouse タブ**: 「Accessibility」を単独で選んでレポートを生成。スコアが 90 以上になる
-3. **コントラスト比**: Elements で `body` の `color` をクリックすると、自動で計算された `Contrast ratio` が右側に出る。AA（4.5:1 以上）を満たしていることを確認
+実際の Vitest 出力では緑のチェックマーク記号がそれぞれの行頭に付きます。すべて緑になれば OK です。
 
 ### 変える
 
-- `body` の `color` を `#808080` に変えてみる。Lighthouse で「Background and foreground colors do not have a sufficient contrast ratio」の警告が出ることを確認
-- `<h2>` を削って、いきなり `<h3>` から始めてみる。Lighthouse が「Heading elements are not in a sequentially-descending order」と警告する
-- `<img>` の `alt` を消してみる。Lighthouse が「Image elements do not have `[alt]` attributes」と警告する
+- `truncate("hello world", 5)` の期待値を `"hello world"` に変えてみる。fail することを確認（fail 表示で「実際は何が返ったか」が示される）。元に戻す
+- `string-utils.ts` の `truncate` の `+ "..."` を消してみる。watch モードが即座に該当テストの fail を表示する。元に戻す
+- 新しい関数 `wordCount(s: string): number`（空白で区切った単語数を返す）を `string-utils.ts` に足し、テストも 3 件書く
 
 ### 自分で書く
 
-- `<main>` の下に「記事一覧」セクションを追加し、`<section>` でくるむ。各記事は `<article>` にして、`<h3>` のタイトル + `<p>` の要約を 3 件並べる
-- フォームの `<input>` に `required` を付け、送信ボタンにキーボードで Tab → Enter で送信できることを確認する
+- 配列を扱う関数を作ってテストを書く
+  - `unique<T>(arr: T[]): T[]`（重複を除いた配列）
+  - `chunk<T>(arr: T[], size: number): T[][]`（配列を size ごとに分割）
+- 各関数で **境界値**（空配列 / 1 要素 / size より小さい配列）も忘れずテストする
 
 ## まとめ
 
-- アクセシビリティは「誰でも使える」状態を目指すこと。WCAG 2.2 が 2026 年の国際標準
-- **セマンティック HTML が a11y の土台**。`<div>` + `role=...` より `<nav>` / `<main>` / `<h1>` のような意味のあるタグを優先
-- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）でページを整理
-- 見出しは `<h1>` → `<h2>` → `<h3>` の順に飛ばさず降りる。`<h1>` はページに 1 つ
-- 画像には `alt`、フォームには `<label>` を必ず
-- コントラスト比は本文 **4.5:1** 以上が AA（実用レベル）
-- `<html lang="ja">` で言語を明示
+- テストはデグレ防止 / リファクタリング安心 / 設計フィードバック / ドキュメント代わりの 4 つで報われる
+- テストピラミッド: ユニット 70% / 結合 20% / E2E 10% を目安
+- **Vitest** は Vite の上で動くテストランナー。Jest 互換の書き味で 10x 速い
+- 基本構造: `describe(名前, () => { it(条件, () => { expect(値).toBe(期待値) }) })`
+- アサーション: `toBe` はプリミティブ / `toEqual` はオブジェクト・配列
+- watch モードでファイル変更検知 → 即再実行で開発体験が大きく向上

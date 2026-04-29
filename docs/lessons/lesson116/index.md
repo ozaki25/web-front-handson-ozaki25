@@ -1,363 +1,348 @@
-# lesson116: 状態管理の地図（TanStack Query / Zustand / Jotai）
+# lesson116: フィーチャーフラグ
 
 ## ゴール
 
-- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
-- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
-- **TanStack Query** が **サーバー state** に特化していることを理解する
-- **Zustand** が **グローバルクライアント state** の現代の定番であることを知る
-- **Jotai** の atom 思想と Zustand との使い分けを 1 行で言える
-- **Redux Toolkit** の現在地（特定用途に残る）を把握する
-- 「迷ったら何を選ぶか」の判断軸を持つ
+- フィーチャーフラグが「**デプロイ** と **機能公開** を分離する」考え方であることを説明できる
+- 環境変数ベースの最小実装ができる
+- ロールアウト（10% → 50% → 100%）の意義を理解する
+- LaunchDarkly / GrowthBook / Vercel Edge Config / Statsig の位置付けが分かる
+- A/B テストとフィーチャーフラグの違いと重なりを説明できる
 
 ## 解説
 
-### state を 5 種類に分ける
+### 背景: 「リリース」と「公開」を切り離したい
 
-「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
+新機能をリリースすると、次の不安が常に付きまといます。
 
-| 種類 | 例 | 最適なツール |
-|---|---|---|
-| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
-| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
-| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
-| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
-| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
+- **本番で初めて壊れたら？**
+- **想定外のトラフィックで重くなったら？**
+- **特定ユーザーだけが踏むバグがあったら？**
 
-> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
+従来の「**ビルドして本番にデプロイ → 全ユーザーに公開**」は、不具合が出た瞬間に **ロールバックしか選択肢がない** という弱さがあります。
 
-### 1. ローカル state: `useState` / `useReducer`
+フィーチャーフラグ（Feature Flag、Feature Toggle）は **「コードはデプロイ済み、機能は OFF」の状態を作る** 仕組みです。
 
-特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
-
-```tsx
-const [isOpen, setIsOpen] = useState(false);
+```
+[ デプロイ ]──────────────[ 機能公開 ]
+     │                         │
+     ↓                         ↓
+  GitHub で merge          管理画面で ON
+   = 全ユーザーに            = 特定の人 / %
+     コードが届く              に出す
 ```
 
-「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
+これによって:
 
-### 2. URL state: `useSearchParams`
+- **5% に出してから様子を見る**
+- **問題が出たら 1 クリックで戻す**（ビルド不要）
+- **社内ユーザーだけ先行公開**
+- **A/B テスト**（バリアント A と B の効果を比較）
 
-「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。
+### 最小実装: 環境変数で
+
+「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。Server Component で評価する形がもっとも安全です。
+
+```ts
+// .env.production
+NEW_CHECKOUT=false
+```
 
 ```tsx
-"use client";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
-
-export function FilterBar() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const tag = searchParams.get("tag") ?? "all";
-
-  function setTag(newTag: string) {
-    const params = new URLSearchParams(searchParams);
-    params.set("tag", newTag);
-    router.push(`${pathname}?${params}`);
+// app/checkout/page.tsx (Server Component)
+export default function CheckoutPage() {
+  if (process.env.NEW_CHECKOUT === "true") {
+    return <NewCheckout />;
   }
-
-  return (
-    <select value={tag} onChange={(e) => setTag(e.target.value)}>
-      <option value="all">すべて</option>
-      <option value="js">JavaScript</option>
-      <option value="css">CSS</option>
-    </select>
-  );
+  return <LegacyCheckout />;
 }
 ```
 
-URL に状態が入ると:
+> **補足: `NEXT_PUBLIC_` プレフィックスはクライアントに丸見え**: `NEXT_PUBLIC_` で始まる環境変数は **ビルド時にクライアントバンドルに埋め込まれます**。ブラウザの DevTools で JS を眺めれば値も変数名もそのまま見えます。`NEXT_PUBLIC_NEW_CHECKOUT` のようにフラグ名を `NEXT_PUBLIC_` で出すと「未公開機能の存在」「フラグ名の命名規則」がエンドユーザーに漏れる事故になります。**Server Component で評価できる場合はプレフィックスなしの `process.env.NEW_CHECKOUT`** を使い、どうしても Client Component で参照したい場合だけ `NEXT_PUBLIC_` を付けます。
 
-- ブラウザの戻る / 進むで遷移できる
-- URL を共有すれば同じ画面が再現できる
-- ブックマークできる
+メリット:
 
-「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
+- 何も足さずに始められる
+- ビルド時に値が **インライン** されるので実行時オーバーヘッドゼロ
 
-### 3. サーバー state: TanStack Query
+デメリット:
 
-API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
+- 切り替えに **再ビルド + デプロイ** が必要（瞬時には変えられない）
+- ユーザー単位で出し分けできない
+- A/B テストには使えない
 
-- **古くなる**（他のユーザーの書き換えで上書きされる可能性がある）
-- **キャッシュしたい**（同じデータを何度も取りたくない）
-- **再取得したい**（ページに戻ってきた時など）
-- **楽観的更新したい**（UI を先に変えて、サーバー応答で確定）
+「**動作確認用 / 開発中の機能を本番に隠す**」程度なら環境変数で十分。**運用で柔軟に切り替えたい** なら次のステップへ。
 
-これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。
+### 中規模実装: 設定をリモート管理
 
-**TanStack Query**（React Query から改名）はこの問題を **`useQuery` 1 行** で解決します。
+ビルドし直さずに切り替えたいなら、**フラグの値を外部から取得** します。
+
+```ts
+// utils/flags.ts
+type Flags = { newCheckout: boolean; aiSummary: boolean };
+
+let cached: Flags | null = null;
+
+export async function getFlags(): Promise<Flags> {
+  if (cached) return cached;
+  const res = await fetch("https://api.example.com/flags", { cache: "no-store" });
+  cached = await res.json();
+  return cached!;
+}
+```
+
+```tsx
+// app/page.tsx
+import { getFlags } from "@/utils/flags";
+
+export default async function Home() {
+  const flags = await getFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
+```
+
+API のバックエンドは:
+
+- 自前のテーブル（Postgres / Redis）
+- **Vercel Edge Config**（Vercel 公式の超低遅延 KV）
+- Cloudflare KV / R2
+
+Vercel Edge Config の例:
+
+```ts
+import { get } from "@vercel/edge-config";
+
+const newCheckout = await get<boolean>("newCheckout");
+```
+
+**ms 単位で読める** ので、ページレンダリングの先頭で読んでも遅くなりません。
+
+### ユーザーに紐付くロールアウト
+
+「10% に出す」「特定の社員だけに出す」を実現するには **ユーザー識別子** が要ります。
+
+```ts
+function isFeatureEnabled(userId: string, percent: number): boolean {
+  // ユーザー ID をハッシュ → 0〜99 にマップ
+  const hash = simpleHash(userId) % 100;
+  return hash < percent;
+}
+
+const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
+```
+
+ハッシュベースだと、**同じユーザーは毎回同じ結果**（再現性）が得られます。「今回は ON、次回は OFF」を防げる。
+
+### SaaS の選択肢
+
+機能が複雑になると自前は辛いので SaaS を使います。
+
+| サービス | 特徴 |
+|---|---|
+| **LaunchDarkly** | エンタープライズ標準。機能フラグ + 実験機能 + 監査ログ。価格は高め |
+| **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
+| **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
+| **Flagsmith** | OSS / セルフホスト可能 |
+| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
+| **PostHog Feature Flags** | Analytics と統合 |
+
+#### LaunchDarkly の最小例
 
 ```bash
-npm install @tanstack/react-query
+npm install launchdarkly-react-client-sdk
 ```
 
 ```tsx
-import { useQuery } from "@tanstack/react-query";
+import { withLDProvider, useFlags } from "launchdarkly-react-client-sdk";
 
-function PostsList() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("/api/posts");
-      return res.json();
-    },
-  });
-
-  if (isLoading) return <p>読み込み中...</p>;
-  if (error) return <p>エラー</p>;
-  return <ul>{data.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+function App() {
+  const flags = useFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
 }
+
+export default withLDProvider({
+  clientSideID: process.env.NEXT_PUBLIC_LD_CLIENT_ID!,
+  context: { kind: "user", key: "user-123", email: "user@example.com" },
+})(App);
 ```
 
-`useQuery` がやってくれること:
+管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
 
-- **キャッシュ**: 同じ `queryKey` のデータは再利用
-- **重複排除**: 同じ key で複数コンポーネントから呼んでも 1 回だけ fetch
-- **再取得**: ウィンドウフォーカス時 / ネットワーク復帰時
-- **ステール管理**: `staleTime` を超えたら古い扱いに
-- **楽観的更新**: `useMutation` で送信中に UI を先に更新
-- **無限スクロール**: `useInfiniteQuery`
+> **補足: 環境ごとに SDK key を分ける**: フラグ SaaS では **Production / Preview / Development それぞれに別の SDK key を発行** できます。同じ key を全環境で使い回すと、Preview デプロイの動作確認が **本番フラグの評価ログを汚す**、A/B テストの母数に開発者の挙動が混ざる、本番フラグを誤って Preview から ON にしてしまう、といった事故になります。Vercel なら `Settings → Environment Variables` で `NEXT_PUBLIC_LD_CLIENT_ID` を **Production / Preview / Development の 3 つに分けて設定する** のが定石です。
 
-2026 年の React アプリで **API 呼び出しがある** なら、TanStack Query 入れない理由はほぼないです。
-
-> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
-
-### 4. グローバルクライアント state: Zustand / Jotai / Context
-
-「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には:
-
-#### 軽量な定番: Zustand
+#### GrowthBook の最小例
 
 ```bash
-npm install zustand
+npm install @growthbook/growthbook-react
 ```
 
 ```tsx
-import { create } from "zustand";
+import { GrowthBook, GrowthBookProvider, useFeatureIsOn } from "@growthbook/growthbook-react";
 
-type AuthStore = {
-  user: { id: string; name: string } | null;
-  login: (user: { id: string; name: string }) => void;
-  logout: () => void;
-};
+const gb = new GrowthBook({
+  apiHost: "https://cdn.growthbook.io",
+  clientKey: process.env.NEXT_PUBLIC_GB_CLIENT_KEY,
+  attributes: { id: currentUser.id },
+});
 
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
-  login: (user) => set({ user }),
-  logout: () => set({ user: null }),
-}));
-```
+await gb.loadFeatures();
 
-```tsx
-function Header() {
-  const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
-
-  return user ? (
-    <div>
-      ようこそ、{user.name} さん
-      <button onClick={logout}>ログアウト</button>
-    </div>
-  ) : (
-    <p>未ログイン</p>
-  );
+function NewCheckoutGuard() {
+  const enabled = useFeatureIsOn("new-checkout");
+  return enabled ? <NewCheckout /> : <LegacyCheckout />;
 }
+
+<GrowthBookProvider growthbook={gb}>
+  <NewCheckoutGuard />
+</GrowthBookProvider>
 ```
 
-利点:
+### A/B テストとの関係
 
-- **Provider が要らない**: import するだけで使える
-- **boilerplate が少ない**: Redux に比べて 1/5 のコード
-- **TypeScript フレンドリー**
-- **React 外でも呼べる**: `useAuthStore.getState()` で外部からも参照可能
+フィーチャーフラグは「**ON か OFF か**」、A/B テストは「**A 案と B 案、どちらの効果が高いか**」を測るもの。
 
-2026 年の **グローバルクライアント state の第一候補**。Redux Toolkit の boilerplate に疲れた人が大量に乗り換えました。
+実装は近く、フラグ系 SaaS は両方こなします。
 
-#### atom ベース: Jotai
+```ts
+// バリアント割当
+const variant = useExperiment("checkout-flow"); // "control" or "v2"
 
-```bash
-npm install jotai
+return variant === "v2" ? <NewCheckout /> : <LegacyCheckout />;
 ```
 
-```tsx
-import { atom, useAtom } from "jotai";
+A/B テストは **統計的な有意差** の判定が必要なので、SaaS の機能（Bayesian / Frequentist のテスト統計）を活用します。
 
-const countAtom = atom(0);
+### Kill Switch（緊急停止）
 
-function Counter() {
-  const [count, setCount] = useAtom(countAtom);
-  return <button onClick={() => setCount(count + 1)}>{count}</button>;
-}
+フィーチャーフラグの **大きな価値** がこれ。本番で問題が起きた時に **コードを巻き戻さず** に機能を即 OFF にできる。
+
+- 「決済 v2 を ON にしたら障害」→ 管理画面で OFF に
+- 「新検索が API を叩きすぎ」→ OFF に
+
+ロールバック（git revert + 再デプロイ）が **数分** かかるのに対し、フラグ OFF は **数秒**。これが本番運用の安心感に直結します。
+
+### フラグの寿命管理
+
+フラグは増えると **コードが if 地獄** になります。**寿命を管理** する習慣が大事。
+
+| フラグの種類 | 寿命の目安 |
+|---|---|
+| Release flag（新機能の段階公開） | 公開完了後すぐ削除 |
+| Experiment flag（A/B テスト） | 結果が出たら削除 |
+| Ops flag（緊急停止用） | 長期保存 |
+| Permission flag（権限による出し分け） | 永続 |
+
+「**Release flag は公開後 2 週間で削除**」のようなルールを決めて、定期清掃します。
+
+#### lint で検出
+
+GrowthBook / LaunchDarkly などの SaaS は「**コードに残っているフラグ一覧**」を検出する CLI を提供しています。CI で「3 ヶ月使われていないフラグ」を warning 出力するのが有効。
+
+### サーバー / クライアント / Edge
+
+Next.js のような SSR / RSC 環境では「**フラグをどこで評価するか**」が重要です。
+
+| 場所 | 例 |
+|---|---|
+| **Server Component** | `await getFlag()` を直接呼ぶ。SSR でフラグ反映 |
+| **Edge Middleware** | リクエストヘッダで分岐し、A/B 用に URL を書き換え |
+| **Client Component** | `useFlag()` フックでクライアントサイド分岐。**ハイドレーション後の表示揺れ** に注意 |
+
+クライアント側だけで分岐すると、ハイドレーションの瞬間に「**ON → OFF のチラつき**」が出ることがあります。なるべく **サーバー側で確定** させて RSC として配るのが安全。
+
+### よくある失敗
+
+#### 1. フラグの ON / OFF が複雑になりすぎる
+
+`if (flag1 && (flag2 || flag3) && !flag4) { ... }` のような状態は **テスト不可能**。フラグは独立に動かす設計を。
+
+#### 2. デフォルト値の事故
+
+ネットワークが落ちた時 / API 失敗時の **fallback 値** を必ず決める。
+
+```ts
+const enabled = (await getFlag("newCheckout")) ?? false; // 失敗時は OFF
 ```
 
-特徴:
+#### 3. クライアント露出
 
-- 状態を **小さな atom** に分割。それぞれが独立に管理される
-- 「明確な store がない、散らばった state を組み合わせる」アプリ向け
-- 派生状態（derived atom）が綺麗に書ける
+「管理画面用フラグ」をクライアントから読めるようにすると、**敵対的なユーザーが ON にしてしまう** 可能性がある。**サーバー側で評価** が原則。
 
-Zustand の **明確な store** とは対照的に、Jotai は **粒度の細かい atom** を組み合わせる思想です。React の useState を「アプリ全体に拡張した版」と考えると分かりやすい。
+#### 4. 削除されないフラグ
 
-#### React Context（組み込み）
-
-`useContext` も簡易な共有手段ですが、**頻繁に変わる state には向きません**（全消費者が再レンダリングされる）。テーマや言語設定のような「滅多に変わらない」共有値に使うのが定番です。
-
-「`Context` で済むなら Context、頻繁に変わるなら Zustand or Jotai、サーバー由来なら TanStack Query」が 2026 年の使い分けです。
-
-### Redux / Redux Toolkit の現在地
-
-Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。
-
-Redux が今でも残るのは:
-
-- **既存プロジェクト**: 移行コストで残る
-- **大規模 + 複雑な action / reducer ロジック** が要る場合
-- **Redux DevTools の時間旅行デバッグ** が欲しい場合
-- **ミドルウェア（thunk / saga）の生態系** に依存
-
-新規アプリなら **Zustand から始める** のが軽量で十分です。
-
-### SWR（TanStack Query の代替）
-
-Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。
-
-- TanStack Query: 機能豊富、エコシステム大、複雑系も得意
-- SWR: シンプル、API が小さい、学習コスト低、Next.js との親和性
-
-「シンプルさを優先」なら SWR、「全部入りで困らない」なら TanStack Query、というイメージです。
-
-### 「迷ったらこう選ぶ」フローチャート
-
-1. **コンポーネント内だけで完結？** → `useState`
-2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
-3. **サーバーから取るデータ？** → **TanStack Query**
-4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
-5. **散らばった派生状態が多い？** → **Jotai**
-6. **滅多に変わらない設定値？** → **Context**
-7. **フォームの入力値？** → **React Hook Form**
-
-これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
+書いたまま忘れて、**コードが永遠に if で分岐**。定期的な清掃を。
 
 ## 演習
 
 ### ゴール
 
-- 「TanStack Query で API データ取得」「Zustand でテーマ切替」「URL state でフィルタ」を 1 つのアプリで体験する
-- それぞれが **どの種類の state** を扱っているか意識する
+- 環境変数ベースのフラグから始め、リモート管理ベースに育てる
+- ユーザー ID ベースの 10% ロールアウトを実装する
 
-### 途中から始める場合
-
-新規 Vite + React + TS プロジェクトを作成。
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest state-sample -- --template react-ts
-cd state-sample
-npm install
-npm install @tanstack/react-query zustand
+npx create-next-app@latest flags-sample --ts --app
+cd flags-sample
 ```
 
-### 手順 1: TanStack Query の Provider を入れる
+### 手順 2: 環境変数フラグ
 
-`src/main.tsx`:
+`.env.local`:
+
+```
+NEXT_PUBLIC_NEW_HOMEPAGE=true
+```
+
+`app/page.tsx`:
 
 ```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import App from "./App";
-
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
-);
+export default function Home() {
+  const newHomepage = process.env.NEXT_PUBLIC_NEW_HOMEPAGE === "true";
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
+    </main>
+  );
+}
 ```
 
-### 手順 2: Zustand store
+`.env.local` の値を `false` に変えて再起動すると、表示が切り替わります。
 
-`src/themeStore.ts`:
+### 手順 3: ユーザー ID ベースのロールアウト
+
+`utils/rollout.ts`:
 
 ```ts
-import { create } from "zustand";
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h;
+}
 
-type ThemeStore = {
-  theme: "light" | "dark";
-  toggle: () => void;
-};
-
-// 初期値は OS 設定 (prefers-color-scheme) を尊重する
-const prefersDark =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: prefersDark ? "dark" : "light",
-  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-}));
+export function isInRollout(userId: string, percent: number): boolean {
+  return hash(userId) % 100 < percent;
+}
 ```
 
-> **`aria-pressed` と `prefers-color-scheme`**: 切替ボタン側には `aria-pressed={theme === "dark"}` を付けて、スクリーンリーダーに「現在 ON / OFF どちらの状態か」を伝えます。初期値は `prefers-color-scheme: dark` を見て OS 設定に揃えると、ダークモード設定の利用者が **明るい画面で迎えられる事故** を防げます。
-
-### 手順 3: 統合した App
-
-`src/App.tsx`:
+`app/page.tsx`:
 
 ```tsx
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useThemeStore } from "./themeStore";
+import { isInRollout } from "@/utils/rollout";
 
-type Post = { id: number; title: string };
+const FAKE_USERS = ["user-1", "user-2", "user-3", "user-4", "user-5"];
 
-export default function App() {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggle);
-  const [filter, setFilter] = useState("all");  // 簡易版（本来は URL state）
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-      return (await res.json()) as Post[];
-    },
-  });
-
-  const filtered = filter === "all" ? data : data?.filter((p) => p.id <= 10);
-
+export default function Home() {
   return (
-    <main
-      style={{
-        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
-        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
-        padding: 16,
-        minHeight: "100vh",
-      }}
-    >
-      <h1>状態管理の地図</h1>
-
-      <button
-        type="button"
-        aria-pressed={theme === "dark"}
-        onClick={toggleTheme}
-      >
-        テーマ: {theme}（クリックで切替 — Zustand）
-      </button>
-
-      <div style={{ marginTop: 12 }}>
-        <button onClick={() => setFilter("all")}>すべて（ローカル state）</button>
-        <button onClick={() => setFilter("first10")}>最初の 10 件</button>
-      </div>
-
-      <h2>記事一覧（TanStack Query で fetch）</h2>
-      {isLoading && <p>読み込み中...</p>}
-      {error && <p>エラー</p>}
+    <main style={{ padding: 24 }}>
+      <h1>10% ロールアウトのデモ</h1>
       <ul>
-        {filtered?.slice(0, 20).map((p) => (
-          <li key={p.id}>#{p.id} {p.title}</li>
+        {FAKE_USERS.map((id) => (
+          <li key={id}>
+            {id}: {isInRollout(id, 10) ? "ON" : "OFF"}
+          </li>
         ))}
       </ul>
     </main>
@@ -365,30 +350,70 @@ export default function App() {
 }
 ```
 
+10% に絞ると **ほとんどの user が OFF**、50% にすると半々、と **再現性** を持って分かれることを確認します。
+
+### 手順 4: フラグを集約する
+
+`utils/flags.ts`:
+
+```ts
+import { isInRollout } from "./rollout";
+
+export type Flags = {
+  newCheckout: boolean;
+  aiSummary: boolean;
+};
+
+export function getFlags(userId: string): Flags {
+  return {
+    newCheckout: process.env.NEXT_PUBLIC_NEW_CHECKOUT === "true" && isInRollout(userId, 10),
+    aiSummary: process.env.NEXT_PUBLIC_AI_SUMMARY === "true",
+  };
+}
+```
+
+`app/dashboard/page.tsx`:
+
+```tsx
+import { getFlags } from "@/utils/flags";
+
+export default function Dashboard() {
+  const flags = getFlags("user-current");
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Dashboard</h1>
+      {flags.newCheckout && <p>新チェックアウト ON</p>}
+      {flags.aiSummary && <p>AI 要約 ON</p>}
+    </main>
+  );
+}
+```
+
 ### 期待出力
 
-- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示
-- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
-- 「最初の 10 件」を押すと表示が絞り込まれる（ローカル state）
-- ブラウザを **リロードしても fetch は走らない**（TanStack Query のキャッシュ）→ DevTools の Network で 2 回目以降は出ない
+- `.env.local` の値を変えて再起動すると、`new` / `old` が切り替わる
+- ユーザー ID 別に ON / OFF が **再現性** を持って決まる
+- フラグを集約すると、ページごとの分岐が読みやすくなる
 
 ### 変える
 
-- `useQuery` の `staleTime: 1000 * 60` を渡してみる。1 分間は再取得されないキャッシュ
-- Zustand の `theme` をブラウザリロード後も保持するために `zustand/middleware` の `persist` を使ってみる
-- `filter` を URL state に変更（`useSearchParams` で `?filter=...`）
+- 5%、25%、50%、100% に変えて、ロールアウトの比率を実感する
+- ハッシュ関数を `Math.random()` に変えると **同じユーザーで結果がバラつく** ことを確認（NG パターン）
+- フラグ評価を Server Component に閉じ込めて、クライアントには結果だけ渡す
 
-### 自分で書く
+### 自分で書く（任意）
 
-- TanStack Query の `useMutation` で「記事を作成」ボタンを足す（POST）。送信中の UI を表示
-- Jotai を入れて、`countAtom` でカウンターを実装し、Zustand 版と書き味を比較
+- Vercel Edge Config を使ってフラグをリモート管理にする
+- GrowthBook の SDK を入れて、UI で % を変えて即時反映を体験する
+- A/B テスト用の variant 割当を実装し、analytics に variant をタグ付けして送る
 
 ## まとめ
 
-- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
-- 2026 年は **役割ごとに使い分ける** のが定番
-- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
-- **Jotai** は atom ベース、散らばった派生状態に向く
-- **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
-- **SWR** は TanStack Query のシンプル代替
-- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ
+- フィーチャーフラグは **デプロイと機能公開を分離** する仕組み
+- 最小実装は **環境変数 1 つ**。柔軟性を上げたければリモート管理（Edge Config / DB）
+- **ハッシュベース** のロールアウトで再現性を保つ
+- SaaS は LaunchDarkly / **GrowthBook** / Statsig / Flagsmith / Vercel + PostHog など
+- **Kill Switch** で本番障害をビルドなしに止められる価値が大きい
+- A/B テストはフラグの仲間。SaaS は両方こなす
+- フラグは増える → **寿命を管理して定期清掃**
+- Server / Edge で評価して **クライアントのチラつき** を避ける

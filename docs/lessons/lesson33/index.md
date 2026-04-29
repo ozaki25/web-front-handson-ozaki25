@@ -62,7 +62,7 @@ main();
 - `try { ... }` の中でエラーが起きると、`catch (error) { ... }` に飛ぶ
 - `error` にはエラー情報が入る
 
-`try` / `catch` は「TODO アプリを作る」の `JSON.parse` でも再利用します。
+`try` / `catch` は壊れた JSON を `JSON.parse` するときなどでも再利用します。
 
 ### `fetch` の落とし穴: HTTP エラーは `catch` に飛ばない
 

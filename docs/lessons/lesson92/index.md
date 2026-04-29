@@ -1,188 +1,250 @@
-# lesson92: DevTools の読み方
+# lesson92: Cookie と Web セキュリティ
 
 ## ゴール
 
-- Chrome DevTools の主要なタブ（Elements / Console / Network / Application / Performance / Sources）がそれぞれ何を見る場所か説明できる
-- ページを開いたときに発生している全リクエストを Network タブで一覧できる
-- Application タブで Cookie / Local Storage / Session Storage を確認できる
-- Performance タブで録画したページロードを眺めて、どの段階が遅いか大まかに判断できる
-- Sources タブで JS のブレークポイントを貼って止められる
+- Cookie と Web Storage の違いと使い分けを説明できる
+- Cookie の属性（`HttpOnly` / `Secure` / `SameSite` / `Domain` / `Path` / `Expires` / `Max-Age`）の役割を説明できる
+- XSS（Cross-Site Scripting）と CSRF（Cross-Site Request Forgery）の概要と、それぞれに効く防御を挙げられる
+- セッション Cookie を安全に扱うための実務パターン（HttpOnly / Secure / SameSite=Lax）を知る
+- Content-Security-Policy や HTTPS の位置づけを大まかに把握する
 
 ## 解説
 
-### DevTools はブラウザ付属の開発ツール
+### Cookie とは何か（もう一度）
 
-DevTools はブラウザ本体に組み込まれた、開発者向けの道具箱です。本コースで **最もよく使う 1 つの道具** と言えます。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
+Cookie は「サーバーがブラウザに値を持たせて、次回以降のリクエストに **自動で付けさせる** 仕組み」です。サーバーからのレスポンスに次のヘッダが付いていると、ブラウザは **`user=alice`** を覚え、同じサイトへの次のリクエストに自動で `Cookie: user=alice` を付けます。
 
-### 開き方
+```
+# サーバーからのレスポンス
+HTTP/1.1 200 OK
+Set-Cookie: user=alice; Path=/; HttpOnly; Secure; SameSite=Lax
 
-| 操作 | ショートカット |
-|---|---|
-| DevTools を開く / 閉じる | Windows / Linux: `F12` または `Ctrl+Shift+I` / Mac: `Cmd+Opt+I` |
-| 直接 Elements タブを開く | ページで右クリック → 「検証」 |
-| 直接 Console を開く | Windows / Linux: `Ctrl+Shift+J` / Mac: `Cmd+Opt+J` |
-| デバイスモード（スマホ幅） | `Ctrl+Shift+M` / `Cmd+Shift+M` |
-
-### Elements タブ: DOM と CSS を見る・いじる
-
-「DOM を操作する」で扱った **DOM ツリー** の現在状態が、ここに展開されます。左側のタグをクリックすると、ページ内の対応要素がハイライトされます。右側には、その要素に当たっている **計算済みの CSS** と、どの CSS ファイルの何行目から来たかが表示されます。
-
-覚えておきたい操作:
-
-- タグをダブルクリックすると中身のテキストを編集できる（プレビュー確認用、保存されない）
-- 右ペインの `Styles` でプロパティのチェックを外すと **その場で無効化** できる（どのスタイルが効いているかの切り分けに便利）
-- `Computed` タブで、実際に当たっている最終値（ブラウザが計算した後のピクセル値など）を確認
-- `Box Model` 図で margin / border / padding / content のサイズを数値で確認
-
-本コースの 1 章（HTML / CSS）の演習中、画面が思った通りに並ばないときは、まずここで **どのスタイルが当たっているか** を目で確認するのが近道です。
-
-### Console タブ: JS を打つ・ログを見る
-
-「デバッグに効く Console API」で扱った `console.log` 系の出力がここに流れ込みます。さらに **その場で JS を打って実行できる** のが Console の強みです。
-
-```js
-// Console に直接打って Enter
-document.title
-> "lesson92: DevTools の読み方"
-
-document.querySelectorAll("a").length
-> 18
+# 以後、ブラウザが自動で付ける
+GET /profile HTTP/1.1
+Cookie: user=alice
 ```
 
-エラーが出たときは Console にスタックトレースが出ます。行番号をクリックすると、該当ファイルが Sources タブで開きます。
+この「自動で送る」性質が、認証セッションを維持する用途に向いています。一方で同じ性質が **後述の CSRF 攻撃の温床** にもなります。
 
-`console.log` をコードに書き足さなくても、Console に現在のページの値を問い合わせられる、というのは画面を書き換えずに調査できる大きな武器です。
+> **`user=alice` は仕組み説明用の架空値**: 上の例では分かりやすさのために `user=alice` という平文を入れていますが、**実例では Cookie に主体識別子を直接入れません**。代わりに、サーバーが発行した **不可逆なセッション ID**（例: `session=abc123xyz...`）を入れて、サーバー側でその ID から「これは alice さんのセッション」と引き当てる形が一般的です。本文の以降の例 (`session=abc123` など) はこの実運用の形を想定しています。
 
-### Network タブ: 通信を見る
+### Cookie と Web Storage の使い分け（再掲）
 
-「ブラウザと HTTP の基本」で触った、**リクエスト / レスポンスの実物** をここで観察します。
+| 用途 | Cookie | Web Storage |
+|---|---|---|
+| ログインセッションの維持 | **最適**（サーバーに自動送信される） | 不向き |
+| ユーザー設定（テーマ / 言語） | 可能だが毎リクエストで送信されるのでムダ | **最適** |
+| 容量 | 4KB 程度（小さい） | 5〜10MB |
+| JS からの読み書き | `document.cookie`（`HttpOnly` ならブラウザで JS からは見えない） | `localStorage.setItem` 等 |
+| 有効期限 | 属性で制御 | localStorage は恒久、session は タブ閉じで消える |
 
-主な見どころ:
+認証は Cookie、クライアント完結の設定は Web Storage、というのが現代の定番です。
 
-- **一覧**: ページを開いたときに発生した全リクエストが時系列に並ぶ
-- **Method / Status / Type / Size / Time**: 各列で「どのメソッドでどのファイルをどう取ったか」がわかる
-- **1 行クリック**: Headers / Payload / Preview / Response / Timing の 5 つのパネルで詳細
-- **Preserve log**: チェックすると、ページ遷移しても過去のログが消えない（リダイレクトの追跡に便利）
-- **Disable cache**: DevTools を開いているあいだ、ブラウザキャッシュを無効化する（キャッシュ確認用。通常はオフにしておく）
-- **Throttling**: 「Slow 3G」などに切り替えて回線が遅い状況を再現できる
+### Cookie の主要属性
 
-Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / `Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
+`Set-Cookie` に付けられる属性で、Cookie の振る舞いを細かく制御します。どれもセキュリティに直結します。
 
-### Application タブ: 保存されているデータを見る
+#### `HttpOnly`
 
-ブラウザ側に溜まっている各種ストレージの中身を確認・編集できます。
+**JS から読み書きできない** Cookie にします。`document.cookie` で見ようとしても出てきません。
 
-- **Local Storage / Session Storage**: 「Web Storage」で保存した値が、キーと値のペアで見られる。その場で編集・削除も可能
-- **Cookies**: 現在のドメインに対する Cookie 一覧。`Name` / `Value` / `Domain` / `HttpOnly` / `Secure` / `SameSite` などの属性が一覧できる
-- **IndexedDB**: より大容量のデータベース系 API。本コースでは扱わないが眺めるだけはしておく
-- **Cache Storage**: Service Worker が保存しているキャッシュ
-- **Service Workers**: 登録されている Service Worker（本サイトでも PWA で 1 つ登録されている）
+```
+Set-Cookie: session=abc123; HttpOnly
+```
 
-「Web Storage」と「Cookie と Web セキュリティ」の内容を実地で確認する場所です。
+XSS（後述）でページに悪意ある JS が混入しても、`HttpOnly` 付きのセッション Cookie は盗めません。ログインセッション用の Cookie は **原則 `HttpOnly` を付ける** のが現代の正解です。
 
-### Performance タブ: ページロードと実行を録画する
+#### `Secure`
 
-`Record` ボタン（黒丸）を押して一連の操作 → `Stop` を押すと、その間のブラウザの挙動が細かく記録されます。
+**HTTPS 経由のリクエストにしか送らせない** 属性です。平文 HTTP で運ばれて盗聴される事故を防ぎます。
 
-- **FPS**: 描画フレームレートの推移
-- **Main**: メインスレッドが何をしていたか（JS 実行 / スタイル計算 / レイアウト / 描画）の時間軸
-- **Network**: 各リクエストの発生と完了のタイミング
-- **Frames**: 個々の描画フレームのスクリーンショット
+```
+Set-Cookie: session=abc123; Secure
+```
 
-「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
+本番はほぼ HTTPS のみになった現在では、**セッション Cookie には常に `Secure`** を付けます。
 
-### Lighthouse タブで Core Web Vitals を測る
+#### `SameSite`
 
-Performance タブの録画は **詳細を追える代わりに見方を覚える必要** があります。最初に手を出すべきは Performance タブの隣にある **Lighthouse タブ** です。`Analyze page load` を押すだけで、ページに対して点数とレポートが出ます。
+**クロスサイトのリクエストで Cookie を送るか** を制御する属性です。CSRF 攻撃への主要な防御です。
 
-実務で見るのは点数より **Core Web Vitals** と呼ばれる 3 指標です。Google の検索ランキング要因にもなっているため、SEO とパフォーマンスは一体です。
+| 値 | 動作 |
+|---|---|
+| `Strict` | 他サイトからの遷移では一切送らない（ログインが切れる UX になりがち） |
+| `Lax` | トップレベル GET ナビゲーション（リンククリック等）では送る。フォーム POST や iframe では送らない |
+| `None` | すべて送る。**`Secure` 必須** |
 
-- **LCP** (Largest Contentful Paint): 一番大きい要素（メインの画像 / 見出し）が描画されるまでの時間。**2.5 秒以下** が目安
-- **INP** (Interaction to Next Paint): クリック / タップ / キーボード入力に反応して次の描画が出るまでの時間。**200ms 以下** が目安
-- **CLS** (Cumulative Layout Shift): 表示中にレイアウトが何回ガタッとずれるかの累積。**0.1 以下** が目安
+現代のブラウザの **デフォルトは `Lax`** です。クロスサイトで明示的に送りたい場合のみ `None; Secure` を付けます。通常のセッション Cookie は `Lax` のままで十分な場合が多いです。
 
-Lighthouse は試験環境（あなたの PC）で測るので、本番の数値とは少しずれます。本番の実ユーザー指標は **Google Search Console** の Core Web Vitals レポートや **Web Vitals API** で取得します。
+#### `Domain` / `Path`
 
-### Sources タブ: JS をデバッガで止める
+どのホスト・どのパスに対して Cookie を送るかの指定です。指定しなければ **発行元のホストとパス以下** になります。
 
-ソースコードを眺めて、行番号をクリックすると **ブレークポイント** が貼れます。そこに実行が到達すると、その行で JS が一時停止し、変数の値を確認できます。
+- `Domain=example.com`: サブドメイン（`api.example.com` 等）にも送る
+- `Path=/admin`: `/admin` 以下のパスにだけ送る
 
-- **行番号クリック**: 基本のブレークポイント
-- **右クリック → Conditional breakpoint**: 条件式が真のときだけ止まる
-- **`debugger;` 文**: コード側に書いておけば、その行に来たときに止まる
-- **Watch / Scope**: 止まっている時点での変数の値を確認
+広く付けすぎるとセキュリティ事故の原因になるので、**必要最小限** に絞るのが原則です。
 
-`console.log` で追うより一段深い調査が必要なときに使います。本コースでは軽く紹介するに留めますが、使えるようになるとバグ探しの速度が何倍にもなります。
+#### `Expires` / `Max-Age`
 
-### ショートカットで覚えておくと捗るもの
+有効期限の指定です。
 
-- **`Ctrl+Shift+F` / `Cmd+Opt+F`**: 全ソース横断検索（Sources タブ）。ライブラリ内を含めて grep できる
-- **`Ctrl+P` / `Cmd+P`**: Sources でファイル名クイックオープン
-- **`Ctrl+L` / `Cmd+K`**: Console を全消去
-- **`$0`**: Elements タブで最後に選択した要素を Console から参照
+- `Expires=Wed, 21 Oct 2026 07:28:00 GMT`: 指定日時まで
+- `Max-Age=3600`: 3600 秒後まで（現代では推奨）
 
-### モバイル / レスポンシブ確認: デバイスモード
+どちらも付けなかった Cookie は **セッション Cookie**（ブラウザを閉じると消える）になります。
 
-`Ctrl+Shift+M` / `Cmd+Shift+M` でツールバー上部にデバイス選択が出ます。`iPhone SE (375×667)` / `Pixel 7` / 任意サイズ（Responsive）で表示を切り替えられます。1 章 の「Flexbox とレスポンシブ」や「CSS Grid」の演習で使ったはずです。
+### 典型的な「ログインセッション Cookie」の形
 
-「メディアを確認」（`more options` メニュー内）で `prefers-color-scheme: dark` / `prefers-reduced-motion` などを強制的にオン / オフできます。ダークモード対応の確認に便利です。
+実務で多く見る典型パターンです。
+
+```
+Set-Cookie: session=abc123xyz; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400
+```
+
+読み解き:
+
+- `Path=/`: サイト全体で有効
+- `HttpOnly`: JS から見えない（XSS 対策）
+- `Secure`: HTTPS のみ
+- `SameSite=Lax`: 基本的なクロスサイトリクエストでは送らない（CSRF 対策）
+- `Max-Age=86400`: 24 時間有効
+
+この組み合わせを **デフォルトの出発点** と覚えてください。
+
+### XSS（Cross-Site Scripting）
+
+悪意ある JS を **自分のサイトの一部として** 動かされる攻撃です。
+
+代表的な入り口:
+
+1. ユーザー入力をそのまま `innerHTML` で出力（「DOM を操作する」の `innerHTML` 節で扱った）
+2. `<script src="ユーザー入力">` のように属性にも入力が流れ込む
+3. URL のクエリから取った値を HTML にそのまま埋め込む
+
+成功すると、`document.cookie` / `localStorage` の中身を攻撃者のサーバーに送信されたり、ユーザーになりすまして投稿されたりします。
+
+#### 防御の基本
+
+- **出力をエスケープする**: `textContent` を使う、React / Vue のテンプレートを信じる（彼らが自動でエスケープする）
+- **`innerHTML` には自分で書いた安全な文字列だけ**: ユーザー入力は決して入れない
+- **`HttpOnly` Cookie**: セッション Cookie を JS から見えなくする（攻撃が成功しても Cookie だけは守れる）
+- **Content-Security-Policy（CSP）ヘッダ**: `<script>` の実行元を制限する（後述）
+
+React / Next.js は `{variable}` で値を埋め込む限り、自動的にテキストとして扱ってくれます。生の HTML を埋め込みたいときの `dangerouslySetInnerHTML` が「**危険**」という名前なのは、まさにこの XSS を警告するためです。
+
+### CSRF（Cross-Site Request Forgery）
+
+ログインしているユーザーに **意図しないリクエスト** を送らせる攻撃です。仕組み:
+
+1. 攻撃者が罠サイトを用意する
+2. ログイン中の標的ユーザーに罠サイトを踏ませる
+3. 罠サイトの HTML から銀行 API へのリクエストを自動発火させる。GET なら `https://bank.example.com/transfer?to=attacker&amount=10000`、POST なら `<form action="https://bank.example.com/transfer" method="POST">` の自動送信が典型例
+4. ブラウザは `bank.example.com` のセッション Cookie を **自動で付けて** リクエストする
+5. 銀行サーバーから見ると、正規ユーザーの認証済みリクエストに見える
+
+#### 防御
+
+- **`SameSite=Lax` / `Strict`**: クロスサイトの POST で Cookie を送らせない。現代のブラウザのデフォルトが `Lax` なので、大半の単純な CSRF は既にブロック済み
+- **CSRF トークン**: フォーム送信のたびにサーバーから一意のトークンを渡し、リクエスト時に一緒に送らせる。攻撃者の罠サイトはトークンを知らないので送れない
+- **重要操作の再認証**: パスワード変更や送金では、現行セッションでも再度パスワードを入れさせる
+
+現代のフレームワーク（Next.js の Server Actions など）は CSRF トークン処理を内蔵していることが多いため、自分で手書きする機会は減っています。仕組みは知っておく価値があります。
+
+### HTTPS と HSTS
+
+HTTPS は **通信を暗号化** する基本です。HTTPS でない（平文 HTTP）通信は途中経路で改ざん・盗聴される可能性があります。
+
+**HSTS**（HTTP Strict Transport Security） ヘッダを付けると、ブラウザに「今後はこのサイトは必ず HTTPS で来い」と覚えさせられます。初回のみ平文アクセスが発生しうる隙を塞ぎます。
+
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains
+```
+
+Vercel / Netlify などはデフォルトで HTTPS のみでの配信になっています。本コースの教材サイトもすべて HTTPS です。
+
+> **`includeSubDomains` の罠**: 一度配信すると、ブラウザはこのドメインの **全サブドメインも HTTPS 必須** として `max-age` の期間（上の例では 1 年）覚え続けます。社内ツールなど一部サブドメインに HTTPS が無いと、その期間アクセスできなくなります。`max-age=0` を返しても **既に保存済みのブラウザを巻き戻せません**。本番投入は `max-age` を短めから始めて段階的に伸ばすのが安全です。
+
+### `SameSite=None; Secure`（クロスサイト Cookie の現代的形）
+
+外部サイトからの埋め込み（iframe / クロスオリジン fetch with credentials）で Cookie を送りたい場合は、`SameSite=None` を明示する必要があります。**さらに `Secure` の併記が必須**（Chrome / Safari / Firefox の現行仕様）です。
+
+```
+Set-Cookie: session=abc; Path=/; HttpOnly; Secure; SameSite=None
+```
+
+`SameSite=None` 単独や、HTTPS でない通信での `SameSite=None` は **ブラウザが拒否します**。サードパーティ Cookie 廃止の流れも進んでいるため、可能なら `SameSite=Lax` で済ませる設計を選ぶのが現代の標準です。
+
+### Content-Security-Policy（CSP）
+
+レスポンスヘッダで **「このページで実行してよい JS の出所」** を制限する仕組みです。XSS の最後の砦として効きます。
+
+```
+Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com
+```
+
+この例では、`<script>` は自サイトと指定した CDN 以外からは一切読ませない、という宣言です。インラインスクリプトや `eval` も既定では禁止されます。
+
+強力ですが設定を間違えると自分のサイトが動かなくなるので、導入は慎重に（まずは `Content-Security-Policy-Report-Only` で違反だけログに流し、問題がないと確認してから本番適用するのが定番）。
+
+### オリジンと CORS（軽く）
+
+**オリジン** は `スキーム + ホスト + ポート` の 3 つ組で、ブラウザのセキュリティ境界の基本単位です。`https://a.example.com` と `https://b.example.com` は別オリジンです。
+
+ブラウザは既定で **別オリジンへの `fetch` が返すレスポンスを JS から読めなくする** 同一オリジンポリシーを採用しています。別オリジンの API を使いたい場合、サーバー側が `Access-Control-Allow-Origin` 等の CORS ヘッダで明示的に許可する必要があります。
+
+CORS は実務で詰まりやすい分野です。本コースでは深入りせず、「オリジンが違うと fetch 結果が読めないことがある / サーバー側で CORS ヘッダを返してもらう必要がある」という認識だけ押さえてください。
 
 ## 演習
 
 ### ゴール
 
-- DevTools を 1 通り触って、本文で説明した各タブの役割を体感する
-- Application タブで本サイトの localStorage を確認する
-- Network タブで 1 リクエストを選び、ヘッダ・ボディ・Timing を読み取れる
-- Performance タブでページロードを録画して眺める
+- 本サイトおよび任意のサイトの Cookie 属性を DevTools Application タブで眺める
+- `HttpOnly` / `Secure` / `SameSite` がどう出ているか確認する
+- XSS / CSRF のイメージを自分の言葉で説明できるようにする
 
-### 手順
+### 手順 1: Cookie を観察する
 
-本サイト（この教材）のページを開いた状態で、以下を順に試します。
+1. Google や GitHub などログイン済みのサイトを開きます
+2. DevTools → Application タブ → Cookies → そのサイトを選択します
+3. 一覧の `Name` / `Value` / `HttpOnly` / `Secure` / `SameSite` / `Expires` 列を眺めます
+4. セッション系の Cookie には `HttpOnly` と `Secure` がチェックされているはずです
 
-1. **Elements タブ**
-   - F12 で DevTools を開く
-   - 左のツリーで `<body>` を展開し、見出しや段落のタグを辿る
-   - 右ペインの `Styles` で、見出しの `color` のチェックを外して色が消えることを確認（再度チェックで戻る）
-2. **Console タブ**
-   - `document.title` と打って Enter、ページタイトルが返ることを確認
-   - `document.querySelectorAll("h2").length` で、このページの `<h2>` の個数を取得
-3. **Network タブ**
-   - ページをリロード（`F5` / `Cmd+R`）
-   - 一覧のうち **`.js`** の 1 つをクリックし、`Headers` タブで `status: 200` と `content-type: application/javascript` を確認
-   - `Timing` タブで TTFB（Time To First Byte）と Content Download の 2 つの時間を確認
-4. **Application タブ**
-   - 左ペインから `Local Storage` → `https://...`（このサイトの URL）を選択
-   - `lesson-progress` 系のキーがあれば、それは「完了ボタン」を押した進捗データ
-   - 試しに 1 つのキーを選んで **Delete ボタン** で消す → ページをリロード → 該当レッスンの完了マークが消えることを確認
-5. **Performance タブ**
-   - 左上の丸い `Record` ボタンを押す
-   - ページを一度リロード
-   - 5 秒ほど経ったら `Stop`
-   - `Main` 行をドラッグで拡大して、どの時間帯に何が起きていたか（Loading / Scripting / Rendering 等の色分け）を眺める
-6. **Sources タブ**
-   - 左ペインで **Workers** / **Origin** を展開し、自分のサイトの `.js` ファイルを 1 つ開く
-   - 行番号をクリックしてブレークポイントを貼る
-   - ページをリロード → 該当行で停止することを確認（停止したら上部の再生ボタンで続行）
+### 手順 2: `document.cookie` で JS からの可視性を確認する
+
+DevTools の Console タブで次を実行します。
+
+```js
+document.cookie
+```
+
+出力には **`HttpOnly` が付いていない Cookie だけ** が出ます。セッション系の重要な Cookie が出てこないのは、`HttpOnly` 属性が働いているためです。
+
+試しに適当なサイト（攻撃を想定したメモ）で、もしセッション Cookie が JS から見えてしまっていた場合は、そのサイトは XSS 耐性が弱い可能性があります。
+
+### 手順 3: 自分の言葉でまとめる
+
+次の質問に、本レッスンを閉じた状態で自分の言葉で答えてみます（目安: それぞれ 2-3 文）。
+
+- Q1: XSS と CSRF のそれぞれが「何を悪用する」攻撃か
+- Q2: 典型的なログインセッション Cookie には、どの属性を付けるか（3 つ挙げよ）
+- Q3: `SameSite=Lax` は CSRF にどう効くか
 
 ### 変える
 
-- Network タブで `Disable cache` のチェックを入れて、もう一度リロードする。Size 列に `(memory cache)` や `(disk cache)` と出ていた行が **実サイズ** になることを確認
-- Network タブの Throttling を `Slow 4G` に切り替え、ページをリロード。感覚として遅くなることと、Timing の値が伸びることを確認。元に戻す
-- デバイスモード（`Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE を選び、本サイトのレイアウトがスマホ向けに切り替わることを確認
+- **観察対象は本コースの教材サイト / 自分のローカルプロジェクト / StackBlitz プレビュー** などにとどめます。他人のサイトで Cookie 操作を試す行為は、利用規約や攻撃の境界が曖昧になりやすいので避けます。
+- 自分が動かしている開発環境で、Application タブから Cookie を 1 つ選び、右クリック → Delete で削除する。再度アクセスしてもページが見られることを確認
+- 自分が管理するアカウントの開発環境で、セッション Cookie を削除するとログアウトになることを確認（本番アカウントではなく開発用で）
 
 ### 自分で書く
 
-- 自分でよく開くサイト（SNS / ニュース / ポートフォリオなど）で Network タブを開き、**HTML 1 つ読むのに何個のリクエストが発生しているか** 数える
-- そのうち Status が `304`（キャッシュ使用）になっているリクエストの数もメモしておく
+- 自分がよく使うサイト 3 つの、ログイン後に Application タブの Cookies で確認できる **`HttpOnly` の付き方** を比較する
+- Next.js の Server Actions で POST を送る際、ブラウザ開発者ツールの Network タブから CSRF 関連ヘッダがどう付いているか観察する（将来の発展）
 
 ## まとめ
 
-- DevTools は開発の生命線。`F12` や右クリック「検証」で常に開ける場所にしておく
-- **Elements**: DOM と CSS を見る・いじる。スタイルのチェック外しで切り分け
-- **Console**: ログ閲覧 + その場で JS 実行
-- **Network**: 通信の全履歴。メソッド / ステータス / Timing / ヘッダ / ボディ
-- **Application**: Web Storage / Cookie / IndexedDB / Service Worker
-- **Performance**: 録画してページロードや JS 実行のボトルネックを可視化
-- **Sources**: JS にブレークポイントを貼ってデバッガで止める
-- デバイスモードで画面幅や prefers-color-scheme を強制切り替え
+- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値。セッション維持の本命
+- 属性の黄金律: `HttpOnly; Secure; SameSite=Lax`。セッション Cookie はこれを最低ラインに
+- XSS は「サイトに悪意 JS を混入される」攻撃。`textContent` / エスケープ / `HttpOnly` / CSP で防ぐ
+- CSRF は「ログイン中のユーザーに意図しないリクエストを送らせる」攻撃。`SameSite` / CSRF トークンで防ぐ
+- HTTPS + HSTS は前提。平文 HTTP は現代の Web ではほぼ使わない
