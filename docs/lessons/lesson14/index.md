@@ -136,10 +136,6 @@ body { padding: 24px; background: #f5f7fa; }
 
 以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
 
-### このレッスンで扱うもの
-
-`transition` で値の変化をなめらかに補間し、`prefers-reduced-motion` で配慮する書き方を学びます。これまでに作った静的なページに「動き」を足せるようになります。
-
 ## 演習
 
 ### 途中から始める場合
@@ -572,8 +568,6 @@ form button:focus {
 - `transition: all` が効かない → そもそも変化するプロパティが書かれていない（`:hover` で色も位置も変わっていないなど）。まず何を変えたいかを決めて、`:hover` 側に書く。
 
 ## まとめ
-
-### このレッスンのまとめ
 
 - `transition` で値の変化をなめらかに補間できる。最初は `transition: all 200ms ease` で十分。
 - `transform: translateY()` / `scale()` はレイアウトを壊さずに位置・大きさを変えられる。
