@@ -458,7 +458,7 @@ export default function CompiledComponent() { /* ... */ }
 
 ### 変える
 
-- 既存コード（lesson65 / lesson69 の React アプリなど）に Compiler を入れる
+- 手元の React + Vite プロジェクトに Compiler を入れる
 - React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
 - 大量レンダリング（1000 行のリスト）で差を観察
 

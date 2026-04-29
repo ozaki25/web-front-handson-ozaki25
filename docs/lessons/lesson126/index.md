@@ -346,7 +346,7 @@ export function copyToClipboard(text: string) {
 
 ### Suspense と Loading
 
-データ取得中の UI を **Suspense + Loading UI** で書きます（lesson68 / lesson86 と関連）。
+データ取得中の UI を **Suspense + Loading UI** で書きます（「Error Boundary と Suspense」「Loading UI と Streaming」と関連）。
 
 ```tsx
 // app/posts/page.tsx
