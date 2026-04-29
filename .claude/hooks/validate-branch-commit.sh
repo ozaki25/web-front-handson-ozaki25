@@ -127,23 +127,24 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
   fi
 
-  # --- 位置依存参照の検出（コードブロック / フェンスドコード除外）---
-  # 「次のレッスン」「前のレッスン」「先ほど」は読者の現在地に依存する表現。
-  # topic-name 参照（「○○のレッスン」）に置き換える。
+  # --- 位置依存参照の検出（コードブロック除外）---
+  # 章再編・レッスン入替で意味が壊れる cross-lesson / cross-chapter の位置参照だけを狙う。
+  # 「位置を表す語（次/前/先/あと/後ろ/先ほど）+ レッスン or 章」と「前章 / 次章」が対象。
+  # within-document の「先ほど書いた」「先ほどのデモ」は同じ文書内なので拾わない。
   if [ -n "$staged_md" ]; then
     pos_dep_hits=""
     for f in $staged_md; do
       issues=$(git show ":$f" 2>/dev/null | awk '
         /^```/ { in_code = !in_code; next }
         in_code { next }
-        /次のレッスン|前のレッスン|先ほど/ { print NR ": " $0 }
+        /(次の|前の|先の|あとの|後ろの|先ほどの)(レッスン|章)|前章|次章/ { print NR ": " $0 }
       ')
       if [ -n "$issues" ]; then
         pos_dep_hits="${pos_dep_hits}${f}:\n${issues}\n"
       fi
     done
     if [ -n "$pos_dep_hits" ]; then
-      block "位置依存の参照: 「次のレッスン」「前のレッスン」「先ほど」は読者の現在地に依存する表現です。topic-name 参照（「○○のレッスン」）に置き換えてください。\n${pos_dep_hits}"
+      block "位置依存の参照: cross-lesson / cross-chapter の参照は章順が変わると壊れます。topic-name 参照（「○○のレッスン」「N 章」）に置き換えてください。\n${pos_dep_hits}"
     fi
   fi
 
