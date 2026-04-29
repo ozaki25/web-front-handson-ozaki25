@@ -1,7 +1,5 @@
 import { h } from 'vue'
 import DefaultTheme from 'vitepress/theme'
-import TwoslashFloatingVue from '@shikijs/vitepress-twoslash/client'
-import '@shikijs/vitepress-twoslash/style.css'
 import { enhanceAppWithTabs } from 'vitepress-plugin-tabs/client'
 import { useRoute, type EnhanceAppContext } from 'vitepress'
 import { inject as injectVercelAnalytics } from '@vercel/analytics'
@@ -20,7 +18,6 @@ export default {
     })
   },
   enhanceApp({ app }: EnhanceAppContext) {
-    app.use(TwoslashFloatingVue)
     enhanceAppWithTabs(app)
     app.component('LessonProgress', LessonProgress)
     app.component('LiveDemo', LiveDemo)

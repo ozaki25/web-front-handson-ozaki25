@@ -1,7 +1,6 @@
 import { defineConfig } from 'vitepress'
 import { withMermaid } from 'vitepress-plugin-mermaid'
 import { withPwa } from '@vite-pwa/vitepress'
-import { transformerTwoslash } from '@shikijs/vitepress-twoslash'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 
 export default withPwa(withMermaid(
@@ -10,7 +9,6 @@ export default withPwa(withMermaid(
     title: 'Web フロントエンド入門',
     description: 'Web フロントエンドをこれから学ぶ人向けの学習コンテンツ',
     markdown: {
-      codeTransformers: [transformerTwoslash()],
       config(md) {
         md.use(tabsMarkdownPlugin)
       },
