@@ -6,16 +6,22 @@ function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+const log = document.getElementById('log');
+const btn = document.getElementById('run');
+
 async function main() {
-  console.log('start');
+  log.textContent = '';
+  btn.disabled = true;
+  log.textContent += 'start\\n';
   await wait(1000);
-  console.log('1 秒後');
+  log.textContent += '1 秒後\\n';
   await wait(1000);
-  console.log('さらに 1 秒後（計 2 秒）');
-  console.log('end');
+  log.textContent += 'さらに 1 秒後（計 2 秒）\\n';
+  log.textContent += 'end\\n';
+  btn.disabled = false;
 }
 
-main();
+btn.addEventListener('click', main);
 `
 </script>
 
@@ -55,14 +61,11 @@ console.log("C");
 
 非同期処理の結果は、すぐには手に入りません。そのため JS には「まだ完了していない結果を表す箱」として **Promise**（プロミス） という仕組みがあります。
 
-- `fetch` は「結果そのもの」ではなく「Promise」を返す
-- `setTimeout` **自体は Promise を返さない**（タイマーの ID という数値を返す）。後述の `wait` のように **`setTimeout` を Promise で包んだ関数** を用意すると、Promise が返るようになる
 - Promise は「いつか結果が入る箱」
-- 結果を取り出すには「箱が埋まるのを待つ」必要がある
+- 中身を取り出すには「箱が埋まるのを待つ」必要がある
+- 待つための書き方が `await`、`await` を使える関数の印が `async`
 
-本コースでは `.then` や `new Promise(...)` の自作は扱いません。使う側の書き方である `async` / `await` だけ覚えます。
-
-> **補足: 本レッスンで Promise を返すのは `wait(ms)` だけ**: 「Promise を返す処理」がどれかを今この時点で見分ける必要はありません。本レッスンの演習では `wait(ms)` 1 つだけが Promise を返すと覚えれば十分です。
+本コースでは Promise を自分で作る書き方（`.then` や `new Promise(...)`）は扱いません。**Promise を返す関数を `await` で待つ**、その使う側だけ覚えます。本レッスンで Promise を返すのは、次の節で出てくる `wait(ms)` だけです。
 
 ### `async` / `await`
 
@@ -78,15 +81,17 @@ async function main() {
 main();
 ```
 
-- `async function` は「中で `await` を使える関数」
+- `async function` は「中で `await` を使える関数」、**常に Promise を返す**
 - `await Promise` は「その Promise の結果が返るまで待つ」
+- `await` で止まっているのは **その `async` 関数の中だけ**。ブラウザ全体や他の処理は止まらない
 - `await` は `async function` の中でしか使えない
 
 ### `wait(ms)` 関数（コピペで使う）
 
-「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身の `new Promise(...)` は後の章でも自作しません。
+「○ミリ秒待つ」という Promise を作る関数を、以下のままコピペで使います。中身は今は気にしなくてよいです（`setTimeout` を Promise で包んでいる、とだけ覚える）。
 
 ```js
+// ms ミリ秒後に完了する Promise を返す
 function wait(ms) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -94,112 +99,40 @@ function wait(ms) {
 
 この `wait` は「`ms` ミリ秒後に完了する Promise」を返します。呼び出し側は `await wait(1000)` のように書くだけで、1 秒待つ動きになります。
 
-下のデモを開くと、1 秒・2 秒の間隔でログが順に増えていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
+下のデモで **「main() を実行」** を押すと、`start` が即出て、1 秒後・2 秒後にログが追加されていきます。`await` が「ここで待つ」と動いているのが時間差として見えます。
+
+<!-- textlint-disable ja-technical-writing/sentence-length -->
 
 <LiveDemo
-  height="240px"
-  :html="`<p>await が実際に時間を待つ様子:</p>`"
-  :css="``"
+  height="280px"
+  :html="`
+<button id='run' type='button'>main() を実行</button>
+<pre id='log' aria-live='polite'></pre>
+  `"
+  :css="`
+button { padding: 6px 12px; font-size: 1rem; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+pre { background: #f5f5f5; color: #222; padding: 12px; min-height: 6em; border-radius: 4px; margin-top: 8px; font-family: ui-monospace, monospace; }
+@media (prefers-color-scheme: dark) {
+  pre { background: #2a2a2a; color: #eaeaea; }
+}
+  `"
   :js="demoJs"
 />
 
+<!-- textlint-enable ja-technical-writing/sentence-length -->
+
 ### 次への橋渡し
 
-**戻り値が Promise の関数・メソッドは `await` が必要** です。たとえば `fetch(...)` や `response.json()` はどちらも Promise を返すので、両方に `await` を付けなければいけません。
+**戻り値が Promise の関数・メソッドは `await` が必要** です。`wait(ms)` 以外にも、ネット越しにデータを取りに行く `fetch` など、Promise を返す関数は本コースでもこの後出てきます。「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
 
-「Promise を返す → `await` して結果を取り出す」という流れは、以降のレッスンで繰り返し出てきます。
+ちなみに、Promise を返す処理は失敗することもあります（ネット切断など）。失敗を受け止める書き方は別のレッスンで `try` / `catch` と組み合わせて学びます。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。なお本レッスンでは `<script defer src="./script.js">` の単一ファイル構成に戻って `wait` 関数を学びます。下のコードは「これまでに作った状態」を再現するためのものなので、本レッスンの演習自体は新しい `index.html` と `script.js` で進めて構いません。
-
-<details>
-<summary>出発点のコード</summary>
-
-**`index.html`**
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson29</title>
-    <script type="module" src="./main.js"></script>
-  </head>
-  <body>
-    <h1>lesson29: import / export</h1>
-    <ul id="list"></ul>
-  </body>
-</html>
-```
-
-**`storage.js`**
-
-```js
-const STORAGE_KEY = "module-todos";
-
-export function loadTodos() {
-  const raw = localStorage.getItem(STORAGE_KEY);
-  if (raw === null) {
-    return [];
-  }
-  try {
-    const parsed = JSON.parse(raw);
-    if (Array.isArray(parsed)) {
-      return parsed;
-    }
-    return [];
-  } catch (error) {
-    console.log("保存データの読み込みに失敗しました");
-    console.log(error);
-    return [];
-  }
-}
-
-export function saveTodos(todos) {
-  localStorage.setItem(STORAGE_KEY, JSON.stringify(todos));
-}
-```
-
-**`render.js`**
-
-```js
-export function renderTodos(listElement, todos) {
-  listElement.textContent = "";
-  for (const todo of todos) {
-    const li = document.createElement("li");
-    li.textContent = todo.text;
-    listElement.appendChild(li);
-  }
-}
-```
-
-**`main.js`**
-
-```js
-import { loadTodos, saveTodos } from "./storage.js";
-import { renderTodos } from "./render.js";
-
-const list = document.querySelector("#list");
-
-let todos = loadTodos();
-
-if (todos.length === 0) {
-  todos = [
-    { id: "a1", text: "牛乳を買う" },
-    { id: "a2", text: "本を読む" },
-    { id: "a3", text: "掃除する" },
-  ];
-  saveTodos(todos);
-}
-
-renderTodos(list, todos);
-```
-
-</details>
+このレッスンは独立した演習です。これまでのレッスンのファイルは使いません。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、`script.js` を下記の内容に書き換えてください。`index.html` は最初から `<script defer src="./script.js">` を読み込んでいるテンプレートそのままで構いません。
 
 ### ゴール
 
@@ -207,7 +140,9 @@ renderTodos(list, todos);
 
 ### 手順
 
-1. `script.js` を以下に書き換える（`wait` の中身は書き換えない）
+1. `script.js` を以下の内容に書き換える（`wait` の中身は書き換えない）
+2. プレビューを開いて、ブラウザの DevTools（Console タブ）を表示する
+3. ログが順に出てくる様子を確認する
 
 ### `script.js`
 
@@ -234,33 +169,58 @@ console.log("main を呼んだ後のコード");
 
 ### 期待出力
 
-Console に、1 秒ごとに以下が順に追加されます。
+Console に以下の順で表示されます。タイミングに注目してください。
 
-```
-start
-main を呼んだ後のコード
-1 秒経過
-2 秒経過
-3 秒経過
-end
-```
+| 経過時間 | 出力 |
+|---|---|
+| 即時 | `start` |
+| 即時（`start` に続けて） | `main を呼んだ後のコード` |
+| 約 1 秒後 | `1 秒経過` |
+| 約 2 秒後 | `2 秒経過` |
+| 約 3 秒後 | `3 秒経過` |
+| 続けて即時 | `end` |
 
 ポイント:
 
-- `main()` は Promise を返すので、その後の `console.log("main を呼んだ後のコード")` は **待たずに** すぐ実行される
-- `main` の内部は `await` があるので、順番に待ちながら進む
-- 合計で「約 3 秒」かけて順番にログが出る
+- `async function` は **最初の `await` までは同期的に走る**。だから `console.log("start")` はすぐ出る
+- `await wait(1000)` で `main` の実行が一旦止まり、呼び出し元に制御が戻る。だから `console.log("main を呼んだ後のコード")` が次に出る
+- 1 秒経つと `main` の続きが再開し、`1 秒経過` 以降が 1 秒間隔で並ぶ
+- 全体で約 3 秒かかる
 
 ### 変える
 
-- `wait(1000)` の値を `wait(2000)` に変えて、1 つ 1 つが 2 秒待つようにする
-- `await` を外して `wait(1000)` だけにすると、全部のログが一瞬で出る（待たなくなる）ことを確認
-- `main()` の呼び出しを削除すると、何も実行されないことを確認
+以下はそれぞれ独立に試してください（1 つ試したら元に戻してから次に進む）。
+
+- 3 つの `wait(1000)` をすべて `wait(2000)` に変える。ログ間隔が 2 秒ずつになる
+- 3 つの `await` をすべて外し、`wait(1000)` だけにする。`1 秒経過` などのログが時間差なく一瞬で全部出ることを確認（`await` を忘れたときの典型的な失敗パターン）
+- `main()` の呼び出しを削除する。`main` の中身（`start` 〜 `end`）が実行されなくなり、最後の `console.log("main を呼んだ後のコード")` だけが出る
+- `main()` の戻り値を `console.log(main())` で表示する。`Promise { ... }` のような表示が出れば、「`async function` は Promise を返す」が体感できる
 
 ### 自分で書く
 
-- 0.5 秒ごとに「1 → 2 → 3 → 4 → 5」とカウントアップするプログラムを書く
-- 「A を表示」「2 秒待つ」「B を表示」「1 秒待つ」「C を表示」という順に動く `main` を書く
+#### 課題 1: A → 2 秒 → B → 1 秒 → C
+
+`main` を書き換えて、Console に次の順で `console.log` する。
+
+| 経過時間 | 出力 |
+|---|---|
+| 即時 | `A` |
+| 約 2 秒後 | `B` |
+| 約 3 秒後（B からさらに 1 秒） | `C` |
+
+#### 課題 2: ループでカウントアップ
+
+`for` 文と `await wait(500)` を組み合わせて、0.5 秒ごとに 1 から 5 まで `console.log` する。
+
+| 経過時間 | 出力 |
+|---|---|
+| 約 0.5 秒後 | `1` |
+| 約 1 秒後 | `2` |
+| 約 1.5 秒後 | `3` |
+| 約 2 秒後 | `4` |
+| 約 2.5 秒後 | `5` |
+
+ヒント: `for (let i = 1; i <= 5; i++) { ... }` の中で `await wait(500)` してから `console.log(i)` する。`for` 文の中でも `await` は普通に書ける。
 
 ## まとめ
 
