@@ -93,7 +93,7 @@ function handleClick() {
 
 ### React 19 の ref: 普通の props として渡せる
 
-React 19 以降、自作の関数コンポーネントでも `ref` を **普通の props として** 受け取れるようになりました。
+React 18 以前は、自作コンポーネントに `ref` を渡したいとき `forwardRef()` という API でコンポーネントをラップする必要があり、コードが煩雑になりがちでした。React 19 以降はこの制限がなくなり、`ref` を **普通の props と同じ書き方で** 受け取れます。
 
 ```tsx
 import type { Ref } from "react";
