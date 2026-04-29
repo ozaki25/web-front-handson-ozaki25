@@ -210,11 +210,11 @@ console.log(b); // 2 （ブロックの外でも見える）
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson23</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson23: 関数</h1>
+    <h1>関数</h1>
   </body>
 </html>
 ```

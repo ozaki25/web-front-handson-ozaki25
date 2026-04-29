@@ -9,14 +9,14 @@
 - Next.js で CSP を **proxy + Middleware で動的に発行** できる
 
 ::: tip 前提
-このレッスンは lesson92「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は lesson92 を確認してください。
+このレッスンは「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は「Cookie と Web セキュリティ」を確認してください。
 :::
 
 ## 解説
 
 ### CSP は最後の防衛線
 
-XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（lesson92）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
+XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（「Cookie と Web セキュリティ」）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
 
 Content-Security-Policy は「**仮に攻撃スクリプトが混入しても、ブラウザが読み込みを拒否する**」という二重の防衛線です。
 

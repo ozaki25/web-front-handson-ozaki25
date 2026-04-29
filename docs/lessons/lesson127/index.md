@@ -95,7 +95,7 @@ Sentry.captureMessage("ユーザーが何度もログインに失敗");
 
 ### React の Error Boundary と統合
 
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（lesson68 と相性 ◎）。
+Sentry は **Error Boundary をラップ** したコンポーネントを提供します（「Error Boundary と Suspense」と相性 ◎）。
 
 ```tsx
 import * as Sentry from "@sentry/react";

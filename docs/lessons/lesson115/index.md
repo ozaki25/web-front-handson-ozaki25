@@ -124,7 +124,7 @@ console.log(import.meta.env.VITE_API_URL);  // OK
 console.log(import.meta.env.SECRET_KEY);    // undefined
 ```
 
-詳細は lesson104 でも触れた通り。
+詳細は「Vite の仕組みを軽く」でも触れた通り。
 
 ### 環境ごとの設定
 

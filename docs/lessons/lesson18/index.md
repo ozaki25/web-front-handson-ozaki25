@@ -112,11 +112,11 @@ count = count + 1;
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson18</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: 最初の JavaScript</h1>
+    <h1>最初の JavaScript</h1>
     <p>DevTools の Console を開いてください。</p>
   </body>
 </html>

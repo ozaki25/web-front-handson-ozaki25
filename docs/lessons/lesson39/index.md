@@ -233,7 +233,7 @@ button { padding: 6px 12px; margin-bottom: 8px; }
 
 「要素 **自身のサイズ変化** を検知する」API です。
 
-メディアクエリは画面全体しか見ません。`@container`（lesson16）は CSS だけで分岐できますが、**JS 側で処理を変えたい** 場合は ResizeObserver の出番です。
+メディアクエリは画面全体しか見ません。`@container`（「モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）」）は CSS だけで分岐できますが、**JS 側で処理を変えたい** 場合は ResizeObserver の出番です。
 
 ```js
 const observer = new ResizeObserver((entries) => {

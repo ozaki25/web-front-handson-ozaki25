@@ -167,11 +167,11 @@ p { margin-top: 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson32</title>
+    <title>サンプル</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson32: try / catch</h1>
+    <h1>try / catch</h1>
     <pre id="log"></pre>
   </body>
 </html>
@@ -230,11 +230,11 @@ console.log(value);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson32</title>
+    <title>サンプル</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson32: try / catch</h1>
+    <h1>try / catch</h1>
     <pre id="log"></pre>
   </body>
 </html>

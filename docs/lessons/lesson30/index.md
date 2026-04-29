@@ -157,11 +157,11 @@ import { add } from "./math";
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson30</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson30: import / export の出発点</h1>
+    <h1>import / export の出発点</h1>
   </body>
 </html>
 ```
@@ -229,11 +229,11 @@ console.log(missing);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson30</title>
+    <title>サンプル</title>
     <script type="module" src="./main.js"></script>
   </head>
   <body>
-    <h1>lesson30: import / export</h1>
+    <h1>import / export</h1>
     <ul id="list"></ul>
   </body>
 </html>

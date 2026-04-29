@@ -310,7 +310,7 @@ git log --oneline       # 2 件の履歴が見える
 
 ```bash
 git switch -c feature/greeting
-# hello.txt を編集 → 「Hello, Git! こんにちは。」 に
+# hello.txt を編集 → 「Hello, Git! こんにちは。」に
 git add hello.txt
 git commit -m "挨拶を日本語追記"
 ```
@@ -319,7 +319,7 @@ git commit -m "挨拶を日本語追記"
 
 ```bash
 git switch main
-# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」 に
+# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」に
 git add hello.txt
 git commit -m "ビックリマーク追加"
 ```

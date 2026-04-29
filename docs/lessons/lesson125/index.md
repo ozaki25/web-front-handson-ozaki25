@@ -9,7 +9,7 @@
 - 既存コードでハマらないための注意点（Rules of React）を押さえる
 
 ::: tip 前提
-このレッスンは lesson65「useMemo で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は lesson65 / 55 を確認してください。
+このレッスンは「`useMemo` で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は「`useMemo` で計算のメモ化」「配列を描画する」を確認してください。
 :::
 
 ## 解説
@@ -464,7 +464,7 @@ export default function CompiledComponent() { /* ... */ }
 
 ### 自分で書く（4 章 の成果物に適用）
 
-このコースの **4 章 「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト、または手元の React + Vite プロジェクトに React Compiler を入れて **before / after を比較** します。
+このコースの **4 章「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト、または手元の React + Vite プロジェクトに React Compiler を入れて **before / after を比較** します。
 
 1. 該当プロジェクトを開く
 2. **React DevTools の Profiler** で、何かアクション（追加・削除など）を 1 回計測 → 「再レンダリング回数」「総時間」をメモ
@@ -478,7 +478,7 @@ export default function CompiledComponent() { /* ... */ }
 ### 単独の任意課題
 
 - `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
-- ベンチマーク（lesson100 の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
+- ベンチマーク（「Core Web Vitals の 3 つの指標と Lighthouse」の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 
 ## まとめ
 

@@ -68,7 +68,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ### Vercel Speed Insights
 
-実ユーザーの **Core Web Vitals**（lesson100）を集めるツールです。
+実ユーザーの **Core Web Vitals**（「Core Web Vitals の 3 つの指標と Lighthouse」）を集めるツールです。
 
 ```bash
 npm install @vercel/speed-insights

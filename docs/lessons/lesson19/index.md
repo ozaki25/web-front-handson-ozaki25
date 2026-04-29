@@ -97,11 +97,11 @@ console.log(message);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson18</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson18: 最初の JavaScript</h1>
+    <h1>最初の JavaScript</h1>
     <p>DevTools の Console を開いてください。</p>
   </body>
 </html>
@@ -129,7 +129,7 @@ console.log(count);
 
 ### 手順
 
-1. これまでの `index.html` をそのまま使う（タイトルだけ `lesson19` に変える）
+1. これまでの `index.html` をそのまま使う
 2. `script.js` を以下の内容に書き換える
 3. プレビューの Console を開く
 
@@ -141,11 +141,11 @@ console.log(count);
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson19</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson19: 値の種類</h1>
+    <h1>値の種類</h1>
   </body>
 </html>
 ```

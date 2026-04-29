@@ -367,11 +367,11 @@ console.log(li.previousElementSibling); // 前の兄弟
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson35</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson35: DOM を操作する</h1>
+    <h1>DOM を操作する</h1>
     <p>DevTools の Console を確認してください。</p>
   </body>
 </html>
@@ -419,12 +419,12 @@ main();
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson35</title>
+    <title>サンプル</title>
     <link rel="stylesheet" href="./style.css" />
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1 id="title">lesson35</h1>
+    <h1 id="title">練習</h1>
     <p id="box">このボックスのクラスが切り替わります</p>
     <ul id="list">
       <li>既存の項目 1</li>
@@ -503,7 +503,7 @@ list.appendChild(newLi);
 - 画面の見出し: 「DOM を書き換えました」になっている
 - ボックスは背景黄色（または枠色が濃いオレンジ）に変わる
 - リストに `既存の項目 1` / `既存の項目 2` / `りんご` / `みかん` / `ぶどう` / `最後に追加した項目` の 6 項目が並ぶ
-- Console に元のタイトル「lesson35」が出る
+- Console に元の見出しテキスト「練習」が出る
 
 ### 変える
 

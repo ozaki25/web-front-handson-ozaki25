@@ -133,7 +133,7 @@ if (inputRef.current) {
 
 Props として ref を受け取る側の型 `Ref<HTMLInputElement>` は、内部的にはこの `RefObject<HTMLInputElement | null>` または「ref をセットする関数」のユニオンです（callback ref と呼ばれる別形式があるため）。本コースでは **オブジェクト形式の ref のみ扱います**。
 
-> **TS strict 前提**: 本コースは `tsconfig.json` の `"strict": true` を前提にしています（3 章 「tsconfig.json を読む」参照）。strict が無効だと `current` の null チェックを忘れても型エラーが出ず、実行時に「`Cannot read property 'focus' of null`」で落ちます。strict を切らないでください。
+> **TS strict 前提**: 本コースは `tsconfig.json` の `"strict": true` を前提にしています（3 章「tsconfig.json を読む」参照）。strict が無効だと `current` の null チェックを忘れても型エラーが出ず、実行時に「`Cannot read property 'focus' of null`」で落ちます。strict を切らないでください。
 
 ### 過去形（`forwardRef`）は扱わない
 

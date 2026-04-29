@@ -105,7 +105,7 @@ React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plug
 - **ベンダー**（`node_modules`）を別チャンクに
 - **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
 
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（lesson101 のバンドルサイズ最適化と繋がる話）。
+を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（「バンドルサイズの最適化とコード分割」のバンドルサイズ最適化と繋がる話）。
 
 ```ts
 // クリック時に初めて読み込む
@@ -175,7 +175,7 @@ export default defineConfig({
 - `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
 - `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
 - `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（lesson96）
+- `vitest`: テストランナー（「テスト入門 — Vitest でユニットテスト」）
 
 Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
 

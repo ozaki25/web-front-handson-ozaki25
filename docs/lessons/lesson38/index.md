@@ -231,7 +231,7 @@ button { margin: 4px 6px 4px 0; padding: 6px 12px; }
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson38</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>

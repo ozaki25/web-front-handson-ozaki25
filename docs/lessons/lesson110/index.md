@@ -9,7 +9,7 @@
 - Vercel の **Preview Deployment** とテストを連携できる
 
 ::: tip 前提
-このレッスンは lesson109「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は lesson109 を参照してください。
+このレッスンは「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は「GitHub Actions で CI」を参照してください。
 :::
 
 ## 解説

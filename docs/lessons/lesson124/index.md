@@ -12,7 +12,7 @@
 
 ### `localStorage` の限界
 
-lesson29 で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+「Web Storage で値をブラウザに保存する」で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
 - **容量が小さい**（オリジン全体で 5〜10MB）
 - **値は文字列だけ**（オブジェクトは JSON 化が必要）
@@ -201,7 +201,7 @@ if (granted) console.log("永続化 OK");
 
 ### `Cache API` との違い
 
-Service Worker と一緒に出てくる **`Cache API`**（lesson123）と IndexedDB は **別物**:
+Service Worker と一緒に出てくる **`Cache API`**（「Service Worker と PWA 深掘り」）と IndexedDB は **別物**:
 
 | | Cache API | IndexedDB |
 |---|---|---|

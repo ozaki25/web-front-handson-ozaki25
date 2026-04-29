@@ -93,11 +93,11 @@ todos.forEach((todo) => {
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson21</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson21: 配列を扱う</h1>
+    <h1>配列を扱う</h1>
   </body>
 </html>
 ```

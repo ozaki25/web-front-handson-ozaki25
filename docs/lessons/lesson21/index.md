@@ -107,11 +107,11 @@ console.log(fruits);  // ["apple", "banana"]
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>lesson20</title>
+    <title>サンプル</title>
     <script defer src="./script.js"></script>
   </head>
   <body>
-    <h1>lesson20: 条件で分岐する</h1>
+    <h1>条件で分岐する</h1>
   </body>
 </html>
 ```
