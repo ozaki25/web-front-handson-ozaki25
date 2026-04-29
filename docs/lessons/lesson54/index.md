@@ -83,9 +83,9 @@ import type { GreetingProps } from "./types";
 
 `age?: number` は「`age` は省略しても OK」という意味です。書く側は `<Greeting name="Alice" />` でも `<Greeting name="Alice" age={20} />` でも動きます。省略された場合、`age` の値は `undefined` になります。
 
-### `children`（コピペで与える `ReactNode`）
+### `children` でタグの中身を受け取る
 
-コンポーネントのタグの**中身**を受け取りたいことがあります。例えばこう書きたい。
+コンポーネントのタグの開きと閉じの**間に書いた JSX** を、コンポーネント内部の好きな位置に表示したいことがあります。
 
 ```tsx
 <Card>
@@ -94,9 +94,9 @@ import type { GreetingProps } from "./types";
 </Card>
 ```
 
-`Card` の中身（`<h2>` と `<p>`）を、`Card` の中の好きな場所にはめ込みたい。この「中身」を受け取る特別な props の名前が **`children`** です。
+この `<h2>` と `<p>` を `Card` の中で表示するには、「タグに挟まれた中身」を受け取る特別な props を使います。その props の名前が **`children`** です。
 
-型は `ReactNode` を使います（`react` パッケージから `import type` する）。**意味は「JSX として描画できるもの全て（要素・文字列・数値・配列など）」** ですが、当面は**コピペで与える決まり文句**と思って構いません。
+型は **`ReactNode`** を使います（`react` パッケージから `import type { ReactNode }` で取り込む）。`ReactNode` は「JSX で描画できるもの全般（JSX 要素・文字列・数値・配列・`null` など）」を表す型で、`children` の型としてほぼ常にこれを指定します。
 
 ```tsx
 import type { ReactNode } from "react";
@@ -320,6 +320,6 @@ function Card({ title, children }: CardProps) {
 - props は「コンポーネントの引数」。オブジェクトの分割代入（2 章 の「分割代入とスプレッド」）で受け取る
 - 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
 - オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
-- `children` はタグの中身を受け取る特別な props。型は `ReactNode`（`react` から `import type`）
+- `children` はタグに挟まれた中身を受け取る特別な props。型は `ReactNode`（`react` から `import type { ReactNode }`）
 - HTML 要素をラップするときは `ComponentProps<"button">` で標準 props を継承、`PropsWithChildren<T>` で children 付きを 1 行で書ける（補足）
 - コンポーネント名は必ず大文字始まり
