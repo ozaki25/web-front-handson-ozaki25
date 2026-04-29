@@ -3,7 +3,7 @@
 ## ゴール
 
 - OGP（Open Graph）タグと Twitter Card で **シェアされた時の見栄え** を制御できる
-- Next.js の Metadata API（**Metadata API のレッスン**の発展）で OGP を動的に生成できる
+- Next.js の Metadata API で OGP を動的に生成できる
 - `sitemap.xml` と `robots.txt` の役割と Next.js での生成方法を知る
 - JSON-LD（構造化データ）でリッチリザルトを狙える
 - Google Search Console の使い方が分かる
