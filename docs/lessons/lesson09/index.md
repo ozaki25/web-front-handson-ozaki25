@@ -9,15 +9,35 @@
 
 ## 解説
 
-「クラスと状態」までで、要素セレクタとクラスセレクタを使い分けられるようになりました。これらを **組み合わせる** と、もう少し細かい指定ができます。
+「クラスと状態」までで、要素セレクタとクラスセレクタを使い分けられるようになりました。これらを **組み合わせる** と、もう少し細かい指定ができます。あわせて新しいセレクタを 2 つ（id セレクタ、属性セレクタ）と、複数のルールが衝突したときの **詳細度** も学びます。
 
-### 子孫セレクタ: `a b`（半角スペース)
+### id セレクタ: `#名前`
 
-セレクタを **半角スペースで** つなげると、「`a` の中にある `b`」を意味します。間に他の要素が挟まっていても OK です。
+「ページの骨格を組む」で `id` 属性を使い、`<section id="profile">` のように書きました。CSS からは `#profile { ... }` の形でその要素だけを狙えます。これが **id セレクタ** です。
+
+```css
+#main-content {
+  max-width: 800px;
+  margin: 0 auto;
+}
+```
+
+クラスとの違いは「使える数」です。
+
+- **クラス** (`.btn`): 同じクラスをページ内の **複数の要素** に付けられる。「種類」のラベル
+- **id** (`#main-content`): ページ内に **1 つだけ**。「固有の名前」
+
+ヘッダーやメインコンテンツのように **ページ内に 1 個しかないもの** に使います。
+
+> **実務では id をスタイル指定に使わない** のが主流です。後述の詳細度の節で扱う通り「強すぎて上書きしにくい」ためで、見た目はクラスで当てるのが定番です。本レッスンでは詳細度を体感するために id セレクタも書きますが、普段使いはクラスで十分です。
+
+### 子孫セレクタ: `a b`（半角スペース）
+
+セレクタを **半角スペース** でつなげると、「`a` の中にある `b`」を意味します。間に他の要素が挟まっていても OK です。
 
 ```css
 .card p {
-  color: #555;
+  color: crimson;
 }
 ```
 
@@ -33,24 +53,79 @@
 <p>これは外側</p>  <!-- 対象外 -->
 ```
 
+下のデモで、`.card` の中の段落だけが赤くなり、外の段落は黒のままになるのが見えます。
+
+<LiveDemo
+  height="180px"
+  :html="`
+<div class='card'>
+  <h2>タイトル</h2>
+  <p>card の中の段落（赤くなる）</p>
+  <div class='body'>
+    <p>さらに入れ子の段落（赤くなる）</p>
+  </div>
+</div>
+<p>外側の段落（黒のまま）</p>
+  `"
+  :css="`
+body { padding: 12px; font-family: system-ui; color: #111; background: #fff; }
+.card { border: 1px solid #d1d5db; padding: 12px; margin-bottom: 12px; }
+.card p { color: crimson; font-weight: bold; }
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  .card { border-color: #555; }
+  .card p { color: #ff6b6b; }
+}
+  `"
+  :js="``"
+/>
+
 ### 子セレクタ: `a > b`
 
 `>` を挟むと「**直接の子**」だけに限定できます。孫より下は対象外です。
 
 ```css
 .card > p {
-  font-weight: bold;
+  background-color: lightyellow;
 }
 ```
 
 ```html
 <div class="card">
-  <p>直接の子</p>      <!-- 対象 -->
+  <p>直接の子</p>       <!-- 対象 -->
   <div>
-    <p>孫の p</p>     <!-- 対象外 -->
+    <p>孫の p</p>      <!-- 対象外 -->
   </div>
 </div>
 ```
+
+下のデモは、`.card` の **直接の子** の段落だけ黄色背景になります。`<div>` でくるんだ孫の段落は背景色が付きません。
+
+<LiveDemo
+  height="200px"
+  :html="`
+<div class='card'>
+  <p>直接の子（黄色背景）</p>
+  <div class='inner'>
+    <p>孫の段落（背景なし）</p>
+  </div>
+  <p>もう 1 つ直接の子（黄色背景）</p>
+</div>
+  `"
+  :css="`
+body { padding: 12px; font-family: system-ui; color: #111; background: #fff; }
+.card { border: 1px solid #d1d5db; padding: 12px; }
+.card > p { background-color: lightyellow; padding: 4px 8px; }
+.inner { padding: 8px; border-left: 3px solid #d1d5db; margin: 8px 0; }
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  .card { border-color: #555; }
+  .card > p { background-color: #4a4500; color: #fff5b3; }
+  .inner { border-left-color: #555; }
+}
+  `"
+  :js="``"
+/>
 
 「ナビゲーションの直下のリンクだけ装飾したい」のように、ネストの深い箇所まで巻き込みたくないときに使います。
 
@@ -60,11 +135,35 @@
 
 ```css
 h2 + p {
-  margin-top: 0;
+  color: dodgerblue;
+  font-weight: bold;
 }
 ```
 
-「見出しの直後の段落だけ余白を詰める」のような微調整に使います。
+下のデモは、見出し直後の段落だけ青く太字になります。同じ `<h2>` 配下でも 2 つ目以降の段落には当たりません。
+
+<LiveDemo
+  height="220px"
+  :html="`
+<h2>タイトル A</h2>
+<p>見出し直後の段落（青、太字）</p>
+<p>2 つ目の段落（普通）</p>
+
+<h2>タイトル B</h2>
+<p>見出し直後の段落（青、太字）</p>
+  `"
+  :css="`
+body { padding: 12px; font-family: system-ui; color: #111; background: #fff; }
+h2 + p { color: dodgerblue; font-weight: bold; }
+@media (prefers-color-scheme: dark) {
+  body { color: #eaeaea; background: #1a1a1a; }
+  h2 + p { color: #6cb4ff; }
+}
+  `"
+  :js="``"
+/>
+
+「見出しの直後の段落だけ余白を詰める」「リストの最初の項目だけ強調」のような微調整で使います。
 
 ### 属性セレクタ: `[属性名="値"]`
 
@@ -72,7 +171,7 @@ h2 + p {
 
 ```css
 input[type="email"] {
-  background-color: #f0f9ff;
+  background-color: #dbeafe;
 }
 
 a[href^="https://"] {
@@ -83,61 +182,61 @@ a[href^="https://"] {
 - `[type="email"]`: `type` 属性が `"email"` の入力欄
 - `[href^="https://"]`: `href` が `https://` で **始まる** リンク（`^=` は前方一致）
 
-`type="checkbox"` だけ装飾を変えたい、外部リンクだけ色を変えたい、など `<input>` 周りで重宝します。
-
-### デモ: 組み合わせを目で見比べる
-
-下のデモは、同じ `<p>` でも置かれる場所によって当たるルールが変わる様子を確認できます。`.card` 直下と入れ子の中で見た目が違うのが見えます。
+下のデモは、同じ `<input>` でも `type="email"` のものだけ青背景になります。`type="text"` の方は背景が付きません。
 
 <LiveDemo
-  height="240px"
+  height="180px"
   :html="`
-<div class='card'>
-  <h2>タイトル</h2>
-  <p>子セレクタが当たる: 太字</p>
-  <div class='inner'>
-    <p>子孫セレクタだけ: 灰色のまま、太字にはならない</p>
-  </div>
-</div>
-<p>外側の p（どのルールも当たらない）</p>
+<p><label>名前: <input type='text' placeholder='テキスト入力'></label></p>
+<p><label>メール: <input type='email' placeholder='email 入力'></label></p>
   `"
   :css="`
-body { padding: 16px; font-family: system-ui; color: #111; background: #fff; }
-.card { border: 1px solid #d1d5db; padding: 16px; }
-.card p { color: #555; }
-.card > p { font-weight: bold; }
+body { padding: 12px; font-family: system-ui; color: #111; background: #fff; }
+input { padding: 4px 8px; font: inherit; }
+input[type='email'] { background-color: #dbeafe; border: 1px solid #2563eb; }
 @media (prefers-color-scheme: dark) {
   body { color: #eaeaea; background: #1a1a1a; }
-  .card { border-color: #555; }
-  .card p { color: #bbb; }
+  input { background-color: #2a2a2a; color: #eaeaea; border-color: #555; }
+  input[type='email'] { background-color: #1e3a5f; border-color: #6cb4ff; color: #fff; }
 }
   `"
   :js="``"
 />
 
+`type="checkbox"` だけ装飾を変えたい、外部リンクだけ色を変えたい、など `<input>` 周りで重宝します。
+
 ### 詳細度（specificity）
 
 複数のルールが同じ要素にマッチしたとき、**どれが勝つか** を決めるのが **詳細度** です。
 
-セレクタの種類を 3 つの数字 `(id, class, element)` で数えます。数字が大きいほど強いです。
+セレクタを次の 3 種類に分けて数えます。
 
-| セレクタ | 例 | 数え方 |
-|---|---|---|
-| ID セレクタ | `#submit` | (1, 0, 0) |
-| クラス / 属性 / 擬似クラス | `.btn` / `[type="email"]` / `:hover` | (0, 1, 0) |
-| 要素 / 擬似要素 | `p` / `::before` | (0, 0, 1) |
+- **id セレクタ** (`#main`) → **重み 100**
+- **クラス / 属性 / 擬似クラス** (`.btn` / `[type="email"]` / `:hover`) → **重み 10**
+- **要素 / 擬似要素** (`p` / `::before`) → **重み 1**
 
-複合セレクタは、それぞれを **足し算** します。
+セレクタを `(id の個数, class の個数, 要素の個数)` の **3 つ組** で表記します。比較は **左から順**: id の数が多い方が勝ち、同じなら class、それも同じなら要素の数で比較します。
 
-| セレクタ | 詳細度 |
-|---|---|
-| `p` | (0, 0, 1) |
-| `.card p` | (0, 1, 1) |
-| `.card > p` | (0, 1, 1) |
-| `.card .body p` | (0, 2, 1) |
-| `#main .card p` | (1, 1, 1) |
+#### 数え方の例
 
-**比較は左から順** に行われます。`(1, 0, 0)` は `(0, 99, 0)` より強いです。クラスを 99 個並べても、id 1 個には勝てません。
+| セレクタ | id | class | 要素 | 表記 | 数え方の説明 |
+|---|---|---|---|---|---|
+| `p` | 0 | 0 | 1 | (0, 0, 1) | 要素 1 つ |
+| `.card p` | 0 | 1 | 1 | (0, 1, 1) | クラス `.card` 1 つ + 要素 `p` 1 つ |
+| `.card > p` | 0 | 1 | 1 | (0, 1, 1) | `>` は数えない。class 1 + 要素 1 |
+| `.card .body p` | 0 | 2 | 1 | (0, 2, 1) | クラス 2 つ（`.card` `.body`）+ 要素 1 つ |
+| `#main .card p` | 1 | 1 | 1 | (1, 1, 1) | id 1 + class 1 + 要素 1 |
+| `#submit` | 1 | 0 | 0 | (1, 0, 0) | id 1 つだけ |
+
+「セレクタの中の `#`、`.`、要素名 を数える」と覚えれば計算できます。`>` `+` `(空白)` のような **連結子** は数えません。
+
+#### 比較ルール
+
+**左から順に比較** します。先頭の数字が大きい方の勝ち。
+
+- `(1, 0, 0)` vs `(0, 99, 0)` → **(1, 0, 0) の勝ち**（クラス 99 個でも id 1 個には勝てない）
+- `(0, 2, 0)` vs `(0, 1, 5)` → **(0, 2, 0) の勝ち**（要素 5 個でも class 2 個には勝てない）
+- `(0, 1, 1)` vs `(0, 1, 1)` → **同点**（後述: 後勝ち）
 
 ### 同じ詳細度なら後勝ち
 
@@ -360,8 +459,9 @@ DevTools の Elements パネルで `.body` の中の `<p>` をクリックしま
 
 ## まとめ
 
-- セレクタは組み合わせられる。子孫（`a b`）/ 子（`a > b`）/ 隣接（`a + b`）/ 属性（`[type="email"]`）。
-- 詳細度は **(id, class, element)** の 3 つで数える。左から比較して大きい方が勝つ。
+- id セレクタは `#名前 { ... }`。ページに 1 つだけ。実務ではスタイルにはクラスを使うのが主流。
+- セレクタは組み合わせられる。子孫（`a b`）/ 子（`a > p`）/ 隣接（`a + b`）/ 属性（`[type="email"]`）。
+- 詳細度は **(id の数, class の数, 要素の数)** で数えて、左から比較。大きい方が勝つ。
 - 同じ詳細度なら **後勝ち**。
 - `!important` は最強だが、上書き合戦の温床なので原則使わない。
 - DevTools の Styles パネルで取り消し線を見ると、どのルールが勝っているかを目で確認できる。
