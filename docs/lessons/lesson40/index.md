@@ -1,6 +1,22 @@
 # lesson40: 監視系 API（Intersection Observer / ResizeObserver / MutationObserver）
 
 <script setup>
+const resizeDemoJs = `
+const target = document.getElementById('target');
+const sizeInfo = document.getElementById('size-info');
+
+const observer = new ResizeObserver((entries) => {
+  for (const entry of entries) {
+    const { width, height } = entry.contentRect;
+    sizeInfo.textContent =
+      'width: ' + Math.round(width) + 'px / height: ' + Math.round(height) + 'px';
+    target.classList.toggle('wide', width > 360);
+  }
+});
+
+observer.observe(target);
+`
+
 const fadeDemoJs = `
 const items = document.querySelectorAll('.fade-in');
 const observer = new IntersectionObserver((entries) => {
@@ -252,6 +268,31 @@ observer.observe(card);
 ::: warning 注意
 ResizeObserver のコールバック内で **同じ要素のサイズを変える** と、無限ループに陥ります（次フレームでまたコールバックが呼ばれる）。`requestAnimationFrame` などで切る、または「変化量が一定以上の時だけ反応」とガードを入れます。
 :::
+
+下のデモは `contenteditable` の枠に文字を入れたり改行したりすると、`width` / `height` が即時に更新される最小例です。幅が 360px を超えると枠の色が変わります（`classList.toggle("wide", width > 360)` の効果）。
+
+<!-- textlint-disable ja-technical-writing/sentence-length -->
+
+<LiveDemo
+  height="280px"
+  :html="`
+<p id='size-info'>width: - / height: -</p>
+<div id='target' contenteditable='true'>ここに自由に書いて、改行を増やしたり文字を増やしたりしてください。サイズが即時に更新されます。</div>
+  `"
+  :css="`
+#size-info { font-family: ui-monospace, monospace; color: #444; margin-bottom: 8px; }
+#target { padding: 12px; min-height: 4em; background: #fef3c7; color: #1f2937; border: 2px dashed #d4a017; border-radius: 6px; outline: none; line-height: 1.6; }
+#target.wide { background: #c7f3d0; border-color: #16a34a; }
+@media (prefers-color-scheme: dark) {
+  #size-info { color: #ccc; }
+  #target { background: #3a2f0a; color: #f5f5f5; border-color: #b8860b; }
+  #target.wide { background: #0a3a1f; border-color: #4ade80; }
+}
+  `"
+  :js="resizeDemoJs"
+/>
+
+<!-- textlint-enable ja-technical-writing/sentence-length -->
 
 ### MutationObserver
 
