@@ -1,0 +1,21 @@
+{
+  "rules": {
+    "preset-ja-technical-writing": {
+      "no-mix-dearu-desumasu": false,
+      "ja-no-mixed-period": false,
+      "no-exclamation-question-mark": false,
+      "no-unmatched-pair": false,
+      "ja-no-successive-word": false,
+      "sentence-length": {
+        "max": 150
+      },
+      "max-ten": {
+        "max": 5
+      },
+      "max-kanji-continuous-len": {
+        "max": 8
+      },
+      "no-doubled-joshi": false
+    }
+  }
+}
