@@ -250,6 +250,18 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
   fi
 
+  # --- textlint（日本語表現の lint） ---
+  # 冗長表現 / 弱い表現 / 文長など、構造的な日本語の癖を検出する。
+  # 設定は .textlintrc.json。staged の docs/**/*.md だけ対象にする。
+  if [ -n "$staged_md" ]; then
+    if [ -x "node_modules/.bin/textlint" ]; then
+      textlint_out=$(node_modules/.bin/textlint -f compact $staged_md 2>&1 | grep ': line' || true)
+      if [ -n "$textlint_out" ]; then
+        block "textlint の指摘: 冗長表現 / 弱い表現 / 文長などを直してください。\n${textlint_out}"
+      fi
+    fi
+  fi
+
   # --- レッスンテンプレート 4 節チェック ---
   lesson_md=$(echo "$STAGED" | grep -E '^docs/lessons/lesson[0-9]+/index\.md$' || true)
   if [ -n "$lesson_md" ]; then

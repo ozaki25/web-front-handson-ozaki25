@@ -75,7 +75,7 @@ graph TD
 
 ここがよく詰まるポイントです。
 
-- Client Component が Server Component を **`import` することはできません**。
+- Client Component から Server Component を **`import` できません**。
 - ただし、`children` や props として **受け取ること** は可能です。
 
 つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。

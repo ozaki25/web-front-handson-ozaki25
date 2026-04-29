@@ -100,7 +100,9 @@ export async function GET() {
 サーバー専用コードでは **プレフィックスなしの値** が読めます。クライアント側で同じコードを書くと `undefined` になる。
 
 ::: warning Server Component / Server Action の罠
-Server Component / Server Action のソースを **Client Component に間接的に import** すると、Next.js のバンドラがコードをクライアント側に持ち込んでしまうことがあります。シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import して **誤って client にバンドルされたら build 時に失敗させる** のが安全です。
+Server Component / Server Action のソースが **Client Component から間接的に import** されると、バンドラがクライアント側に持ち込みます。
+
+シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import します。これで **誤って client にバンドルされた場合に build が失敗** します。
 
 ```ts
 import "server-only"; // クライアントから import するとエラー

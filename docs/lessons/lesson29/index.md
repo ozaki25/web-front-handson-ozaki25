@@ -113,7 +113,7 @@ console.log(greet("Alice")); // "こんにちは、Alice さん"
 
 #### 名前付きとデフォルトの混在
 
-同じファイルから両方 import することもできます。
+同じファイルから両方を import するのも可能です。
 
 ```js
 import greet, { PI } from "./greeter.js";

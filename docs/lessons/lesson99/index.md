@@ -249,7 +249,7 @@ expect(element).toHaveAttribute("href", "/about");
 
 RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
 
-- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります（Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み）。**普段は何もしなくて大丈夫**ですが、`vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあるので、`render` した DOM が次のテストに残って干渉していると感じたら **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。
+- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。
 - **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
 
 ```ts

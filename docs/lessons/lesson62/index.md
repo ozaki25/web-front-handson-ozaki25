@@ -337,7 +337,7 @@ export default App;
 ### 変える
 
 - `App.tsx` で `<ThemeProvider>` の行を削除してみます。`useTheme` の中で `throw new Error(...)` が発動し、画面がエラー表示になります。「Provider を必ず外側に置く」必要性を体感する演習です。確認したら元に戻します。
-- `ThemeContext.tsx` の `createContext<ThemeContextValue | null>(null)` を `createContext<ThemeContextValue>({ theme: "light", toggleTheme: () => {} })` のように「ダミーのデフォルト値」に変えることもできます。こうすると Provider 無しでもエラーは出ませんが、「包み忘れ」に気づけなくなる欠点があります。本コースでは `null` + チェック方式を推奨します。
+- `ThemeContext.tsx` の `createContext<ThemeContextValue | null>(null)` には、別の書き方もあります。`createContext<ThemeContextValue>({ theme: "light", toggleTheme: () => {} })` のように「ダミーのデフォルト値」を渡す方式です。こうすると Provider 無しでもエラーは出ませんが、「包み忘れ」に気づけなくなる欠点があります。本コースでは `null` + チェック方式を推奨します。
 - `ThemeToggle` を `Header` の直下に移動しても、変わらず動くことを確認します。Context は **ツリーのどこに置いても** Provider の配下なら届きます。
 
 ### 自分で書く

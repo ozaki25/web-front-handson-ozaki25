@@ -181,7 +181,7 @@ middle();
 
 ### スタイル付き出力: `%c`
 
-第 1 引数の文字列に `%c` を入れ、第 2 引数以降に CSS を渡すと色付きのログになります。ライブラリが Console にロゴを出すのに使っているのを見たことがあるかもしれません。
+第 1 引数の文字列に `%c` を入れ、第 2 引数以降に CSS を渡すと色付きのログになります。ライブラリが Console にロゴを出すのに使っている例も多くあります。
 
 ```js
 console.log("%cデバッグモード", "color: white; background: steelblue; padding: 2px 6px; border-radius: 3px;");

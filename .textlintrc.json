@@ -6,6 +6,7 @@
       "no-exclamation-question-mark": false,
       "no-unmatched-pair": false,
       "ja-no-successive-word": false,
+      "arabic-kanji-numbers": false,
       "sentence-length": {
         "max": 150
       },

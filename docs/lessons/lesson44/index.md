@@ -62,7 +62,7 @@ const admin: AdminUser = {
 ```
 
 - `AdminUser` は `User` のプロパティ（`id` と `name`）に加え、`role` と `permissions` を持つ。
-- `extends` の右にカンマで並べれば、**複数の `interface`** を継承することもできる。
+- `extends` の右にカンマで並べれば、**複数の `interface`** も継承できる。
 
 継承したプロパティを欠けさせるとエラーになります。
 
