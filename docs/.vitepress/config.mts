@@ -7,6 +7,7 @@ export default withPwa(
     lang: 'ja-JP',
     title: 'Web フロントエンド入門',
     description: 'Web フロントエンドをこれから学ぶ人向けの学習コンテンツ',
+    lastUpdated: true,
     markdown: {
       // 本コースで実際に使う言語だけ Shiki にロードさせる。
       // 既定では C++ / WebAssembly などの未使用言語までチャンクが
@@ -254,6 +255,13 @@ export default withPwa(
       docFooter: {
         prev: '前のレッスン',
         next: '次のレッスン',
+      },
+      lastUpdated: {
+        text: '最終更新',
+        formatOptions: {
+          dateStyle: 'medium',
+          timeStyle: 'short',
+        },
       },
       search: {
         provider: 'local',

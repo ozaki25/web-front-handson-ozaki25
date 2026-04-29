@@ -6,6 +6,7 @@
 - `target` / `module` / `moduleResolution` の 3 つの関係を説明できる
 - `paths` でパスエイリアス（`@/*`）を設定できる
 - `jsx` / `lib` / `types` の役割を理解する
+- `verbatimModuleSyntax` / `erasableSyntaxOnly` など、Node.js が TypeScript をネイティブ実行する時代の前提を押さえる
 - Vite / Next.js / Node 用の tsconfig.json の差を読める
 
 ## 解説
@@ -13,6 +14,10 @@
 TypeScript プロジェクトのルートに置く `tsconfig.json` は、**型チェックとコンパイル** の挙動を決める設定ファイルです。フレームワークが自動生成してくれるので普段は触る機会も少ないですが、新しいツールを入れる時 / 「なぜか型エラー」を解決する時に **読めると話が早い** です。
 
 このレッスンでは「現場で出てくる項目」だけを取り上げます。すべてを覚える必要はありません。
+
+::: tip TypeScript 6 / 7 時代の前提
+Node.js 22 以降、`.ts` ファイルを **そのまま実行できる**（型注釈などを実行時に剥がす）ようになりました。これに合わせて TypeScript 5.8 以降は `verbatimModuleSyntax` / `erasableSyntaxOnly` といった「ネイティブ実行向きの書き方を強制する」オプションが整い、TypeScript 6 / 7 のフレームワーク標準として広がっています。本レッスンもこれらを前提にした設定で書いています。
+:::
 
 ### 全体構造
 
@@ -187,6 +192,58 @@ JSX をどう変換するか。
 
 `tsc` を **型チェック専用ツール** として使う、というのが現代の TS の主な役割です。
 
+### TypeScript 6 / 7 時代の前提オプション
+
+Node.js 22+ が `.ts` をネイティブ実行する時代に合わせて、TypeScript 5.8 以降は **「型情報以外を含まないコード」を強制する** オプション群が標準になりました。`npm create vite@latest` / `create-next-app` の生成 tsconfig にも入っているので、現代のフロントでは「常に ON」と思って構いません。
+
+#### `verbatimModuleSyntax`
+
+`import` / `export` のうち **型だけ使うもの** を `import type` / `export type` で **明示** させるオプションです。
+
+```ts
+// NG: User は型としてしか使われていないのに、ふつうの import になっている
+import { User } from "./types";
+
+// OK: 型専用 import を明示する
+import type { User } from "./types";
+```
+
+なぜ必要かというと、esbuild / SWC / Node.js のネイティブ実行のように **TypeScript の型解析をせずに変換するツール** は、「これが値か型か」をファイル単体で判定できません。`import type` で書いてあれば確実に剥がせるので、ビルド速度・互換性が安定します。
+
+`isolatedModules` の上位互換的な扱いで、新規プロジェクトでは `verbatimModuleSyntax: true` を使うのが標準です。
+
+#### `erasableSyntaxOnly`
+
+「**型注釈以外の TS 独自構文** を禁止する」オプションです（TypeScript 5.8 から追加）。Node.js が `.ts` をネイティブ実行する場合、Node.js は型注釈を **そのまま剥がす** だけなので、剥がせない構文が残っているとエラーになります。
+
+剥がせない（このオプションでエラーになる）構文は次のとおりです。
+
+- `enum`（数値・文字列ともに、JS のオブジェクトに展開される）
+- `namespace`（中身が値を持つ場合）
+- `class` のコンストラクタ引数で書く `parameter property`（`constructor(public name: string)`）
+- 旧式の experimental decorators
+
+```ts
+// NG: enum はランタイムにオブジェクトとして残る
+enum Color { Red, Blue }
+
+// OK: union 型 + as const で代用
+type Color = "red" | "blue";
+const Colors = { red: "red", blue: "blue" } as const;
+```
+
+`erasableSyntaxOnly: true` にしておくと、上記が出てきた時点で TS がエラーを出すので、Node.js のネイティブ実行や Vite / Next.js のバンドルで **後から困らない** 状態を保てます。
+
+#### `noUncheckedIndexedAccess`
+
+`arr[0]` の型を `T | undefined` にして、配列アクセスの「実は範囲外でした」事故を型で防ぐオプションです（TypeScript 4.1+）。書き味が硬くなるので強制ではありませんが、6 / 7 時代の **新規プロジェクトでは入れる方向** に倒すのが推奨です。
+
+```ts
+const items = ["a", "b", "c"];
+const first = items[0]; // 型: string | undefined（noUncheckedIndexedAccess: true）
+console.log(first.toUpperCase()); // エラー: 'first' is possibly 'undefined'
+```
+
 ### `tsconfig.json` のバリエーション
 
 #### Vite + React（`npm create vite -- --template react-ts` の生成例）
@@ -201,14 +258,16 @@ JSX をどう変換するか。
     "skipLibCheck": true,
     "moduleResolution": "bundler",
     "allowImportingTsExtensions": true,
-    "isolatedModules": true,
+    "verbatimModuleSyntax": true,
+    "erasableSyntaxOnly": true,
     "moduleDetection": "force",
     "noEmit": true,
     "jsx": "react-jsx",
     "strict": true,
     "noUnusedLocals": true,
     "noUnusedParameters": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true
   },
   "include": ["src"]
 }
@@ -217,7 +276,8 @@ JSX をどう変換するか。
 特徴:
 
 - `moduleResolution: "bundler"` + `allowImportingTsExtensions: true` でバンドラ前提
-- `isolatedModules` は **ファイル単位で型情報なく変換** されることを保証する。Vite / esbuild の前提
+- `verbatimModuleSyntax` / `erasableSyntaxOnly` で **型情報以外を持たない安全な書き方** を強制
+- `noUncheckedSideEffectImports` で `import "./style.css"` のような副作用 import の typo を検出
 - `noEmit: true` で型チェック専用
 
 #### Next.js（自動生成）
@@ -432,4 +492,5 @@ import App from "@/App";
 - `jsx: "react-jsx"` が React 17 以降のデファクト
 - `lib` で使える型、`types` で読み込む型パッケージを制御
 - `noEmit: true` にして **型チェック専用** にし、変換はバンドラに任せるのが現代流
+- TypeScript 6 / 7 時代は `verbatimModuleSyntax` / `erasableSyntaxOnly` で **「型以外の独自構文を持たない」** 書き方が標準。Node.js のネイティブ TS 実行とも噛み合う
 - `extends` でベース設定を継承できる。`@tsconfig/strictest` などの公式バンドルもある

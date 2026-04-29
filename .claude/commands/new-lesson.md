@@ -27,7 +27,7 @@ description: 新規レッスン本文を、CLAUDE.md の執筆原則に従って
 - **「コピペ → 変える → 自分で書く」** の 3 段階を演習に含める
 - **ダークモード色指定**（CSS を書くなら `@media (prefers-color-scheme: dark)` も併記）
 - **コードブロックは言語指定必須**（` ```html `, ` ```css `, ` ```js `, ` ```ts `, ` ```tsx `）
-- **React は 19 以降前提**（`仮想 DOM` の用語は使わず「UI をツリーとして保持し差分反映」と表現、`forwardRef` は扱わない）
+- **React は 19 以降前提**（`forwardRef` は扱わない。`仮想 DOM` の用語は使ってよいが、React Compiler などの現代的な補足を添える）
 - **Next.js は 15 以降前提**（`params` / `searchParams` は `Promise<...>` で `await`、fetch は既定キャッシュしない）
 
 ## 螺旋構造
