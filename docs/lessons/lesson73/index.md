@@ -48,22 +48,7 @@ export function Counter() {
 
 ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
 
-```mermaid
-graph TD
-  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
-  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
-
-  Layout["RootLayout (Server)"]:::server
-  Page["page.tsx (Server)"]:::server
-  Nav["Nav (Server)"]:::server
-  Counter["Counter (Client)"]:::client
-  Form["TodoForm (Client)"]:::client
-
-  Layout --> Page
-  Page --> Nav
-  Page --> Counter
-  Page --> Form
-```
+<img src="/diagrams/server-client-tree.svg" alt="RootLayout(Server) → page.tsx(Server) → Nav(Server) / Counter(Client) / TodoForm(Client) のツリー。Server Component が外側を占め、Client Component が必要な葉のみ" class="diagram" />
 
 - 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
 - 図の青（Client）は、ブラウザに JS が届いて動く部分です。

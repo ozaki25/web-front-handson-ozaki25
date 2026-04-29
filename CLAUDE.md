@@ -100,7 +100,7 @@ docs/rejected/       ← 却下したレッスン案
 7. 必要に応じて VitePress のタブ / Mermaid / 折りたたみを使う。
 8. ダークモード色指定を忘れない(白背景だけ指定して文字が読めなくなる事故を防ぐ)。
 9. `npm run docs:build` を通してから main にコミットする。
-10. 後述の「§ 13 過去指摘の checklist」を毎レッスン commit 前に必ず通す。
+10. 後述の「§ 14 過去指摘の checklist」を毎レッスン commit 前に必ず通す。
 
 ## 11. 避けたい書き方（方針）
 
@@ -152,7 +152,24 @@ docs/rejected/       ← 却下したレッスン案
 - `:js` に外部 URL の `fetch` を書くこと（CORS で失敗する。外部 API 連携は StackBlitz で扱う）
 - `:html` 等の値で **HTML 属性を `&quot;` のような HTML エンティティでエスケープする**こと。テンプレートリテラル内では **シングルクォート** を使う（`<input type='text'>`）。エンティティを使うと VitePress の build で実体に展開されて壊れる。
 
-## 13. 過去指摘の checklist（hook で拾えない判断項目）
+## 13. 図は SVG で置く（Mermaid プラグインは使わない）
+
+本文に図を入れたいときは、**`docs/public/diagrams/*.svg`** に静的 SVG を置いて `<img src="/diagrams/<name>.svg" alt="..." class="diagram" />` で参照する。
+
+```md
+<img src="/diagrams/server-client-tree.svg" alt="RootLayout(Server) → page.tsx(Server) → Nav(Server) / Counter(Client) / TodoForm(Client) のツリー" class="diagram" />
+```
+
+ルール:
+
+- **新規に ` ```mermaid ` フェンスを書かない**。`vitepress-plugin-mermaid` は 1 つの図のために mermaid 本体（Cytoscape / Wardley / KaTeX など全図種）をバンドルに巻き込み、ビルドが遅くチャンクが肥大する。**本コースは Mermaid プラグインを使わない方針** に固定する。
+- 図のソース（mermaid 記法 `.mmd` ファイル）は **`diagrams-src/`** に置く。再生成手順は `diagrams-src/README.md` を参照。書き出した SVG だけを `docs/public/diagrams/` にコミットする。
+- ファイル名は **トピック名**（例: `server-action-flow.svg`）。`lessonNN` を含めない（章再編で破綻するため）。
+- `alt` 属性は **省略しない**。スクリーンリーダーで意味が伝わる、図の主旨を 1〜2 文で書く。`alt="図"` のような無情報文字列は禁止。
+- `class="diagram"` を付ける（`docs/.vitepress/theme/custom.css` で `max-width` などを定義済み）。
+- 単純な木構造や箇条書きで足りる場合は、図ではなく **箇条書きや表** で表現する方が保守性が高い。SVG 化は「図でないと伝わらない」場面に限る。
+
+## 14. 過去指摘の checklist（hook で拾えない判断項目）
 
 ここに列挙したのは **目視で確認するしかない項目**。機械的に検出できるパターン（絵文字・位置依存参照・章 N・省略コード・用語揺れ・素の `<script>` `<style>`・太字+全角閉じ括弧・Vue 補間未閉・レッスン 4 節の存在）は `.claude/hooks/validate-branch-commit.sh` が commit 時に自動で弾く。
 

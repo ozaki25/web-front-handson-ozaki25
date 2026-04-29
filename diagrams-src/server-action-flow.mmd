@@ -1,0 +1,20 @@
+sequenceDiagram
+  participant Browser as ブラウザ
+  participant Page as /todos page.tsx (Server)
+  participant Action as addTodo (Server Action)
+  participant Store as todos 配列
+
+  Browser->>Page: アクセス
+  Page->>Store: 配列を読む
+  Store-->>Page: [] (空)
+  Page-->>Browser: 空の一覧
+
+  Browser->>Action: <form action> で送信
+  Action->>Store: push(new)
+  Action->>Page: revalidatePath('/todos')
+  Note right of Page: キャッシュ無効化
+  Action-->>Browser: 完了
+  Browser->>Page: 再レンダリング(自動)
+  Page->>Store: 配列を読む
+  Store-->>Page: [new]
+  Page-->>Browser: 更新された一覧

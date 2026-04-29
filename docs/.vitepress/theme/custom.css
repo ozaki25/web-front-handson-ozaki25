@@ -29,3 +29,13 @@
   --vp-c-bg-soft: #2c251c;
   --vp-c-bg-mute: #3a3024;
 }
+
+/* 本文中のダイアグラム SVG（docs/public/diagrams/*.svg）の表示。
+ * 元の mermaid ノード色（#2d6a4f / #1b4965 / #3a2d5c）が暗い前提なので
+ * ライト / ダークどちらでも視認できるよう余白だけ与える。 */
+.diagram {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1em auto;
+}

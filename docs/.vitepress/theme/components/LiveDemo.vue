@@ -129,10 +129,24 @@ async function ensureHighlighted() {
   highlightTriggered = true
   isHighlighting.value = true
   try {
-    const { createHighlighter } = await import('shiki/bundle/web')
-    const highlighter = await createHighlighter({
-      themes: ['github-light', 'github-dark'],
-      langs: ['html', 'css', 'js'],
+    // 必要な言語だけ動的 import する。`shiki/bundle/web` を使うと
+    // C++ / WebAssembly / Vue Vine など未使用言語までチャンクが
+    // 生成されるため、ここでは html / css / js のみ。
+    const [{ createHighlighterCore }, { createOnigurumaEngine }] = await Promise.all([
+      import('@shikijs/core'),
+      import('@shikijs/engine-oniguruma'),
+    ])
+    const highlighter = await createHighlighterCore({
+      themes: [
+        import('@shikijs/themes/github-light'),
+        import('@shikijs/themes/github-dark'),
+      ],
+      langs: [
+        import('@shikijs/langs/html'),
+        import('@shikijs/langs/css'),
+        import('@shikijs/langs/javascript'),
+      ],
+      engine: createOnigurumaEngine(import('shiki/wasm')),
     })
     const opts = {
       themes: { light: 'github-light', dark: 'github-dark' },

@@ -1,0 +1,17 @@
+graph TD
+  classDef root fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
+  classDef group fill:#1b4965,stroke:#62b6cb,color:#ffffff;
+  classDef page fill:#3a2d5c,stroke:#c4a6ff,color:#ffffff;
+
+  Root["app/layout.tsx (全ページ共通)"]:::root
+  Public["(public) は layout.tsx なし"]:::group
+  App["app/(app)/layout.tsx (サイドバー)"]:::group
+  Home["/ page.tsx"]:::page
+  About["/about page.tsx"]:::page
+  Todos["/todos page.tsx"]:::page
+
+  Root --> Public
+  Root --> App
+  Public --> Home
+  Public --> About
+  App --> Todos

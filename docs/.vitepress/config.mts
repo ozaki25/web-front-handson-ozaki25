@@ -1,14 +1,23 @@
 import { defineConfig } from 'vitepress'
-import { withMermaid } from 'vitepress-plugin-mermaid'
 import { withPwa } from '@vite-pwa/vitepress'
 import { tabsMarkdownPlugin } from 'vitepress-plugin-tabs'
 
-export default withPwa(withMermaid(
+export default withPwa(
   defineConfig({
     lang: 'ja-JP',
     title: 'Web フロントエンド入門',
     description: 'Web フロントエンドをこれから学ぶ人向けの学習コンテンツ',
     markdown: {
+      // 本コースで実際に使う言語だけ Shiki にロードさせる。
+      // 既定では C++ / WebAssembly などの未使用言語までチャンクが
+      // 生成されてバンドルが膨らむため、明示で抑える。
+      languages: [
+        'ts', 'tsx', 'js', 'jsx',
+        'html', 'css', 'json', 'jsonc',
+        'bash', 'sh', 'yaml',
+        'md', 'markdown',
+        'graphql', 'http',
+      ],
       config(md) {
         md.use(tabsMarkdownPlugin)
       },
@@ -260,4 +269,4 @@ export default withPwa(withMermaid(
       },
     },
   })
-))
+)

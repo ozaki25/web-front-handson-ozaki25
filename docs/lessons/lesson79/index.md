@@ -105,28 +105,7 @@ Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッ
 
 `revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** されます。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画されます。
 
-```mermaid
-sequenceDiagram
-  participant Browser as ブラウザ
-  participant Page as /todos page.tsx (Server)
-  participant Action as addTodo (Server Action)
-  participant Store as todos 配列
-
-  Browser->>Page: アクセス
-  Page->>Store: 配列を読む
-  Store-->>Page: [] (空)
-  Page-->>Browser: 空の一覧
-
-  Browser->>Action: <form action> で送信
-  Action->>Store: push(new)
-  Action->>Page: revalidatePath('/todos')
-  Note right of Page: キャッシュ無効化
-  Action-->>Browser: 完了
-  Browser->>Page: 再レンダリング(自動)
-  Page->>Store: 配列を読む
-  Store-->>Page: [new]
-  Page-->>Browser: 更新された一覧
-```
+<img src="/diagrams/server-action-flow.svg" alt="ブラウザ → /todos page.tsx(Server) → todos 配列 へアクセスし最初は空配列が返る。次にブラウザが Server Action (addTodo) に送信、Action は配列に push し revalidatePath('/todos') でキャッシュ無効化、ブラウザが自動再レンダリングされて更新後の一覧が返るシーケンス図" class="diagram" />
 
 ## 演習
 

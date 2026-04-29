@@ -1,0 +1,14 @@
+graph TD
+  classDef server fill:#2d6a4f,stroke:#95d5b2,color:#ffffff;
+  classDef client fill:#1b4965,stroke:#62b6cb,color:#ffffff;
+
+  Layout["RootLayout (Server)"]:::server
+  Page["page.tsx (Server)"]:::server
+  Nav["Nav (Server)"]:::server
+  Counter["Counter (Client)"]:::client
+  Form["TodoForm (Client)"]:::client
+
+  Layout --> Page
+  Page --> Nav
+  Page --> Counter
+  Page --> Form
