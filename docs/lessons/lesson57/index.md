@@ -57,40 +57,32 @@ setTodos((prev) => prev.filter((t) => t.id !== id));
 
 `filter`（2 章 の「配列の変換」）は**新しい配列**を返すので、そのまま渡してよいです。`prev` 自体は変更されません。
 
-### イベントハンドラの型（コピペして使う）
+### イベントハンドラの型
 
-TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペして使う**ものとして覚えてください。意味は後から少しずつ分かります。
+JSX の中にインラインで書くアロー関数では、型推論が効くので型注釈は不要です。
+
+```tsx
+<button onClick={(e) => console.log(e)}>
+  {/* e は MouseEvent<HTMLButtonElement> と自動推論される */}
+</button>
+```
+
+一方、**ハンドラを JSX の外で別関数として定義する**場合は、引数 `e` の型を明示する必要があります。`react` から `import type` で取り込み、`イベント種類<HTML要素>` という形で書きます。
 
 ```tsx
 import type { MouseEvent, ChangeEvent, FormEvent } from "react";
 
 // ボタンのクリック
-function handleClick(e: MouseEvent<HTMLButtonElement>) {
-  /* ... */
-}
+function handleClick(e: MouseEvent<HTMLButtonElement>) { /* ... */ }
 
 // input の変化
-function handleChange(e: ChangeEvent<HTMLInputElement>) {
-  /* ... */
-}
+function handleChange(e: ChangeEvent<HTMLInputElement>) { /* ... */ }
 
 // フォームの送信
-function handleSubmit(e: FormEvent<HTMLFormElement>) {
-  /* ... */
-}
+function handleSubmit(e: FormEvent<HTMLFormElement>) { /* ... */ }
 ```
 
-これらの型は `react` パッケージから `import type` で呼びます。`React.MouseEvent` のように名前空間経由で書くこともできますが、新しい JSX ランタイム（Vite の React + TS テンプレート）では名前空間経由だとエラーになる環境があるので、**個別に import する形に統一します**。
-
-とはいえ、**JSX の中にインラインで書くとき**は、型推論が効くので書かなくても OK です。
-
-```tsx
-<button onClick={(e) => console.log(e)}>
-  {/* e は MouseEvent<HTMLButtonElement> 型と自動推論される */}
-</button>
-```
-
-関数を別の場所で定義するときだけ、上の型をコピペして付けます。
+パターンは「`XXXEvent<HTML要素>`」で一貫しているので、型が分からなくなったら IDE の補完か、インラインで書いてから推論された型を確認すると手早く調べられます。
 
 ### スコープ外: オブジェクトの state 更新
 
