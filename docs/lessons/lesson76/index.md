@@ -314,4 +314,3 @@ export default function RootLayout({
 - `next/font/google` から使いたいフォントを import し、`subsets` を指定して呼び出すだけでフォントの自動最適化が有効になります。
 - 戻り値の `className` を `<html>` や `<body>` に付けると、配下全体に適用されます。
 - `display` のデフォルトは **`"swap"`**（先にシステムフォントで描画し、読み込みが済んだら差し替わる FOUT 挙動）です。
-- 適用前のシステムフォントと適用後の Web フォントで、同じページの印象が大きく変わることを目で確認できました。

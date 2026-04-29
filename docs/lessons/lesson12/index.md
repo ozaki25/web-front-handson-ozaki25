@@ -8,7 +8,6 @@
 - `display: grid` と `grid-template-columns` / `grid-template-rows` で列と行を定義できる。
 - `fr` 単位と `repeat()` で列の並びを簡潔に書ける。
 - `minmax()` と `auto-fit` を組み合わせて、画面幅に応じてカード数が自動で折り返すレイアウトを作れる。
-- これまでのレッスンで作った自己紹介ページの「好きなもの」カード部分を Grid で書き直せる。
 
 ## 解説
 

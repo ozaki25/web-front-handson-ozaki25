@@ -5,7 +5,7 @@
 - JS ファイルを複数に分割して、`import` と `export` で繋げられる
 - 名前付き export と `export default` の違いを使い分けられる
 - `<script type="module">` を使ってモジュールを読み込める
-- TODO アプリのロジックを `storage.js` / `render.js` / `main.js` の 3 ファイルに分割できる
+- ロジックを役割ごとに複数ファイルに分けて整理できる
 
 ## 解説
 

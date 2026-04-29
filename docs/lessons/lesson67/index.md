@@ -6,8 +6,8 @@
 
 ## ゴール
 
-- 2 章 の「TODO アプリを作る」の TODO アプリを React + TS に移植し、3 つのコンポーネント（`TodoInput` / `TodoList` / `TodoItem`）に分割できます。
-- 3 章 の `Todo` 型を `import type` して使えます。
+- 機能ごとに React コンポーネントを分割して組み立てられます。
+- `import type` で別ファイルの型を使えます。
 - `useState` の **初期値関数** を使って localStorage から復元できます。
 - `useEffect` で localStorage に保存できます。
 - オブジェクト state のイミュータブル更新（`setX(prev => ({ ...prev, ... }))`）が書けます。
@@ -604,7 +604,7 @@ const [settings, setSettings] = useState<Settings>({ showCount: true });
 
 ## まとめ
 
-- 2 章 の「TODO アプリを作る」の素の JS + DOM の TODO を、React + TS + コンポーネント分割 + localStorage + `useEffect` で書き直しました
-- 3 章 の `Todo` 型を `import type` して、props にも state にも使っています
-- `useState` の初期値関数で **localStorage 書き戻しバグ** を避けました
-- オブジェクト state のイミュータブル更新（`prev => ({ ...prev, ... })`）を体験しました
+- 機能ごとにコンポーネントを分けると、props とイベントハンドラの流れが見通しやすくなる
+- `import type` で別ファイルの型を取り込み、props にも state にも使い回せる
+- `useState` の初期値関数で localStorage 書き戻しバグを避けられる
+- オブジェクト state は `prev => ({ ...prev, ... })` でイミュータブルに更新する

@@ -365,4 +365,3 @@ export default async function TodosPage() {
 - Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
 - `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
 - **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。
-- このあとの「小さなアプリを仕上げる」では、ここまでの知識を統合して TODO アプリを仕上げます。詳細ページ・メタデータ・`searchParams` によるハイライト表示を足します。

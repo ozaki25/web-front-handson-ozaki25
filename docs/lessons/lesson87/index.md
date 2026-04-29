@@ -5,7 +5,7 @@
 - `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
 - 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
 - `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
-- React 19.2 + Next.js 16 の Server Component でどう動くかを、1 つの演習を通して体感する
+- React 19.2 + Next.js 16 の Server Component で Streaming がどう動くかを理解する
 
 ## 解説
 

@@ -17,7 +17,6 @@ btn.addEventListener('click', () => {
 - `addEventListener` でボタンのクリックに反応できる
 - `submit` イベントでフォーム送信に反応できる
 - `event.preventDefault()` でブラウザ既定の動作を止められる
-- カウンターアプリを作る
 
 ## 解説
 

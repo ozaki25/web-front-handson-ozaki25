@@ -4,7 +4,7 @@
 
 - `app/` の下にディレクトリと `page.tsx` を追加して、新しい URL のページを作れます。
 - `next/link` の `<Link>` を使って、ページ遷移を SPA 風に高速化できます。
-- 1 章 の「Flexbox とレスポンシブ」で作った自己紹介ページの HTML を JSX に書き換え、`/about` として復活させられます。
+- 既存の HTML を JSX に書き換えられます。
 - HTML と JSX の主な違い 3 点（`class`、`for`、自己閉じタグ）を意識して書けます。
 
 ## 解説
@@ -472,4 +472,3 @@ export default function Page() {
 - `app/<path>/page.tsx` を作ると、そのディレクトリ名がそのまま URL のパスになります。
 - ページ遷移は `next/link` の `<Link>` で行います。`<a>` より軽い遷移になります。
 - HTML を JSX にするときは **3 点だけ** 書き換えます: `class` → `className`、`for` → `htmlFor`、自己閉じタグに `/`。
-- 1 章 の自己紹介ページを `/about` として復活させました。`/todos` は次以降で中身を作っていきます。
