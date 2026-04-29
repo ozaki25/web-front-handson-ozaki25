@@ -242,7 +242,7 @@ window.addEventListener("scroll", () => {
 
 このコードの問題:
 
-1. **毎フレーム発火** する。スクロール中に何百回もコールバックが走る
+1. **毎フレーム発火** する。スクロール中に何度もコールバックが走る
 2. `getBoundingClientRect()` は **レイアウト再計算** を強制する重い処理
 3. `throttle` / `debounce` で対処できるが、**反応が遅れる**
 4. メモリリークの温床（`removeEventListener` 忘れ）

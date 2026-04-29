@@ -4,9 +4,11 @@
       "no-mix-dearu-desumasu": false,
       "ja-no-mixed-period": false,
       "no-exclamation-question-mark": false,
+      "no-doubled-joshi": false,
+      "ja-no-successive-word": {
+        "allow": ["○", "〇"]
+      },
       "no-unmatched-pair": false,
-      "ja-no-successive-word": false,
-      "arabic-kanji-numbers": false,
       "sentence-length": {
         "max": 150
       },
@@ -15,8 +17,7 @@
       },
       "max-kanji-continuous-len": {
         "max": 8
-      },
-      "no-doubled-joshi": false
+      }
     }
   }
 }

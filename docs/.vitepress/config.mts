@@ -84,7 +84,7 @@ export default withPwa(withMermaid(
             { text: 'lesson10: 色と文字を整える', link: '/lessons/lesson10/' },
             { text: 'lesson11: ボックスモデルで余白を作る', link: '/lessons/lesson11/' },
             { text: 'lesson12: Flexbox とレスポンシブ', link: '/lessons/lesson12/' },
-            { text: 'lesson13: CSS Grid で二次元レイアウト', link: '/lessons/lesson13/' },
+            { text: 'lesson13: CSS Grid で 2 次元レイアウト', link: '/lessons/lesson13/' },
             { text: 'lesson14: Position と z-index', link: '/lessons/lesson14/' },
             { text: 'lesson15: Transition と hover アニメーション', link: '/lessons/lesson15/' },
             { text: 'lesson16: モダン CSS（:has / @layer / @scope / Container Queries / View Transitions）', link: '/lessons/lesson16/' },

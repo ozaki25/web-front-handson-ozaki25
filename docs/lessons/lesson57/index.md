@@ -59,7 +59,7 @@ setTodos((prev) => prev.filter((t) => t.id !== id));
 
 ### イベントハンドラの型（コピペして使う）
 
-TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペして使う**ものとして覚えてください。意味は追い追い分かります。
+TypeScript でイベントハンドラを書くとき、引数の型を指定したい場面があります。よく出る型はまず**コピペして使う**ものとして覚えてください。意味は後から少しずつ分かります。
 
 ```tsx
 import type { MouseEvent, ChangeEvent, FormEvent } from "react";
