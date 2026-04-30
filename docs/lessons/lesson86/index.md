@@ -172,6 +172,28 @@ Next.js App Router は、`app/` 直下に **特定のファイル名** で画像
 
 `<head>` を手で書く必要はありません。画像ファイルを置くだけです。
 
+### `generateMetadata` と `page.tsx` が同じデータを使うとき
+
+`app/posts/[id]/page.tsx` のように、`generateMetadata` でも `page.tsx` でも同じ記事データを fetch するケースがよくあります。そのまま書くと、1 回のリクエストで同じ URL への fetch が 2 回発生します。
+
+これを防ぐのが React 組み込みの **`cache()`** 関数です。
+
+```tsx
+import { cache } from "react";
+
+const getPost = cache(async (id: string) => {
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  return res.json();
+});
+
+// generateMetadata でも PostPage でも getPost(id) を呼ぶが、
+// 同一リクエスト内では 1 回しか fetch しない
+```
+
+`cache()` で包んだ関数は、**同一リクエスト内での重複呼び出しを自動でメモ化**します。`generateMetadata(id)` が先に呼ばれてキャッシュされた値が、`PostPage(id)` の呼び出しでそのまま使われます。
+
+これは lesson75 で扱った Data Cache（`fetch` オプションで制御する永続キャッシュ）とは別物です。`cache()` は「同じリクエストの中での重複排除」に特化した React の仕組みです。
+
 ### Server Component の前提
 
 `metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
@@ -377,7 +399,6 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 }
 ```
 
-> **補足: `cache()` で同一リクエスト内の重複 fetch を 1 回にまとめる**: `generateMetadata` と `PostPage` は同じリクエストで両方走るため、素朴に書くと同じ URL に **2 回 fetch が飛びます**。`import { cache } from "react"` の `cache()` 関数で包むと、**同一リクエスト内** であれば 2 回目以降の呼び出しは 1 回目の結果を使い回します（メモ化）。`{ cache: "force-cache" }` のような fetch オプションはネットワークの再取得を防ぐ別の仕組みで、`cache()` と組み合わせなくても上記の重複呼び出し自体は走ってしまいます。
 
 ### 期待出力
 

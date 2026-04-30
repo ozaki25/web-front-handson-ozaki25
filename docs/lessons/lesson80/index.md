@@ -101,9 +101,9 @@ const todos: Todo[] = [];
 
 ### `revalidatePath` の仕組み
 
-Server Component（例: `/todos` の `page.tsx`）は、描画結果がキャッシュされます。Server Action が配列を変更しても、そのままではキャッシュされた古い画面が残ります。
+ユーザーが `/todos` を開くと、ブラウザ側の **Router Cache**（lesson75 で扱ったページキャッシュ）に描画結果が保存されます。Server Action で `todos` 配列を変えただけでは、このキャッシュが残っているため画面が更新されません。
 
-`revalidatePath('/todos')` を呼ぶと、そのパスのキャッシュが **無効化** されます。次にそのページに入る（またはアクション直後の自動再レンダリング）タイミングで Server Component が再実行され、最新の `todos` が描画されます。
+`revalidatePath('/todos')` を呼ぶと、そのパスの Router Cache が **破棄** されます。フォームを送信した直後に Next.js が自動で `/todos` を再取得し直し、最新の `todos` が画面に反映されます。
 
 <img src="/diagrams/server-action-flow.svg" alt="ブラウザ → /todos page.tsx(Server) → todos 配列 へアクセスし最初は空配列が返る。次にブラウザが Server Action (addTodo) に送信、Action は配列に push し revalidatePath('/todos') でキャッシュ無効化、ブラウザが自動再レンダリングされて更新後の一覧が返るシーケンス図" class="diagram" />
 
@@ -264,7 +264,7 @@ import { revalidateTag } from "next/cache";
 revalidateTag("todos");
 ```
 
-複数ページで同じデータを使っているときに便利です。本コースでは扱いませんが、実務では頻出です。
+同じデータを複数のページで使っているとき、パスを 1 つずつ書かずにタグで一括で無効化できるのが利点です。`revalidateTag` の仕組みと `fetch` オプションの全体像は lesson75 で扱っています。
 
 ### コラム: Server Actions の CSRF 自動保護
 
