@@ -5,7 +5,8 @@
 - **Data Cache**（サーバー側の fetch キャッシュ）と **Router Cache**（ブラウザ側のページキャッシュ）の違いを説明できる
 - Next.js 15 以降、`fetch` のデフォルトはキャッシュしないことを理解する
 - `{ cache: "force-cache" }` / `{ next: { revalidate: N } }` / `{ next: { tags: [...] } }` を使い分けられる
-- `updateTag` / `revalidatePath` / `revalidateTag` の使い分けを説明できる
+- `updateTag` / `revalidatePath` / `revalidateTag` / `refresh` の使い分けを説明できる
+- Server Action から `refresh()` でブラウザ側の Router Cache を更新できる
 - クライアント側から `router.refresh()` で即時再取得できる
 - Next.js 16 の `"use cache"` ディレクティブの基本的な書き方を知っている
 
@@ -132,9 +133,9 @@ const res = await fetch(url, { next: { tags: ["posts"] } });
 
 - 向いているもの: フォーム送信後に一覧を更新したい、管理画面で更新したらフロントに即反映させたい
 
-### キャッシュを手動で切る 3 つの API
+### キャッシュを手動で切る 4 つの API
 
-サーバー側のキャッシュを無効化する関数は 3 つあります。どれも `"next/cache"` からインポートします。
+`"next/cache"` からインポートする関数は 4 つあります。
 
 #### `updateTag` — Server Action からの即時無効化（推奨）
 
@@ -174,13 +175,28 @@ import { revalidatePath } from "next/cache";
 revalidatePath("/posts");
 ```
 
-#### 3 つの使い分け
+#### `refresh` — Server Action からの Router Cache 更新
 
-| API | 使える場所 | 動作 | 使う場面 |
+`refresh()` は **Data Cache ではなく Router Cache** を更新します。Server Action の中からブラウザ側のページキャッシュをクリアして、現在のルートを再取得させます。
+
+```tsx
+import { refresh } from "next/cache";
+
+refresh();
+```
+
+- **Server Action の中からのみ**呼べます。Route Handler・Client Component では使えません。
+- Data Cache（fetch の結果キャッシュ）は操作しません。Router Cache だけを更新します。
+- `revalidatePath` / `updateTag` と組み合わせて使うことが多いです。
+
+#### 4 つの使い分け
+
+| API | 使える場所 | 操作対象 | 使う場面 |
 |---|---|---|---|
-| `updateTag` | Server Action のみ | 即時失効 | ユーザー操作 → 結果を今すぐ見せたい |
-| `revalidateTag` | Server Action + Route Handler | stale-while-revalidate | webhook・管理操作・バックグラウンド更新 |
-| `revalidatePath` | Server Action + Route Handler | stale-while-revalidate | パス単位でまとめてクリアしたい |
+| `updateTag` | Server Action のみ | Data Cache（即時失効） | ユーザー操作 → 結果を今すぐ見せたい |
+| `revalidateTag` | Server Action + Route Handler | Data Cache（stale-while-revalidate） | webhook・管理操作・バックグラウンド更新 |
+| `revalidatePath` | Server Action + Route Handler | Data Cache（stale-while-revalidate） | パス単位でまとめてクリアしたい |
+| `refresh` | Server Action のみ | Router Cache | Server Action からページ表示を即時更新したい |
 
 #### 「無効化し忘れる」と何が起きるか
 
@@ -216,7 +232,7 @@ export async function addPost(formData: FormData) {
 
 ### `router.refresh()` — クライアント側から即時再取得
 
-ここまでの `updateTag` / `revalidateTag` / `revalidatePath` はサーバー側のキャッシュを操作する API でした。**ブラウザ側から** 現在のページを今すぐ再取得したいときは `router.refresh()` を使います。
+上記 4 つは Server Action（または Route Handler）から呼ぶ API でした。**Client Component から**現在のページを今すぐ再取得したいときは `router.refresh()` を使います。`refresh()` のクライアント版にあたります。
 
 ```tsx
 "use client";
@@ -235,7 +251,7 @@ export function RefreshButton() {
 - `useRouter` は Client Component のフックなので `"use client"` が必要です。
 - 通常の `<a>` タグと違い、**ページ全体をリロードしません**。React の state は維持されたまま、サーバーから新しい RSC payload だけを取り直します。
 - WebSocket などの外部イベントを受け取って「データが更新された可能性がある」タイミングで手動更新したいときに向きます。
-- `updateTag` / `revalidatePath` は「サーバー側のキャッシュを無効化する」。`router.refresh()` は「ブラウザから再取得をトリガーする」。役割が違うので場面に応じて使い分けます。
+- Server Action から Router Cache を更新したい場合は `refresh()`、Client Component からは `router.refresh()`、と使う場所で使い分けます。
 
 ### `"use cache"` ディレクティブ（Next.js 16）
 
@@ -287,6 +303,7 @@ async function getPosts() {
 | タグを即時失効（Server Action のみ） | `updateTag("name")` |
 | タグを stale-while-revalidate で無効化 | `revalidateTag("name")` |
 | パスのキャッシュを切る | `revalidatePath("/path")` |
+| Server Action から Router Cache を更新 | `refresh()` （Server Action のみ） |
 | クライアントから今すぐ再取得 | `router.refresh()` （Client Component） |
 | 関数・コンポーネント単位でキャッシュ | `"use cache"` + `cacheLife` + `cacheTag` |
 
