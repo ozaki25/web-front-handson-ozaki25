@@ -101,7 +101,9 @@ const todos: Todo[] = [];
 
 ### `revalidatePath` の仕組み
 
-ユーザーが `/todos` を開くと、ブラウザ側の **Router Cache**（lesson75 で扱ったページキャッシュ）に描画結果が保存されます。Server Action で `todos` 配列を変えただけでは、このキャッシュが残っているため画面が更新されません。
+フォームを送信してデータを追加したのに、**画面の一覧が変わらない**という現象が起きます。なぜでしょうか。
+
+ブラウザ側の **Router Cache**（lesson75 で扱ったページキャッシュ）に、以前アクセスした `/todos` の描画結果が保存されているためです。Server Action で `todos` 配列を変えただけでは、このキャッシュが残っているため画面は更新されません。
 
 `revalidatePath('/todos')` を呼ぶと、そのパスの Router Cache が **破棄** されます。フォームを送信した直後に Next.js が自動で `/todos` を再取得し直し、最新の `todos` が画面に反映されます。
 
