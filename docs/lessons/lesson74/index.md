@@ -2,10 +2,11 @@
 
 ## ゴール
 
-- `async` な Server Component を書けるようになります。
-- 外部 API から `fetch` でデータを取ってきて、結果を JSX で表示できます。
-- `loading.tsx` でローディング UI を挟めるようになります。
-- Next.js 16 の Server Component での fetch は **既定でキャッシュしない** ことを知り、キャッシュしたいときの書き方（`"use cache"` ディレクティブ / `fetch` オプション）を見分けられます。
+- `async` な Server Component を書ける
+- 外部 API から `fetch` でデータを取って、結果を JSX で表示できる
+- `loading.tsx` でローディング UI を挟める
+- Server Component の `fetch` は Next.js 15 以降 **既定でキャッシュしない** ことを理解し、キャッシュしたいときの 2 つの書き方（`fetch` オプション / `"use cache"` ディレクティブ）を見分けられる
+- Next.js のキャッシュが **Data Cache（サーバー側）** と **Router Cache（ブラウザ側）** に分かれていることを把握する
 
 ## 解説
 
@@ -38,7 +39,43 @@ app/
 
 `loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
 
-### Next.js 16 のキャッシュは「明示的に opt-in」
+### Next.js のキャッシュ全体像
+
+Next.js を使う上でキャッシュの理解は避けて通れません。種類が複数あるので最初に全体像を整理します。本コースで押さえるのは **2 つだけ** です。
+
+#### Data Cache（サーバー側で `fetch` の結果をキャッシュ）
+
+サーバー側で実行された `fetch` の結果を保管しておき、同じ URL への次の `fetch` ではサーバー間通信せずキャッシュを返す仕組みです。
+
+- 効くタイミング: Server Component や Server Actions の中で `fetch(url)` を呼んだとき
+- 寿命: 明示的に無効化されるか、`revalidate` で指定した時間が経つまで
+- 操作: 後述する `fetch` オプションや `"use cache"` ディレクティブで挙動を制御する
+
+#### Router Cache（ブラウザ側で画面の RSC payload をキャッシュ）
+
+ブラウザ側で、訪問済みのページのレンダリング結果（RSC payload）を保管しておく仕組みです。`<Link>` で行き来した時に、すでに見たページが瞬時に表示されます。
+
+- 効くタイミング: `<Link>` でページ間を遷移したとき（タブを開いている間だけ有効）
+- 寿命: タブを閉じるまで。あるいは Server Action から `revalidatePath` / `revalidateTag` で無効化されたとき
+- 操作: 通常は意識しなくて良い。データを変更したら `revalidatePath('/posts')` のように呼んで Router Cache を切る
+
+#### 関係性
+
+```
+ブラウザ ←─ Router Cache（画面の結果を保管）
+                ↑ ↓
+         Server Component（毎回 or キャッシュから生成）
+                ↑ ↓
+サーバー ←─ Data Cache（fetch の結果を保管）─→ 外部 API
+```
+
+「画面そのものを保管しているのが Router Cache（ブラウザ側）」「fetch の結果を保管しているのが Data Cache（サーバー側）」と分けて覚えると整理しやすいです。
+
+::: tip もう 2 つあるキャッシュ
+Next.js には他に **Full Route Cache**（ビルド時の静的ページ HTML）と **Request Memoization**（同一リクエスト内での `fetch` 重複呼び出し防止）もありますが、初学のうちは特に意識しなくて構いません。Data Cache と Router Cache の 2 つを軸に把握してください。
+:::
+
+### Data Cache は「明示的に opt-in」
 
 Next.js 14 までは、Server Component の `fetch` はデフォルトで **結果をキャッシュ** していました。便利な反面、「キャッシュされていると気付かずに古いデータを見る」事故が多かったため、Next.js 15 以降は **fetch のデフォルトがキャッシュしない** 動作に切り替わっています。毎リクエストで取り直します。
 
@@ -102,7 +139,7 @@ async function PostList() {
 
 本レッスンの演習ではキャッシュ指定なしの素の `fetch(url)` を使います。「キャッシュしたいときに 2 系統の選択肢がある」ことだけ頭に入れておけば十分です。本格的に使うのは実務に入ってからで構いません。
 
-ここで話しているキャッシュは **Server Component のデータ取得** の話です。App Router にはこれ以外にも Router Cache 等がありますが、本コースでは踏み込みません。
+これらは **Data Cache**（サーバー側）の操作です。Router Cache（ブラウザ側）は通常 `<Link>` 遷移で自動的に効き、Server Action 内の `revalidatePath` / `revalidateTag` で切ります。具体的な使い方は「Server Actions の最小形」と「動的ルート」のレッスンで実例を見ながら扱います。
 
 ## 演習
 
