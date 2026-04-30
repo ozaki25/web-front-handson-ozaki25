@@ -2,28 +2,29 @@
 
 ## ゴール
 
-- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できます。
-- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子にも Client 扱いが伝播することを理解できます。
-- Client Component が Server Component を `import` はできませんが、`children` や props として受け取れることを知っています。
-- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを自分の目で確認できます。
+- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できる
+- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子に Client 扱いが伝播することを理解する
+- Client Component から Server Component を `import` できないが、`children` や props として受け取れることを知る
+- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを目で確認する
 
 ## 解説
 
-### 2 種類のコンポーネントがある
+### 2 種類のコンポーネントの違い
 
-App Router では、コンポーネントが 2 種類あります。
+「Next.js ってなに？」で触れた通り、App Router にはコンポーネントが 2 種類あります。本レッスンではこの違いをコードで体感していきます。
 
-- **Server Component**（デフォルト）
-  - サーバー側で React を実行します。
-  - `useState` / `useEffect` / `onClick` など、**ブラウザでしか動かないもの** は使えません。
-  - データベースアクセスや秘密情報を扱えます。
-  - 送り出されたあとはブラウザでは再実行されません。
-- **Client Component**
-  - ブラウザで動きます。4 章 までの React と同じ感覚で書けます。
-  - `useState` / `useEffect` / `onClick` が使えます。
-  - 先頭に `"use client"` を書いて明示します。
+| | Server Component | Client Component |
+|---|---|---|
+| 動く場所 | サーバー側 | ブラウザ側 |
+| デフォルトか | **既定**（何もしなければこちら） | `"use client"` を明示する必要がある |
+| `useState` / `useEffect` / `onClick` | 使えない | 使える |
+| DB 接続 / API キー | 使える | 使えない（ブラウザに漏れるため） |
+| ブラウザに送られる JS | 送られない（結果だけが届く） | 送られる |
 
-4 章 と同じ感覚で `useState` を使いたい部品は Client Component に、静的に描画するだけの部品は Server Component に、というのが基本の使い分けです。
+基本の使い分けは次の通りです。
+
+- 静的に描画するだけ・データ取得をしたいだけ → **Server Component**
+- ボタンクリック・state 管理・ブラウザ API（`localStorage` など）が必要 → **Client Component**
 
 ### `"use client"` のルール
 
@@ -53,8 +54,6 @@ export function Counter() {
 - 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
 - 図の青（Client）は、ブラウザに JS が届いて動く部分です。
 - Client の部分は「葉」に配置します。ページ全体を Client にしません。
-
-上記図はダークモード前提で十分なコントラスト（背景 `#2d6a4f` / `#1b4965`、枠 `#95d5b2` / `#62b6cb`、文字 `#ffffff`）を指定しています。
 
 ### Client → Server の呼び出しルール
 
@@ -99,18 +98,20 @@ export function ClientWrapper({ children }: { children: ReactNode }) {
 
 `ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
 
-### Server → Client へ渡せる props は **シリアライズ可能なもの限定**
+### Server → Client へ渡せる props は JSON で表せる値だけ
 
-Server Component から Client Component へ props を渡すとき、**シリアライズ可能** （JSON で表現できる）な値しか渡せません。具体的には次のとおりです。
+Server Component から Client Component へ props を渡すとき、**JSON で表せる値**（= シリアライズ可能な値）しか渡せません。これは Server で計算した結果を **ネットワーク越しに JSON にして Client へ送る** ためです。
+
+> **シリアライズ** は「メモリ上のオブジェクトを、ネットワークやファイルで送れる文字列／バイト列に変換すること」。JSON 化はその代表例です。
 
 - **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
 - **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
 
-これは「Server で計算した結果を Client に渡す = ネットワーク越しに JSON で送る」ためです。`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーで詰まります。実務での回避パターン:
+`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーになります。実務での回避パターン:
 
 - **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
 - **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
-- **コールバック関数**: 普通の関数は渡せないので、**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せます
+- **コールバック関数**: 普通の関数は渡せない。**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せる
 
 ### `"use client"` を忘れたときのエラー
 
