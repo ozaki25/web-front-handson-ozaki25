@@ -2,10 +2,10 @@
 
 ## ゴール
 
-- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できます。
-- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を覚えます。
-- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを押さえます。
-- 既存の `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられます。
+- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できる
+- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を理解する
+- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを知る
+- 既存の `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられる
 
 ## 解説
 
@@ -13,17 +13,19 @@
 
 HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
 
-- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送されます。
-- **形式が古い**: JPG / PNG のまま配ると、WebP や AVIF に対応するブラウザでもその恩恵を受けられません。
-- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に全部読みに行きます（CLS や LCP の悪化）。
-- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動きます（CLS）。
+- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送される
+- **古い形式のまま配られる**: JPG / PNG のまま配ると、WebP や AVIF など軽い形式に対応するブラウザでもその恩恵を受けられない
+- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に取りに行く
+- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動く
+
+> **CLS / LCP**: ガタつきや表示遅延は **Core Web Vitals** という Google が定めた指標で評価されます。`CLS`（Cumulative Layout Shift、画面のズレ量）と `LCP`（Largest Contentful Paint、メインコンテンツが見えるまでの時間）が代表で、SEO スコアにも影響します。詳細は「Core Web Vitals の 3 つの指標と Lighthouse」のレッスンで扱います。
 
 `next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
 
 - 表示サイズに応じた解像度を自動生成（`srcset`）
 - WebP / AVIF に自動変換（ブラウザが対応していれば）
 - 画面内に入ったときだけ読み込み（遅延読み込み）
-- `width` / `height` 必須にすることでレイアウトのガタつきを防ぐ
+- `width` / `height` 必須にすることでレイアウトのガタつき（CLS）を防ぐ
 
 ### 最小の使い方
 
@@ -308,7 +310,7 @@ export default function AboutPage() {
 
 ## まとめ
 
-- `import Image from "next/image"` で `<Image>` コンポーネントを使えます。素の `<img>` より賢い画像表示ができます。
-- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけです。
-- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録します。
-- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられます。
+- `import Image from "next/image"` で `<Image>` コンポーネントを使う。素の `<img>` より賢い画像表示ができる
+- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけ
+- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録する
+- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられる
