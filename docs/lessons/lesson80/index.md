@@ -264,7 +264,9 @@ import { revalidateTag } from "next/cache";
 revalidateTag("todos");
 ```
 
-同じデータを複数のページで使っているとき、パスを 1 つずつ書かずにタグで一括で無効化できるのが利点です。`revalidateTag` の仕組みと `fetch` オプションの全体像は lesson75 で扱っています。
+同じデータを複数のページで使っているとき、パスを 1 つずつ書かずにタグで一括で無効化できるのが利点です。
+
+`fetch` にタグを付けて **ユーザーが操作した直後に即反映** させたい場合は、`revalidateTag` の代わりに `updateTag` を使うと、stale-while-revalidate（一瞬古いデータが返る）を避けられます。詳細は lesson75 で扱っています。
 
 ### コラム: Server Actions の CSRF 自動保護
 
