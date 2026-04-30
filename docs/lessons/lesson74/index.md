@@ -37,7 +37,7 @@ app/
     └── loading.tsx    ← 取得中に表示される
 ```
 
-`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。学習者側は特別な接続コードを書きません。
+`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。`<Suspense>` を自分で書く必要はありません。
 
 ### Next.js のキャッシュ全体像
 
@@ -186,7 +186,7 @@ export default async function PostsPage() {
 - `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
 - `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
 
-> **補足: `Post[]` への型キャストは「信頼している」だけ**: `await res.json()` の戻り値は実際は `unknown` で、上のコードは「外部 API は約束通りの形を返してくる」と **信じている** 状態です。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように **実行時に形をチェック** します。
+> **補足: `Post[]` の型注釈は実行時にチェックされない**: `await res.json()` の戻り値は実際には `unknown` で、`: Post[]` は TypeScript に「この形だと信じてください」と伝えているだけで実行時の検証はしません。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように実行時に形をチェックします。
 
 ### 手順 2: `loading.tsx` を置く
 
@@ -241,13 +241,14 @@ const res = await fetch(
 
 ## まとめ
 
-- Server Component は `async` にできます。`await fetch(...)` でデータを直接取得できます。
-- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟めます。
-- Next.js 15 以降、Server Component での **fetch の既定はキャッシュしません**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か、Next.js 16 で導入された **`"use cache"` ディレクティブ**（Cache Components） を使います。
-- ブラウザ側 fetch + `useEffect` で起きていた罠を回避できるのが Server Component の強みです。
+- Server Component は `async` にできる。`await fetch(...)` でデータを直接取得できる
+- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟める
+- Next.js 15 以降、Server Component の `fetch` は **既定でキャッシュしない**。キャッシュしたいときは `fetch` オプション（`force-cache` / `revalidate` / `tags`）か `"use cache"` ディレクティブ（Cache Components）を使う
+- Next.js のキャッシュは **Data Cache（サーバー側で fetch 結果を保管）** と **Router Cache（ブラウザ側で画面を保管）** の 2 つを軸に押さえる
+- ブラウザ側 `fetch` + `useEffect` で起きていた競合・ローディング管理の罠が、サーバー側に寄せることで回避できる
 
 ### コラム: `loading.tsx` の裏で動く Suspense
 
-`loading.tsx` の仕組みは、React の **`<Suspense>`** によるストリーミング描画で動いています。ページの非同期な部分が準備できるまでの間、`<Suspense fallback={...}>` で指定されたフォールバック UI を表示する機能があります。Next.js はこれを `loading.tsx` というファイル規約に包んで、学習者が `<Suspense>` を直接書かなくても済むようにしています。
+`loading.tsx` の仕組みは React の **`<Suspense>`** によるストリーミング描画で動いています。`<Suspense fallback={...}>` で「非同期な部分が準備できるまでフォールバック UI を出す」ことができ、Next.js はこれを `loading.tsx` というファイル規約に包んで、自分で `<Suspense>` を書かなくても済むようにしています。
 
-本コースでは `<Suspense>` を単独で使う場面は出てきませんが、「`loading.tsx` の裏では Suspense が動いている」と頭の片隅に入れておくと、後で React の別コースや公式ドキュメントを読むときに繋がります。
+詳しい使い方は「Loading UI と Streaming」のレッスンで扱います。「`loading.tsx` の裏では Suspense が動いている」とだけ頭の片隅に入れておけば十分です。
