@@ -2,21 +2,21 @@
 
 ## ゴール
 
-- `app/layout.tsx` の役割を理解し、全ページで共通のヘッダー・フッターを持てます。
-- `children` という props を受け取って、中に各ページの中身を差し込む仕組みを把握できます。
-- ルートレイアウトがデフォルトで Server Component であることを確認できます。
+- `app/layout.tsx` の役割を理解し、全ページで共通のヘッダー・フッターを 1 箇所にまとめられる
+- `children` という props を受け取って、各ページの中身を差し込む仕組みを把握できる
+- ルートレイアウトが既定で Server Component であることを理解する
 
 ## 解説
 
 ### 同じ見た目を毎ページ書くのは大変
 
-「ページを増やしてリンクで移動する」で 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、毎ページで `<Link>` を並べたコードをコピペすることになります。リンクが 1 つ増えるたびに全ページを修正するのは明らかに辛いです。
+「ページを増やしてリンクで移動する」で 3 つのページ（`/` `/about` `/todos`）を作りました。それぞれに同じナビを貼ろうとすると、ナビのコードを全ページにコピペすることになります。リンクが 1 つ増えるたびに 3 ファイルを直す必要があり、ページが増えるほど辛くなります。
 
-この「全ページで共通の外側」を 1 箇所に集めるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
+この **「全ページで共通の外側」** を 1 箇所にまとめるのが **レイアウト** の役割で、App Router では `layout.tsx` というファイル名で書きます。
 
 ### `app/layout.tsx` の最小形
 
-StackBlitz の Next.js テンプレートには最初から `app/layout.tsx` が用意されています。中身は概ね次の形になっています。
+StackBlitz の Next.js テンプレートには、最初から `app/layout.tsx` が入っています。中身はおおよそ次の形です。
 
 ```tsx
 export const metadata = {
@@ -32,33 +32,37 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 }
 ```
 
-重要なのは次の点です。
+このファイルは **ルートレイアウト**（root layout）と呼ばれ、Next.js プロジェクトに **必須** です。削除するとビルドエラーになります。
 
-- **ルートレイアウト**（`app/layout.tsx`）は **必須** です。なければページがエラーになります。
-- `<html>` と `<body>` は **このファイルが唯一の書き場所** です。各 `page.tsx` には書きません（「ページを増やしてリンクで移動する」で「コピーしない」と言ったのはこのためです）。
-- `children` には、現在の URL に対応する `page.tsx` の中身（または下のフォルダの `layout.tsx`）が差し込まれます。
-- `LayoutProps<"/">` は Next.js 16 が自動生成する **グローバル型** です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` にルート別の型定義が生成されます。第 1 引数の `"/"` はこの `layout.tsx` が覆うルートのパスで、他のルート用レイアウトなら `LayoutProps<"/posts">` のように書きます。
-- `export const metadata` で `<title>` や OG 画像をまとめて設定できます（詳細は「小さなアプリを仕上げる」）。
+押さえるべきポイントは 3 つです。
 
-### `children` の正体
+- **`<html>` と `<body>` を書くのはこのファイルだけ**: 各 `page.tsx` には書きません。「ページを増やしてリンクで移動する」で `<!DOCTYPE>` などをコピーしなかったのはこのためです
+- **`children` に各ページの中身が自動で入る**: `/about` を開けば `app/about/page.tsx` の JSX が、`/todos` なら `app/todos/page.tsx` が、それぞれ `children` に差し込まれます
+- **`metadata` でタブのタイトルや OG 画像を設定できる**: `<head>` 内の `<title>` などに反映されます（詳細は「Metadata API で SEO を整える」）
 
-`children` はこれまで4 章 の「コンポーネントと props」で軽く触った props と同じものです。親コンポーネントが「中に入れるもの」を子に渡すための特別な名前です。
+::: tip `LayoutProps<"/">` の型はどこから来た？
+`LayoutProps<"/">` は Next.js 16 が **自動生成するグローバル型** です。`import` 不要で、`next dev` / `next build` のたびに `.next/types/` に各ルート用の型が用意されます。第 1 引数の `"/"` はこのレイアウトが覆うルートのパスを表します。本コースではルートレイアウト 1 枚しか使わないので、常に `"/"` のままで構いません。
+:::
 
-レイアウトの場合、Next.js が現在 URL に対応する `page.tsx` を自動で `children` に入れてくれます。学習者が直接 `<RootLayout>` を呼ぶことはありません。
+### `children` の流れを追う
 
-- `/` にアクセス → `app/page.tsx` の JSX が `children` に入る
-- `/about` にアクセス → `app/about/page.tsx` の JSX が `children` に入る
-- `/todos` にアクセス → `app/todos/page.tsx` の JSX が `children` に入る
+`children` の動きをもう少し具体的に追ってみます。例えばユーザーが `/about` にアクセスした場合、Next.js は内部的に次のような JSX を組み立てます。
+
+```tsx
+<RootLayout>
+  <AboutPage />
+</RootLayout>
+```
+
+つまり `<AboutPage />` が `RootLayout` の `children` に入る形です。`/todos` なら `<TodosPage />`、`/` なら `<Page />` が入ります。`<RootLayout>` を書いた人（あなた）が手動で呼ぶことはなく、**Next.js がルーティングに応じて勝手に差し替えて** くれます。
 
 ### ルートレイアウトは Server Component
 
-`app/layout.tsx` の先頭に `"use client"` は付いていないので、これは **Server Component** として動きます。ヘッダーやフッターなど、クリックで動くような仕掛けがなければ Server Component のままで良いです。
+`app/layout.tsx` の先頭に `"use client"` が付いていないので、ルートレイアウトは既定で **Server Component** として動きます（「Next.js ってなに？」で触れた通り、何もしなければサーバー側で実行されます）。
 
-今回のようにナビ内の `<Link>` を並べるだけならイベントハンドラを使わないので、`"use client"` は不要です。
+ナビの `<Link>` を並べるだけ・著作権表示を出すだけなら `useState` も `onClick` も不要なので、Server Component のままで問題ありません。これにより、ナビ部分の JS はブラウザに送られず、表示が軽くなります。
 
-### レイアウトは入れ子にできる（予告）
-
-実は `app/<path>/layout.tsx` を置くと、その配下のページだけに適用される追加のレイアウトが作れます。本コースでは **ルートレイアウト 1 枚** のみ使います（入れ子レイアウトは扱いません）。
+ハンバーガーメニューのトグルなど **クリックで開閉する仕掛け** が要るときは、その部分だけを別の Client Component に切り出して呼び出します（詳しくは「Server Component と Client Component」で扱います）。
 
 ## 演習
 
@@ -168,93 +172,7 @@ export default function AboutPage() {
 }
 ```
 
-**`app/about/about.css`**
-
-```css
-* {
-  box-sizing: border-box;
-}
-
-body {
-  margin: 0;
-  font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
-  line-height: 1.6;
-  color: #1f2937;
-  background-color: #f9fafb;
-}
-
-@media (prefers-color-scheme: dark) {
-  body {
-    color: #e5e7eb;
-    background-color: #0b1220;
-  }
-}
-
-main {
-  max-width: 960px;
-  margin: 0 auto;
-  padding: 24px;
-}
-
-.site-header {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-}
-
-.site-nav a {
-  color: #f9fafb;
-  margin-right: 16px;
-}
-
-.cards {
-  display: flex;
-  gap: 16px;
-}
-
-.cards .card {
-  flex: 1;
-  background-color: #ffffff;
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 16px;
-}
-
-@media (prefers-color-scheme: dark) {
-  .cards .card {
-    background-color: #111827;
-    border-color: #374151;
-  }
-}
-
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
-}
-
-.site-footer {
-  padding: 16px 24px;
-  background-color: #1e3a8a;
-  color: #f9fafb;
-  text-align: center;
-}
-
-@media (max-width: 600px) {
-  .site-header {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 8px;
-  }
-
-  .cards {
-    flex-direction: column;
-  }
-}
-```
+**`app/about/about.css`**: 「ページを増やしてリンクで移動する」の手順 3 で作成したファイルをそのまま使います。
 
 **`app/todos/page.tsx`**
 
@@ -277,7 +195,7 @@ export default function TodosPage() {
 
 ### 手順 1: ヘッダーとフッターをルートレイアウトに集める
 
-`app/layout.tsx` を以下に書き換えます。
+`app/layout.tsx` を以下に書き換えます（StackBlitz テンプレートに既にあるファイルを上書き）。
 
 ```tsx
 import Link from "next/link";
@@ -316,9 +234,11 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 }
 ```
 
+これで全ページに共通のヘッダー（ナビ）とフッターが付きます。`{children}` の位置に各ページの `page.tsx` の中身が差し込まれます。
+
 ### 手順 2: 共通 CSS
 
-`app/globals.css` を開き（StackBlitz テンプレートに既にあります）、末尾に以下を追加します。存在しなければ新規作成してください。
+`app/globals.css` を開きます（StackBlitz テンプレートに最初から入っています）。中身は触らずに、末尾に以下を **追加** してください。
 
 ```css
 .site-header ul {
@@ -340,7 +260,6 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   color: #555;
 }
 
-/* ダークモード色指定: 白背景前提にすると文字が読めなくなるため必ず上書き */
 @media (prefers-color-scheme: dark) {
   .site-header ul {
     background: #1f1f1f;
@@ -355,9 +274,13 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 }
 ```
 
-### 手順 3: 各ページからナビを消す
+`globals.css` は `app/layout.tsx` の `import "./globals.css"` で読み込まれているので、書いたスタイルは全ページで効きます。
 
-`app/page.tsx` から `<nav>` のブロックを削除し、ページ固有の中身だけにします。
+### 手順 3: 各ページからヘッダー・フッターを消す
+
+`layout.tsx` でヘッダー・フッターを出すようになったので、各 `page.tsx` から重複しているナビ・ヘッダー・フッターを削除します。
+
+`app/page.tsx`: `<nav>` のブロックを削除し、ページ固有の中身だけにします。
 
 ```tsx
 export default function Page() {
@@ -370,9 +293,7 @@ export default function Page() {
 }
 ```
 
-`app/about/page.tsx` はこれまでのレッスンで書いたままだと **ヘッダー・フッター・メインが二重になります**（layout.tsx 側でも `<header>` / `<main>` / `<footer>` を書いたためです）。ルートレイアウトが担当する外側要素と、ページ固有の中身を分離します。
-
-これまでの `app/about/page.tsx` から **`<header className="site-header">` ブロックと `<footer className="site-footer">` ブロックを削除** し、中身の `<section>` 3 つだけにします。外側の `<main>` / `<>` も不要です（`layout.tsx` の `<main>` に入るため、直接 `<section>` から書き始めます）。
+`app/about/page.tsx`: `<header className="site-header">` ブロックと `<footer className="site-footer">` ブロック、外側の `<main>` を削除し、`<section>` 3 つだけ残します（外側の `<main>` は `layout.tsx` 側にあるためです）。
 
 ```tsx
 import "./about.css";
@@ -429,9 +350,9 @@ export default function AboutPage() {
 }
 ```
 
-これで `/about` を開いても、ヘッダーとフッターは layout.tsx の 1 つずつだけになります。`about.css` のうち `.site-header` や `.site-footer` のスタイルは layout 側に移し、`about` ページ固有の `.cards` / `.card` スタイルだけを `about.css` に残す運用に整えます。
+`app/about/about.css`: layout で `.site-header` / `.site-footer` のスタイルを担当するようになったので、`about.css` 内の **`.site-header`、`.site-nav`、`.site-footer` セレクタは削除** します。`.cards` / `.card` などページ固有のスタイルだけ残します。
 
-`app/todos/page.tsx` も同様にページ固有の中身だけ残します。
+`app/todos/page.tsx`: 同様に外側の `<main>` を外します。
 
 ```tsx
 export default function TodosPage() {
@@ -446,24 +367,22 @@ export default function TodosPage() {
 
 ### 期待出力
 
-- どのページにアクセスしても、画面上部に「Home / About / Todos」のナビ、下部に「&copy; 2026 My Next App」のフッターが表示されます。
-- ナビをクリックするとページ本体だけが差し替わります（ヘッダー・フッターは再レンダリングされません）。
-- ブラウザタブのタイトルが「My Next App」になっています（`export const metadata` によります）。
+- どのページにアクセスしても、画面上部に「Home / About / Todos」のナビ、下部に「&copy; 2026 My Next App」のフッターが表示される
+- 各リンクをクリックすると、ヘッダーとフッターはそのまま残り、中央のページ本体だけが切り替わる
+- ブラウザタブのタイトルが「My Next App」になっている（`export const metadata` が効いている合図）
 
 ### 変えてみる
 
-1. `metadata.title` を自分のアプリ名に変えて、タブ名が変わるのを確認しましょう。
-2. フッターの著作権表示を自分の名前に変えましょう。
-3. 試しに `app/about/layout.tsx` を作って、そこに `<h2>自己紹介セクション</h2>` を入れてみましょう。`/about` の中だけにそのタイトルが追加されることを確認したら、実験が終わったらそのファイルは削除します（本コースではルートレイアウト 1 枚運用）。
+1. `metadata.title` を自分のアプリ名に変えて、ブラウザのタブ名が変わるのを確認する
+2. フッターの著作権表示を自分の名前に変えてみる
 
 ### 自分で書く
 
-`app/layout.tsx` を何も見ずに、`<html>` `<body>` `{children}` の最小構成から書き直してみましょう。ヘッダーとフッターを再度足して、見た目が崩れないことを確認します。
+`app/layout.tsx` を何も見ずに、`<html>` `<body>` `{children}` の最小構成から書き直してみましょう。書けたらヘッダーとフッターを再度足して、見た目が崩れないことを確認します。
 
 ## まとめ
 
-- `app/layout.tsx` は全ページ共通の外側の枠です。`<html>` と `<body>` はここだけに書きます。
-- `children` に現在のページ（`page.tsx`）の中身が自動で差し込まれます。
-- ルートレイアウトは何もしなければ Server Component です。ナビや文字を並べるだけなら `"use client"` は不要です。
-- 共通部分を 1 箇所に集めたので、ページを増やしても繰り返しコードが増えません。
-- このあとの「Server Component と Client Component」で、2 つの違いに踏み込みます。`useState` が必要な部品だけを Client にする使い分けを覚えましょう。
+- `app/layout.tsx` は全ページ共通の外側の枠。`<html>` / `<body>` はここだけに書く
+- `children` には現在の URL に対応する `page.tsx` の中身が、Next.js によって自動で差し込まれる
+- ルートレイアウトは何もしなければ Server Component。ナビや文字を並べるだけなら `"use client"` は不要
+- 共通部分を 1 箇所にまとめたので、ページが増えても繰り返しコードが増えない
