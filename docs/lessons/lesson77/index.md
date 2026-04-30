@@ -2,9 +2,10 @@
 
 ## ゴール
 
-- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れます。
-- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解できます。
-- `find` で配列から 1 件だけ取り出せます。
+- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れる
+- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解する
+- `find` で配列から 1 件だけ取り出せる
+- `searchParams` でクエリ文字列も同様に受け取れる
 
 ## 解説
 
@@ -24,11 +25,9 @@ app/
 
 `[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
 
-### `params` は Promise になった
+### `params` は Promise として渡ってくる
 
-Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。
-
-> 重要: これは Next.js 15 での仕様変更。`params` は即値ではなく `await` で取り出す必要がある。
+Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。即値ではなく `await` で取り出す必要があります。
 
 型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
 
@@ -83,30 +82,30 @@ const post: Post = await res.json();
 
 ### `searchParams` でクエリ文字列を受け取る
 
-URL の **後ろ** に付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。`params`（動的ルートのディレクトリ名から来る値）と並んでよく使うので、ここで一緒に押さえておきます。
+URL の後ろに付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。`params`（動的ルート）と書き方が似ているので、ここで一緒に押さえます。
 
 ```tsx
 export default async function PostsPage({
   searchParams,
 }: PageProps<"/posts">) {
   const { highlight } = await searchParams;
-  // highlight は string | undefined
+  // highlight は string | string[] | undefined
 }
 ```
 
-- Next.js 15 以降、`searchParams` は **`params` と同様に Promise** になっています。`await searchParams` で取り出します。
-- `PageProps<"/posts">` のグローバル型が `searchParams` を `Promise<{ [key: string]: string | string[] | undefined }>` として推論します。
-- `?foo=1&foo=2` のように同じキーが複数個渡ると配列になりますが、本コースでは扱いません。
+- `searchParams` も `params` と同じく **Promise** で渡ってくるので `await` する
+- 値の型は `string | string[] | undefined`。`?foo=1&foo=2` のように同じキーが 2 つ来ると配列になる
+- `PageProps<"/posts">` のグローバル型がこれらの型を自動で持つ
 
-### `searchParams` は外部入力扱い
+::: warning `searchParams` は外部入力として扱う
+URL のクエリ文字列はユーザーが自由に書き換えられる **外部入力** です。次の 3 点を守ります。
 
-`searchParams` の値は **URL のクエリ文字列** なので、攻撃者を含めた任意のユーザーが好きな値を入れられます。「サーバーが渡してきた信頼できるデータ」ではなく、`fetch` のレスポンスや `<form>` の入力と同じ **外部入力** として扱います。具体的には次の 3 点を守ります。
+- JSX に埋めるだけなら React が自動でエスケープするので XSS は出ない
+- 別の URL に組み込むときは `encodeURIComponent(value)` でエンコードしてから連結する
+- `dangerouslySetInnerHTML` には **絶対に渡さない**（XSS が成立する）
 
-1. **画面に出すだけなら React に任せる**: JSX 内で `{highlight}` のように埋めると React が自動で HTML エスケープします。XSS は出ません。
-2. **`<a href={...}>` や別の URL に組み込むときは `encodeURIComponent`**: `highlight` を別画面の URL に転用するなら、`encodeURIComponent(highlight)` でエンコードしてから埋めます。素直に文字列連結すると `?` や `&` が攻撃に使われます。
-3. **`dangerouslySetInnerHTML` には絶対渡さない**: 名前のとおり危険です。`searchParams` の値をここに渡すと XSS が成立します。
-
-「同じキーが複数個」「想定外に長い文字列」も外部入力ゆえに起こります。値を使う前に `Array.isArray(highlight)` をチェックする、長さ上限で切り捨てる、既知の値（DB の id）と照合してから使う、といった**入り口での検証**を入れるのが堅い書き方です。「Zod でスキーマバリデーション」で扱う `safeParse` がこの検証の定番です。
+入力検証の堅い書き方は「Zod でスキーマバリデーション」で扱います。
+:::
 
 ## 演習
 
@@ -263,6 +262,7 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 
 ## まとめ
 
-- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになります。
-- Next.js 15 以降 `params` は Promise 型になっています。Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けるのが最短です。`await params` で取り出します。
-- 配列から 1 件取り出すのは2 章 で学んだ `find` です。URL の `string` と API 側の型（`number` など）を揃えることに注意しましょう。
+- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになる
+- Next.js 15 以降 `params` は Promise 型。`PageProps<"/posts/[id]">` で受けて `await params` で取り出す
+- 配列から 1 件取り出すのは 2 章 で学んだ `find`。URL の `string` と API 側の型（`number` など）を揃えることに注意
+- クエリ文字列は `searchParams` で受け取る。これも Promise なので `await` する。値は外部入力なので扱いに注意
