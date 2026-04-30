@@ -213,8 +213,4 @@ docs/rejected/       ← 却下したレッスン案
 
 ### H. ライブラリ API の正確性（Context7 必須）
 
-- [ ] 本文に登場するすべてのライブラリ API・設定・挙動を、**Context7 MCP（`resolve-library-id` → `get-library-docs`）で最新ドキュメントと照合した**か
-- [ ] 以下の項目は特に注意（過去に誤りが見つかった箇所）:
-  - Next.js: `fetch` のキャッシュデフォルト / `"use cache"` ディレクティブ / `cacheComponents` の配置場所 / `updateTag` vs `revalidateTag` / async Request APIs（`cookies()` / `headers()` / `params`）の await 必須化
-  - React: フック名と import 元（`useActionState` は `react` から、`useFormStatus` は `react-dom` から）
-  - Next.js config: `experimental` に移ったと思い込んでいる設定がトップレベルになっていないか確認する
+- [ ] 本文に登場する **すべての** ライブラリ API・設定オプション・挙動の記述について、`resolve-library-id` → `get-library-docs` で最新ドキュメントを取得し照合したか。「知っているから大丈夫」は根拠にならない。既知かどうかに関わらず引くこと
