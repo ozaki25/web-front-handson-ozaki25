@@ -200,7 +200,7 @@ OK（意味を持たせる）:
 このレッスンは独立しています。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開いて、下の出発点のコードを貼ってください。
 
 <details>
-<summary>出発点のコード（`div` だらけの NG パターン）</summary>
+<summary>出発点のコード（<code>div</code> だらけの NG パターン）</summary>
 
 **`index.html`**
 

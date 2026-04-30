@@ -139,7 +139,7 @@ export type Todo = {
 新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
-<summary>`src/types.ts`（これまでに育ててきた版）</summary>
+<summary><code>src/types.ts</code>（これまでに育ててきた版）</summary>
 
 ```ts
 export type Todo = {
