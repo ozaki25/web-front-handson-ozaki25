@@ -1,316 +1,365 @@
-# lesson75: `next/image` で画像最適化
+# lesson75: Next.js のキャッシュと revalidate
 
 ## ゴール
 
-- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できる
-- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を理解する
-- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを知る
-- 既存の `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられる
+- **Data Cache**（サーバー側の fetch キャッシュ）と **Router Cache**（ブラウザ側のページキャッシュ）の違いを説明できる
+- Next.js 15 以降、`fetch` のデフォルトはキャッシュしないことを理解する
+- `{ cache: "force-cache" }` / `{ next: { revalidate: N } }` / `{ next: { tags: [...] } }` を使い分けられる
+- `revalidatePath` と `revalidateTag` でキャッシュを手動で無効化できる
+- Next.js 16 の `"use cache"` ディレクティブの基本的な書き方を知っている
 
 ## 解説
 
-### なぜ `<img>` のままでは駄目なのか
+### なぜキャッシュが必要なのか
 
-HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
+lesson74 で作った `/posts` ページは、アクセスするたびに外部 API を呼んでいます。学習用の JSONPlaceholder は無制限に使えますが、実際のサービスでは話が違います。
 
-- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送される
-- **古い形式のまま配られる**: JPG / PNG のまま配ると、WebP や AVIF など軽い形式に対応するブラウザでもその恩恵を受けられない
-- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に取りに行く
-- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動く
+- **外部 API は呼び出しに課金される**: 回数ごとに費用が発生する API は多い
+- **ネットワーク通信は時間がかかる**: 往復に 100ms かかれば、毎リクエストで 100ms ロスする
+- **API が落ちると自分のサービスも落ちる**: 外部依存が多いほど障害のリスクが増える
 
-> **CLS / LCP**: ガタつきや表示遅延は **Core Web Vitals** という Google が定めた指標で評価されます。`CLS`（Cumulative Layout Shift、画面のズレ量）と `LCP`（Largest Contentful Paint、メインコンテンツが見えるまでの時間）が代表で、SEO スコアにも影響します。詳細は「Core Web Vitals の 3 つの指標と Lighthouse」のレッスンで扱います。
+キャッシュとは「一度取ったデータを手元に保管しておき、次に同じデータが必要なときに使い回す仕組み」です。うまく使うと、レスポンスが速くなり、外部 API への呼び出し回数が減ります。
 
-`next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
+ただし「古いデータをいつまでも使い続ける」問題もあります。これを管理するのが **revalidate**（再検証）です。キャッシュと revalidate は、セットで理解するのがポイントです。
 
-- 表示サイズに応じた解像度を自動生成（`srcset`）
-- WebP / AVIF に自動変換（ブラウザが対応していれば）
-- 画面内に入ったときだけ読み込み（遅延読み込み）
-- `width` / `height` 必須にすることでレイアウトのガタつき（CLS）を防ぐ
+### Next.js の 2 種類のキャッシュ
 
-### 最小の使い方
+Next.js には複数のキャッシュ層がありますが、最初に押さえるのは **2 つ** です。
+
+#### Data Cache（サーバー側 — fetch の結果をキャッシュ）
+
+サーバー側で実行した `fetch` の結果を保管する仕組みです。
+
+```
+【1 回目のリクエスト】
+  ブラウザ → サーバー → fetch → 外部 API → 「記事 100 件」が返る
+                ↓
+       Data Cache に保存
+                ↓
+       HTML を組み立てブラウザに返す
+
+【2 回目のリクエスト（キャッシュが有効な場合）】
+  ブラウザ → サーバー → Data Cache から「記事 100 件」を取り出す
+             （外部 API は呼ばない → 速い）
+                ↓
+       HTML を組み立てブラウザに返す
+```
+
+保管場所はサーバー内です。`fetch` の第 2 引数でキャッシュ動作を制御します。
+
+#### Router Cache（ブラウザ側 — ページの RSC payload をキャッシュ）
+
+ブラウザ側で、訪問済みページの描画結果を保管する仕組みです。
+
+```
+/posts にアクセス → /posts/1 に移動 → 「戻る」で /posts に戻る
+                                            ↑
+                            Router Cache から即座に復元
+                            （サーバーへのリクエストが起きない）
+```
+
+- 保管場所: ブラウザのメモリ（タブを閉じると消える）
+- 有効期間: タブを開いている間だけ
+- 操作: Server Action 内で `revalidatePath` / `revalidateTag` を呼ぶとクリアされる
+
+#### 2 つの位置関係
+
+```
+ブラウザ側
+  └─ Router Cache（ページの描画結果を保管 — 遷移を速くする）
+          ↑↓
+サーバー側
+  └─ Server Component（ページを生成する）
+          ↑↓
+  └─ Data Cache（fetch の結果を保管 — API 呼び出しを減らす）
+          ↑↓
+      外部 API
+```
+
+「サーバー側の fetch キャッシュ = Data Cache」「ブラウザ側のページキャッシュ = Router Cache」と分けて覚えてください。
+
+### Next.js 15 以降：`fetch` のデフォルトはキャッシュしない
+
+**Next.js 14 まで**の `fetch` は、何も指定しなければ結果をキャッシュしていました。一度表示したページのデータが更新されてもサーバーが古い結果を返し続け、「なぜ更新されないの？」という事故が多発しました。
+
+**Next.js 15 以降**はデフォルトが「キャッシュしない」に変わりました。
 
 ```tsx
-import Image from "next/image";
+// デフォルト（Next.js 15 以降）: 毎リクエストで外部 API を呼ぶ
+const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+```
 
-export default function Page() {
-  return (
-    <Image
-      src="/coffee.jpg"
-      alt="コーヒーの写真"
-      width={300}
-      height={200}
-    />
-  );
+キャッシュしたいときは **明示的に指定** します。Next.js 14 以前の記事を読むと「デフォルトでキャッシュされる」と書いてあることがありますが、15 以降は当てはまらないので注意してください。
+
+### キャッシュを使うときの 3 パターン
+
+#### パターン 1: `force-cache`（ずっとキャッシュ）
+
+```tsx
+const res = await fetch(url, { cache: "force-cache" });
+```
+
+一度取ったらサーバーを再起動するまで使い回します。
+
+- 向いているもの: 国名リスト・カテゴリ・マスターデータなど「ほぼ変わらないデータ」
+- 向いていないもの: ユーザーが書き込むコンテンツ、在庫数など頻繁に変わるデータ
+
+#### パターン 2: `{ next: { revalidate: N } }`（時間ベース再検証）
+
+```tsx
+// 60 秒間はキャッシュを使い、60 秒を過ぎたら次のリクエストで取り直す
+const res = await fetch(url, { next: { revalidate: 60 } });
+```
+
+キャッシュに「賞味期限（秒）」を設けます。期限が切れた後は、次のリクエストのタイミングで新しく取り直します。
+
+```
+T=0 秒 : 最初のリクエスト → 外部 API から取得 → キャッシュに保存（有効期限 60 秒）
+T=30 秒: 2 回目のリクエスト → キャッシュから返す（まだ 60 秒経っていない）
+T=90 秒: 3 回目のリクエスト → キャッシュが古くなった → 外部 API から取り直す
+```
+
+- 向いているもの: ブログ記事一覧・ニュース・「数分に 1 回更新されればよい」データ
+
+#### パターン 3: `{ next: { tags: [...] } }`（タグで手動無効化）
+
+```tsx
+const res = await fetch(url, { next: { tags: ["posts"] } });
+```
+
+タグを付けておき、「新しい記事が投稿された」など **何か変化が起きたとき** に `revalidateTag("posts")` を呼んでキャッシュを捨てます。時間に関係なく、必要なタイミングだけ更新できます。
+
+- 向いているもの: フォーム送信後に一覧を更新したい、管理画面で更新したらフロントに即反映させたい
+
+### `revalidatePath` と `revalidateTag` — キャッシュを手動で切る
+
+`revalidatePath` と `revalidateTag` は `"next/cache"` からインポートして、**Server Action の中から** 呼び出す関数です（Server Action は lesson80 で詳しく扱います）。
+
+```tsx
+import { revalidatePath } from "next/cache";
+import { revalidateTag } from "next/cache";
+
+// パス指定: /posts ページのキャッシュをすべて捨てる
+revalidatePath("/posts");
+
+// タグ指定: "posts" タグのついた fetch キャッシュをすべて捨てる
+revalidateTag("posts");
+```
+
+どちらを呼んでも **Data Cache と Router Cache の両方** が無効化されます。次にそのページを開いたとき、サーバーが改めてデータを取得します。
+
+#### 使い分け
+
+| | `revalidatePath` | `revalidateTag` |
+|---|---|---|
+| 指定の単位 | URL パス | fetch に付けたタグ文字列 |
+| 使う場面 | 特定のページだけ更新したい | 複数ページにまたがるデータをまとめて更新したい |
+| 例 | `/posts` を送信後に更新 | `"posts"` タグのついた fetch をすべてクリア |
+
+#### 「revalidate し忘れる」と何が起きるか
+
+これが最も陥りやすい失敗です。たとえば「新しい記事を投稿するフォーム」を作ったとします。
+
+```
+ユーザーがフォームを送信 → DB に記事を追加 → revalidatePath("/posts") を呼び忘れた
+     ↓
+/posts を開いてもキャッシュが残っているので、追加した記事が表示されない
+     ↓
+「投稿できていない？」とユーザーが困惑する
+```
+
+**DB やストレージにデータを書き込んだら、対応するパスまたはタグの revalidate を必ず呼ぶ** — これが基本ルールです。
+
+#### Server Action との組み合わせのイメージ
+
+Server Action の書き方は lesson80 で扱いますが、`revalidatePath` がどこに入るか先に形だけ見ておきます。
+
+```tsx
+"use server";
+import { revalidatePath } from "next/cache";
+
+export async function addPost(formData: FormData) {
+  const title = formData.get("title") as string;
+
+  // API や DB にデータを保存する処理（ここでは省略）
+
+  // 保存後に /posts ページのキャッシュを切る
+  revalidatePath("/posts");
 }
 ```
 
-- `import Image from "next/image"` でコンポーネントを読み込みます。
-- `src` はプロジェクト内の `public/` 直下のパス、または **登録済み** の外部 URL です。
-- `alt` は必須です。読み上げソフトと、画像が読み込めなかったときの代替テキストになります。
-- `width` と `height` はピクセル数を **数値** で書きます（CSS 単位の `px` は付けません）。
+「データを変えたら revalidate を呼ぶ」がパターンです。
 
-### `width` / `height` は原則必須。ただし省略できる 2 つのケース
+### `"use cache"` ディレクティブ（Next.js 16）
 
-`<Image>` は `width` / `height` を **原則必須** にします。レイアウトのガタつき（CLS）を防ぐためです。ただし、次の 2 ケースだけは省略できます。
+Next.js 16 では **Cache Components** という仕組みが導入されました。`"use cache"` を関数やコンポーネントの先頭に書くと、その**結果全体**をキャッシュ対象にします。
 
-1. **静的 import の場合**
-   プロジェクト内の画像を `import` すると、Next.js がビルド時に画像のサイズを読み取って自動で埋めてくれます。
-   ```tsx
-   import heroImg from "./hero.png";
-
-   <Image src={heroImg} alt="ヒーロー画像" />
-   ```
-2. **`fill` を使う場合**
-   親要素いっぱいに広げる使い方です。親に `position: relative` と明示的なサイズが要ります。
-   ```tsx
-   <div style={{ position: "relative", width: 300, height: 200 }}>
-     <Image src="/coffee.jpg" alt="コーヒー" fill />
-   </div>
-   ```
-
-外部 URL を `src` に指定する場合は **静的 import できないので `width` / `height` を明示するか、`fill` で親サイズに従わせる** ことになります。
-
-### 外部ホストを使うには `remotePatterns`
-
-`<Image>` はセキュリティとキャッシュの都合で、**どの外部ホストからの画像を許可するか** を事前に宣言する必要があります。これが `next.config.ts` の `images.remotePatterns` です。
-
-未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
-
-```
-Invalid src prop (https://placehold.co/...) on `next/image`,
-hostname "placehold.co" is not configured under images in your `next.config.js`
-```
-
-書き方は次の通りです。
+有効にするには `next.config.ts` に設定が必要です。
 
 ```ts
 // next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
-    ],
+const nextConfig = {
+  experimental: {
+    cacheComponents: true,
   },
 };
-
 export default nextConfig;
 ```
 
-Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書けば 1 ファイルだけ許可するパターンも書けます。
-
-### `sizes` でレスポンシブ対応
-
-`<Image>` は可変サイズ（`width` が CSS で `100%` のような動的な値）で使うときに `sizes` を付けると、もっとも賢く `srcset` を切り替えてくれます。詳細は本レッスンの範囲外ですが、1 行だけ雰囲気を見せておきます。
-
 ```tsx
-<Image
-  src="/coffee.jpg"
-  alt="コーヒー"
-  width={600}
-  height={400}
-  sizes="(max-width: 640px) 100vw, 300px"
-/>
+import { cacheLife, cacheTag } from "next/cache";
+
+async function getPosts() {
+  "use cache";
+  cacheLife("hours");  // 1 時間キャッシュ
+  cacheTag("posts");   // revalidateTag("posts") で切れるタグ
+
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  return res.json();
+}
 ```
 
-スマホ幅では 100vw、それ以外では 300px で表示される、という意味です。本演習では使いませんが、覚えておくと役立ちます。
+`fetch` オプションで書く方法と何が違うかというと、**キャッシュの設定を「関数の中に閉じ込められる点**です。複数の処理をまとめてキャッシュしたいときに見通しがよくなります。
+
+- **`cacheLife("minutes" | "hours" | "days" | "weeks" | ...)`** でキャッシュ寿命を設定
+- **`cacheTag("...")`** でタグを付け、`revalidateTag` から無効化できる
+- 書く場所はファイル先頭（ファイル全体）/ 関数先頭 / コンポーネント先頭のいずれか
+
+::: warning `cacheComponents` が無効な状態で `"use cache"` を書くとビルドエラー
+`next.config.ts` で `cacheComponents: true` を入れていない状態で `"use cache"` を書くと、ビルド時にエラーが出て動きません。本レッスンの演習では使わないので、`fetch` オプションで練習します。
+:::
+
+### まとめると
+
+| 目的 | 書き方 |
+|---|---|
+| キャッシュしない（デフォルト） | `fetch(url)` そのまま |
+| ずっとキャッシュ | `fetch(url, { cache: "force-cache" })` |
+| N 秒ごとに再取得 | `fetch(url, { next: { revalidate: N } })` |
+| タグで手動無効化 | `fetch(url, { next: { tags: ["name"] } })` |
+| タグのキャッシュを切る | `revalidateTag("name")` （Server Action 内から） |
+| パスのキャッシュを切る | `revalidatePath("/path")` （Server Action 内から） |
+| 関数・コンポーネント単位でキャッシュ | `"use cache"` + `cacheLife` + `cacheTag` |
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。`/about` の画像を差し替える演習なので、最低限 `/about` ページと `<img>` が存在すれば構いません。
+lesson74 で作った `/posts` ページがあることを前提にします。手元になければ新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の出発点ファイルを作ってから始めてください。
 
 <details>
-<summary>出発点のファイル（<code>/about</code> 最小形）</summary>
-
-**`app/about/page.tsx`**
+<summary>出発点: <code>app/posts/page.tsx</code></summary>
 
 ```tsx
-export default function AboutPage() {
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+export default async function PostsPage() {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  const posts: Post[] = await res.json();
+
   return (
     <>
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
 ```
-
-Route Groups を使っていない出発点なので、本文中で `app/(public)/about/page.tsx` と書かれている箇所は `app/about/page.tsx` に読み替えてください。
 
 </details>
 
 ### 前回のプロジェクトを開く
 
-5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
+lesson74 で作ったプロジェクトを開き直しましょう。
 
-### 手順 1: `next.config.ts` に `remotePatterns` を追加
+### 手順 1: 時間ベースキャッシュを付ける
 
-プロジェクト直下に `next.config.ts`（または `next.config.mjs`）があります。StackBlitz テンプレートでは既に存在するはずです。なければ新規作成します。
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  images: {
-    remotePatterns: [
-      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
-    ],
-  },
-};
-
-export default nextConfig;
-```
-
-保存すると、Next.js が設定を再読み込みします（StackBlitz ではターミナルに再起動のログが流れます）。
-
-### 手順 2: `/about` の `<img>` を `<Image>` に置き換える
-
-`app/(public)/about/page.tsx`（「Route Groups で整理する」以前のままなら `app/about/page.tsx`）を開きます。「ページを増やしてリンクで移動する」で貼った 3 枚のカードの `<img>` を、`<Image>` に置き換えます。
-
-ファイル全体はこうなります。
+`app/posts/page.tsx` の `fetch` に `{ next: { revalidate: 60 } }` を追加します。
 
 ```tsx
-import Image from "next/image";
-import "./about.css";
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
 
-export default function AboutPage() {
+export default async function PostsPage() {
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts",
+    { next: { revalidate: 60 } },
+  );
+  const posts: Post[] = await res.json();
+
   return (
     <>
-      <section id="about">
-        <h2>自己紹介</h2>
-        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
-      </section>
-
-      <section id="likes">
-        <h2>好きなもの</h2>
-        <div className="cards">
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="コーヒーのプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>コーヒー</h3>
-            <p>朝の 1 杯が欠かせない。</p>
-          </article>
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="本のプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>本</h3>
-            <p>技術書からエッセイまで。</p>
-          </article>
-          <article className="card">
-            <Image
-              src="https://placehold.co/300x200.png"
-              alt="散歩のプレースホルダ画像"
-              width={300}
-              height={200}
-            />
-            <h3>散歩</h3>
-            <p>行き先を決めずに歩く。</p>
-          </article>
-        </div>
-      </section>
-
-      <section id="contact">
-        <h2>問い合わせ</h2>
-        <form>
-          <div>
-            <label htmlFor="name">お名前</label>
-            <input id="name" name="name" type="text" required />
-          </div>
-          <div>
-            <label htmlFor="email">メール</label>
-            <input id="email" name="email" type="email" required />
-          </div>
-          <div>
-            <label htmlFor="message">メッセージ</label>
-            <textarea id="message" name="message" rows={4} required></textarea>
-          </div>
-          <button type="submit">送信</button>
-        </form>
-      </section>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.slice(0, 10).map((post) => (
+          <li key={post.id}>
+            <strong>#{post.id}</strong> {post.title}
+          </li>
+        ))}
+      </ul>
     </>
   );
 }
 ```
 
-変更点:
+保存してページをリロードします。エラーが出なければ成功です。JSONPlaceholder のデータは変わらないので見た目の変化はありませんが、設定自体は有効になっています。
 
-- 1 行目に `import Image from "next/image";` を追加しました。
-- `<img src="..." alt="..." />` を 3 箇所とも `<Image ... width={300} height={200} />` に置き換えました。
-- `<Image>` は `width` と `height` を **数値**（中括弧） で書くことに注意してください（HTML の `<img width="300">` のような文字列ではありません）。
+### 手順 2: タグ付きキャッシュに変える
 
-### 手順 3: 画像サイズの CSS を見直す
+`revalidate` の代わりにタグを使う書き方に変えます。
 
-「ページを増やしてリンクで移動する」の `about.css` には次のような指定が入っていました。
-
-```css
-.card img {
-  width: 100%;
-  height: auto;
-  border-radius: 4px;
-}
+```tsx
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts",
+    { next: { tags: ["posts"] } },
+  );
 ```
 
-`<Image>` も内部的には `<img>` を生成するので、このスタイルはそのまま効きます。`width: 100%` でカードの幅に合わせて縮みます。`height: auto` を入れておくと、縮んでも縦横比が崩れません。
+こちらもエラーが出なければ成功です。
 
-ダークモードでの `filter` 調整などは不要です。「ページを増やしてリンクで移動する」時点の CSS のままで構いません。
+### 手順 3: `force-cache` にしてみる
+
+```tsx
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts",
+    { cache: "force-cache" },
+  );
+```
+
+エラーが出ないことを確認したら、`{ next: { revalidate: 60 } }` に戻しておきましょう。
 
 ### 期待出力
 
-1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
-2. **DevTools → Network タブ** を開いて再読み込みします。
-3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
-4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
-5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
+- 手順 1〜3 いずれでも `/posts` ページが正常に表示される
+- StackBlitz のターミナルにエラーが出ない
+- ブラウザの DevTools（F12 → Network タブ）で `jsonplaceholder.typicode.com` への直接リクエストが**出ていない**（サーバー側で fetch しているため、ブラウザは知らない）
 
 ### 変えてみる
 
-1. 3 枚目のカードの `<Image>` に `priority` プロパティを付けて、遅延読み込みを止めてみましょう（`<Image src="..." alt="..." width={300} height={200} priority />`）。ページ表示のタイミングが少しだけ速くなる可能性があります（体感差は小さい）。
-2. `width={300} height={200}` を `width={600} height={400}` に変えると、同じ見た目のまま 2 倍の解像度のソースが配信されるようになります（ネットワークタブで URL の `w=` が変わるのを確認）。
-3. `public/` フォルダに自分の PNG 画像を 1 枚置いて、`import myImg from "../../../../public/my.png"` のように静的 import で `<Image src={myImg} alt="..." />` を書いてみましょう。`width` / `height` を **省略しても** 動くはずです（静的 import なので Next.js が自動でサイズを取る）。
-
-### スコープ外
-
-- LCP 最適化の深掘り、`priority` の本格活用、`placeholder="blur"` の `blurDataURL` 自動生成は本コースでは扱いません。
-- `localPatterns`（Next.js 15.3 で追加）などの発展設定は扱いません。
-- カスタムローダー（CDN 連携）も扱いません。
+1. `revalidate: 60` を `revalidate: 5` にしてみましょう。5 秒ごとに再取得する設定です（JSONPlaceholder は変わらないので見た目は変わりませんが、設定自体は機能します）
+2. `{ next: { tags: ["posts"] } }` のタグ名を `"postList"` に変えても動きます。タグ名は自由な文字列です
 
 ### 自分で書く
 
-`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.co/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
+`app/users/page.tsx`（lesson74 の「自分で書く」で作ったページ）の fetch に `{ next: { revalidate: 300 } }`（5 分）を付けましょう。ユーザー情報は記事より変わりにくいので、少し長い revalidate が向きます。
 
 ## まとめ
 
-- `import Image from "next/image"` で `<Image>` コンポーネントを使う。素の `<img>` より賢い画像表示ができる
-- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけ
-- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録する
-- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられる
+- Next.js のキャッシュは **Data Cache**（サーバー側 — fetch 結果を保管）と **Router Cache**（ブラウザ側 — ページを保管）の 2 層
+- Next.js 15 以降、`fetch` のデフォルトはキャッシュしない。キャッシュしたいときは明示的に指定する
+- `{ cache: "force-cache" }` は永続、`{ next: { revalidate: N } }` は時間ベース、`{ next: { tags: [...] } }` はタグで手動無効化
+- `revalidatePath` / `revalidateTag` を Server Action から呼ぶとキャッシュが切れる。データを変えたら必ず呼ぶ
+- Next.js 16 の `"use cache"` ディレクティブは関数・コンポーネント単位でキャッシュを設定できる新しい書き方

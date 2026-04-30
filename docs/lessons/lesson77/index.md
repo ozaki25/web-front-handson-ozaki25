@@ -1,268 +1,317 @@
-# lesson77: 動的ルート
+# lesson77: `next/font` でフォント
 
 ## ゴール
 
-- `[id]` のようなディレクトリ名で、URL の一部をパラメータとして受け取れる
-- Next.js 15 以降 `params` が `Promise<...>` 型になったこと、`await params` で取り出すことを理解する
-- `find` で配列から 1 件だけ取り出せる
-- `searchParams` でクエリ文字列も同様に受け取れる
+- Web フォントを `next/font/google` と `next/font/local` で読み込める
+- `font.className` をルートレイアウトの `<html>` や `<body>` に付けて、全ページに適用できる
+- `display` のデフォルトが `"swap"` であること（システムフォント → Web フォントへ差し替わる）を理解する
+- 適用前と適用後の見た目の違いを目で確認する
 
 ## 解説
 
-### 動的ルートとは
+### `<link href="...">` でフォント読み込みの何が辛いか
 
-「記事 ID ごとに違うページを作りたい」「ユーザーごとのページを作りたい」といった場合、URL ごとにファイルを作るのは現実的ではありません。
+素の HTML では、Google Fonts の使い方として次のように書くのが定番でした。
 
-App Router では **ディレクトリ名をブラケット `[ ]` で囲む** と、その部分が URL のパラメータになります。
-
-```
-app/
-└── posts/
-    ├── page.tsx            → /posts（一覧）
-    └── [id]/
-        └── page.tsx        → /posts/1, /posts/2, /posts/42, ...
+```html
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">
 ```
 
-`[id]` はディレクトリ名なので、そのまま書きます。`[slug]` のように別名でも構いません。URL の該当部分が `id` という名前で渡ってきます。
+これだと次の問題があります。
 
-### `params` は Promise として渡ってくる
+- **外部ホストに毎回アクセス**: ユーザーのブラウザが `fonts.googleapis.com` と `fonts.gstatic.com` の 2 つに追加接続する。
+- **プライバシー**: Google にユーザーの IP が送られる（国・地域によっては規制対象）。
+- **フォントファイルが重い**: 全グリフが送られてしまう可能性がある。
 
-Next.js 15 から、`page.tsx` に渡される `params` は **Promise 型** になりました。即値ではなく `await` で取り出す必要があります。
+`next/font` はこれらを解決します。
 
-型は **Next.js 16 で導入された `PageProps` のグローバル型** を使うのが最短です。`import` は不要で、`next dev` / `next build` のたびに `.next/types/` 配下にルート別の型定義が生成されます。
+- **ビルド時に自サーバーへフォントファイルをコピー**（自ホスト化）。ユーザーは Google に直接アクセスしません。
+- 使っている文字だけを含む **サブセット** を自動生成します。
+- フォントの CSS 変数やクラス名を React 側から参照できるようにします。
+
+### `next/font/google` の使い方
 
 ```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  // id を使って処理
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>{children}</body>
+    </html>
+  );
 }
 ```
 
-`PageProps<"/posts/[id]">` の文字列は、**この `page.tsx` があるルート** を書きます。`[id]` の部分がそのまま `params.id` の型に反映されます（`string` 型）。
+- `next/font/google` から **使いたいフォント名を名前付き import** します（`Inter`、`Roboto`、`Noto_Sans_JP` など）。
+- 関数として呼び出し、`subsets` を指定します（`["latin"]` / `["japanese"]` など）。
+- 戻り値の `inter` は `{ className, style, variable }` を持つオブジェクトです。
+- `className` を `<html>` か `<body>` に付けると、そのフォントが配下全体に適用されます。
 
-- `params` の中身のキーは **ディレクトリ名** と同じです（`[id]` なら `id`）。
-- 値は常に `string` です（URL の一部なので文字列です）。数値として使いたいなら `Number(id)` に変換します。
-- 関数を `async` にして、`const { id } = await params;` で取り出すのが定番です。
+### `display` のデフォルトは `"swap"`
 
-### `find` で 1 件だけ取り出す
+`next/font` の `display` オプションのデフォルトは **`"swap"`** です。**フォント読込中はシステムフォント（ゴシックなど）で表示し、Web フォントが届いたら差し替わる** 動きになります。
 
-2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
+- 初期表示が速い（FOIT = Flash of Invisible Text が起きにくい）
+- 代わりに、読み込み完了の瞬間にフォントが切り替わる FOUT（Flash of Unstyled Text）が起きる可能性がある
 
-```ts
-const target = posts.find((p) => p.id === id);
-```
+本レッスンではこのデフォルトをそのまま使います。`display` を明示する必要はありません。
 
-- 見つかったとき: その要素を返します。
-- 見つからないとき: `undefined` を返します。
+### フォント差し替え時の CLS と `next/font` の自動対策
 
-なので、詳細ページでは次のような流れになります。
+「読込中はシステムフォント → 届いたら Web フォント」と差し替わるとき、文字幅の差で **要素の高さや改行位置がずれて画面がガタッと動く** ことがあります。「next/image で画像最適化」で触れた **CLS** がここでも問題になります。
 
-1. 一覧を `fetch` で全部取ってくる（Server Component）。
-2. `await params` で URL の `id` を取り出す。
-3. `posts.find((p) => p.id === id)` で 1 件だけ探す。
-4. 見つからないときは 404 を返す。
+`next/font` はこの対策を **自動で** 入れています。
 
-この段階ではシンプルに「一覧から `find` で取り出して表示」までを作ります。
+- フォントメトリクス（`ascent-override` / `descent-override` / `size-adjust` 等）を **ビルド時に計測** し、フォールバックフォントの寸法を Web フォントに近づけて `@font-face` に書き出す
+- 結果として「フォントが入れ替わってもレイアウトが大きく動かない」状態を作ってくれる
 
-### 実務では「単件 fetch」が原則
+自分でメトリクス調整を書く必要はありません。`<link>` 直書きや他のフォント読み込み手段では CLS 対策を手動でやる必要がありますが、`next/font` を使えば自動で付くというのが採用する一番の理由です。
 
-学習用の演習では `posts` 一覧をまるごと fetch して `find` で 1 件選び出していますが、**実務ではこの書き方を本番に持ち込みません**。一覧が 1 万件あれば「1 件のページを表示するために 1 万件をネットワーク越しに取ってくる」ことになり、転送量・実行時間ともに無駄が大きく、外部 API への過剰呼び出しにもなります。
+複数フォントを使う場合は、メインに使う 1 つだけ `preload: true`（既定）にし、残りは `preload: false` にするとリクエスト数を減らせます。
 
-JSONPlaceholder の場合は **`/posts/${id}` で単件取得できる** ので、実務寄りに書くなら次のようにします。
+### `next/font/local` の使い方
 
-```ts
-const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-if (!res.ok) {
-  // 見つからなかったときの処理（notFound() など）
-}
-const post: Post = await res.json();
-```
-
-加えて、変更頻度の低いデータなら `{ next: { revalidate: 60 } }` のような **時間ベースの再検証** を付けたり、ビルド時に静的生成する `generateStaticParams` で **既知の `id` 一覧を SSG する** 戦略もあります。本コースでは概念に集中するため `find` のままにしますが、本番に持ち込む前に「単件 API があれば単件 fetch、なければキャッシュ戦略を考える」を頭に入れておきます。
-
-### `searchParams` でクエリ文字列を受け取る
-
-URL の後ろに付く `?highlight=42` のようなクエリ文字列は **`searchParams`** で受け取ります。`params`（動的ルート）と書き方が似ているので、ここで一緒に押さえます。
+ローカルの `.woff2` ファイルを使う場合は次のように書きます。
 
 ```tsx
-export default async function PostsPage({
-  searchParams,
-}: PageProps<"/posts">) {
-  const { highlight } = await searchParams;
-  // highlight は string | string[] | undefined
-}
+import localFont from "next/font/local";
+
+const myFont = localFont({
+  src: "./MyFont.woff2",
+});
 ```
 
-- `searchParams` も `params` と同じく **Promise** で渡ってくるので `await` する
-- 値の型は `string | string[] | undefined`。`?foo=1&foo=2` のように同じキーが 2 つ来ると配列になる
-- `PageProps<"/posts">` のグローバル型がこれらの型を自動で持つ
+本コースでは Google Fonts のみを扱うので `next/font/google` に集中します。`next/font/local` は存在だけ知っておきましょう。
 
-::: warning `searchParams` は外部入力として扱う
-URL のクエリ文字列はユーザーが自由に書き換えられる **外部入力** です。次の 3 点を守ります。
+### 日本語フォントの注意
 
-- JSX に埋めるだけなら React が自動でエスケープするので XSS は出ない
-- 別の URL に組み込むときは `encodeURIComponent(value)` でエンコードしてから連結する
-- `dangerouslySetInnerHTML` には **絶対に渡さない**（XSS が成立する）
+日本語の Google Font（`Noto Sans JP` など）は、ラテン文字より **グリフ数が遥かに多い** ため、サブセットを指定しないと重くなりがちです。本演習では `Noto_Sans_JP` を使いつつ、全体には `Inter` を、見出しにだけ日本語フォントを当てる形を試します。
 
-入力検証の堅い書き方は「Zod でスキーマバリデーション」で扱います。
-:::
+### `font.className` の正体
+
+`next/font` の `className` は、**ビルド時に生成される固有のクラス名** です（見た目は `__className_abc123` のような自動生成の文字列になります）。中身は `font-family`、`font-weight`、`font-display: swap` などの CSS 宣言が自動的に書き込まれています。
+
+自分で `@font-face { ... }` を書く必要はありません。`className` を付けるだけで完結します。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。このレッスンは「Server Component でデータを取得する」の記事一覧を前提にしています。
-
-<details>
-<summary>出発点のファイル（<code>/posts</code> 部分）</summary>
-
-**`app/posts/page.tsx`**
-
-```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  return (
-    <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
-```
-
-**`app/posts/loading.tsx`**
-
-```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
-}
-```
-
-</details>
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/layout.tsx` に `next/font/google` の import と `className` を足すだけなので、このレッスンより前のプロジェクトが無くても動きます。
 
 ### 前回のプロジェクトを開く
 
-「Server Component でデータを取得する」で作ったプロジェクトを開き直しましょう。
+これまでのプロジェクトを開き直しましょう。
 
-### 手順 1: 一覧ページを詳細リンク付きに更新
+### 手順 1: 適用前の見た目を記録する
 
-`app/posts/page.tsx` を書き換えます。各項目を `<Link>` にして `/posts/[id]` に飛べるようにします。
+まず、`/about` を開いてスクショを 1 枚撮っておきます（または目で覚えておきます）。これが「システムフォント」の状態です。
 
-```tsx
-import Link from "next/link";
+ASCII 図で表すと次のような雰囲気です（ブラウザやフォント設定で変わります）。
 
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  return (
-    <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <Link href={`/posts/${post.id}`}>
-              <strong>#{post.id}</strong> {post.title}
-            </Link>
-          </li>
-        ))}
-      </ul>
-    </>
-  );
-}
+```
++---------------------------------------+
+| Home | About | Todos                  |
++---------------------------------------+
+|  自己紹介                             |  ← システムゴシック
+|  Web フロントエンドを学び中です。    |     角ばった一般的な表示
+|                                       |
+|  好きなもの                           |
+|  [画像] コーヒー                      |
+|  [画像] 本                            |
+|  [画像] 散歩                          |
++---------------------------------------+
 ```
 
-### 手順 2: 動的ルートのファイルを作る
+日本語は OS のシステムフォント（macOS なら Hiragino、Windows なら Yu Gothic、など）で表示されています。
 
-`app/posts/[id]/page.tsx` を新規作成します（`[id]` はディレクトリ名として `[` と `]` をそのまま使います）。
+### 手順 2: `Inter` をルートレイアウトに適用
+
+`app/layout.tsx` を次のように書き換えます。
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { Inter } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+
+export const metadata = {
+  title: "My Next App",
 };
 
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
-
-  // URL の id は string、API の id は number なので揃える
-  const post = posts.find((p) => String(p.id) === id);
-
-  if (!post) {
-    return (
-      <>
-        <h1>見つかりません</h1>
-        <p>ID: {id} の記事は存在しない。</p>
-      </>
-    );
-  }
-
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
+    <html lang="ja" className={inter.className}>
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
   );
 }
 ```
 
 ポイント:
 
-- `PageProps<"/posts/[id]">` でグローバル型を受けます。`import` は不要で、Next.js が `.next/types/` に自動生成します。
-- `await params` してから `id` を取り出します。
-- `find` で 1 件検索します。URL の `id` は `string`、API の `id` は `number` なので、`String(p.id) === id` で揃えます。
-- 見つからなかった場合は、とりあえずその場で「見つからない」メッセージを返します。
+- `import { Inter } from "next/font/google";` を追加。
+- `const inter = Inter({ subsets: ["latin"] });` をモジュール先頭に。
+- `<html>` の `className={inter.className}` を付与。
 
-### 期待出力
+保存すると、StackBlitz のビルドが走り、プレビューが更新されます。
 
-1. `/posts` にアクセスすると、一覧の各項目がリンクになっています。
-2. 「#1 sunt aut facere ...」のような最初の記事をクリック → `/posts/1` に遷移して詳細が表示されます。
-3. URL バーで `/posts/999` と打ち込むと「見つかりません」と出ます（999 番の記事は 100 件の中にないためです）。
-4. `/posts/1` でページソースを表示すると、タイトルと本文がすでに HTML に焼き込まれています（Server Component で fetch → 描画しているためです）。
+### 期待出力: 適用後の見た目
+
+もう一度 `/about` を開きます。今度は **欧文部分が Inter** で表示されます。日本語はまだシステムフォントのままです。
+
+ASCII 図で表すとこう変わります。
+
+```
++---------------------------------------+
+| Home | About | Todos   ← Inter に変化 |
++---------------------------------------+
+|  自己紹介                             |  ← 日本語はシステムフォント
+|  Web フロントエンドを学び中です。    |     Web → Web は Inter で表示
+|                                       |
+|  Cards                                |  ← ラテン文字は丸みのある Inter
++---------------------------------------+
+```
+
+英字の「Home / About / Todos」、本文中の「Web」などの **ラテン文字が Inter に変わっている** ことを、適用前スクショと見比べて確認します。
+
+どこが違って見えるかのヒント:
+
+- Inter は可読性重視の現代的なサンセリフ。特に数字とアルファベットの字形（例: `a`、`g`、`1`、`4`）が、システムゴシックと見分けやすいです。
+- 字間（トラッキング）も少し広くなります。
+
+### 手順 3: 日本語は `Noto_Sans_JP` を見出しに当てる
+
+日本語の本文も Web フォントにしたい場合は、`Noto_Sans_JP` を併用します。ここでは「見出しだけ `Noto_Sans_JP`、本文は Inter + システム日本語フォント」の使い分けをやってみます。
+
+`app/layout.tsx` を次のように拡張します。
+
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
+import { Inter, Noto_Sans_JP } from "next/font/google";
+import "./globals.css";
+
+const inter = Inter({ subsets: ["latin"] });
+const notoJp = Noto_Sans_JP({
+  subsets: ["latin"],
+  weight: ["500", "700"],
+});
+
+export const metadata = {
+  title: "My Next App",
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>
+        <header className={`site-header ${notoJp.className}`}>
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
+  );
+}
+```
+
+ポイント:
+
+- 2 つのフォントを同時に呼べます。
+- `Noto_Sans_JP` は **アンダースコア区切り** のインポート名です（ハイフン付きのフォント名はアンダースコアに置き換わります）。
+- `weight` を `["500", "700"]` に絞って、不要なウェイトをダウンロードさせません。
+- `className` は **テンプレートリテラルで複数合成** できます（`${notoJp.className}` をヘッダーだけに付与）。
+
+> `subsets` に `"japanese"` を指定すると日本語グリフも含まれますが、**ファイルが大きくなる** ので本演習では `"latin"` のみにし、日本語はシステムフォントに任せる割り切りにします。必要な読者は `subsets: ["latin", "japanese"]` を試してみてください。
+
+### 期待出力（再度の対比）
+
+ブラウザで `/about` を開いて手順 2 との違いを見ます。
+
+```
++---------------------------------------+
+| Home | About | Todos   ← Noto Sans JP |
++---------------------------------------+
+|  自己紹介   ← 本文は Inter + システム  |
+|  ...                                  |
++---------------------------------------+
+```
+
+ヘッダーの文字が Noto Sans JP の統一感ある字形になり、本文と少し印象が変わります。ヘッダーの日本語は現時点では入っていないので、差分は欧文（Home / About / Todos）の字形で見ることになります。
 
 ### 変えてみる
 
-1. 詳細ページに「一覧に戻る」`<Link href="/posts">` を追加しましょう。
-2. `post.body` を `<p>` ではなく `<article>` で囲んでみましょう。
-3. URL のパラメータ名を変えてみます: `[id]` → `[postId]` に変更し、`PageProps<"/posts/[postId]">` に合わせて書き直します（グローバル型なので再ビルドすると自動で型が切り替わります）。ディレクトリ名とキー名が対応することを確認しましょう（確認したら元に戻してください）。
+1. `<html lang="ja" className={inter.className}>` を `<html lang="ja" className={notoJp.className}>` に変えて、全体が Noto Sans JP になった見た目を確認しましょう（字面が丸くなる）。
+2. `Inter` の呼び出しに `{ subsets: ["latin"], weight: ["400", "700"] }` を渡してみましょう。weight の指定で読み込まれるファイル数が変わります（DevTools → Network で確認）。
+3. いったん `className={inter.className}` を外して保存し、システムフォントに戻った見た目をもう一度目に焼き付けてから、付け直しましょう。切り替わりの一瞬（FOUT）が体感できることがあります。
+
+### スコープ外
+
+- `variable` font の詳細、CSS 変数 (`--font-inter`) 連携は扱いません。
+- `display` の他の値（`"block"`、`"fallback"`、`"optional"`）は扱いません。デフォルト `"swap"` のみ。
+- 有料フォントサービス（Adobe Fonts など）との連携は扱いません。
 
 ### 自分で書く
 
-`/users/[id]/page.tsx` を自力で作ってみましょう。「Server Component でデータを取得する」の「自分で書く」で作った `/users` の一覧があるなら、そこからリンクして詳細ページに飛ぶ流れを組み立てます。
-
-- URL: `/users/1`
-- API: `https://jsonplaceholder.typicode.com/users`
-- 表示: `name` と `email`、`phone`
-
-`PageProps<"/users/[id]">` の型定義、`await params`、`find` の 3 点が書ければ合格です。
+`Roboto` や `Lato` など別の Google Font を 1 つ選び、`<html>` に適用してみましょう。`import { Roboto } from "next/font/google"` のようにインポートし、`subsets: ["latin"]` を指定するだけです。字形の違いを `/about` の見出しや本文で観察します。
 
 ## まとめ
 
-- `app/<path>/[id]/page.tsx` でディレクトリ名をブラケットにすると動的ルートになる
-- Next.js 15 以降 `params` は Promise 型。`PageProps<"/posts/[id]">` で受けて `await params` で取り出す
-- 配列から 1 件取り出すのは 2 章 で学んだ `find`。URL の `string` と API 側の型（`number` など）を揃えることに注意
-- クエリ文字列は `searchParams` で受け取る。これも Promise なので `await` する。値は外部入力なので扱いに注意
+- `next/font/google` から使いたいフォントを import し、`subsets` を指定して呼び出すだけで自動最適化が有効になる
+- 戻り値の `className` を `<html>` や `<body>` に付けると、配下全体に適用される
+- `display` のデフォルトは **`"swap"`**（先にシステムフォントで描画し、読み込みが済んだら差し替わる FOUT 挙動）
+- フォント差し替え時の CLS 対策（フォールバックのメトリクス調整）も `next/font` が自動で入れてくれる

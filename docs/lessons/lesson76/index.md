@@ -1,317 +1,316 @@
-# lesson76: `next/font` でフォント
+# lesson76: `next/image` で画像最適化
 
 ## ゴール
 
-- Web フォントを `next/font/google` と `next/font/local` で読み込める
-- `font.className` をルートレイアウトの `<html>` や `<body>` に付けて、全ページに適用できる
-- `display` のデフォルトが `"swap"` であること（システムフォント → Web フォントへ差し替わる）を理解する
-- 適用前と適用後の見た目の違いを目で確認する
+- `next/image` の `<Image>` コンポーネントで、HTML の素の `<img>` より賢く画像を表示できる
+- `width` / `height` の扱いと、省略できる 2 パターン（静的 import と `fill`）を理解する
+- 外部ホストの画像を使うには `next.config.ts` の `images.remotePatterns` に登録が必要なことを知る
+- 既存の `<img>` を `<Image>` に置き換えて、自動最適化の恩恵を受けられる
 
 ## 解説
 
-### `<link href="...">` でフォント読み込みの何が辛いか
+### なぜ `<img>` のままでは駄目なのか
 
-素の HTML では、Google Fonts の使い方として次のように書くのが定番でした。
+HTML の素の `<img>` タグは、書いたサイズそのまま・書いた形式そのままの画像をブラウザに配ります。実用アプリで問題になるのは次の点です。
 
-```html
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter&display=swap">
-```
+- **画像が重い**: 3000×2000 の写真を 300×200 で表示していても、3000×2000 のファイルがそのまま転送される
+- **古い形式のまま配られる**: JPG / PNG のまま配ると、WebP や AVIF など軽い形式に対応するブラウザでもその恩恵を受けられない
+- **画面外の画像も全部読む**: スクロールしないと見えない画像まで、開いた瞬間に取りに行く
+- **縦横比で起きるガタつき**: 画像の読み込みが終わるとレイアウトがズレて、読んでいた本文がピョンと下に動く
 
-これだと次の問題があります。
+> **CLS / LCP**: ガタつきや表示遅延は **Core Web Vitals** という Google が定めた指標で評価されます。`CLS`（Cumulative Layout Shift、画面のズレ量）と `LCP`（Largest Contentful Paint、メインコンテンツが見えるまでの時間）が代表で、SEO スコアにも影響します。詳細は「Core Web Vitals の 3 つの指標と Lighthouse」のレッスンで扱います。
 
-- **外部ホストに毎回アクセス**: ユーザーのブラウザが `fonts.googleapis.com` と `fonts.gstatic.com` の 2 つに追加接続する。
-- **プライバシー**: Google にユーザーの IP が送られる（国・地域によっては規制対象）。
-- **フォントファイルが重い**: 全グリフが送られてしまう可能性がある。
+`next/image` の `<Image>` は、これらを **設定なしで** 自動で面倒を見てくれます。
 
-`next/font` はこれらを解決します。
+- 表示サイズに応じた解像度を自動生成（`srcset`）
+- WebP / AVIF に自動変換（ブラウザが対応していれば）
+- 画面内に入ったときだけ読み込み（遅延読み込み）
+- `width` / `height` 必須にすることでレイアウトのガタつき（CLS）を防ぐ
 
-- **ビルド時に自サーバーへフォントファイルをコピー**（自ホスト化）。ユーザーは Google に直接アクセスしません。
-- 使っている文字だけを含む **サブセット** を自動生成します。
-- フォントの CSS 変数やクラス名を React 側から参照できるようにします。
-
-### `next/font/google` の使い方
+### 最小の使い方
 
 ```tsx
-import { Inter } from "next/font/google";
+import Image from "next/image";
 
-const inter = Inter({ subsets: ["latin"] });
-
-export default function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default function Page() {
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <Image
+      src="/coffee.jpg"
+      alt="コーヒーの写真"
+      width={300}
+      height={200}
+    />
   );
 }
 ```
 
-- `next/font/google` から **使いたいフォント名を名前付き import** します（`Inter`、`Roboto`、`Noto_Sans_JP` など）。
-- 関数として呼び出し、`subsets` を指定します（`["latin"]` / `["japanese"]` など）。
-- 戻り値の `inter` は `{ className, style, variable }` を持つオブジェクトです。
-- `className` を `<html>` か `<body>` に付けると、そのフォントが配下全体に適用されます。
+- `import Image from "next/image"` でコンポーネントを読み込みます。
+- `src` はプロジェクト内の `public/` 直下のパス、または **登録済み** の外部 URL です。
+- `alt` は必須です。読み上げソフトと、画像が読み込めなかったときの代替テキストになります。
+- `width` と `height` はピクセル数を **数値** で書きます（CSS 単位の `px` は付けません）。
 
-### `display` のデフォルトは `"swap"`
+### `width` / `height` は原則必須。ただし省略できる 2 つのケース
 
-`next/font` の `display` オプションのデフォルトは **`"swap"`** です。**フォント読込中はシステムフォント（ゴシックなど）で表示し、Web フォントが届いたら差し替わる** 動きになります。
+`<Image>` は `width` / `height` を **原則必須** にします。レイアウトのガタつき（CLS）を防ぐためです。ただし、次の 2 ケースだけは省略できます。
 
-- 初期表示が速い（FOIT = Flash of Invisible Text が起きにくい）
-- 代わりに、読み込み完了の瞬間にフォントが切り替わる FOUT（Flash of Unstyled Text）が起きる可能性がある
+1. **静的 import の場合**
+   プロジェクト内の画像を `import` すると、Next.js がビルド時に画像のサイズを読み取って自動で埋めてくれます。
+   ```tsx
+   import heroImg from "./hero.png";
 
-本レッスンではこのデフォルトをそのまま使います。`display` を明示する必要はありません。
+   <Image src={heroImg} alt="ヒーロー画像" />
+   ```
+2. **`fill` を使う場合**
+   親要素いっぱいに広げる使い方です。親に `position: relative` と明示的なサイズが要ります。
+   ```tsx
+   <div style={{ position: "relative", width: 300, height: 200 }}>
+     <Image src="/coffee.jpg" alt="コーヒー" fill />
+   </div>
+   ```
 
-### フォント差し替え時の CLS と `next/font` の自動対策
+外部 URL を `src` に指定する場合は **静的 import できないので `width` / `height` を明示するか、`fill` で親サイズに従わせる** ことになります。
 
-「読込中はシステムフォント → 届いたら Web フォント」と差し替わるとき、文字幅の差で **要素の高さや改行位置がずれて画面がガタッと動く** ことがあります。「next/image で画像最適化」で触れた **CLS** がここでも問題になります。
+### 外部ホストを使うには `remotePatterns`
 
-`next/font` はこの対策を **自動で** 入れています。
+`<Image>` はセキュリティとキャッシュの都合で、**どの外部ホストからの画像を許可するか** を事前に宣言する必要があります。これが `next.config.ts` の `images.remotePatterns` です。
 
-- フォントメトリクス（`ascent-override` / `descent-override` / `size-adjust` 等）を **ビルド時に計測** し、フォールバックフォントの寸法を Web フォントに近づけて `@font-face` に書き出す
-- 結果として「フォントが入れ替わってもレイアウトが大きく動かない」状態を作ってくれる
+未登録のホストの画像を `<Image src="https://...">` で読むと、次のようなエラーになります。
 
-自分でメトリクス調整を書く必要はありません。`<link>` 直書きや他のフォント読み込み手段では CLS 対策を手動でやる必要がありますが、`next/font` を使えば自動で付くというのが採用する一番の理由です。
-
-複数フォントを使う場合は、メインに使う 1 つだけ `preload: true`（既定）にし、残りは `preload: false` にするとリクエスト数を減らせます。
-
-### `next/font/local` の使い方
-
-ローカルの `.woff2` ファイルを使う場合は次のように書きます。
-
-```tsx
-import localFont from "next/font/local";
-
-const myFont = localFont({
-  src: "./MyFont.woff2",
-});
+```
+Invalid src prop (https://placehold.co/...) on `next/image`,
+hostname "placehold.co" is not configured under images in your `next.config.js`
 ```
 
-本コースでは Google Fonts のみを扱うので `next/font/google` に集中します。`next/font/local` は存在だけ知っておきましょう。
+書き方は次の通りです。
 
-### 日本語フォントの注意
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
 
-日本語の Google Font（`Noto Sans JP` など）は、ラテン文字より **グリフ数が遥かに多い** ため、サブセットを指定しないと重くなりがちです。本演習では `Noto_Sans_JP` を使いつつ、全体には `Inter` を、見出しにだけ日本語フォントを当てる形を試します。
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
+    ],
+  },
+};
 
-### `font.className` の正体
+export default nextConfig;
+```
 
-`next/font` の `className` は、**ビルド時に生成される固有のクラス名** です（見た目は `__className_abc123` のような自動生成の文字列になります）。中身は `font-family`、`font-weight`、`font-display: swap` などの CSS 宣言が自動的に書き込まれています。
+Next.js 15 以降は **`{ protocol, hostname, pathname }` のオブジェクト配列** で書きます。`pathname: "/**"` は「そのホストの全パスを許可」の意味です。より狭く `"/300x200.png"` と書けば 1 ファイルだけ許可するパターンも書けます。
 
-自分で `@font-face { ... }` を書く必要はありません。`className` を付けるだけで完結します。
+### `sizes` でレスポンシブ対応
+
+`<Image>` は可変サイズ（`width` が CSS で `100%` のような動的な値）で使うときに `sizes` を付けると、もっとも賢く `srcset` を切り替えてくれます。詳細は本レッスンの範囲外ですが、1 行だけ雰囲気を見せておきます。
+
+```tsx
+<Image
+  src="/coffee.jpg"
+  alt="コーヒー"
+  width={600}
+  height={400}
+  sizes="(max-width: 640px) 100vw, 300px"
+/>
+```
+
+スマホ幅では 100vw、それ以外では 300px で表示される、という意味です。本演習では使いませんが、覚えておくと役立ちます。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`app/layout.tsx` に `next/font/google` の import と `className` を足すだけなので、このレッスンより前のプロジェクトが無くても動きます。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。`/about` の画像を差し替える演習なので、最低限 `/about` ページと `<img>` が存在すれば構いません。
+
+<details>
+<summary>出発点のファイル（<code>/about</code> 最小形）</summary>
+
+**`app/about/page.tsx`**
+
+```tsx
+export default function AboutPage() {
+  return (
+    <>
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+    </>
+  );
+}
+```
+
+Route Groups を使っていない出発点なので、本文中で `app/(public)/about/page.tsx` と書かれている箇所は `app/about/page.tsx` に読み替えてください。
+
+</details>
 
 ### 前回のプロジェクトを開く
 
-これまでのプロジェクトを開き直しましょう。
+5 章 のここまで（「ページを増やしてリンクで移動する」〜「Server Component でデータを取得する」）で作ってきた StackBlitz プロジェクトを開き直しましょう。「Route Groups で整理する」の Route Groups 化を済ませていれば、`/about` のファイルは `app/(public)/about/page.tsx` にあります。
 
-### 手順 1: 適用前の見た目を記録する
+### 手順 1: `next.config.ts` に `remotePatterns` を追加
 
-まず、`/about` を開いてスクショを 1 枚撮っておきます（または目で覚えておきます）。これが「システムフォント」の状態です。
+プロジェクト直下に `next.config.ts`（または `next.config.mjs`）があります。StackBlitz テンプレートでは既に存在するはずです。なければ新規作成します。
 
-ASCII 図で表すと次のような雰囲気です（ブラウザやフォント設定で変わります）。
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
 
-```
-+---------------------------------------+
-| Home | About | Todos                  |
-+---------------------------------------+
-|  自己紹介                             |  ← システムゴシック
-|  Web フロントエンドを学び中です。    |     角ばった一般的な表示
-|                                       |
-|  好きなもの                           |
-|  [画像] コーヒー                      |
-|  [画像] 本                            |
-|  [画像] 散歩                          |
-+---------------------------------------+
-```
-
-日本語は OS のシステムフォント（macOS なら Hiragino、Windows なら Yu Gothic、など）で表示されています。
-
-### 手順 2: `Inter` をルートレイアウトに適用
-
-`app/layout.tsx` を次のように書き換えます。
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { Inter } from "next/font/google";
-import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
-
-export const metadata = {
-  title: "My Next App",
+const nextConfig: NextConfig = {
+  images: {
+    remotePatterns: [
+      { protocol: "https", hostname: "placehold.co", pathname: "/**" },
+    ],
+  },
 };
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+export default nextConfig;
+```
+
+保存すると、Next.js が設定を再読み込みします（StackBlitz ではターミナルに再起動のログが流れます）。
+
+### 手順 2: `/about` の `<img>` を `<Image>` に置き換える
+
+`app/(public)/about/page.tsx`（「Route Groups で整理する」以前のままなら `app/about/page.tsx`）を開きます。「ページを増やしてリンクで移動する」で貼った 3 枚のカードの `<img>` を、`<Image>` に置き換えます。
+
+ファイル全体はこうなります。
+
+```tsx
+import Image from "next/image";
+import "./about.css";
+
+export default function AboutPage() {
   return (
-    <html lang="ja" className={inter.className}>
-      <body>
-        <header className="site-header">
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
+    <>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <Image
+              src="https://placehold.co/300x200.png"
+              alt="コーヒーのプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <Image
+              src="https://placehold.co/300x200.png"
+              alt="本のプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <Image
+              src="https://placehold.co/300x200.png"
+              alt="散歩のプレースホルダ画像"
+              width={300}
+              height={200}
+            />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </>
   );
 }
 ```
 
-ポイント:
+変更点:
 
-- `import { Inter } from "next/font/google";` を追加。
-- `const inter = Inter({ subsets: ["latin"] });` をモジュール先頭に。
-- `<html>` の `className={inter.className}` を付与。
+- 1 行目に `import Image from "next/image";` を追加しました。
+- `<img src="..." alt="..." />` を 3 箇所とも `<Image ... width={300} height={200} />` に置き換えました。
+- `<Image>` は `width` と `height` を **数値**（中括弧） で書くことに注意してください（HTML の `<img width="300">` のような文字列ではありません）。
 
-保存すると、StackBlitz のビルドが走り、プレビューが更新されます。
+### 手順 3: 画像サイズの CSS を見直す
 
-### 期待出力: 適用後の見た目
+「ページを増やしてリンクで移動する」の `about.css` には次のような指定が入っていました。
 
-もう一度 `/about` を開きます。今度は **欧文部分が Inter** で表示されます。日本語はまだシステムフォントのままです。
-
-ASCII 図で表すとこう変わります。
-
-```
-+---------------------------------------+
-| Home | About | Todos   ← Inter に変化 |
-+---------------------------------------+
-|  自己紹介                             |  ← 日本語はシステムフォント
-|  Web フロントエンドを学び中です。    |     Web → Web は Inter で表示
-|                                       |
-|  Cards                                |  ← ラテン文字は丸みのある Inter
-+---------------------------------------+
-```
-
-英字の「Home / About / Todos」、本文中の「Web」などの **ラテン文字が Inter に変わっている** ことを、適用前スクショと見比べて確認します。
-
-どこが違って見えるかのヒント:
-
-- Inter は可読性重視の現代的なサンセリフ。特に数字とアルファベットの字形（例: `a`、`g`、`1`、`4`）が、システムゴシックと見分けやすいです。
-- 字間（トラッキング）も少し広くなります。
-
-### 手順 3: 日本語は `Noto_Sans_JP` を見出しに当てる
-
-日本語の本文も Web フォントにしたい場合は、`Noto_Sans_JP` を併用します。ここでは「見出しだけ `Noto_Sans_JP`、本文は Inter + システム日本語フォント」の使い分けをやってみます。
-
-`app/layout.tsx` を次のように拡張します。
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-import { Inter, Noto_Sans_JP } from "next/font/google";
-import "./globals.css";
-
-const inter = Inter({ subsets: ["latin"] });
-const notoJp = Noto_Sans_JP({
-  subsets: ["latin"],
-  weight: ["500", "700"],
-});
-
-export const metadata = {
-  title: "My Next App",
-};
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja" className={inter.className}>
-      <body>
-        <header className={`site-header ${notoJp.className}`}>
-          <nav>
-            <ul>
-              <li>
-                <Link href="/">Home</Link>
-              </li>
-              <li>
-                <Link href="/about">About</Link>
-              </li>
-              <li>
-                <Link href="/todos">Todos</Link>
-              </li>
-            </ul>
-          </nav>
-        </header>
-        <main>{children}</main>
-        <footer className="site-footer">
-          <p>&copy; 2026 My Next App</p>
-        </footer>
-      </body>
-    </html>
-  );
+```css
+.card img {
+  width: 100%;
+  height: auto;
+  border-radius: 4px;
 }
 ```
 
-ポイント:
+`<Image>` も内部的には `<img>` を生成するので、このスタイルはそのまま効きます。`width: 100%` でカードの幅に合わせて縮みます。`height: auto` を入れておくと、縮んでも縦横比が崩れません。
 
-- 2 つのフォントを同時に呼べます。
-- `Noto_Sans_JP` は **アンダースコア区切り** のインポート名です（ハイフン付きのフォント名はアンダースコアに置き換わります）。
-- `weight` を `["500", "700"]` に絞って、不要なウェイトをダウンロードさせません。
-- `className` は **テンプレートリテラルで複数合成** できます（`${notoJp.className}` をヘッダーだけに付与）。
+ダークモードでの `filter` 調整などは不要です。「ページを増やしてリンクで移動する」時点の CSS のままで構いません。
 
-> `subsets` に `"japanese"` を指定すると日本語グリフも含まれますが、**ファイルが大きくなる** ので本演習では `"latin"` のみにし、日本語はシステムフォントに任せる割り切りにします。必要な読者は `subsets: ["latin", "japanese"]` を試してみてください。
+### 期待出力
 
-### 期待出力（再度の対比）
-
-ブラウザで `/about` を開いて手順 2 との違いを見ます。
-
-```
-+---------------------------------------+
-| Home | About | Todos   ← Noto Sans JP |
-+---------------------------------------+
-|  自己紹介   ← 本文は Inter + システム  |
-|  ...                                  |
-+---------------------------------------+
-```
-
-ヘッダーの文字が Noto Sans JP の統一感ある字形になり、本文と少し印象が変わります。ヘッダーの日本語は現時点では入っていないので、差分は欧文（Home / About / Todos）の字形で見ることになります。
+1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
+2. **DevTools → Network タブ** を開いて再読み込みします。
+3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
+4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
+5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
 
 ### 変えてみる
 
-1. `<html lang="ja" className={inter.className}>` を `<html lang="ja" className={notoJp.className}>` に変えて、全体が Noto Sans JP になった見た目を確認しましょう（字面が丸くなる）。
-2. `Inter` の呼び出しに `{ subsets: ["latin"], weight: ["400", "700"] }` を渡してみましょう。weight の指定で読み込まれるファイル数が変わります（DevTools → Network で確認）。
-3. いったん `className={inter.className}` を外して保存し、システムフォントに戻った見た目をもう一度目に焼き付けてから、付け直しましょう。切り替わりの一瞬（FOUT）が体感できることがあります。
+1. 3 枚目のカードの `<Image>` に `priority` プロパティを付けて、遅延読み込みを止めてみましょう（`<Image src="..." alt="..." width={300} height={200} priority />`）。ページ表示のタイミングが少しだけ速くなる可能性があります（体感差は小さい）。
+2. `width={300} height={200}` を `width={600} height={400}` に変えると、同じ見た目のまま 2 倍の解像度のソースが配信されるようになります（ネットワークタブで URL の `w=` が変わるのを確認）。
+3. `public/` フォルダに自分の PNG 画像を 1 枚置いて、`import myImg from "../../../../public/my.png"` のように静的 import で `<Image src={myImg} alt="..." />` を書いてみましょう。`width` / `height` を **省略しても** 動くはずです（静的 import なので Next.js が自動でサイズを取る）。
 
 ### スコープ外
 
-- `variable` font の詳細、CSS 変数 (`--font-inter`) 連携は扱いません。
-- `display` の他の値（`"block"`、`"fallback"`、`"optional"`）は扱いません。デフォルト `"swap"` のみ。
-- 有料フォントサービス（Adobe Fonts など）との連携は扱いません。
+- LCP 最適化の深掘り、`priority` の本格活用、`placeholder="blur"` の `blurDataURL` 自動生成は本コースでは扱いません。
+- `localPatterns`（Next.js 15.3 で追加）などの発展設定は扱いません。
+- カスタムローダー（CDN 連携）も扱いません。
 
 ### 自分で書く
 
-`Roboto` や `Lato` など別の Google Font を 1 つ選び、`<html>` に適用してみましょう。`import { Roboto } from "next/font/google"` のようにインポートし、`subsets: ["latin"]` を指定するだけです。字形の違いを `/about` の見出しや本文で観察します。
+`/gallery` という新しいページを `app/(public)/gallery/page.tsx` に作り、`https://placehold.co/400x300.png` のような別サイズの画像を 3 枚並べるページを組んでみましょう。`width={400} height={300}` を指定するだけで、自動最適化が効きます。ナビにも `/gallery` のリンクを足してみると良いでしょう。
 
 ## まとめ
 
-- `next/font/google` から使いたいフォントを import し、`subsets` を指定して呼び出すだけで自動最適化が有効になる
-- 戻り値の `className` を `<html>` や `<body>` に付けると、配下全体に適用される
-- `display` のデフォルトは **`"swap"`**（先にシステムフォントで描画し、読み込みが済んだら差し替わる FOUT 挙動）
-- フォント差し替え時の CLS 対策（フォールバックのメトリクス調整）も `next/font` が自動で入れてくれる
+- `import Image from "next/image"` で `<Image>` コンポーネントを使う。素の `<img>` より賢い画像表示ができる
+- `width` と `height` は **原則必須**。省略できるのは静的 import と `fill` の 2 パターンだけ
+- 外部ホストを使うには `next.config.ts` の `images.remotePatterns` に `{ protocol, hostname, pathname }` のオブジェクトで登録する
+- `<img>` を `<Image>` に差し替えるだけで、WebP / AVIF 変換や遅延読み込みの恩恵を自動で受けられる

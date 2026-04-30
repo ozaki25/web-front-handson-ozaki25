@@ -1,127 +1,186 @@
-# lesson86: Loading UI と Streaming
+# lesson86: Metadata API で SEO を整える
 
 ## ゴール
 
-- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
-- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
-- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
-- React 19.2 + Next.js 16 の Server Component で Streaming がどう動くかを理解する
+- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
+- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
+- `generateMetadata` で動的にタイトルや説明文を組み立てられる
+- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
+- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
 
 ## 解説
 
-### `loading.tsx` の役割
+### 「SEO を整える」とは
 
-Server Component でデータを取得すると、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
+SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
 
-```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
+- `<title>`: ブラウザタブの文字、検索結果の見出し
+- `<meta name="description">`: 検索結果の説明文
+- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
+- `<link rel="icon">`: タブの左に出る favicon
 
-- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
-- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
+これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
 
-これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
+### Metadata API の 2 系統
 
-### ルート単位のローディングだけだと粗い
+書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
 
-`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
+1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
+2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
 
-例: 記事ページに
+### 静的 `metadata` export
 
-- 記事本文（速い、キャッシュ済み）
-- 関連記事（遅い、外部 API から取得）
-
-があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
-
-### 部分的 Streaming: `<Suspense>` で囲む
-
-遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
+`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
 
 ```tsx
-// app/posts/[id]/page.tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
+// app/about/page.tsx
+import type { Metadata } from "next";
 
-export default async function PostPage() {
-  return (
-    <>
-      <h1>記事本文（すぐ出る）</h1>
-      <p>...本文...</p>
+export const metadata: Metadata = {
+  title: "About",
+  description: "このサイトについて",
+};
 
-      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
-        <RelatedPosts />
-      </Suspense>
-    </>
-  );
+export default function AboutPage() {
+  return <h1>About</h1>;
 }
 ```
 
-- `<h1>` と `<p>` は先にブラウザに届く
-- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
-- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
+Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
 
-これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
+### 動的 `generateMetadata`
 
-### `loading.tsx` と `<Suspense>` の棲み分け
+URL から情報を取ってタイトルを作るときに使います。
 
-ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
+```tsx
+// app/posts/[id]/page.tsx
+import type { Metadata } from "next";
 
-- **`loading.tsx`**（ルート単位）: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
-- **`<Suspense>`**（コンポーネント単位）: ページの中で遅い領域だけを個別に待たせる
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  const post = await res.json();
+  return {
+    title: post.title,
+    description: post.body.slice(0, 120),
+  };
+}
 
-両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
-
-### `error.tsx` との関係
-
-「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
-
-| 何が起きた？ | 担当ファイル |
-|---|---|
-| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
-| 取得に失敗・例外が飛んだ | `error.tsx` |
-
-両方置いておくのが実用的な構成です。
-
-```
-app/
-└── posts/
-    ├── page.tsx
-    ├── loading.tsx
-    └── error.tsx
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  return <h1>記事 ID: {id}</h1>;
+}
 ```
 
-### スケルトン UI を返すコツ
+- `generateMetadata` は非同期関数にできます
+- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
+- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
+- 戻り値は `Metadata` 型のオブジェクト
 
-`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
+`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
 
-- 見出しの位置にグレーのバー
-- 本文の位置に複数の細いバー
-- 画像の位置に正方形のプレースホルダ
+### `title.template` でサイト全体を揃える
 
-これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
+記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
 
-### 実行順のイメージ
+```tsx
+// app/layout.tsx
+import type { Metadata } from "next";
 
-`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+export const metadata: Metadata = {
+  title: {
+    default: "My Next Site",
+    template: "%s | My Next Site",
+  },
+  description: "Next.js App Router の学習用サイト",
+};
+```
 
-1. ブラウザが `/posts/1` にアクセス
-2. Server が `page.tsx` を評価し始める
-3. `<h1>` と `<p>` の部分は即座に生成される
-4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
-5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
-6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
-7. ブラウザが追加分を受け取り、`fallback` を置き換える
+- `default`: ページ側でタイトルを書いていないときに使う既定値
+- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
 
-「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
+ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
+
+### Open Graph を足す
+
+SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
+
+```tsx
+export const metadata: Metadata = {
+  title: "My Next Site",
+  description: "Next.js App Router の学習用サイト",
+  openGraph: {
+    title: "My Next Site",
+    description: "Next.js App Router の学習用サイト",
+    url: "https://example.com",
+    siteName: "My Next Site",
+    locale: "ja_JP",
+    type: "website",
+  },
+};
+```
+
+最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
+
+### OG 画像 / canonical / robots（実務 SEO 三点セット）
+
+公開サイトでは次の 3 つを揃えるのがほぼ必須です。
+
+```ts
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: "My Site",
+  description: "...",
+
+  // (1) OG 画像（SNS シェア時の見栄え）
+  openGraph: {
+    images: [
+      { url: "/og-image.png", width: 1200, height: 630 },
+    ],
+  },
+
+  // (2) canonical URL（重複コンテンツ対策）
+  alternates: {
+    canonical: "/",
+  },
+
+  // (3) robots（インデックス制御）: 既定は本番だけ index、それ以外は noindex
+  robots: {
+    index: process.env.VERCEL_ENV === "production",
+    follow: true,
+  },
+};
+```
+
+それぞれの「いつ使うか」:
+
+- **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
+- **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
+- **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
+
+実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
+
+### favicon / apple-touch-icon は **ファイル配置だけで OK**
+
+Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
+
+- `app/favicon.ico` → `<link rel="icon">`
+- `app/icon.png` / `app/icon.svg` → 同上
+- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
+
+`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
+
+### Server Component の前提
+
+`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
 
 <details>
 <summary>出発点のファイル</summary>
@@ -143,7 +202,9 @@ export default function RootLayout({
         <nav>
           <Link href="/">Home</Link>
           {" | "}
-          <Link href="/streaming">Streaming</Link>
+          <Link href="/about">About</Link>
+          {" | "}
+          <Link href="/posts/1">Post #1</Link>
         </nav>
         {children}
       </body>
@@ -160,139 +221,189 @@ export default function Home() {
 }
 ```
 
+**`app/about/page.tsx`**
+
+```tsx
+export default function About() {
+  return <h1>About</h1>;
+}
+```
+
+**`app/posts/[id]/page.tsx`**
+
+```tsx
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  return <h1>記事 ID: {id}</h1>;
+}
+```
+
 </details>
 
 ### ゴール
 
-- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
-- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
-- fetch が終わると fallback が実データに置き換わる
+- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
+- `app/about/page.tsx` に静的 metadata を追加する
+- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
+- ブラウザタブの文字が各ページで変わることを確認する
 
 ### 手順
 
-1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
-2. `app/streaming/loading.tsx` を置く
-3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
-4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
-5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
+1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
+2. `app/about/page.tsx` に静的 `metadata` export を追加
+3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
+4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
 
 ### 主要ファイルの完成形
 
-**`app/streaming/page.tsx`**
+**`app/layout.tsx`**
 
 ```tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
-import { PostsSkeleton } from "./skeleton";
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import Link from "next/link";
 
-export default function StreamingPage() {
+export const metadata: Metadata = {
+  title: {
+    default: "My Next Site",
+    template: "%s | My Next Site",
+  },
+  description: "Next.js App Router の学習用サイト",
+  openGraph: {
+    title: "My Next Site",
+    description: "Next.js App Router の学習用サイト",
+    url: "https://example.com",
+    siteName: "My Next Site",
+    locale: "ja_JP",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
   return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1>Streaming デモ</h1>
-      <p>
-        このテキストと見出しは <strong>すぐに</strong> 表示されます。
-        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
-      </p>
-
-      <h2>関連記事</h2>
-      <Suspense fallback={<PostsSkeleton />}>
-        <RelatedPosts />
-      </Suspense>
-
-      <p>フッター（これも先に出ます）</p>
-    </div>
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/about">About</Link>
+          {" | "}
+          <Link href="/posts/1">Post #1</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
   );
 }
 ```
 
-**`app/streaming/RelatedPosts.tsx`**
+注: **`ReactNode` は `next` の公開型ではなく `react` から import します**。`Metadata` は `next` から、`ReactNode` は `react` から、と use 元が違う点に注意します。
+
+**`app/page.tsx`**
 
 ```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
+```
+
+この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
+
+**`app/about/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "About",
+  description: "このサイトについて",
+};
+
+export default function About() {
+  return <h1>About</h1>;
+}
+```
+
+**`app/posts/[id]/page.tsx`**
+
+```tsx
+import { cache } from "react";
+import type { Metadata } from "next";
+
 type Post = {
   id: number;
   title: string;
+  body: string;
 };
 
-export default async function RelatedPosts() {
-  // わざと 2 秒待つ
-  await new Promise((r) => setTimeout(r, 2000));
+// 同一リクエスト内での重複 fetch を 1 回にまとめる
+const getPost = cache(async (id: string): Promise<Post | null> => {
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  if (!res.ok) return null;
+  return res.json();
+});
 
-  // Next.js 16 では fetch の既定が no-store なので明示は不要だが、
-  // 「キャッシュしない」を明示したい場合の書き方として残している。
-  const res = await fetch(
-    "https://jsonplaceholder.typicode.com/posts?_limit=3"
-  );
-  const posts: Post[] = await res.json();
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const post = await getPost(id);
+  if (!post) {
+    return { title: "記事が見つかりません" };
+  }
+  return {
+    title: post.title,
+    description: post.body.slice(0, 120),
+  };
+}
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  const post = await getPost(id);
+  if (!post) {
+    return <h1>記事が見つかりません</h1>;
+  }
 
   return (
-    <ul>
-      {posts.map((post) => (
-        <li key={post.id}>{post.title}</li>
-      ))}
-    </ul>
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
   );
 }
 ```
 
-**`app/streaming/skeleton.tsx`**
-
-```tsx
-export function PostsSkeleton() {
-  return (
-    <ul style={{ listStyle: "none", padding: 0 }}>
-      {[0, 1, 2].map((i) => (
-        <li
-          key={i}
-          style={{
-            height: 16,
-            margin: "8px 0",
-            background: "#e5e5e5",
-            borderRadius: 4,
-          }}
-        />
-      ))}
-    </ul>
-  );
-}
-```
-
-**`app/streaming/loading.tsx`**
-
-```tsx
-export default function Loading() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
-    </div>
-  );
-}
-```
+> **補足: `cache()` で同一リクエスト内の重複 fetch を 1 回にまとめる**: `generateMetadata` と `PostPage` は同じリクエストで両方走るため、素朴に書くと同じ URL に **2 回 fetch が飛びます**。`import { cache } from "react"` の `cache()` 関数で包むと、**同一リクエスト内** であれば 2 回目以降の呼び出しは 1 回目の結果を使い回します（メモ化）。`{ cache: "force-cache" }` のような fetch オプションはネットワークの再取得を防ぐ別の仕組みで、`cache()` と組み合わせなくても上記の重複呼び出し自体は走ってしまいます。
 
 ### 期待出力
 
-1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
-2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
-3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
-4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
+ブラウザで次のように動きます。
 
-DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
+1. `/` を開く → タブのタイトルが `My Next Site`
+2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
+3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
+4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
 
 ### 変える
 
-- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
-- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
-- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
+- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
+- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
+- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
 
 ### 自分で書く
 
-- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
-- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
-- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
+- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
+- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
+- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
 
 ## まとめ
 
-- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
-- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
-- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
-- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
-- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
+- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
+- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
+- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
+- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
+- `metadata` / `generateMetadata` は Server Component 側でだけ書く

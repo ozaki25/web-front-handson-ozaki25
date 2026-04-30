@@ -1,493 +1,389 @@
-# lesson125: React Compiler
+# lesson125: IndexedDB 入門
 
 ## ゴール
 
-- React Compiler が **何を自動化** するかを言える
-- 「手動メモ化（`useMemo` / `useCallback` / `React.memo`）が要らなくなる」境界を理解する
-- React Compiler 1.0（2025 年 10 月安定版）の **現在地** を知る
-- Next.js / Vite で React Compiler を **有効化** できる
-- 既存コードでハマらないための注意点（Rules of React）を押さえる
-
-::: tip 前提
-このレッスンは「`useMemo` で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は「`useMemo` で計算のメモ化」「配列を描画する」を確認してください。
-:::
+- IndexedDB が `localStorage` と何が違うか説明できる
+- 生 API の用語（database / objectStore / transaction / cursor）を読める
+- `idb` ライブラリで Promise ベースの最小コードを書ける
+- `Dexie.js` のクラス指向 API の利点を理解する
+- ユースケース（オフライン作業 / 大量データキャッシュ）を判断できる
 
 ## 解説
 
-### 「手動メモ化」の苦しみ
+### `localStorage` の限界
 
-React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなる。そのために導入されたのが:
+「Web Storage で値をブラウザに保存する」で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
-- `useMemo`: 値の **再計算を抑える**
-- `useCallback`: 関数の **再生成を抑える**
-- `React.memo`: コンポーネントの **再レンダリングを抑える**
+- **容量が小さい**（オリジン全体で 5〜10MB）
+- **値は文字列だけ**（オブジェクトは JSON 化が必要）
+- **同期 API**（読み書きで UI が止まる）
+- **検索 / インデックスがない**
+- **トランザクションがない**
 
-```tsx
-const filtered = useMemo(
-  () => items.filter((i) => i.active),
-  [items],
-);
+「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
 
-const onClick = useCallback(
-  () => handler(value),
-  [value],
-);
+### IndexedDB とは
 
-const Memoed = React.memo(Child);
-```
+ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
 
-3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
+- **容量は数十 MB 〜 GB クラス**（ブラウザによる）
+- **オブジェクトをそのまま** 保存（structured clone）
+- **完全に非同期**（イベント / Promise）
+- **インデックスでの検索** が可能
+- **トランザクション** でアトミック操作
+- **Service Worker からも使える**
 
-- **書き忘れ**でパフォーマンス劣化
-- **依存配列のミス**でバグ
-- **過度なメモ化**で逆に遅くなる
-- 読みづらいコード
+### 用語
 
-これを **コンパイラが自動でやる** のが React Compiler の役割です。
-
-### React Compiler とは
-
-[React Compiler](https://react.dev/learn/react-compiler/introduction) は、**Babel ベースのコンパイラ** で、ソースコードを **解析してメモ化を自動挿入** します。
-
-```tsx
-// あなたが書くコード
-function Cart({ items }: { items: Item[] }) {
-  const total = items.reduce((sum, i) => sum + i.price, 0);
-  return <p>合計: {total}</p>;
-}
-
-// Compiler が変換した結果（イメージ）
-function Cart({ items }: { items: Item[] }) {
-  const $ = useMemoCache(2);
-  let total;
-  if ($[0] !== items) {
-    total = items.reduce((sum, i) => sum + i.price, 0);
-    $[0] = items;
-    $[1] = total;
-  } else {
-    total = $[1];
-  }
-  return <p>合計: {total}</p>;
-}
-```
-
-実際の出力は人間が読まなくて良い形式ですが、要は **手動の useMemo を全部書いた状態** に近づけてくれます。
-
-### 1.0 安定版（2025 年 10 月）
-
-[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、**プロダクション ready** 扱い。
-
-主な仕様:
-
-- React 17 / 18 / 19 と互換（19 推奨）
-- TypeScript 完全対応
-- Next.js / Remix / Expo / Vite すべてでサポート
-- ビルド時間は **やや増える**（軽量化が継続中）
-
-### Next.js 16 で有効化
-
-[Next.js 16](https://nextjs.org/blog/next-16)（2025 年 10 月）以降、React Compiler は **stable** な設定オプションになりました（experimental から昇格）。
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const nextConfig: NextConfig = {
-  reactCompiler: true,
-};
-
-export default nextConfig;
-```
-
-これだけで OK。デフォルトでは ON ではないので、**明示的に有効化** します。
-
-#### 細かい設定
-
-```ts
-const nextConfig: NextConfig = {
-  reactCompiler: {
-    compilationMode: "annotation",  // "all" | "annotation" | "infer"
-  },
-};
-```
-
-| `compilationMode` | 説明 |
+| 用語 | 意味 |
 |---|---|
-| `"all"`（デフォルト） | すべてのコンポーネントを変換 |
-| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ |
-| `"infer"` | use の前提を満たす関数のみ |
+| **Database** | 1 つの DB。複数の objectStore を持つ |
+| **Object Store** | テーブル / コレクションに相当 |
+| **Key Path** | レコードの主キーフィールド（`id` 等） |
+| **Index** | 検索を速くする補助インデックス |
+| **Transaction** | 読み書きをまとめる単位（`readonly` / `readwrite`） |
+| **Cursor** | 範囲走査するイテレータ |
 
-「徐々に試したい」場合は `"annotation"` から始めて、確認後に `"all"` に切り替えるのが安全。
-
-### Vite で有効化
-
-```bash
-npm install -D babel-plugin-react-compiler
-```
-
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-
-const ReactCompilerConfig = {};
-
-export default defineConfig({
-  plugins: [
-    react({
-      babel: {
-        plugins: [
-          ["babel-plugin-react-compiler", ReactCompilerConfig],
-        ],
-      },
-    }),
-  ],
-});
-```
-
-### 「メモ化が要らなくなる」とは
-
-#### Before
-
-```tsx
-function ProductList({ products, query }: Props) {
-  const filtered = useMemo(
-    () => products.filter((p) => p.name.includes(query)),
-    [products, query],
-  );
-
-  const handleClick = useCallback(
-    (id: string) => navigate(`/product/${id}`),
-    [navigate],
-  );
-
-  return (
-    <ul>
-      {filtered.map((p) => (
-        <ProductCard key={p.id} product={p} onClick={handleClick} />
-      ))}
-    </ul>
-  );
-}
-
-const ProductCard = React.memo(({ product, onClick }: CardProps) => (
-  <li onClick={() => onClick(product.id)}>{product.name}</li>
-));
-```
-
-#### After（Compiler 有効）
-
-```tsx
-function ProductList({ products, query }: Props) {
-  const filtered = products.filter((p) => p.name.includes(query));
-  const handleClick = (id: string) => navigate(`/product/${id}`);
-
-  return (
-    <ul>
-      {filtered.map((p) => (
-        <ProductCard key={p.id} product={p} onClick={handleClick} />
-      ))}
-    </ul>
-  );
-}
-
-function ProductCard({ product, onClick }: CardProps) {
-  return <li onClick={() => onClick(product.id)}>{product.name}</li>;
-}
-```
-
-「**普通に書いた JSX** が、コンパイル後は **十分にメモ化された** コードに変換される」のが Compiler の価値。
-
-### 何が変わるか / 変わらないか
-
-#### 変わるもの
-
-- **`useMemo` / `useCallback` の手動記述が不要** に
-- **`React.memo` で囲う必要がない**（依存があれば自動でメモ化される）
-- 依存配列の書き間違いミスが消える
-
-#### 変わらないもの
-
-- `useEffect` / `useState` / `useRef` などの Hook は **そのまま** 使う
-- **データ取得** や **副作用** の責務は変わらない
-- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題
-
-### Rules of React
-
-Compiler が動くには **コードが React のルールに従っている** ことが前提です。
-
-#### Components / Hooks は **純粋**
-
-- レンダリング中に副作用を起こさない（DOM 直接操作 / API 呼び出し / setState）
-- 同じ入力からは同じ出力を返す（**ピュア**）
-
-```tsx
-// NG: レンダリング中に外部状態を変更
-function Bad() {
-  globalCounter++;        // 副作用
-  return <p>{globalCounter}</p>;
-}
-
-// OK: 副作用は useEffect 内で
-function Good() {
-  useEffect(() => { globalCounter++; }, []);
-  return <p>{globalCounter}</p>;
-}
-```
-
-#### イベントハンドラは外部状態を変えても OK
-
-```tsx
-function Counter() {
-  const [n, setN] = useState(0);
-  return <button onClick={() => setN(n + 1)}>{n}</button>;
-}
-```
-
-イベントハンドラはレンダリング中ではないので **副作用 OK**。Compiler はこれを区別します。
-
-#### `eslint-plugin-react-compiler` で違反を検出
-
-```bash
-npm install -D eslint-plugin-react-compiler
-```
+### 生 API の最小例
 
 ```js
-// eslint.config.js
-import reactCompiler from "eslint-plugin-react-compiler";
+const open = indexedDB.open("my-db", 1);
 
-export default [
-  {
-    plugins: { "react-compiler": reactCompiler },
-    rules: {
-      "react-compiler/react-compiler": "error",
-    },
+open.onupgradeneeded = (event) => {
+  const db = event.target.result;
+  const store = db.createObjectStore("posts", { keyPath: "id" });
+  store.createIndex("by-author", "author");
+};
+
+open.onsuccess = (event) => {
+  const db = event.target.result;
+
+  const tx = db.transaction("posts", "readwrite");
+  const store = tx.objectStore("posts");
+  store.put({ id: "1", title: "Hello", author: "Alice" });
+
+  tx.oncomplete = () => console.log("保存完了");
+};
+```
+
+ポイント:
+
+- `open` の **`onupgradeneeded`** でスキーマを定義（version を上げると再実行）
+- `transaction(name, mode)` で操作する store を選ぶ
+- `put` / `get` / `delete` / `getAll` などのメソッドはイベントハンドラで結果を受ける
+
+**生 API は冗長で書きづらい** ので、ラッパーを使うのが普通です。
+
+### `idb`（Promise ラッパー）
+
+[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
+
+```bash
+npm install idb
+```
+
+```ts
+import { openDB, DBSchema } from "idb";
+
+interface MyDB extends DBSchema {
+  posts: {
+    key: string;
+    value: { id: string; title: string; author: string };
+    indexes: { "by-author": string };
+  };
+}
+
+const db = await openDB<MyDB>("my-db", 1, {
+  upgrade(db) {
+    const store = db.createObjectStore("posts", { keyPath: "id" });
+    store.createIndex("by-author", "author");
   },
-];
+});
+
+await db.put("posts", { id: "1", title: "Hello", author: "Alice" });
+const post = await db.get("posts", "1");
+const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
 ```
 
-このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint でコードの問題を修正しておくのが安全。
+`DBSchema` を使うと **型付きの API** になり、IDE 補完が効きます。
 
-### 「Compile されない」コードへの対処
+### `Dexie.js`（クラス指向）
 
-Compiler が「危険」と判断したコンポーネントは **そのまま** にします（壊れない）。
+[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
 
-警告メッセージ:
-
-```
-[ReactCompiler] Function `MyComponent` could not be compiled.
-Reason: Mutation of value passed as argument
+```bash
+npm install dexie
 ```
 
-対応:
+```ts
+import Dexie, { Table } from "dexie";
 
-1. ESLint の指摘を素直に直す（**ピュア化**）
-2. 直せない事情があれば **`"use no memo"`** ディレクティブで対象外に
-3. **`"use memo"`** で「変換して欲しい」と明示
+interface Post {
+  id?: number;
+  title: string;
+  author: string;
+  createdAt: number;
+}
+
+class MyDB extends Dexie {
+  posts!: Table<Post, number>;
+  constructor() {
+    super("my-db");
+    this.version(1).stores({
+      posts: "++id, author, createdAt",
+    });
+  }
+}
+
+const db = new MyDB();
+
+await db.posts.add({ title: "Hello", author: "Alice", createdAt: Date.now() });
+
+const aliceLatest = await db.posts
+  .where("author").equals("Alice")
+  .reverse()
+  .sortBy("createdAt");
+```
+
+ポイント:
+
+- `++id` は **自動採番** の主キー
+- `stores` の文字列で **インデックスを宣言**
+- `where().equals().reverse().sortBy()` のような **チェーン** が書ける
+- React 用 hooks（`useLiveQuery`）も提供される
 
 ```tsx
-"use no memo";
+import { useLiveQuery } from "dexie-react-hooks";
 
-function LegacyComponent() {
-  // Compiler 対象外
+function PostList() {
+  const posts = useLiveQuery(() => db.posts.toArray(), []);
+  return (
+    <ul>
+      {posts?.map((p) => <li key={p.id}>{p.title}</li>)}
+    </ul>
+  );
 }
 ```
 
-### 既存プロジェクトに導入する流れ
+`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
 
-1. **`eslint-plugin-react-compiler` を入れて警告を見る**
-2. 警告を直せる範囲で直す
-3. **`compilationMode: "annotation"`** で **限定的に試す**
-4. 動作確認 → 問題なければ **`"all"`** に切り替え
-5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
+### `localStorage` / `sessionStorage` / IndexedDB の使い分け
 
-「全部一気に」ではなく **段階導入** が事故を減らします。
+| 用途 | 推奨 |
+|---|---|
+| ユーザー設定（ダークモード / 言語） | `localStorage` |
+| タブ単位の一時状態 | `sessionStorage` |
+| 認証トークン | **どちらも使わない**。HttpOnly Cookie に |
+| Todo / 下書き / オフライン編集データ | **IndexedDB** |
+| 画像 / 動画 / Blob | **IndexedDB**（Cache API も候補） |
+| API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
+| ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
 
-### パフォーマンス効果は？
+「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
 
-[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などで:
+### 容量とクォータ
 
-- **手動メモ化が完璧でないコードベース** には大きな改善
-- **既に十分メモ化済みのコード** にはほぼ同等
-- **小規模アプリ** には変化なし
+ブラウザは「**クォータ**」というオリジン単位の上限を割り当てます。`navigator.storage.estimate()` で確認できます。
 
-「**すべての React アプリが速くなる魔法** ではない」けれど、コードの **保守性** は確実に上がります。
+```js
+const { quota, usage } = await navigator.storage.estimate();
+console.log(`使用 ${usage} / クォータ ${quota}`);
+```
 
-### `useMemo` を残すべき場面
+ChromeBook / iOS / 容量不足時に **自動退去**（eviction）されることがあります。**消えても困らない設計** にする / `navigator.storage.persist()` で **退去耐性** をリクエスト:
 
-- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替え。Compiler が判断しても明示する方が読みやすい
-- **deep compare** が必要な場合: lodash の `isEqual` で比較したい時など
-- **API 互換**: 公開ライブラリ（コンパイラ前提に強制できない）
+```js
+const granted = await navigator.storage.persist();
+if (granted) console.log("永続化 OK");
+```
 
-### React 19 / Next.js 16 / React Compiler の関係
+ただしユーザーの Bookmark / インストール等の条件次第。
 
-整理すると:
+### `Cache API` との違い
 
-- **React 19**: Hooks 中心の API（`useEffectEvent` / `cacheSignal` / `<Activity />`）
-- **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
-- **Next.js 16**: Turbopack 標準、Cache Components、`reactCompiler` 設定が stable
+Service Worker と一緒に出てくる **`Cache API`**（「Service Worker と PWA 深掘り」）と IndexedDB は **別物**:
 
-3 つは **独立に進化** していて、組み合わせは選択可能。
+| | Cache API | IndexedDB |
+|---|---|---|
+| 単位 | Request / Response | 任意のオブジェクト |
+| 用途 | HTTP リソースの保存 | アプリのデータ保存 |
+| クエリ | URL マッチ | インデックス検索 |
+| トランザクション | なし | あり |
 
-### よくある誤解
+「画像や HTML を保存 → Cache API」、「ユーザーが編集中の下書き → IndexedDB」と覚えればよいです。
 
-- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけ。本質的なボトルネックは別
-- 「**全 useMemo を消すべき**」→ Compiler 任せでも動くが、**読みやすさのために残す** のはアリ
-- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要
+### IndexedDB のオフライン同期パターン
+
+```
+[ユーザー操作] → IndexedDB に保存（pending）
+                       ↓
+              [ネットがある時]
+                       ↓
+              バックエンドに POST
+                       ↓
+            成功したら IndexedDB のフラグを更新
+```
+
+- 書き込みは **常にローカルに保存**（UI が即座に反応）
+- バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
+- 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
+
+ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+
+### よくある罠
+
+- **transaction が auto-commit する**: `await` を別の Promise で挟むと **トランザクションが終わってしまう**。同じ tx の中ではすべての操作を **同期的に並べる**
+- **構造化クローンの制約**: 関数 / シンボル / DOM ノードは保存できない
+- **大量レコード**: `cursor` で逐次処理する。`getAll()` でメモリ爆発に注意
+- **iOS Safari**: 古いバージョンで挙動が不安定。最新版（17 / 18 系）はかなり改善
+- **マイグレーション**: `version` を上げて `upgrade` 内で `objectStoreNames` をチェックして差分を当てる
 
 ## 演習
 
-> **このレッスンはローカル前提**: React Compiler の Babel プラグインを Next.js のビルドパイプラインに統合する都合上、**ローカルでの Node.js 実行を前提** にしています。StackBlitz の Next.js テンプレでも同じ手順は走りますが、ビルド時間が長くなり Compiler の確認が分かりにくいので、ローカル環境での実行を推奨します。
-
 ### ゴール
 
-- Next.js 16 で React Compiler を有効化する
-- `useMemo` / `useCallback` を消しても動くことを確認
-- ESLint プラグインで違反を検出する
+- Dexie.js で **オフラインメモアプリ** を作る
+- `localStorage` 比較で「容量 / 非同期 / 検索」の差を体感する
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest compiler-sample --ts --app
-cd compiler-sample
+npm create vite@latest indexeddb-sample -- --template react-ts
+cd indexeddb-sample
+npm install
+npm install dexie dexie-react-hooks
 ```
 
-### 手順 2: React Compiler を有効化
+### 手順 2: DB の定義
 
-`next.config.ts`:
+`src/db.ts`:
 
 ```ts
-import type { NextConfig } from "next";
+import Dexie, { Table } from "dexie";
 
-const nextConfig: NextConfig = {
-  reactCompiler: true,
-};
+export interface Memo {
+  id?: number;
+  title: string;
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
-export default nextConfig;
+class MemoDB extends Dexie {
+  memos!: Table<Memo, number>;
+  constructor() {
+    super("memo-app");
+    this.version(1).stores({
+      memos: "++id, updatedAt",
+    });
+  }
+}
+
+export const db = new MemoDB();
 ```
 
-### 手順 3: ESLint プラグインを導入
+### 手順 3: メモ一覧 + 追加
 
-```bash
-npm install -D eslint-plugin-react-compiler
-```
-
-`eslint.config.mjs`（Next.js 16 デフォルト）に追加:
-
-```js
-import reactCompiler from "eslint-plugin-react-compiler";
-
-const config = [
-  // ...既存
-  {
-    plugins: { "react-compiler": reactCompiler },
-    rules: { "react-compiler/react-compiler": "error" },
-  },
-];
-
-export default config;
-```
-
-### 手順 4: メモ化なしのコンポーネント
-
-`app/page.tsx`:
+`src/App.tsx`:
 
 ```tsx
-"use client";
 import { useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, Memo } from "./db";
 
-export default function Page() {
-  const [items, setItems] = useState([1, 2, 3, 4, 5]);
-  const [filter, setFilter] = useState("");
+export default function App() {
+  const memos = useLiveQuery(
+    () => db.memos.orderBy("updatedAt").reverse().toArray(),
+    [],
+  );
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
 
-  // useMemo を書かない
-  const filtered = items.filter((n) => String(n).includes(filter));
+  const add = async () => {
+    if (!title.trim()) return;
+    await db.memos.add({
+      title,
+      body,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    setTitle("");
+    setBody("");
+  };
+
+  const remove = (id: number) => db.memos.delete(id);
 
   return (
-    <main style={{ padding: 24 }}>
-      <input value={filter} onChange={(e) => setFilter(e.target.value)} />
+    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <h1>オフラインメモ</h1>
+      <div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="タイトル" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="本文" />
+        <button onClick={add}>追加</button>
+      </div>
       <ul>
-        {filtered.map((n) => (
-          <li key={n}>{n}</li>
+        {memos?.map((m) => (
+          <li key={m.id}>
+            <strong>{m.title}</strong> — {new Date(m.updatedAt).toLocaleString()}
+            <p>{m.body}</p>
+            <button onClick={() => remove(m.id!)}>削除</button>
+          </li>
         ))}
       </ul>
-      <button onClick={() => setItems((x) => [...x, x.length + 1])}>追加</button>
     </main>
   );
 }
 ```
 
-`npm run dev` で動作。filter 入力 / 追加ボタンが快適に動くことを確認。
+### 手順 4: 確認
 
-### 手順 5: わざとルール違反
+```bash
+npm run dev
+```
+
+メモを追加し、**ブラウザを閉じて再度開いて** も残っていることを確認。DevTools の Application → IndexedDB → `memo-app` → `memos` で実データが見られる。
+
+### 手順 5: ストレージ使用量を表示
+
+`App` 末尾に追加:
 
 ```tsx
-let counter = 0;
+import { useEffect, useState } from "react";
 
-export default function BadCounter() {
-  counter++;  // レンダリング中の副作用
-  return <p>{counter}</p>;
-}
+const [usage, setUsage] = useState("");
+useEffect(() => {
+  navigator.storage.estimate().then(({ usage, quota }) => {
+    setUsage(`使用 ${Math.round((usage ?? 0) / 1024)}KB / クォータ ${Math.round((quota ?? 0) / 1024 / 1024)}MB`);
+  });
+}, [memos]);
 ```
 
-ESLint がエラーを出します。**修正方法**: state に置き換える / `useEffect` に移す。
-
-### 手順 6: 段階導入を試す
-
-`next.config.ts`:
-
-```ts
-const nextConfig: NextConfig = {
-  reactCompiler: { compilationMode: "annotation" },
-};
-```
-
-このモードで `"use memo"` を書いたコンポーネントだけ変換されます:
-
-```tsx
-"use memo";
-
-export default function CompiledComponent() { /* ... */ }
-```
+`<p>{usage}</p>` を画面に出す。メモを増やすと使用量が増えていくのが見えます。
 
 ### 期待出力
 
-- React Compiler が有効化されたメッセージがビルド時に出る
-- ESLint プラグインがルール違反を **エラー / warning** で出す
-- 動作は手動メモ化版と同じか **わずかに速い**
+- メモがブラウザを閉じても残る
+- `Application → IndexedDB` でストアの中身が見られる
+- ストレージ使用量が表示され、メモ追加で増える
 
 ### 変える
 
-- 手元の React + Vite プロジェクトに Compiler を入れる
-- React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
-- 大量レンダリング（1000 行のリスト）で差を観察
+- `useLiveQuery(() => db.memos.where("title").startsWithIgnoreCase("a").toArray())` のような **検索** を追加
+- DB の `version(2)` で `body` にインデックスを追加し、マイグレーション挙動を観察
+- 大量データ（1 万件）を一括追加して **`getAll` の遅さ** と **`each` cursor の差** を比較
 
-### 自分で書く（4 章 の成果物に適用）
+### 自分で書く（任意）
 
-このコースの **4 章「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト、または手元の React + Vite プロジェクトに React Compiler を入れて **before / after を比較** します。
-
-1. 該当プロジェクトを開く
-2. **React DevTools の Profiler** で、何かアクション（追加・削除など）を 1 回計測 → 「再レンダリング回数」「総時間」をメモ
-3. `babel-plugin-react-compiler` を追加 + `vite.config.ts` に組み込む
-4. **同じアクション** を再度 Profiler で計測
-5. 「再レンダリングが減ったか」「総時間が短くなったか」を観察
-6. 続けて、コード上の `useMemo` / `useCallback` を **1 つずつ削除** して、Profiler の値が変わらないことを確認
-
-これが「Compiler が効いている」直接的な証拠になります。手元に成果物がない場合は、`useMemo` を多用した小さいリスト + フィルタの例を新規に作って試します。
-
-### 単独の任意課題
-
-- `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
-- ベンチマーク（「Core Web Vitals の 3 つの指標と Lighthouse」の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
+- API と同期する Memo アプリを作る（**ローカルに保存 → サーバーに同期**）
+- 画像（Blob）を添付できるようにする
+- `localStorage` から IndexedDB に乗り換えるマイグレーションスクリプトを書く
 
 ## まとめ
 
-- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラ
-- **2025 年 10 月に 1.0 安定版** がリリース、Meta 大規模で実戦投入済み
-- **Next.js 16** で `reactCompiler: true` の設定が stable に
-- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加
-- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提
-- **`eslint-plugin-react-compiler`** で違反を検出 → 直すか `"use no memo"` で対象外に
-- 段階導入は **`compilationMode: "annotation"`** から
-- 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
-- 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい
+- `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
+- 用語: **database / objectStore / transaction / cursor**
+- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
+- React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
+- 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
+- クォータ / 退去 / `navigator.storage.persist()` を意識する
+- オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番

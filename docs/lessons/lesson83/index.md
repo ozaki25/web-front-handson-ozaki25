@@ -1,210 +1,229 @@
-# lesson83: 環境変数の基本
+# lesson83: Proxy で認証前処理
 
 ## ゴール
 
-- `.env.local` に環境変数を書いて `process.env` から読める
-- `NEXT_PUBLIC_` プレフィックスの意味を理解する
-- Server Component と Client Component で **読める変数が違う** ことを体感する
-- `.env.local` が `.gitignore` に入っている前提を知る
+- `proxy.ts` を使ってリクエストに割り込める
+- 認証状態（Cookie）に応じてリダイレクトできる
+- Node.js ランタイムで動くことと、軽量処理に留めるべき理由を理解する
+- `matcher` で適用範囲を絞れる
 
 ## 解説
 
-### なぜ環境変数か
+### Proxy とは
 
-アプリには「環境ごとに変えたい値」があります。
+**Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
 
-- ローカル開発では `http://localhost:3000` の API、本番では `https://api.example.com` の API を叩きたい
-- 開発用のテスト API キー、本番用のリリース API キー
-- 機能フラグ（開発では有効、本番では無効）
+::: tip Next.js 15 以前の `middleware.ts` から改名
+Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
+:::
 
-これをコード本体に直接書くと、環境を変えるたびにコード修正 → デプロイが必要になり、シークレット（秘密鍵）の場合はリポジトリに漏れる危険もあります。
+配置ルール:
 
-そこで、**環境変数**（Environment Variables）として外に出します。Next.js では `.env.local` というファイルに書く形が標準です。
+- ファイル名は **`proxy.ts`**（または `.js`） 固定
+- 配置はプロジェクトルート直下（`app/` ディレクトリの横に置く）
+- 1 つのプロジェクトに 1 ファイルのみ
 
-### `.env.local` の書き方
-
-プロジェクトルート直下に `.env.local` を作り、`KEY=VALUE` の形で書きます。
-
-```
-NEXT_PUBLIC_APP_NAME=My Todo App
-APP_SECRET=super-secret-value
-```
-
-- 1 行 1 変数、`=` の左右にスペース不要
-- クォートは不要（ただし空白を含むならクォートも可）
-- ファイル末尾に改行を入れておく
-
-**`.env.local` は `.gitignore` に入っている** のがデフォルト（`create-next-app` で作ったプロジェクトはこうなっています）。シークレットがリポジトリに入らない仕組みです。
-
-### 読み方は `process.env.XXX`
-
-コード側から読むときは、`process.env` オブジェクトを使います。
+### 最小の proxy
 
 ```ts
-const name = process.env.NEXT_PUBLIC_APP_NAME; // "My Todo App"
-const secret = process.env.APP_SECRET;          // "super-secret-value"（サーバー側のみ）
+// proxy.ts
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function proxy(request: NextRequest) {
+  // ここに前処理を書く
+  return NextResponse.next(); // 通常通りページを表示
+}
 ```
 
-戻り値は常に `string | undefined`（TS の型）。値が無ければ `undefined` です。
+- 引数 `request` は `NextRequest`（通常の `Request` に Next.js 独自の機能を追加したもの）
+- export は **named `proxy` 関数** または **default export** のどちらかで書けます
+- 戻り値:
+  - `NextResponse.next()` → そのままページへ
+  - `NextResponse.redirect(url)` → リダイレクトする
+  - `NextResponse.rewrite(url)` → URL はそのままで別ページを表示（中身を差し替え）
 
-### `NEXT_PUBLIC_` プレフィックスの意味
+### `matcher` で適用範囲を絞る
 
-Next.js には重要なルールがあります。
+デフォルトでは **すべてのリクエスト** で proxy が動きます。特定のパスだけで動かすには `config.matcher` を書きます。
 
-> **`NEXT_PUBLIC_` で始まる変数だけが、Client Component からも読める。**
-> **それ以外の変数は、Server Component・Route Handlers・Server Actions からしか読めない。**
+```ts
+export const config = {
+  matcher: ["/todos/:path*", "/admin/:path*"],
+};
+```
 
-なぜか:
+- `/todos/:path*` は `/todos` と `/todos/*` の全部にマッチ
+- 静的アセット（画像・CSS）など余計なものを避ける
 
-- **サーバー側のみ** = ブラウザに配信される JS に値が入らない。シークレットを隠せる
-- **`NEXT_PUBLIC_` 付き** = ビルド時にクライアント JS に値が埋め込まれる。公開しても構わない値だけ付ける
+### Node.js ランタイムで動く
 
-逆に言うと、`NEXT_PUBLIC_` で始まる変数は **ブラウザのソースを開けば全員が見える** ので、シークレットには絶対に付けません。
+Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
 
-### `NEXT_PUBLIC_` の値は「一度公開したら取り消せない」
+重要な指針:
 
-`NEXT_PUBLIC_` で始まる値は **ビルド時に JS バンドルへ焼き込まれて配信されます**。これが意味するのは:
+- **重い処理は proxy に書かない**。ユーザー認証の JWT 署名検証や細かい権限チェックは Server Components / Server Actions に寄せる
+- proxy は「Cookie が無ければログインへ飛ばす」のような **トラフィック制御** に絞る
 
-- **CDN / ブラウザキャッシュ / Service Worker** に値が残り、デプロイをロールバックしても回収できない
-- **Git の履歴に `.env.local` を誤って commit してしまった場合**、後から削除しても commit ハッシュをたどれば閲覧可能（force push と git history 削除も完全ではない）
-- **リファラ / アクセスログ / 第三者の Web Archive** に URL ごと値が残ることもある
+「Route Handlers」と同じ Node.js ランタイム上で動きますが、**ページ本体の前に毎回走る** ぶん、オーバーヘッドが気になりやすい点に注意してください。
 
-そのため、誤って `NEXT_PUBLIC_API_SECRET=...` のようにシークレットを付けてしまったら、**まずそのキーを発行元でローテート（無効化＋再発行）するのが優先**です。コード修正 / デプロイで取り消すことはできません。
+### 本コースの範囲
 
-### 命名の指針
+本レッスンでは **最小形の認証前処理** だけを扱います。
 
-- 公開しても困らない（URL、アプリ名、GA トラッキング ID など）: `NEXT_PUBLIC_` を付ける
-- 公開すると困る（API キー、DB 接続文字列、JWT の秘密鍵など）: プレフィックスなし
+- Cookie `auth` がある → 通す
+- Cookie `auth` が無い → `/login` にリダイレクト
+
+本格的な認証（NextAuth、JWT 検証、セッション管理）は扱いません。「認証のガワを書く感じ」を体験するだけです。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`.env.local` と `app/env-test/` 配下の 2 ファイルを新規作成するだけです。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`proxy.ts` と `app/login/page.tsx` の 2 ファイルが中心です。`/todos` ページが存在しない場合は、最小形の `app/todos/page.tsx`（`<h1>TODO 一覧</h1>` だけでも可）を用意すれば `matcher` の挙動を確認できます。
 
 ### ゴール
 
-- `.env.local` に 2 種類の変数を書く
-- Server Component と Client Component からそれぞれ読み、**プレフィックスなしの変数は Client では `undefined` になる** ことを体感する
-- 本番（Vercel）での設定は「Vercel にデプロイする」でまとめて扱う
+- `/todos` にアクセスしたとき、Cookie `auth` が無ければ `/login` にリダイレクトする
+- `/login` ページで「ログイン」ボタンを押すと Cookie が立って `/todos` に戻れる
 
 ### 手順
 
-1. 5 章 の既存プロジェクトを開く（どれでも可）
-2. プロジェクトルートに `.env.local` を新規作成
-3. 新しいページ `app/env-test/page.tsx`（Server Component）と `app/env-test/ClientView.tsx`（Client Component）を作る
-4. プレビューで両方を比較
+1. これまでのプロジェクトを開く（5 章 のここまでの成果を引き継ぐ）
+2. `proxy.ts` をプロジェクトルート直下に新規作成
+3. `app/login/page.tsx` を新規作成
 
-### `.env.local`（プロジェクトルート直下）
+### `proxy.ts`（プロジェクトルート直下）
 
+```ts
+import { NextResponse } from "next/server";
+import type { NextRequest } from "next/server";
+
+export function proxy(request: NextRequest) {
+  const auth = request.cookies.get("auth");
+
+  if (!auth) {
+    // /login にリダイレクト
+    const loginUrl = new URL("/login", request.url);
+    return NextResponse.redirect(loginUrl);
+  }
+
+  return NextResponse.next();
+}
+
+export const config = {
+  matcher: ["/todos/:path*"],
+};
 ```
-NEXT_PUBLIC_APP_NAME=私の TODO アプリ
-APP_SECRET=super-secret-value
-```
 
-`.env.local` を編集した後は **開発サーバーを再起動** する必要があります（StackBlitz なら自動再起動、ローカルなら `Ctrl+C` → `npm run dev`）。
+ポイント:
 
-### `app/env-test/page.tsx`（Server Component）
+- `request.cookies.get("auth")` で Cookie を読む
+- `NextResponse.redirect(loginUrl)` でリダイレクト
+- `matcher` で `/todos` 配下だけに適用（`/` や `/about` は素通り）
+
+### `app/login/page.tsx`（新規）
 
 ```tsx
-import { ClientView } from "./ClientView";
+"use client";
 
-export default function EnvTestPage() {
-  const appName = process.env.NEXT_PUBLIC_APP_NAME;
-  const secret = process.env.APP_SECRET;
+import { useRouter } from "next/navigation";
+
+export default function LoginPage() {
+  const router = useRouter();
+
+  function handleLogin() {
+    // Cookie をその場で立てる（max-age 1 時間）
+    document.cookie = "auth=1; path=/; max-age=3600";
+    // /todos に遷移
+    router.push("/todos");
+  }
 
   return (
     <main>
-      <h1>環境変数のテスト</h1>
-
-      <section>
-        <h2>Server Component から読む</h2>
-        <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
-        <p>APP_SECRET = {secret ?? "(undefined)"}</p>
-      </section>
-
-      <ClientView />
+      <h1>ログイン</h1>
+      <p>
+        本格認証は本コースでは扱いません。下のボタンで Cookie を立てて `/todos`
+        にアクセスできるようにします。
+      </p>
+      <button type="button" onClick={handleLogin}>
+        ログイン
+      </button>
     </main>
   );
 }
 ```
 
-### `app/env-test/ClientView.tsx`（Client Component）
+ポイント:
 
-```tsx
-"use client";
+- `"use client"` を付ける（`document.cookie` や `useRouter` を使うため）
+- ボタンクリックで `document.cookie` を直接書く
+- `useRouter().push("/todos")` で `/todos` に遷移
 
-export function ClientView() {
-  const appName = process.env.NEXT_PUBLIC_APP_NAME;
-  const secret = process.env.APP_SECRET;
+### この演習の Cookie は「学習用」（本物のログインではない）
 
-  return (
-    <section>
-      <h2>Client Component から読む</h2>
-      <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
-      <p>APP_SECRET = {secret ?? "(undefined)"}</p>
-    </section>
-  );
-}
+上の `document.cookie = "auth=1; ..."` は **学習用の擬似ログイン** です。本物の認証では絶対にこの形にしません。理由は次の 3 点。
+
+1. **JavaScript から `document.cookie` で書ける Cookie は、ブラウザ側のすべての JS から読める**。XSS（任意の JS が走る攻撃）が成立すると即漏洩します。
+2. **`HttpOnly` フラグが付いていない**。本物の認証 Cookie には必ず `HttpOnly` を付けて、JS から読めないようにします。`HttpOnly` はサーバー側でしか付けられないため、`document.cookie` で立てた時点で「JS 可視」になっています。
+3. **`SameSite` / `Secure` が指定されていない**。CSRF / 中間者攻撃に対する基本防御が抜けています。
+
+実運用では、認証 Cookie はサーバー側（Server Action や Route Handler）で次のように発行します。
+
+```ts
+// Server Action / Route Handler 内で（例）
+import { cookies } from "next/headers";
+
+(await cookies()).set("session", token, {
+  httpOnly: true,        // JS から読めない
+  secure: true,          // HTTPS のみ送信
+  sameSite: "lax",       // 別オリジンからの送信を制限（CSRF 対策）
+  maxAge: 60 * 60 * 24,  // 1 日
+  path: "/",
+});
 ```
+
+本コースでは認証フローには深入りしないため、この演習では学習用の擬似 Cookie を使いますが、**実装するときは「JS から `document.cookie` を書く」を絶対にしない** と覚えてください。本格的な認証は Auth.js / NextAuth など専用ライブラリに任せます。
 
 ### 期待出力
 
-`/env-test` にアクセスすると、次のような表示になります。
-
-- **Server Component から読む**
-  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
-  - `APP_SECRET = super-secret-value`
-- **Client Component から読む**
-  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
-  - `APP_SECRET = (undefined)` ← **ここが重要**
-
-`APP_SECRET` は Client 側では読めません。これが「サーバー専用の変数」と「クライアントに公開される変数」の違いを体感する瞬間です。
-
-### さらに確認: ブラウザのソースを見る
-
-1. `/env-test` を開いた状態で、ブラウザで「ページのソースを表示」
-2. HTML ソース内で `super-secret-value` を検索 → **見つからない**（Client Component のバンドル JS にも含まれない）
-3. `私の TODO アプリ` を検索 → 見つかる（`NEXT_PUBLIC_` なのでクライアントに配信されている）
-
-シークレットが本当に漏れない仕組みになっていることを確認できます。
+1. Cookie が何もない状態で `/todos` にアクセス → `/login` にリダイレクトされる
+2. 「ログイン」ボタンを押す → `/todos` に遷移、一覧が見える
+3. DevTools → Application → Cookies で `auth=1` が登録されているのが確認できる
+4. Cookie を削除してから `/todos` にアクセスし直す → また `/login` に戻される
 
 ### 変える
 
-- `APP_SECRET` の名前を `NEXT_PUBLIC_APP_SECRET` に変えると、Client 側でも読めるようになる（が、シークレットを付けるのは NG）
-- 新しい変数 `NEXT_PUBLIC_API_URL=https://jsonplaceholder.typicode.com` を追加し、Client 側で `fetch(process.env.NEXT_PUBLIC_API_URL + "/posts")` して動作確認
+- Cookie 名を `session` に変えて、`proxy.ts` と `login/page.tsx` の両方を追随する
+- `matcher` を `["/todos/:path*", "/admin/:path*"]` に増やして、`/admin/page.tsx` を作り、そちらでもリダイレクトが効くことを確認
+- `NextResponse.redirect` を `NextResponse.rewrite` に変えて挙動の違いを見る（URL が書き換わらないで表示が変わる）
+- `export function proxy(...)` を `export default function(...)` に書き換えて、どちらでも動くことを確認
 
 ### 自分で書く
 
-- `NEXT_PUBLIC_GA_ID`（Google Analytics の ID 仮置き、`G-XXXXXX` のような値）を追加し、Server Component のレイアウトに表示する
-- `DB_URL=postgres://user:pass@localhost/mydb` を追加し、Server Component でだけ表示する（Client に漏れないことを確認）
+- 「ログアウト」ボタンを `/login` に追加し、Cookie を消す:
+  ```ts
+  document.cookie = "auth=; path=/; max-age=0";
+  ```
+- `/todos` のページヘッダーに「ログイン中」と表示し、Cookie が無いとリダイレクトされるので逆に常に「ログイン中」しか出ないことを確認
 
-### 本番対比の予告
+### Route Handlers との組み合わせ（発展）
 
-ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **「Vercel にデプロイする」** でまとめて扱います。
+これまでのレッスンで作った `/api/todos` も、proxy で認証必須にできます。
 
-本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
+```ts
+export const config = {
+  matcher: ["/todos/:path*", "/api/todos/:path*"],
+};
+```
 
-### 環境ごとに値を分ける（Production / Preview / Development）
-
-Vercel など主要なホスティングでは、環境変数を **Production / Preview / Development の 3 つ** に分けて設定できます。実務ではこの 3 つに **別々の値** を入れるのが定石です。
-
-- **Production**: 本番ドメイン（`https://my-app.com`）で読み込まれる値
-- **Preview**: PR ごとに作られるプレビュー URL（`https://my-app-pr-42.vercel.app` のような）で読み込まれる値
-- **Development**: ローカルの `.env.development.local` で読み込まれる値（個人開発機向け）
-
-たとえば DB やアナリティクス、フィーチャーフラグの SDK key は **Preview と Production で別の環境** を指すように設定します。同じ値を使い回すと、
-
-- Preview の動作確認が **本番 DB のデータを書き換える事故** を起こす
-- A/B テスト・アナリティクスの計測値に **開発者の挙動が混ざる**
-- 本番フラグを **誤って Preview から ON にしてしまう**
-
-といった事故になります。Vercel なら `Settings → Environment Variables` で各変数に対して **適用環境にチェックを入れる** UI があるので、新規追加時は「3 つ全部にチェック」ではなく **環境ごとに必要な値を分ける** ことを意識してください。
+これで `/api/todos` を Cookie なしで叩くと `/login` にリダイレクトされるようになります。API の場合は通常 401 を返すほうが妥当なので、実務ではもう少し分岐を書きますが、本コースでは「proxy で API も守れる」ことだけ押さえます。
 
 ## まとめ
 
-- 環境変数は `.env.local` に `KEY=VALUE` で書く
-- `process.env.XXX` で読む。戻り値は `string | undefined`
-- **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
-- シークレットには絶対に `NEXT_PUBLIC_` を付けない
-- `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない
+- `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
+- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
+- `NextResponse.next` / `redirect` / `rewrite` で分岐
+- `matcher` で適用パスを絞る
+- Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める
+- 本格認証は本コース外。擬似ログインで流れだけ掴む

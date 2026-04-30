@@ -1,427 +1,589 @@
-# lesson127: エラートラッキング（Sentry）
+# lesson127: Server Components の設計論
 
 ## ゴール
 
-- 本番のエラーを **見逃さず通知する** 仕組みの必要性を理解する
-- Sentry を React / Next.js プロジェクトに導入できる
-- Source Map で **minified コードを元のコードに復元** する流れが分かる
-- ユーザーコンテキスト / タグ / リリースで **エラーを絞り込む** 方法を知る
-- 代替サービス（Datadog / Bugsnag / Rollbar 等）の位置付けを把握する
+- 「**どこまでサーバー、どこから Client**」の判断軸を持てる
+- データ取得とインタラクションの **分離** が説明できる
+- Server Actions と Client Component の **協調パターン** を書ける
+- よくある設計ミス（巨大 Client Component / 不要なシリアライズ）を避けられる
+- 自分の Next.js プロジェクトで Server / Client の境界設計を整理できる
+
+::: tip 前提
+このレッスンは「Server Component と Client Component」「Server Component でデータ取得」「Server Actions の最小形」の発展編です。基本概念はそれぞれのレッスンで確認してください。
+:::
 
 ## 解説
 
-### なぜエラートラッキングが必要か
+### Server / Client の境界判断
 
-開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
+Next.js App Router では **すべてのコンポーネントがデフォルトで Server Component**。Client Component にしたい時に **`"use client"`** を明示します。
 
-エラートラッキングサービスは:
+判断の **基本原則**:
 
-- ブラウザで起きたエラーを **自動収集** する
-- スタックトレース / OS / ブラウザ / URL / 直前の操作（breadcrumbs）を一緒に送る
-- **集約・重複排除** してダッシュボードに並べる
-- Slack / Email / PagerDuty に **通知** する
-- リリース単位で「**この版で増えたエラー**」を可視化する
+1. **デフォルトは Server**（バンドルから外せて速い）
+2. **状態 / イベントが必要な葉だけ Client**（最小限）
+3. **Client は子に Client / Server を持てるが、Server を import するなら children prop 経由**
 
-これがあるかないかで、本番運用の体感が大きく変わります。
+### Client Component が必要な合図
 
-### Sentry の位置付け
+次のいずれかが要るなら Client Component:
 
-[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
+- `useState` / `useReducer` で **state を持つ**
+- `useEffect` で **副作用** を行う
+- `onClick` / `onChange` などの **イベントハンドラ**
+- `useRef` / `useContext` などの Hook
+- ブラウザ API（`window` / `localStorage` / `navigator`）
 
-特徴:
+それ以外は **Server Component に置いた方が良い**:
 
-- React / Next.js / Node.js / モバイルなど **多言語対応**
-- パフォーマンス監視 / セッションリプレイ / プロファイリングも統合
-- Source Map アップロードが整っていて、**minify されたコードでも元のコードで読める**
-- 月 5,000 イベントまで **無料枠**
+- データ取得（DB / 外部 API）
+- マークダウンや HTML のレンダリング
+- 認証情報を使う処理（Cookie 読み取り）
+- フォントやレイアウト
 
-### React に導入する最小手順
+### 「Client Component が大きすぎる」アンチパターン
 
-```bash
-npm install @sentry/react
-```
-
-`src/main.tsx`（最初の方）:
+**よくある失敗**: ページ全体を Client Component にしてしまう。
 
 ```tsx
-import * as Sentry from "@sentry/react";
-
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,        // パフォーマンス計測。本番は 0.1 程度に
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: import.meta.env.VITE_APP_VERSION,
-});
-```
-
-`.env`:
-
-```
-VITE_SENTRY_DSN=https://xxxxx@oXXX.ingest.sentry.io/12345
-VITE_APP_VERSION=1.0.0
-```
-
-DSN は Sentry の管理画面で「プロジェクトの設定」から取得します。
-
-> **補足: DSN は公開してよい値だが、悪用対策は別途**: `VITE_SENTRY_DSN` は `VITE_` プレフィックスのとおり **クライアントバンドルに埋め込まれる** ため、ブラウザの DevTools で誰でも読めます。Sentry の DSN は **設計上公開して構わない値** で、認証が必要な操作（プロジェクト削除等）はできません。ただし第三者がフェイクのエラーを送りつけて **イベント枠を食い潰す** 攻撃は可能なので、本番では Sentry プロジェクト設定の「**Allowed Domains**」で自分のサイトのオリジンに制限し、必要に応じて **Inbound Filters / Rate Limit** も併用します。CSRF や認証情報を持つ API キーとは扱いが違うこと、ただし完全に放置してよいわけではないこと、の 2 点を覚えておきます。
-
-### エラーを意図的に送る
-
-#### 自動的に拾われるもの
-
-- 未捕捉の `throw`
-- 未処理の Promise rejection
-- React のレンダリング中エラー（後述の Error Boundary 経由）
-
-#### 手動で送る
-
-```tsx
-try {
-  await someApi();
-} catch (e) {
-  Sentry.captureException(e);
-  throw e;  // 必要なら再 throw
-}
-
-// メッセージだけ送る
-Sentry.captureMessage("ユーザーが何度もログインに失敗");
-```
-
-### React の Error Boundary と統合
-
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（「Error Boundary と Suspense」と相性 ◎）。
-
-```tsx
-import * as Sentry from "@sentry/react";
-
-const App = () => (
-  <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-    <Routes />
-  </Sentry.ErrorBoundary>
-);
-```
-
-これだけで「**Error Boundary が捕まえた React レンダリングエラー** が Sentry に届く」状態になります。
-
-### Next.js に導入する最小手順
-
-[Sentry の Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/) は **ウィザード** で 1 コマンド導入できます。
-
-```bash
-npx @sentry/wizard@latest -i nextjs
-```
-
-ウィザードが行うこと:
-
-- プロジェクトの選択 / DSN の設定
-- `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
-- `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
-- `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
-- `next.config.ts` を `withSentryConfig` でラップ
-- ビルド時に **Source Map を自動アップロード** する設定を追加
-
-```ts
-// next.config.ts（生成例）
-import { withSentryConfig } from "@sentry/nextjs";
-
-const nextConfig = {
-  /* 既存の Next.js 設定 */
-};
-
-export default withSentryConfig(nextConfig, {
-  org: "your-org",
-  project: "your-project",
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
-});
-```
-
-**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
-
-### Source Map とは
-
-本番ビルドの JS は **minify** されて変数名が `a` / `b` になり、行も詰められています。これだとスタックトレースを見ても **どのコードか分からない**。
-
-Source Map は「minify 後の位置 → 元のソースの行・列」のマッピング情報です。これがあると:
-
-```
-TypeError: Cannot read property 'foo' of undefined
-  at a.b.c (index-Xj9k2.js:1:12345)
-```
-
-が:
-
-```
-TypeError: Cannot read property 'foo' of undefined
-  at UserProfile.fetchData (src/components/UserProfile.tsx:42:18)
-```
-
-に **復元** されます。
-
-#### Sentry の Source Map 運用
-
-- **ビルド時に Source Map を生成**（`vite build` / `next build`）
-- それを **Sentry にアップロード**（公開しない）
-- Sentry の管理画面で **元のソースで** スタックトレースが見られる
-
-`@sentry/nextjs` のウィザードがビルド時のアップロードまで設定してくれるので、最近は手動設定の必要が減りました。
-
-::: warning Source Map をブラウザに公開しない
-Source Map をそのまま `dist/` に置いてデプロイすると、**元のソースが誰でも読める** 状態になります。Sentry にアップロードして、ビルド成果物からは削除（または `.map` を CDN に出さない）するのが安全。
-:::
-
-### ユーザーコンテキスト
-
-「**誰の** エラーか」が分かると原因究明が圧倒的に早くなります。
-
-```ts
-Sentry.setUser({
-  id: user.id,
-  email: user.email,
-  username: user.name,
-});
-```
-
-ログアウト時:
-
-```ts
-Sentry.setUser(null);
-```
-
-::: tip 個人情報の扱い
-メールアドレスや氏名は **個人情報**。GDPR / 個人情報保護法的に、ユーザー同意やデータ最小化が必要です。本番では **ID だけ送る** / **ハッシュ化する** などの運用が無難。
-:::
-
-### タグとコンテキスト
-
-タグは「**フィルタ用** の短い key-value」、コンテキストは「**詳細データ**」です。
-
-```ts
-// タグ（ダッシュボードで絞り込みに使える）
-Sentry.setTag("page", "checkout");
-Sentry.setTag("payment-provider", "stripe");
-
-// コンテキスト（イベントに添付される詳細）
-Sentry.setContext("cart", {
-  items: 3,
-  total: 12000,
-  currency: "JPY",
-});
-```
-
-### リリース管理
-
-「この版で増えたエラー」を見るには、`release` と `environment` を設定します。
-
-```ts
-Sentry.init({
-  dsn: "...",
-  release: "my-app@1.2.3",       // package.json のバージョンや Git の SHA
-  environment: process.env.NODE_ENV,
-});
-```
-
-CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知すると、ダッシュボードで:
-
-- 「リリース 1.2.3 で **新規** に出たエラー」
-- 「リリース 1.2.2 では出ていなかったが 1.2.3 で **退行** したエラー」
-- 「修正済みリリース」
-
-がトラッキングできます。
-
-### Breadcrumbs
-
-エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
-
-- ボタンクリック / フォーム送信
-- ページ遷移
-- ネットワークリクエスト
-- console.log（任意）
-
-```ts
-Sentry.addBreadcrumb({
-  category: "checkout",
-  message: "クーポンコードを適用",
-  level: "info",
-});
-```
-
-「エラー発生 5 秒前にこのボタンを押している」が分かるので **再現が容易** になります。
-
-### セッションリプレイ
-
-Sentry の **Session Replay** を有効にすると、エラー発生時の **画面録画** が見られます（DOM の差分を記録するので画像ではなく軽い）。
-
-```ts
-Sentry.init({
-  // ...
-  integrations: [Sentry.replayIntegration()],
-  replaysSessionSampleRate: 0.1,   // 通常セッションの 10%
-  replaysOnErrorSampleRate: 1.0,   // エラーが起きたセッションは 100%
-});
-```
-
-「**ユーザーがどう操作してエラーに辿り着いたか**」が動画で分かるのは強烈です。ただし **個人情報の保護** が必要（パスワード入力欄などはマスクする設定）。
-
-### 代替サービス
-
-| サービス | 特徴 |
-|---|---|
-| **Sentry** | OSS / 自前ホスト可。フロント・バック両方 |
-| **Datadog** | 監視全部入り（メトリクス / ログ / APM / RUM）。運用の重心が APM 寄り |
-| **Bugsnag** | エラートラッキング特化。料金体系がシンプル |
-| **Rollbar** | 老舗のエラートラッキング。深い検索機能 |
-| **LogRocket** | セッションリプレイが強み |
-| **Honeybadger** | 開発者にやさしい価格 |
-
-「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
-
-### Edge / Worker 環境での扱い
-
-Cloudflare Workers / Vercel Edge Functions では従来の Sentry SDK が動きにくかったですが、2026 年現在は **`@sentry/cloudflare` / `@sentry/vercel-edge`** など環境別 SDK が整備されています。Next.js の Edge Middleware は `@sentry/nextjs` の `sentry.edge.config.ts` で対応します。
-
-## 演習
-
-### ゴール
-
-- React + Vite プロジェクトに Sentry を入れる
-- 意図的にエラーを起こして Sentry に届くことを確認する
-- ユーザーコンテキストとタグを付ける
-
-### 手順 1: Sentry アカウントとプロジェクト作成
-
-[sentry.io](https://sentry.io/) で無料アカウントを作り、**新規プロジェクト**（platform = React）を作成。**DSN** を控えます。
-
-### 手順 2: 新規 React プロジェクト
-
-```bash
-npm create vite@latest sentry-sample -- --template react-ts
-cd sentry-sample
-npm install @sentry/react
-npm install
-```
-
-### 手順 3: 初期化
-
-`.env`:
-
-```
-VITE_SENTRY_DSN=（控えた DSN を貼る）
-VITE_APP_VERSION=0.1.0
-```
-
-`src/main.tsx`:
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import * as Sentry from "@sentry/react";
-import App from "./App.tsx";
-import "./index.css";
-
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [Sentry.browserTracingIntegration()],
-  tracesSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: `sentry-sample@${import.meta.env.VITE_APP_VERSION}`,
-});
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-      <App />
-    </Sentry.ErrorBoundary>
-  </StrictMode>,
-);
-```
-
-### 手順 4: わざとエラーを起こす
-
-`src/App.tsx`:
-
-```tsx
-import * as Sentry from "@sentry/react";
-import { useState } from "react";
-
-export default function App() {
-  const [crash, setCrash] = useState(false);
-
-  if (crash) {
-    throw new Error("意図的にクラッシュさせた");
-  }
-
-  const sendCustom = () => {
-    Sentry.captureMessage("カスタムメッセージ from Sentry test");
-  };
-
-  const sendException = () => {
-    try {
-      // @ts-expect-error わざと
-      null.foo();
-    } catch (e) {
-      Sentry.captureException(e);
-    }
-  };
-
-  const setUser = () => {
-    Sentry.setUser({ id: "user-123", username: "テストユーザー" });
-    Sentry.setTag("test-run", "manual");
-  };
-
+// app/page.tsx
+"use client";  // 危険信号
+
+export default function HomePage() {
+  // すべての処理がブラウザに送られる
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>Sentry Demo</h1>
-      <button onClick={() => setCrash(true)}>レンダリングエラー</button>
-      <button onClick={sendException}>例外を送信</button>
-      <button onClick={sendCustom}>メッセージを送信</button>
-      <button onClick={setUser}>ユーザーをセット</button>
+    <div>
+      <Header />
+      <Hero />
+      <FeatureList />     {/* 静的でも Client */}
+      <Counter />          {/* これだけ state が必要 */}
+      <Footer />
     </div>
   );
 }
 ```
 
-### 手順 5: 起動して確認
+**バンドルサイズが膨らむ**、**SEO に悪い**、**ハイドレーション** が遅い。
 
-```bash
-npm run dev
+### 改善: Client は **葉に閉じ込める**
+
+```tsx
+// app/page.tsx（Server Component）
+import Header from "@/components/Header";
+import Hero from "@/components/Hero";
+import FeatureList from "@/components/FeatureList";
+import Counter from "@/components/Counter";  // Client
+import Footer from "@/components/Footer";
+
+export default function HomePage() {
+  return (
+    <div>
+      <Header />
+      <Hero />
+      <FeatureList />
+      <Counter />
+      <Footer />
+    </div>
+  );
+}
 ```
 
-ボタンを押して、Sentry のダッシュボードでイベントが届くのを確認します（数秒〜数十秒の遅延あり）。
+```tsx
+// components/Counter.tsx
+"use client";
+import { useState } from "react";
+
+export default function Counter() {
+  const [n, setN] = useState(0);
+  return <button onClick={() => setN(n + 1)}>{n}</button>;
+}
+```
+
+**Counter だけ** がブラウザに送られ、他は Server で解決される。
+
+### Server Component から Client Component に **データを渡す**
+
+これは普通に **props で渡す** だけです。**渡せるのは serializable な値のみ**:
+
+| 渡せる | 渡せない |
+|---|---|
+| 文字列 / 数値 / boolean / null / undefined | 関数 |
+| 配列 / プレーンオブジェクト | クラスインスタンス |
+| Date / Map / Set | Symbol（一部例外） |
+| Promise（React 19 以降） | DOM ノード |
+
+```tsx
+// Server Component
+export default async function Page() {
+  const user = await db.user.findFirst();
+  return <UserCard user={user} />; // user はプレーンオブジェクトなら OK
+}
+```
+
+### Client Component から Server Component を **使う**
+
+直接 import はできません。代わりに **`children` prop** で受け取ります。
+
+```tsx
+// app/layout.tsx（Server Component）
+import Sidebar from "@/components/Sidebar";          // Client
+import RecentPosts from "@/components/RecentPosts";  // Server
+
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <Sidebar>           {/* Client */}
+      <RecentPosts />   {/* Sidebar は中身を知らずに描画 */}
+      {children}
+    </Sidebar>
+  );
+}
+```
+
+```tsx
+// components/Sidebar.tsx
+"use client";
+
+export default function Sidebar({ children }: { children: React.ReactNode }) {
+  return (
+    <aside>
+      <h2>サイドバー</h2>
+      {children}
+    </aside>
+  );
+}
+```
+
+「Client Component の中身に Server Component を **slot で挿入する**」発想。Sidebar は中身がServer か Client かを知らず、ただ描画する。
+
+### Server Actions との協調
+
+Server Actions（「Server Actions の最小形」）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
+
+```tsx
+// app/posts/page.tsx
+import { createPost } from "./actions";
+
+export default function NewPostPage() {
+  return (
+    <form action={createPost}>
+      <input name="title" />
+      <textarea name="body" />
+      <button>投稿</button>
+    </form>
+  );
+}
+```
+
+```ts
+// app/posts/actions.ts
+"use server";
+import { revalidatePath } from "next/cache";
+
+export async function createPost(formData: FormData) {
+  const title = formData.get("title") as string;
+  const body = formData.get("body") as string;
+  await db.post.create({ data: { title, body } });
+  revalidatePath("/posts");
+}
+```
+
+#### Client Component から呼ぶ
+
+```tsx
+"use client";
+import { useTransition } from "react";
+import { createPost } from "./actions";
+
+export default function NewPostForm() {
+  const [pending, startTransition] = useTransition();
+
+  return (
+    <form
+      action={(formData) => {
+        startTransition(async () => {
+          await createPost(formData);
+        });
+      }}
+    >
+      <input name="title" disabled={pending} />
+      <button disabled={pending}>{pending ? "送信中..." : "投稿"}</button>
+    </form>
+  );
+}
+```
+
+`useTransition` で **送信中** の UI を切り替え。Server Component に **戻り値** を返すこともできます。
+
+### `useActionState`（旧 `useFormState`）
+
+React 19 / Next.js 16 では `useActionState` で **action の結果を state として** 受け取れます。
+
+```tsx
+"use client";
+import { useActionState } from "react";
+import { createPost } from "./actions";
+
+const initialState = { ok: false, error: "" };
+
+export default function NewPostForm() {
+  const [state, formAction, pending] = useActionState(createPost, initialState);
+
+  return (
+    <form action={formAction}>
+      <input name="title" />
+      <button disabled={pending}>投稿</button>
+      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
+      {state.ok && <p>投稿しました</p>}
+    </form>
+  );
+}
+```
+
+```ts
+"use server";
+export async function createPost(prev: any, formData: FormData) {
+  try {
+    await db.post.create({ data: {/* ... */} });
+    return { ok: true, error: "" };
+  } catch (e) {
+    return { ok: false, error: "保存失敗" };
+  }
+}
+```
+
+「Server Action から **エラーメッセージを返す**」が型安全に書けます。
+
+### よくある設計ミス
+
+#### 1. データを Server Component で取って **JSON に詰めて Client Component に丸投げ**
+
+```tsx
+// NG パターン
+export default async function Page() {
+  const posts = await db.post.findMany();  // Server で取得
+  return <PostListClient posts={posts} />; // 全部 Client にバンドル
+}
+```
+
+→ 結局すべて JS にシリアライズされて送られる。**せっかくの Server Component の意味が薄れる**。
+
+改善: **表示は Server で**、操作だけ Client に切り出す。
+
+```tsx
+// 改善
+export default async function Page() {
+  const posts = await db.post.findMany();
+  return (
+    <ul>
+      {posts.map((p) => (
+        <li key={p.id}>
+          <h2>{p.title}</h2>
+          <p>{p.body}</p>
+          <DeleteButton postId={p.id} />  {/* Client は削除ボタンだけ */}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+#### 2. Server Component の中で Client Component を再描画させたい
+
+Server Component の **再実行はナビゲーション / 再検証** がトリガー。「state が変わったので再取得」したい時は:
+
+- **Server Action + `revalidatePath()`**（推薦）
+- **Client 側で fetch**（やむを得ない時）
+
+```ts
+"use server";
+export async function deletePost(id: string) {
+  await db.post.delete({ where: { id } });
+  revalidatePath("/posts");  // Server Component を再実行
+}
+```
+
+#### 3. Server / Client を混ぜてシリアライズ不能なものを渡す
+
+```tsx
+// NG: 関数を渡す
+<ClientComponent onClick={() => doSomething()} />
+```
+
+→ Server Component から関数は **渡せない**。`onClick` を持つロジックは **Client Component の中** で完結させる。
+
+#### 4. `"use client"` の場所を間違える
+
+```tsx
+// app/page.tsx（Server Component）
+"use client";   // ファイルの先頭でないと無効
+```
+
+`"use client"` は **ファイルの先頭** に書く必要があります。途中に書いても効きません。
+
+### `server-only` と `client-only`
+
+「**意図しない場所で import される事故**」を防ぐ仕組み。
+
+```ts
+// db.ts
+import "server-only";
+
+export const db = /* DB クライアント */;
+```
+
+これを誤って Client Component から import するとビルド時にエラー。**シークレットの漏洩防止** に有効（「環境変数とシークレット管理」）。
+
+```ts
+// browser-utils.ts
+import "client-only";
+
+export function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
+}
+```
+
+逆も同様。
+
+### Suspense と Loading
+
+データ取得中の UI を **Suspense + Loading UI** で書きます（「Error Boundary と Suspense」「Loading UI と Streaming」と関連）。
+
+```tsx
+// app/posts/page.tsx
+import { Suspense } from "react";
+import PostList from "./PostList";
+import PostListSkeleton from "./PostListSkeleton";
+
+export default function Page() {
+  return (
+    <Suspense fallback={<PostListSkeleton />}>
+      <PostList />
+    </Suspense>
+  );
+}
+```
+
+`PostList` が `await` を含む Server Component なら、待ち時間に **Skeleton が表示** される。**ストリーミング SSR** で各部分が **独立に到着** します。
+
+### `cache()` / `cacheSignal()`
+
+Next.js 16 / React 19 では **同一リクエスト内** のデータをメモ化する `cache()` が安定。`cacheSignal()` は React 19.2 時点で **experimental（実験的）** であり、安定 API になるまでは API が変わる可能性があります。
+
+```ts
+import { cache } from "react";
+
+export const getUser = cache(async (id: string) => {
+  return db.user.findUnique({ where: { id } });
+});
+```
+
+複数の Server Component が `getUser("1")` を呼んでも **DB は 1 回しかヒット** しない。リクエストスコープのメモ化。
+
+### 「全体構造」のテンプレート
+
+経験則で次のように分割します:
+
+```
+app/
+├── layout.tsx                    ← Server（フォント / Provider 設置）
+├── page.tsx                       ← Server
+├── components/
+│   ├── Header.tsx                 ← Server
+│   ├── ThemeToggle.tsx            ← Client（state 必要）
+│   ├── PostList.tsx               ← Server（DB 取得）
+│   ├── PostCard.tsx               ← Server（表示のみ）
+│   ├── DeleteButton.tsx           ← Client（onClick → Action）
+│   └── CommentForm.tsx            ← Client（form + useActionState）
+├── posts/
+│   ├── actions.ts                 ← Server Actions
+│   └── [id]/page.tsx              ← Server
+└── api/
+    └── webhook/route.ts           ← Route Handler
+```
+
+### よくある質問
+
+#### Q: 全部 Client にしてもいいか？
+
+→ **動くけど遅い**。バンドルが膨らみ、ハイドレーションも遅い。最低限「データ取得は Server」を守る。
+
+#### Q: 古い React パターン（Pages Router / `getServerSideProps`）から移行するには？
+
+→ Pages Router の `getServerSideProps` は App Router の **Server Component** に置き換わる。**そのまま Server で `await fetch()`** を書けば良い。
+
+#### Q: Edge Runtime と Node.js Runtime の違いは？
+
+→ **Edge** は軽量・高速だが利用できる API に制限がある、**Node.js** は Node API がまるごと使える。App Router は **Server Component / Route Handler とも Node.js Runtime がデフォルト** で、Edge を使いたいファイルだけ `export const runtime = "edge"` で opt-in する。Next.js 16 では **Middleware も Node.js Runtime を選べる** ようになり、Node API を必要とする処理を Middleware に書きやすくなった。
+
+## 演習
+
+### ゴール
+
+- 「ブログ記事一覧 + 投稿フォーム + 削除」を Server / Client の境界を意識して設計する
+- 既存の Client Component を **Server に格上げ** する練習
+
+### 手順 1: 新規プロジェクト
+
+```bash
+npx create-next-app@latest rsc-design --ts --app
+cd rsc-design
+```
+
+### 手順 2: Server Component で一覧
+
+`app/page.tsx`:
+
+```tsx
+import DeleteButton from "./DeleteButton";
+import { posts } from "@/data/posts";
+
+export default async function Home() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.map((p) => (
+          <li key={p.id}>
+            <h2>{p.title}</h2>
+            <p>{p.body}</p>
+            <DeleteButton id={p.id} />
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
+
+`data/posts.ts`（仮データ）:
+
+```ts
+export const posts = [
+  { id: "1", title: "Hello", body: "本文 1" },
+  { id: "2", title: "World", body: "本文 2" },
+];
+```
+
+### 手順 3: Server Action と Client Component
+
+`app/actions.ts`:
+
+```ts
+"use server";
+import { revalidatePath } from "next/cache";
+
+export async function deletePost(id: string) {
+  // 実際には DB から削除
+  console.log("Deleting:", id);
+  revalidatePath("/");
+}
+```
+
+`app/DeleteButton.tsx`:
+
+```tsx
+"use client";
+import { useTransition } from "react";
+import { deletePost } from "./actions";
+
+export default function DeleteButton({ id }: { id: string }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <button
+      disabled={pending}
+      onClick={() => startTransition(() => deletePost(id))}
+    >
+      {pending ? "..." : "削除"}
+    </button>
+  );
+}
+```
+
+### 手順 4: 投稿フォーム（useActionState）
+
+`app/PostForm.tsx`:
+
+```tsx
+"use client";
+import { useActionState } from "react";
+import { createPost } from "./actions";
+
+export default function PostForm() {
+  const [state, action, pending] = useActionState(createPost, { ok: false, error: "" });
+
+  return (
+    <form action={action}>
+      <input name="title" placeholder="タイトル" required />
+      <textarea name="body" placeholder="本文" />
+      <button disabled={pending}>{pending ? "送信中" : "投稿"}</button>
+      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
+      {state.ok && <p>投稿完了</p>}
+    </form>
+  );
+}
+```
+
+`actions.ts` に `createPost` を追加:
+
+```ts
+export async function createPost(prev: any, formData: FormData) {
+  const title = String(formData.get("title") ?? "");
+  if (!title.trim()) return { ok: false, error: "タイトル必須" };
+  console.log("Created:", title);
+  revalidatePath("/");
+  return { ok: true, error: "" };
+}
+```
+
+### 手順 5: 動作確認
+
+`npm run dev` で:
+
+- 記事一覧は **Server で描画**（ソース表示で HTML に文字列が含まれる）
+- 削除ボタンの onClick 部分だけ **Client にハイドレーション**
+- 投稿フォームでバリデーションエラーをサーバーから返却
 
 ### 期待出力
 
-- 「レンダリングエラー」を押すと Error Boundary の fallback が表示され、Sentry にイベントが届く
-- 「例外を送信」で `TypeError` が届く
-- 「メッセージを送信」で文字列イベントが届く
-- 「ユーザーをセット」した後のイベントは **ユーザー情報付き** で届く
-- ダッシュボードで `release: sentry-sample@0.1.0` 付きとして表示される
+- ページの初回 HTML には **記事タイトルと本文がそのまま** 含まれている（Server で描画）
+- 削除 / 投稿のロジックはサーバーで実行
+- バリデーションエラーが Client Component の state に反映
 
 ### 変える
 
-- `tracesSampleRate` を `0.1` にして、パフォーマンス計測のサンプリング率を下げる
-- `Sentry.replayIntegration()` を追加し、セッションリプレイを有効にする
-- `setTag("page", "home")` などタグを増やしてダッシュボードで絞り込みを試す
+- `Suspense` + `loading.tsx` でストリーミング表示にする
+- `cache()` で同じデータの取得を 1 回に集約する
+- `server-only` パッケージを入れて、誤って Client から import されないように守る
 
-### 自分で書く（任意）
+### 自分で書く（手元の Next.js プロジェクトに適用）
 
-- Next.js プロジェクトに `npx @sentry/wizard@latest -i nextjs` で Sentry を入れる
-- API Route の中で意図的にエラーを起こし、Sentry に届くことを確認する
-- ビルド時に Source Map をアップロードして、minify 後のコードが元のソースで表示されることを確認
+これまでのレッスンで作った Next.js プロジェクト（`page.tsx` / 動的ルート / Server Actions などを含むもの）を **境界の目で見直す** 演習です。
+
+1. プロジェクトの全 `.tsx` を `grep "use client"` で抽出 → どれが Client Component か一覧化
+2. 各 Client Component について、**本当に Client が必要か** を確認:
+   - 状態 / イベント / ブラウザ API があるか?
+   - 無いなら `"use client"` を外して Server Component に戻す
+3. **`server-only` パッケージで「壊す」テスト**:
+   - `app/actions.ts` の冒頭に `import "server-only";` を追加
+   - 試しに Client Component から Server Action を import してビルド → **エラーが出る**ことを確認
+4. **データ取得の場所** をチェック: Client Component の `useEffect` 内で `fetch` していないか? あれば Server Component に **吸い上げて props で渡す**
+5. 「`<DeleteButton>` だけが Client、リスト本体は Server」のように **葉に閉じ込める** 形になっているか確認
+
+before / after で「Client にバンドルされる JS」が減っていれば成功です（Network タブで JS の合計サイズを見る）。
+
+### 単独の任意課題
+
+- DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
+- React Compiler（「React Compiler」）と組み合わせて、`useMemo` を消した状態で動かす
 
 ## まとめ
 
-- **エラートラッキング** は「ユーザーが言わなければ気づけないバグ」を救うインフラ
-- Sentry は React / Next.js / Node.js を 1 つの SDK でカバー
-- React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
-- **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
-- `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
-- `release` / `environment` で **退行**（regression） を可視化
-- **Breadcrumbs** と **Session Replay** で再現が容易になる
-- 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
+- **デフォルトは Server Component**、必要な葉だけ `"use client"`
+- データ取得は Server、インタラクションは Client、書き込みは **Server Actions**
+- Client から Server を使うには **children prop** で挿入
+- props は **serializable な値だけ**（関数 / クラスは渡らない）
+- `useActionState` で Server Action の結果を Client の state に
+- 巨大 Client Component / 不要シリアライズ / 関数受け渡しは **アンチパターン**
+- `server-only` / `client-only` で誤 import を防ぐ
+- `Suspense` + Loading UI で **ストリーミング表示**、`cache()` で同一リクエストのメモ化
+- 「全体構造」を Server / Client で **ファイル単位で分割** すると見通しが良い
