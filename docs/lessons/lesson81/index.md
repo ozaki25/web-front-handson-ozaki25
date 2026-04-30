@@ -125,6 +125,8 @@ export function isTodoArray(value: unknown): value is Todo[] {
 }
 
 // 「text だけの入力」を検証するガード（id はサーバー側で作る）
+// 型ガード本来の責務は「形が合っているか」だが、「空文字を弾く」も同じ場所で見ておくと
+// API 側の入り口で簡潔にチェックできる
 export function isTodoInput(value: unknown): value is { text: string } {
   if (typeof value !== "object" || value === null) return false;
   const obj = value as Record<string, unknown>;
