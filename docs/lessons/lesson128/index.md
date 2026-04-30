@@ -118,11 +118,18 @@ await webpush.sendNotification(
 );
 ```
 
-### Background Sync
+### Background Sync（紹介のみ）
 
-「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組みです。
+「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組みです。実装には未送信データを一時保管する場所（IndexedDB）が必要なので、本レッスンでは API の形だけ眺めて、IndexedDB のレッスンで実装に踏み込みます。
 
-Service Worker 側:
+クライアント側で「あとで送る」とタグ付きで登録:
+
+```js
+const reg = await navigator.serviceWorker.ready;
+await reg.sync.register("send-message");
+```
+
+Service Worker 側でタグごとに処理を書く:
 
 ```js
 self.addEventListener("sync", (event) => {
@@ -132,14 +139,9 @@ self.addEventListener("sync", (event) => {
 });
 ```
 
-クライアント側:
+`sendQueuedMessages()` は IndexedDB から未送信データを取り出して `fetch` し、成功したものをキューから消す処理になります（実装は IndexedDB のレッスンで扱います）。
 
-```js
-const reg = await navigator.serviceWorker.ready;
-await reg.sync.register("send-message");
-```
-
-`Periodic Background Sync` は **定期的にバックグラウンドで実行** する仕組みです（権限の関係で制限あり）。
+`Periodic Background Sync` は **定期的にバックグラウンドで実行** する別の API で、権限の関係で対応ブラウザが限られます。
 
 ### `manifest.webmanifest` の主要フィールド
 
@@ -219,7 +221,9 @@ Web Push は **iOS 16.4 以降のみ** 動作します。それより前の iOS 
 
 ### 手順 1: manifest.webmanifest を作成する
 
-lesson127 で作った `pwa-sample` プロジェクトを使います。`vite-plugin-pwa` がマニフェストを自動生成しますが、ここでは手動で置く方法も確認します。
+lesson127 で作った `pwa-sample` プロジェクトを使います。lesson127 では `vite-plugin-pwa` の `manifest` オプションで自動生成していましたが、ここでは **静的ファイルを手動で配置する形** を確認します。両方ある場合、`<link rel="manifest" href="...">` で指定したパスのファイルが優先されます（プラグインの自動生成は `<link>` を後から書き換えない限り上書きされません）。
+
+アイコンは lesson127 の手順で `public/pwa-192.png` / `public/pwa-512.png` を置いている前提です。まだ無ければ、任意の 192×192 / 512×512 PNG を同名で配置してください（無くても manifest 自体は読めますが、DevTools のアイコンプレビューが broken image になります）。
 
 `public/manifest.webmanifest`:
 
@@ -286,7 +290,7 @@ Private Key:
 xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 ```
 
-生成した公開鍵を使って購読コードを書きます。`src/subscribe.ts`:
+生成した公開鍵を使って購読コードを書きます。下のコードは解説で示したクライアント側の購読コードを TypeScript で書き直したものです（`urlBase64ToUint8Array` も同じ実装）。`src/subscribe.ts`:
 
 ```ts
 function urlBase64ToUint8Array(base64String: string): Uint8Array {
@@ -318,15 +322,33 @@ export async function subscribeToPush(): Promise<PushSubscription | null> {
 
 ### 変える
 
-`display: "standalone"` を `display: "browser"` に変えてビルドし直します。`browser` ではブラウザの UI バーが残り、アドレスバーやナビゲーションボタンが表示されます。`standalone` と見比べると、インストール後のアプリ体験の違いが分かります。
+`public/manifest.webmanifest` の `display` を `"standalone"` から `"browser"` に変更し、`npm run build && npm run preview` で再ビルドします。アドレスバーから一度アンインストール（DevTools → Application → Manifest の「Uninstall」）してからインストールし直してください（インストール済みのアプリは `display` 変更が反映されません）。
 
-### 自分で書く
+期待差分:
 
-サーバーサイドから Web Push を送信する最小スクリプトを書きます。
+- `standalone`: ホーム画面から起動するとアドレスバーとナビゲーションボタンが消え、ネイティブアプリのように見える
+- `browser`: ホーム画面から起動してもアドレスバーとナビゲーションボタンが表示され、通常のブラウザタブと同じ見た目
+
+### 自分で書く（オプション）
+
+サーバーサイドから Web Push を送信する最小スクリプトを書きます。本コースの主軸は Next.js 上での Push なので、このステップは StackBlitz では再現が難しい部分があります（後の章で Next.js の Route Handler から送る形が本筋）。「動かせる人だけ動かす」位置づけで読んでください。
+
+事前準備:
+
+1. `npm install -D tsx` を行い、TypeScript ファイルを直接実行できるようにする
+2. プロジェクト直下に `.env` を作成し、`web-push generate-vapid-keys` で出力した値を貼る
+
+`.env`:
+
+```
+VAPID_PUBLIC_KEY=BNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+VAPID_PRIVATE_KEY=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
 
 `scripts/send-push.ts`:
 
 ```ts
+import "dotenv/config";
 import webpush from "web-push";
 
 const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY!;
@@ -359,13 +381,19 @@ await webpush.sendNotification(
 console.log("Push 送信完了");
 ```
 
-`VAPID_PUBLIC_KEY` と `VAPID_PRIVATE_KEY` を環境変数に設定してから実行します:
+`dotenv` をインストールしてから実行します:
 
 ```bash
-VAPID_PUBLIC_KEY=xxx VAPID_PRIVATE_KEY=yyy npx tsx scripts/send-push.ts
+npm install -D dotenv
+npx tsx scripts/send-push.ts
 ```
 
-ブラウザで購読済みの状態でこのスクリプトを実行し、通知が届けば成功です。
+ブラウザで購読済みの状態でこのスクリプトを実行し、通知が届けば成功です。失敗しやすい点:
+
+- `web-push generate-vapid-keys` で出した値と、購読時にクライアントに渡した値が一致していない（古い購読情報を貼ってしまっている）
+- `subscription.endpoint` が古い（ブラウザを変えた / 購読を解除した後で残ったもの）
+
+VAPID 鍵を作り直したら、ブラウザの DevTools → Application → Service Workers から **Unregister** して購読し直す必要があります。
 
 ## まとめ
 

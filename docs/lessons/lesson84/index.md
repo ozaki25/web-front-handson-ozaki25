@@ -12,6 +12,8 @@
 
 lesson83 で作った `/api/todos` に検証を追加します。GET / POST の基本は動いている前提で進めます。
 
+lesson83 では `body.text` を `typeof` でチェックしながらも、戻り値全体は `any` のまま扱っていました。これは「動く最小形」としては妥当ですが、実務ではセキュリティと保守性の観点で不十分です。このレッスンでは、その簡易実装を **安全な形（`unknown` + 型ガード）** に直します。
+
 ### なぜ `unknown` で受けるのか
 
 `request.json()` の戻り値は TypeScript 的には `any` です。`any` は「どんな操作をしても型エラーにならない」型で、`body.text` に直接アクセスしてもコンパイルは通ります。しかし実行時には、送られてきた JSON に `text` がなければ `undefined` になり、後続の処理が壊れます。
@@ -30,7 +32,9 @@ console.log(body.text.trim()); // 型エラー: body は unknown
 
 ### 型ガードの書き方
 
-3 章の「型ガード」で学んだ `isTodo` の発想をそのまま使います。POST の入力（`{ text: string }`）を検証するガードは次のように書きます。
+3 章の「型ガード」で学んだ `isTodo` の発想をそのまま使います。下のコードは概念説明用の抜粋です。実際に貼るコードは演習の「手順 1」にまとめてあるので、**ここではコピーせず読むだけで構いません**。
+
+POST の入力（`{ text: string }`）を検証するガードは次のように書きます。
 
 ```ts
 // app/types.ts に追加
@@ -71,7 +75,9 @@ export function isTodoArray(value: unknown): value is Todo[] {
 
 ### CORS の仕組み
 
-Route Handler は Server Actions と違い、**別オリジンから直接 `fetch` できる形態**です。ただし、ブラウザには同一オリジンポリシー（Same-Origin Policy）があり、別オリジンへのリクエストはデフォルトで制限されます。
+Route Handler は Server Actions と違い、**通常の HTTP エンドポイント**です。サーバーは誰からのリクエストでも受け取れます。
+
+混乱しやすいのは「サーバーが受け取れるかどうか」と「ブラウザの JS がレスポンスを読めるかどうか」が別物だという点です。同一オリジンポリシー（Same-Origin Policy）はブラウザ側のルールで、**サーバーがレスポンスを返した後、そのレスポンスを JS に渡すかどうかを制御** します。サーバーまでの通信は成立していて、ブラウザだけが JS にデータを渡さない、という挙動になります。
 
 ブラウザは POST など「単純でないリクエスト」を送る前に、**OPTIONS（プリフライト）リクエスト**を自動で送信します。サーバーがそれに対して許可ヘッダ（`Access-Control-Allow-Origin` など）を返した場合に限り、ブラウザは本来のリクエストを送ります。プリフライトを受け取って何も返さないか、許可のないヘッダを返すと、ブラウザは本リクエストをブロックします。
 
@@ -93,16 +99,6 @@ export async function OPTIONS() {
 
 - `Access-Control-Allow-Origin: *` はすべてのオリジンを許可します。Cookie を送りたい場合は `*` が使えず、特定のオリジンの明示が必要です
 - `Access-Control-Max-Age` はプリフライトのキャッシュ秒数です
-
-### ランタイムの選択
-
-Route Handler はデフォルトで Node.js ランタイムで動きます。ファイルに `export const runtime = "edge"` を追加すると Edge ランタイムに切り替わります。
-
-```ts
-export const runtime = "edge";
-```
-
-Edge ランタイムは起動が速く、世界中のエッジで分散実行されます。ただし `fs` や Node.js 固有の API は使えません。`crypto.randomUUID()` は Edge でも使えるため、今回の TODO 追加には問題ありません。特別な理由がなければ Node.js（デフォルト）のままで構いません。
 
 ## 演習
 
@@ -215,6 +211,14 @@ console.log(await res2.json()); // { message: "text が必要です" }
 - 正しい JSON（`{ text: "..." }`）を送ると 201 で追加される
 - GET のレスポンスは変わらず `{ todos: [...] }` の形
 
+OPTIONS ハンドラの確認は別ターミナルから `curl` で行えます:
+
+```bash
+curl -X OPTIONS http://localhost:3000/api/todos -i
+```
+
+`HTTP/1.1 204 No Content` と `Access-Control-Allow-Origin: https://allowed.example.com` 等のヘッダが返れば成功です。
+
 ### 変える
 
 - `OPTIONS` ハンドラの `Access-Control-Allow-Origin` を `http://localhost:3001` だけに絞る
@@ -222,7 +226,13 @@ console.log(await res2.json()); // { message: "text が必要です" }
 
 ### 自分で書く
 
-- `isTodoArray` 型ガードを使った受信検証を `app/todos/TodoFetcher.tsx` に書く
+`app/todos/TodoFetcher.tsx` を自分で作り、**`isTodoArray` 型ガードを使った受信検証** を入れてください。骨格は次のとおりで、`/* TODO: ここを書く */` の 2 か所を埋めると完成します。
+
+要件:
+
+- `useEffect` で `/api/todos` を `fetch` する
+- レスポンスを `unknown` で受け、`{ todos: ... }` の形であることを確認した上で `isTodoArray` で検証する
+- 検証に失敗した場合は `error` state に文字列をセットする
 
 ```tsx
 "use client";
@@ -241,12 +251,48 @@ export function TodoFetcher() {
         const res = await fetch("/api/todos");
         const data: unknown = await res.json();
 
-        // 受信検証: サーバーが想定と違う形を返した場合にエラーにする
-        if (
-          typeof data !== "object" ||
-          data === null ||
-          !("todos" in data)
-        ) {
+        /* TODO: ここで data が { todos: ... } の形か検証する */
+        /* TODO: maybeTodos が Todo[] か isTodoArray で検証し setTodos する */
+      } catch {
+        setError("通信に失敗しました");
+      }
+    })();
+  }, []);
+
+  if (error) return <p>{error}</p>;
+  return (
+    <ul>
+      {todos.map((t) => (
+        <li key={t.id}>{t.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+完成したら `app/todos/page.tsx` から `<TodoFetcher />` を呼び、サーバーが想定外の JSON を返したときにエラーメッセージが表示されることを確認してください。
+
+<details>
+<summary>解答例</summary>
+
+```tsx
+"use client";
+
+import { useEffect, useState } from "react";
+import type { Todo } from "../types";
+import { isTodoArray } from "../types";
+
+export function TodoFetcher() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/todos");
+        const data: unknown = await res.json();
+
+        if (typeof data !== "object" || data === null || !("todos" in data)) {
           setError("レスポンスの形式が不正です");
           return;
         }
@@ -274,7 +320,7 @@ export function TodoFetcher() {
 }
 ```
 
-このコンポーネントを `app/todos/page.tsx` から使うと、サーバーが壊れた JSON を返したときにエラーメッセージが表示されるようになります。
+</details>
 
 ### 実務では
 
@@ -286,4 +332,3 @@ export function TodoFetcher() {
 - 型ガード（`isTodoInput` / `isTodoArray`）でサーバー側入力検証とクライアント側受信検証の両方を書く
 - サーバー側は不正リクエストを弾く、クライアント側は想定外のレスポンスで壊れないようにする、という役割分担
 - 別オリジンからアクセスを許可するには `OPTIONS` ハンドラで CORS ヘッダを返す
-- Edge ランタイムに切り替えるには `export const runtime = "edge"` を書く（Node.js 固有 API は使えなくなる）
