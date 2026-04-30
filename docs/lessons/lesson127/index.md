@@ -124,6 +124,8 @@ export default async function Page() {
 
 直接 import はできません。代わりに **`children` prop** で受け取ります。
 
+`"use client"` はそのファイルとその依存関係をすべてクライアントバンドルに含める境界線です。Client Component が Server Component を直接 import すると、Server Component のコードもクライアントバンドルに引き込まれてしまいます。`children` 経由で渡すと、Server Component の実行はサーバー側に保たれたまま、描画結果だけがクライアントに渡ります。
+
 ```tsx
 // app/layout.tsx（Server Component）
 import Sidebar from "@/components/Sidebar";          // Client
