@@ -2,10 +2,10 @@
 
 ## ゴール
 
-- `<form action={fn}>` に **関数** を渡してサーバー側で処理できることを理解します。
-- `"use server"` の配置ルール（ファイル先頭 or 関数先頭、async 必須、Client 内には書けない）を覚えます。
-- `FormData.get("...")` で送信値を取り出し、サーバー側の配列に追加できます。
-- `revalidatePath` の仕組みを図で把握し、送信後に一覧が自動更新される流れを追えます。
+- `<form action={fn}>` に **関数** を渡してサーバー側で処理できる
+- `"use server"` の配置ルール（ファイル先頭 or 関数先頭、async 必須、Client 内には書けない）を理解する
+- `FormData.get("...")` で送信値を取り出し、サーバー側の配列に追加できる
+- `revalidatePath` の仕組みを図で把握し、送信後に一覧が自動更新される流れを追える
 
 ## 解説
 
@@ -237,8 +237,8 @@ export default async function TodosPage() {
 
 ### スコープ外
 
-- 送信中のボタン無効化、空入力エラー表示は本レッスンでは扱いません。最小形に集中します。
-- `Todo` ごとの削除ボタンも本レッスンでは扱いません（「小さなアプリを仕上げる」の統合で扱います）。
+- 送信中のボタン無効化と空入力エラー表示は本レッスンでは扱いません。「送信状態とエラー表示」で `useActionState` を使って実装します
+- `Todo` ごとの削除ボタンは本レッスンでは扱いません
 
 ### 自分で書く
 
@@ -246,10 +246,10 @@ export default async function TodosPage() {
 
 ## まとめ
 
-- `<form action={fn}>` に関数を渡すと、React が自動で送信を止めて `fn` を呼びます。`preventDefault` は要りません。
-- Server Actions の関数は **必ず async** です。`"use server"` はファイル先頭または関数先頭に書きます。Client Component 内には書けません。
-- データは `app/actions.ts` のモジュールトップレベルの配列で保持します（StackBlitz / Vercel で再起動すると消えます）。
-- `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行されます。
+- `<form action={fn}>` に関数を渡すと、React が自動で送信を止めて `fn` を呼ぶ。`preventDefault` は不要
+- Server Actions の関数は **必ず async**。`"use server"` はファイル先頭または関数先頭に書く。Client Component 内には書けない
+- データは `app/actions.ts` のモジュールトップレベルの配列で保持する（StackBlitz / Vercel で再起動すると消える）
+- `revalidatePath(path)` でその URL のキャッシュを無効化 → 次の描画で Server Component が再実行される
 
 ### コラム: `revalidateTag`
 
