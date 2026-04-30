@@ -2,10 +2,10 @@
 
 ## ゴール
 
-- `useActionState` の正しいシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を覚えます。
-- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せます。
-- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書けます。
-- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を間違えずに使えます。
+- `useActionState` のシグネチャ `[state, formAction, isPending] = useActionState(action, initialState)` を理解する
+- Server Action を `(prevState, formData) => newState` の形（reducer 風）に書き直せる
+- `useFormStatus` を `<form>` の **子コンポーネント** で呼んで、送信中のボタン無効化を書ける
+- 2 つのフックの **import 元の違い**（`react` と `react-dom`）を区別できる
 
 ## 解説
 
@@ -15,7 +15,7 @@
 
 エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
-### `useActionState` のシグネチャ（絶対に覚える）
+### `useActionState` のシグネチャ
 
 ```tsx
 "use client";
@@ -102,20 +102,14 @@ export function SubmitButton() {
 
 間違えると「そんな export はない」というエラーが出ます。最初のうちは毎回見比べながら書くと良いです。
 
-### 冪等性と二重送信への備え
+### 冪等性: 二重送信を防ぐ責任は両側にある
 
-`isPending` でボタンを `disabled` にすれば、ユーザーが送信中にもう一度ボタンを押すことは防げます。ただし、これはクライアント側の親切な UI でしかなく、本番では次のような事態に備えてサーバー側でも対策します。
+`isPending` でボタンを `disabled` にすれば、ユーザーが送信中にもう一度ボタンを押すことは防げます。しかしこれは UI 側の親切でしかなく、本番では次のような事態でも 2 回送信が起きえます。
 
-- ユーザーが「送信」を押した直後に **ネットワーク切断** で結果が返ってこず、**手動でリロード後に再送信** する
-- ブラウザの戻る/進む / フォームの再送信ダイアログで **同じリクエストが 2 回飛ぶ**
+- ネットワーク切断後にユーザーが手動でリロードして再送信
+- ブラウザの戻る／進むでのフォーム再送信ダイアログ
 
-「同じ操作が 2 回届いても結果が変わらない」という性質を **冪等性** と呼びます。Server Action / API を冪等にする実務の定番パターンは次のとおりです。
-
-- **クライアントが `requestId`（ランダム UUID）を生成して送る**: サーバーは `requestId` を DB のユニーク制約付きで保存し、2 回目は無視する
-- **state machine**: TODO の `status` が `done` のときに再度 `done` 化する操作は no-op にする
-- **upsert / `ON CONFLICT DO NOTHING`**: 同じ ID の挿入を 2 回受けてもエラーにせず無視
-
-本コースでは扱いませんが、`useActionState` で `isPending` を見て disabled にする UI 側の対策と、Server 側の冪等性は **両方そろってはじめて安全** という前提を頭に入れておきます。
+「同じ操作が 2 回届いても結果が変わらない」という性質を **冪等**（べきとう）と呼びます。`useActionState` の `isPending` で UI 側を守ると同時に、Server 側でも `requestId` の重複チェックや upsert などで冪等性を担保するのが本番の作法です。本コースでは UI 側の対策まで扱いますが、「サーバー側でも対策が要る」と頭に入れておきましょう。
 
 ## 演習
 
@@ -361,7 +355,7 @@ export default async function TodosPage() {
 
 ## まとめ
 
-- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚えましょう。
-- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がります。
-- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼びます。
-- **`useActionState` は `react`、`useFormStatus` は `react-dom`** です。import 元が違います。
+- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction, isPending]` を覚える
+- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がる
+- `useFormStatus` は `react-dom` から import して、`<form>` の子コンポーネントで呼ぶ
+- **`useActionState` は `react`、`useFormStatus` は `react-dom`** から。import 元が違うので注意
