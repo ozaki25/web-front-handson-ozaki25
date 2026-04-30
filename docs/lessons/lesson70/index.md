@@ -11,7 +11,7 @@
 
 ### 前回のプロジェクトを開く
 
-これまでのレッスンで作った StackBlitz の Next.js プロジェクトを開き直しましょう。左上のメニューに戻るか、保存済みなら `https://stackblitz.com/` の「Your projects」から開けます。
+これまでのレッスンで作った StackBlitz の Next.js プロジェクトを開き直しましょう。GitHub ログインしている場合は <https://stackblitz.com/dashboard> から保存済みのプロジェクトを開けます。
 
 ### 新しいページを作る手順
 
