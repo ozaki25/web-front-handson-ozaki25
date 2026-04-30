@@ -234,7 +234,7 @@ export function RefreshButton() {
 
 - `useRouter` は Client Component のフックなので `"use client"` が必要です。
 - 通常の `<a>` タグと違い、**ページ全体をリロードしません**。React の state は維持されたまま、サーバーから新しい RSC payload だけを取り直します。
-- WebSocket などの外部イベントを受け取って「データが更新されたかもしれない」タイミングで手動更新したいときに向きます。
+- WebSocket などの外部イベントを受け取って「データが更新された可能性がある」タイミングで手動更新したいときに向きます。
 - `updateTag` / `revalidatePath` は「サーバー側のキャッシュを無効化する」。`router.refresh()` は「ブラウザから再取得をトリガーする」。役割が違うので場面に応じて使い分けます。
 
 ### `"use cache"` ディレクティブ（Next.js 16）
@@ -331,9 +331,16 @@ export default async function PostsPage() {
 
 lesson74 で作ったプロジェクトを開き直しましょう。
 
-### 手順 1: 時間ベースキャッシュを付ける
+::: tip 開発モード（`next dev`）ではキャッシュが無効
 
-`app/posts/page.tsx` の `fetch` に `{ next: { revalidate: 60 } }` を追加します。
+Next.js の `next dev` は HMR のためにキャッシュを無効化します。StackBlitz でも同様です。**キャッシュの ON/OFF は本番ビルド（`next build && next start`）や Vercel デプロイで初めて確認できます。**
+
+本演習では**サーバーレンダー時刻**をページに表示して、本番ビルド時にキャッシュが効いているかどうか目で見て判断できるようにします。
+:::
+
+### 手順 1: 時間ベースキャッシュとレンダー時刻を表示する
+
+`app/posts/page.tsx` を以下のように書き換えます。`renderTime` はサーバーがページを生成した瞬間の時刻です。本番ビルドではキャッシュがヒットしているあいだ時刻が変わらず、キャッシュが切れると更新されます。
 
 ```tsx
 type Post = {
@@ -343,6 +350,7 @@ type Post = {
 };
 
 export default async function PostsPage() {
+  const renderTime = new Date().toLocaleTimeString("ja-JP");
   const res = await fetch(
     "https://jsonplaceholder.typicode.com/posts",
     { next: { revalidate: 60 } },
@@ -352,6 +360,9 @@ export default async function PostsPage() {
   return (
     <>
       <h1>記事一覧</h1>
+      <p style={{ color: "#888", fontSize: "0.85em" }}>
+        サーバーがこのページを生成した時刻: {renderTime}
+      </p>
       <ul>
         {posts.slice(0, 10).map((post) => (
           <li key={post.id}>
@@ -364,7 +375,7 @@ export default async function PostsPage() {
 }
 ```
 
-保存してページをリロードします。エラーが出なければ成功です。JSONPlaceholder のデータは変わらないので見た目の変化はありませんが、設定自体は有効になっています。
+保存してページをリロードし、エラーが出ないことを確認します。
 
 ### 手順 2: タグ付きキャッシュに変える
 
@@ -377,7 +388,7 @@ export default async function PostsPage() {
   );
 ```
 
-こちらもエラーが出なければ成功です。
+エラーが出なければ成功です。
 
 ### 手順 3: `force-cache` にしてみる
 
@@ -393,12 +404,14 @@ export default async function PostsPage() {
 ### 期待出力
 
 - 手順 1〜3 いずれでも `/posts` ページが正常に表示される
-- StackBlitz のターミナルにエラーが出ない
+- 「サーバーがこのページを生成した時刻: XX:XX:XX」が表示される
+- **開発モード**（`next dev` / StackBlitz）: リロードするたびに時刻が更新される（キャッシュは無効）
+- **本番ビルド**（`next build && next start`）または Vercel デプロイ後: 60 秒以内のリロードでは時刻が変わらない（キャッシュヒット）。60 秒を過ぎると時刻が新しくなる（キャッシュミス → 再取得）
 - ブラウザの DevTools（F12 → Network タブ）で `jsonplaceholder.typicode.com` への直接リクエストが**出ていない**（サーバー側で fetch しているため、ブラウザは知らない）
 
 ### 変えてみる
 
-1. `revalidate: 60` を `revalidate: 5` にしてみましょう。5 秒ごとに再取得する設定です（JSONPlaceholder は変わらないので見た目は変わりませんが、設定自体は機能します）
+1. `revalidate: 60` を `revalidate: 5` にしましょう。本番ビルドでは 5 秒ごとにレンダー時刻が更新されることが確認できます（開発モードでは毎回更新されるため違いは出ません）
 2. `{ next: { tags: ["posts"] } }` のタグ名を `"postList"` に変えても動きます。タグ名は自由な文字列です
 
 ### 自分で書く

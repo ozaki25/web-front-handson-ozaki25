@@ -290,14 +290,14 @@ cd flags-sample
 `.env.local`:
 
 ```
-NEXT_PUBLIC_NEW_HOMEPAGE=true
+NEW_HOMEPAGE=true
 ```
 
 `app/page.tsx`:
 
 ```tsx
 export default function Home() {
-  const newHomepage = process.env.NEXT_PUBLIC_NEW_HOMEPAGE === "true";
+  const newHomepage = process.env.NEW_HOMEPAGE === "true";
   return (
     <main style={{ padding: 24 }}>
       <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
@@ -366,8 +366,8 @@ export type Flags = {
 
 export function getFlags(userId: string): Flags {
   return {
-    newCheckout: process.env.NEXT_PUBLIC_NEW_CHECKOUT === "true" && isInRollout(userId, 10),
-    aiSummary: process.env.NEXT_PUBLIC_AI_SUMMARY === "true",
+    newCheckout: process.env.NEW_CHECKOUT === "true" && isInRollout(userId, 10),
+    aiSummary: process.env.AI_SUMMARY === "true",
   };
 }
 ```

@@ -167,6 +167,8 @@ test("トップページに a11y 違反がない", async ({ page }) => {
 
 ### 手順 1: Lighthouse を回す
 
+> **注意**: Lighthouse は StackBlitz では動作しない場合があります。**Chrome の DevTools → Lighthouse タブ**（ローカル環境の場合）、または **PageSpeed Insights** でデプロイ済み URL を計測してください。StackBlitz 環境では axe DevTools Chrome 拡張を使った確認に置き換えても構いません。
+
 1. Chrome で本コースの教材サイト、または自分が作ったポートフォリオを開きます
 2. DevTools（`F12`）→ **Lighthouse** タブ
 3. Categories で **Accessibility** だけチェックを残し、**Analyze page load** をクリック

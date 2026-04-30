@@ -99,7 +99,7 @@ React 18 以前は、自作コンポーネントに `ref` を渡したいとき 
 import type { Ref } from "react";
 
 type MyInputProps = {
-  ref: Ref<HTMLInputElement>;
+  ref?: Ref<HTMLInputElement>;
   placeholder?: string;
 };
 

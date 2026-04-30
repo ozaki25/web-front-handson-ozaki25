@@ -207,6 +207,8 @@ console.log(await res3.json());
 
 `app/todos/page.tsx`（Server Component）に、受信した JSON を型ガードで検証する Client Component を組み合わせます。
 
+lesson64 で「`useEffect` + `fetch` の組み合わせには罠がある」と説明しましたが、**Route Handler の場合はブラウザ側からの `fetch` が必要**なため、Client Component + `useEffect` の構成になります。Server Actions と違い、Route Handler は外部クライアント（ブラウザ・モバイルアプリ等）から直接 HTTP で叩く形態だからです。
+
 `app/todos/TodoFetcher.tsx`（新規）:
 
 ```tsx

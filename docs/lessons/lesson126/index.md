@@ -113,11 +113,11 @@ const nextConfig: NextConfig = {
 
 | `compilationMode` | 説明 |
 |---|---|
+| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ変換。まず試したいときはここから |
+| `"infer"` | Rules of React の前提を満たす関数のみ自動判定して変換 |
 | `"all"`（デフォルト） | すべてのコンポーネントを変換 |
-| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ |
-| `"infer"` | use の前提を満たす関数のみ |
 
-「徐々に試したい」場合は `"annotation"` から始めて、確認後に `"all"` に切り替えるのが安全。
+`"annotation"` から段階的に始めて動作を確認し、問題がなければ `"all"` に切り替えるのが安全な導入順序です。
 
 ### Vite で有効化
 

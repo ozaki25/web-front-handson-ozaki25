@@ -322,7 +322,7 @@ export default function AppLayout({ children }: LayoutProps<"/todos">) {
 
 - このファイルは `(app)` グループ配下の `layout.tsx` なので、`(app)` 配下のページにだけ適用されます。今は `/todos` だけが該当するので、`/` や `/about` には影響しません
 - `children` には `(app)` 配下の各 `page.tsx` が差し込まれます（今回は `/todos` だけ）
-- 型引数 `LayoutProps<"/todos">` の `"/todos"` は、このレイアウトが覆う **代表的なルートのパス** を指します。`(app)` 配下にページを増やしたら、Next.js が型を再生成してくれるので IDE の警告に従って修正します
+- 型引数 `LayoutProps<"/todos">` の `"/todos"` は、このレイアウトが覆う **代表的なルートのパス** を指します。`LayoutProps` 自体は Next.js が自動生成するグローバル型なので import は不要です（lesson71 で扱いました）。`(app)` 配下にページを増やしたら、IDE の警告に従って修正してください
 - `"use client"` は不要です。`<Link>` を並べるだけでクリックで動く JS は書いていません（Server Component のままで OK）
 
 ### 手順 5: サイドバーの CSS

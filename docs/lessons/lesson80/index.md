@@ -133,6 +133,12 @@ export default function TodosPage() {
 
 </details>
 
+### 開発時の注意: 保存すると TODO が消える
+
+`app/actions.ts` を編集・保存するたびに Next.js の HMR がモジュールを再評価するため、`const todos: Todo[] = []` が初期化されて中身が消えます。動作確認中は **`actions.ts` を編集しない** のが最も簡単な対策です。
+
+消えにくくしたい場合は `globalThis` に退避する方法があります（本文の補足を参照）。
+
 ### 前回のプロジェクトを開く
 
 これまでのレッスンで作ったプロジェクトを開き直しましょう。

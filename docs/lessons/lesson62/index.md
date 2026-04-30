@@ -165,6 +165,8 @@ export function useTheme() {
 }
 ```
 
+ここで使っている `useMemo` は **lesson65 で詳しく扱います**。今は「Context に渡す値の参照を毎回変えないようにする道具」とだけ覚えておけば十分です。
+
 - Context の初期値を `null` にしておき、`useTheme` で「`null` ならエラー」をチェックしています。これで「Provider で包み忘れた」ときに、はっきりエラーメッセージが出ます
 - Provider はよく使う形なので、`ThemeProvider` という関数コンポーネントとしてラップしています
 - `useTheme` という **カスタムフック** にしておくと、使う側が `useContext(ThemeContext)` と書かずに済みます（カスタムフックは「カスタムフック」で深掘りします）

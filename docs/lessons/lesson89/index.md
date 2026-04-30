@@ -179,6 +179,12 @@ curl -v https://jsonplaceholder.typicode.com/posts/1
 
 `>` で始まる行がリクエスト、`<` で始まる行がレスポンスです。最初の `> GET /posts/1 HTTP/2` と `> host: jsonplaceholder.typicode.com` を見比べると、本文で説明したリクエストの形と一致していることが分かります。
 
+### 期待出力
+
+- `curl -i https://jsonplaceholder.typicode.com/posts/1` を実行すると、先頭に `HTTP/2 200` などのステータス行が出る
+- レスポンスヘッダーに `content-type: application/json` が含まれる
+- ボディに JSON 文字列が表示される
+
 ### 変える
 
 - URL を `https://jsonplaceholder.typicode.com/does-not-exist` に変えて、ブラウザのアドレスバーで開く。Network タブで Status Code が **`404`** になっていることを確認

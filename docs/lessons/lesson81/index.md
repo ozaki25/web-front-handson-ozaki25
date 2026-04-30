@@ -17,6 +17,8 @@
 
 ### `useActionState` のシグネチャ
 
+**import 元の違いに注意**: `useActionState` は **`react`** から、`useFormStatus` は **`react-dom`** から import します。逆にすると「そんな export はない」というエラーになります。
+
 ```tsx
 "use client";
 
@@ -44,7 +46,7 @@ const [state, formAction, isPending] = useActionState(addTodo, initialState);
 
 ### Server Action のシグネチャを変える
 
-`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
+`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。この形は **lesson58 で書いた `useReducer` の reducer 関数**（`(state, action) => newState`）と同じパターンです。
 
 ```ts
 "use server";
@@ -189,7 +191,9 @@ export default async function TodosPage() {
 
 ### 手順の進め方（重要）
 
-本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 を一気に進め、3 が終わってからプレビューを確認する** のが安全です。途中で保存されて HMR が走ってエラー画面が出ても慌てず、3 まで進めましょう。
+本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 → 3 をすべて終わらせてから、はじめてプレビューを確認する** のが安全です。
+
+途中で保存すると HMR が走り、エラー画面が出ることがあります。これは中間状態のため正常です。**エラーが出ても慌てず、手順 3 まで一気に進めてください**。3 つのファイルがすべてそろって初めてエラーが消えます。
 
 順番としては **「先にフォーム側（手順 2 の `TodoForm.tsx`）を作ってから、最後に `actions.ts` の `addTodo` シグネチャを変える」** ほうがエラー状態が短いです。もっとも気持ちよく進めたい人は、次のようにファイルを開く順序で回すと良いです:
 

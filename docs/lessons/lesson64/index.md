@@ -76,6 +76,8 @@ useEffect(() => {
 
 ### localStorage への保存と復元: `useState` の初期値関数を使う
 
+**2章で直接操作していた `localStorage`** を、React のコンポーネントからどう使うかを見ていきます。
+
 `useEffect` の典型的な使い道に、「state の変化を localStorage に保存し、リロード時に復元する」があります。素直に書くと次のような形を思い浮かべます。
 
 ```tsx
@@ -146,7 +148,7 @@ function Page() {
 
 ### コラム: React 19.2 の `useEffectEvent`
 
-React 19.2 で **`useEffectEvent`** という新しいフックが追加されました。これは「effect の中で使っているが、その値が変わっても effect を再実行したくない」という場面に使います。
+React 19.2 で **`useEffectEvent`** が **安定版（stable）** になりました。それ以前は `experimental_useEffectEvent` という名前で実験的チャンネルにのみ存在していました。これは「effect の中で使っているが、その値が変わっても effect を再実行したくない」という場面に使います。
 
 ```tsx
 import { useEffectEvent } from "react";
@@ -165,7 +167,7 @@ function Chat({ roomId, theme }) {
 }
 ```
 
-React の ESLint プラグイン（`eslint-plugin-react-hooks`）には、effect 内で使っている値を依存配列に入れ忘れると警告する `exhaustive-deps` ルールがあります。通常はこの警告に従うべきですが、「値を参照したいが effect を再実行させたくない」という場面では、除外すると警告が出てしまいます。`useEffectEvent` に切り出した関数はその対象から外れるため、依存配列に入れなくても警告が出ません。本レッスンでは踏み込みませんが、useEffect の複雑な依存配列に悩んだら思い出してください。
+React の ESLint プラグイン（`eslint-plugin-react-hooks`）には、effect 内で使っている値を依存配列に入れ忘れると警告する `exhaustive-deps` ルールがあります。通常はこの警告に従うべきです。ただし「値を参照したいが effect を再実行させたくない」という場面では、除外すると警告が出てしまいます。`useEffectEvent` に切り出した関数はその対象から外れるため、依存配列に入れなくても警告が出ません。本レッスンでは踏み込みませんが、useEffect の複雑な依存配列に悩んだら思い出してください。
 
 ## 演習
 

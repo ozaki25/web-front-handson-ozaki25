@@ -230,6 +230,12 @@ document.cookie
 - Q2: 典型的なログインセッション Cookie には、どの属性を付けるか（3 つ挙げよ）
 - Q3: `SameSite=Lax` は CSRF にどう効くか
 
+### 期待出力
+
+- DevTools Application タブ → Cookies で、設定した Cookie のキーと値が確認できる
+- `HttpOnly` を付けた Cookie は `document.cookie` で読めないことを Console で確認できる
+- HTTPS でないと `Secure` 属性の Cookie がセットされないことが分かる
+
 ### 変える
 
 - **観察対象は本コースの教材サイト / 自分のローカルプロジェクト / StackBlitz プレビュー** などにとどめます。他人のサイトで Cookie 操作を試す行為は、利用規約や攻撃の境界が曖昧になりやすいので避けます。

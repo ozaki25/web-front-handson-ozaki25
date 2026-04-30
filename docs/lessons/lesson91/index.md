@@ -166,6 +166,11 @@ curl -I https://jsonplaceholder.typicode.com/posts/1 \
 
 手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
 
+### 期待出力
+
+- 同じリソースを 2 回目にリクエストすると、Network タブの Status 欄に `304` または `(disk cache)` / `(memory cache)` が表示される
+- `Cache-Control: no-cache` のリソースは毎回サーバーに確認リクエストが飛ぶ
+
 ### 変える
 
 - DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
