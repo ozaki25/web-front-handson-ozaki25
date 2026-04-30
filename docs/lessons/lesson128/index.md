@@ -1,427 +1,377 @@
-# lesson128: エラートラッキング（Sentry）
+# lesson203: PWA の通知・インストール・manifest
 
 ## ゴール
 
-- 本番のエラーを **見逃さず通知する** 仕組みの必要性を理解する
-- Sentry を React / Next.js プロジェクトに導入できる
-- Source Map で **minified コードを元のコードに復元** する流れが分かる
-- ユーザーコンテキスト / タグ / リリースで **エラーを絞り込む** 方法を知る
-- 代替サービス（Datadog / Bugsnag / Rollbar 等）の位置付けを把握する
+- Web Push 通知のサーバー → SW → ブラウザの流れを説明できる
+- VAPID 鍵の役割（送信者認証）を理解する
+- `manifest.webmanifest` の主要フィールドを設定できる
+- iOS Safari の制約を把握している
 
 ## 解説
 
-### なぜエラートラッキングが必要か
+lesson124 で学んだ Service Worker を使って、ネイティブアプリに近い機能を追加します。
 
-開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
+### Web Push 通知の仕組み
 
-エラートラッキングサービスは:
+ブラウザを閉じている時でも **プッシュ通知** が届く仕組みです。
 
-- ブラウザで起きたエラーを **自動収集** する
-- スタックトレース / OS / ブラウザ / URL / 直前の操作（breadcrumbs）を一緒に送る
-- **集約・重複排除** してダッシュボードに並べる
-- Slack / Email / PagerDuty に **通知** する
-- リリース単位で「**この版で増えたエラー**」を可視化する
+#### 全体の流れ
 
-これがあるかないかで、本番運用の体感が大きく変わります。
+Push Service（ブラウザベンダーが運営するサーバー）が間に入る構造になっています。
 
-### Sentry の位置付け
-
-[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
-
-特徴:
-
-- React / Next.js / Node.js / モバイルなど **多言語対応**
-- パフォーマンス監視 / セッションリプレイ / プロファイリングも統合
-- Source Map アップロードが整っていて、**minify されたコードでも元のコードで読める**
-- 月 5,000 イベントまで **無料枠**
-
-### React に導入する最小手順
-
-```bash
-npm install @sentry/react
+```
+クライアント ──購読──→ Push Service ──endpoint 発行──→ クライアント
+クライアント ──endpoint をサーバーに保存──→ あなたのサーバー
+あなたのサーバー ──Push 送信──→ Push Service ──配信──→ SW の push イベント
+SW ──showNotification──→ ブラウザ通知
 ```
 
-`src/main.tsx`（最初の方）:
+具体的な手順:
 
-```tsx
-import * as Sentry from "@sentry/react";
+1. **クライアント** が **VAPID 鍵** を使って通知を購読
+2. ブラウザが **Push Service**（Apple / Google / Mozilla）に **endpoint** を発行
+3. クライアントが **endpoint をサーバーに送る**
+4. サーバーが **endpoint に POST**（VAPID 秘密鍵で署名）
+5. Push Service が **ブラウザに配信**
+6. Service Worker の `push` イベントが発火 → `showNotification`
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,        // パフォーマンス計測。本番は 0.1 程度に
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: import.meta.env.VITE_APP_VERSION,
+#### VAPID とは
+
+VAPID（Voluntary Application Server Identification）は、あなたのサーバーが正規の送信者であることを Push Service に証明するための署名の仕組みです。公開鍵をブラウザに登録し、送信時に秘密鍵で署名します。これにより、悪意ある第三者が勝手にあなたのユーザーへ通知を送ることを防ぎます。
+
+#### クライアント側の購読コード
+
+```js
+// 通知の許可を求める
+const permission = await Notification.requestPermission();
+if (permission !== "granted") return;
+
+// VAPID 公開鍵（Base64URL）を Uint8Array に変換するユーティリティ
+function urlBase64ToUint8Array(base64String) {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+const VAPID_PUBLIC_KEY = "あなたの公開鍵をここに貼る";
+
+const reg = await navigator.serviceWorker.ready;
+const subscription = await reg.pushManager.subscribe({
+  userVisibleOnly: true,
+  applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+});
+
+// サーバーに endpoint を保存
+await fetch("/api/push/subscribe", {
+  method: "POST",
+  body: JSON.stringify(subscription),
+  headers: { "Content-Type": "application/json" },
 });
 ```
 
-`.env`:
+#### Service Worker 側（受信）
 
-```
-VITE_SENTRY_DSN=https://xxxxx@oXXX.ingest.sentry.io/12345
-VITE_APP_VERSION=1.0.0
-```
+```js
+self.addEventListener("push", (event) => {
+  const data = event.data?.json() ?? {};
+  event.waitUntil(
+    self.registration.showNotification(data.title ?? "通知", {
+      body: data.body ?? "",
+      icon: "/icon-192.png",
+      badge: "/badge.png",
+      data: { url: data.url ?? "/" },
+    }),
+  );
+});
 
-DSN は Sentry の管理画面で「プロジェクトの設定」から取得します。
-
-> **補足: DSN は公開してよい値だが、悪用対策は別途**: `VITE_SENTRY_DSN` は `VITE_` プレフィックスのとおり **クライアントバンドルに埋め込まれる** ため、ブラウザの DevTools で誰でも読めます。Sentry の DSN は **設計上公開して構わない値** で、認証が必要な操作（プロジェクト削除等）はできません。ただし第三者がフェイクのエラーを送りつけて **イベント枠を食い潰す** 攻撃は可能なので、本番では Sentry プロジェクト設定の「**Allowed Domains**」で自分のサイトのオリジンに制限し、必要に応じて **Inbound Filters / Rate Limit** も併用します。CSRF や認証情報を持つ API キーとは扱いが違うこと、ただし完全に放置してよいわけではないこと、の 2 点を覚えておきます。
-
-### エラーを意図的に送る
-
-#### 自動的に拾われるもの
-
-- 未捕捉の `throw`
-- 未処理の Promise rejection
-- React のレンダリング中エラー（後述の Error Boundary 経由）
-
-#### 手動で送る
-
-```tsx
-try {
-  await someApi();
-} catch (e) {
-  Sentry.captureException(e);
-  throw e;  // 必要なら再 throw
-}
-
-// メッセージだけ送る
-Sentry.captureMessage("ユーザーが何度もログインに失敗");
+self.addEventListener("notificationclick", (event) => {
+  event.notification.close();
+  event.waitUntil(self.clients.openWindow(event.notification.data.url));
+});
 ```
 
-### React の Error Boundary と統合
+#### サーバー側（送信）
 
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（「Error Boundary と Suspense」と相性 ◎）。
+`web-push` パッケージで送信します。
 
-```tsx
-import * as Sentry from "@sentry/react";
+```ts
+import webpush from "web-push";
 
-const App = () => (
-  <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-    <Routes />
-  </Sentry.ErrorBoundary>
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY!;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
+
+webpush.setVapidDetails(
+  "mailto:admin@example.com",
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+);
+
+// subscription はクライアントから保存したもの
+await webpush.sendNotification(
+  subscription,
+  JSON.stringify({
+    title: "新しい通知",
+    body: "メッセージが届きました",
+    url: "/inbox",
+  }),
 );
 ```
 
-これだけで「**Error Boundary が捕まえた React レンダリングエラー** が Sentry に届く」状態になります。
+### Background Sync
 
-### Next.js に導入する最小手順
+「**ネットがない時に送信失敗した POST を、復活した時に再送する**」仕組みです。
 
-[Sentry の Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/) は **ウィザード** で 1 コマンド導入できます。
+Service Worker 側:
 
-```bash
-npx @sentry/wizard@latest -i nextjs
-```
-
-ウィザードが行うこと:
-
-- プロジェクトの選択 / DSN の設定
-- `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
-- `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
-- `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
-- `next.config.ts` を `withSentryConfig` でラップ
-- ビルド時に **Source Map を自動アップロード** する設定を追加
-
-```ts
-// next.config.ts（生成例）
-import { withSentryConfig } from "@sentry/nextjs";
-
-const nextConfig = {
-  /* 既存の Next.js 設定 */
-};
-
-export default withSentryConfig(nextConfig, {
-  org: "your-org",
-  project: "your-project",
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
+```js
+self.addEventListener("sync", (event) => {
+  if (event.tag === "send-message") {
+    event.waitUntil(sendQueuedMessages());
+  }
 });
 ```
 
-**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
+クライアント側:
 
-### Source Map とは
-
-本番ビルドの JS は **minify** されて変数名が `a` / `b` になり、行も詰められています。これだとスタックトレースを見ても **どのコードか分からない**。
-
-Source Map は「minify 後の位置 → 元のソースの行・列」のマッピング情報です。これがあると:
-
-```
-TypeError: Cannot read property 'foo' of undefined
-  at a.b.c (index-Xj9k2.js:1:12345)
+```js
+const reg = await navigator.serviceWorker.ready;
+await reg.sync.register("send-message");
 ```
 
-が:
+`Periodic Background Sync` は **定期的にバックグラウンドで実行** する仕組みです（権限の関係で制限あり）。
 
-```
-TypeError: Cannot read property 'foo' of undefined
-  at UserProfile.fetchData (src/components/UserProfile.tsx:42:18)
-```
+### `manifest.webmanifest` の主要フィールド
 
-に **復元** されます。
-
-#### Sentry の Source Map 運用
-
-- **ビルド時に Source Map を生成**（`vite build` / `next build`）
-- それを **Sentry にアップロード**（公開しない）
-- Sentry の管理画面で **元のソースで** スタックトレースが見られる
-
-`@sentry/nextjs` のウィザードがビルド時のアップロードまで設定してくれるので、最近は手動設定の必要が減りました。
-
-::: warning Source Map をブラウザに公開しない
-Source Map をそのまま `dist/` に置いてデプロイすると、**元のソースが誰でも読める** 状態になります。Sentry にアップロードして、ビルド成果物からは削除（または `.map` を CDN に出さない）するのが安全。
-:::
-
-### ユーザーコンテキスト
-
-「**誰の** エラーか」が分かると原因究明が圧倒的に早くなります。
-
-```ts
-Sentry.setUser({
-  id: user.id,
-  email: user.email,
-  username: user.name,
-});
+```json
+{
+  "name": "My PWA App",
+  "short_name": "PWA",
+  "description": "サンプル PWA アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "scope": "/",
+  "categories": ["productivity"],
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ],
+  "screenshots": [
+    { "src": "/screenshot1.png", "sizes": "1080x1920", "type": "image/png", "form_factor": "narrow" }
+  ],
+  "shortcuts": [
+    { "name": "新規作成", "url": "/new", "icons": [{ "src": "/new.png", "sizes": "96x96" }] }
+  ]
+}
 ```
 
-ログアウト時:
-
-```ts
-Sentry.setUser(null);
-```
-
-::: tip 個人情報の扱い
-メールアドレスや氏名は **個人情報**。GDPR / 個人情報保護法的に、ユーザー同意やデータ最小化が必要です。本番では **ID だけ送る** / **ハッシュ化する** などの運用が無難。
-:::
-
-### タグとコンテキスト
-
-タグは「**フィルタ用** の短い key-value」、コンテキストは「**詳細データ**」です。
-
-```ts
-// タグ（ダッシュボードで絞り込みに使える）
-Sentry.setTag("page", "checkout");
-Sentry.setTag("payment-provider", "stripe");
-
-// コンテキスト（イベントに添付される詳細）
-Sentry.setContext("cart", {
-  items: 3,
-  total: 12000,
-  currency: "JPY",
-});
-```
-
-### リリース管理
-
-「この版で増えたエラー」を見るには、`release` と `environment` を設定します。
-
-```ts
-Sentry.init({
-  dsn: "...",
-  release: "my-app@1.2.3",       // package.json のバージョンや Git の SHA
-  environment: process.env.NODE_ENV,
-});
-```
-
-CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知すると、ダッシュボードで:
-
-- 「リリース 1.2.3 で **新規** に出たエラー」
-- 「リリース 1.2.2 では出ていなかったが 1.2.3 で **退行** したエラー」
-- 「修正済みリリース」
-
-がトラッキングできます。
-
-### Breadcrumbs
-
-エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
-
-- ボタンクリック / フォーム送信
-- ページ遷移
-- ネットワークリクエスト
-- console.log（任意）
-
-```ts
-Sentry.addBreadcrumb({
-  category: "checkout",
-  message: "クーポンコードを適用",
-  level: "info",
-});
-```
-
-「エラー発生 5 秒前にこのボタンを押している」が分かるので **再現が容易** になります。
-
-### セッションリプレイ
-
-Sentry の **Session Replay** を有効にすると、エラー発生時の **画面録画** が見られます（DOM の差分を記録するので画像ではなく軽い）。
-
-```ts
-Sentry.init({
-  // ...
-  integrations: [Sentry.replayIntegration()],
-  replaysSessionSampleRate: 0.1,   // 通常セッションの 10%
-  replaysOnErrorSampleRate: 1.0,   // エラーが起きたセッションは 100%
-});
-```
-
-「**ユーザーがどう操作してエラーに辿り着いたか**」が動画で分かるのは強烈です。ただし **個人情報の保護** が必要（パスワード入力欄などはマスクする設定）。
-
-### 代替サービス
-
-| サービス | 特徴 |
+| フィールド | 役割 |
 |---|---|
-| **Sentry** | OSS / 自前ホスト可。フロント・バック両方 |
-| **Datadog** | 監視全部入り（メトリクス / ログ / APM / RUM）。運用の重心が APM 寄り |
-| **Bugsnag** | エラートラッキング特化。料金体系がシンプル |
-| **Rollbar** | 老舗のエラートラッキング。深い検索機能 |
-| **LogRocket** | セッションリプレイが強み |
-| **Honeybadger** | 開発者にやさしい価格 |
+| `display: standalone` | ブラウザ UI を消してアプリ風に |
+| `theme_color` | 上部バーの色 |
+| `background_color` | スプラッシュ画面の背景 |
+| `icons` | ホーム画面のアイコン |
+| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
+| `screenshots` | インストール画面（form_factor で広 / 狭を区別） |
+| `shortcuts` | アプリ長押しでのクイックメニュー |
 
-「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
+> **補足: `theme_color` をダーク/ライトで切り替える**: マニフェストの `theme_color` は単一値ですが、HTML の `<meta name="theme-color">` には `media` 属性を付けて **OS のテーマ設定に応じて切り替え** できます。
+>
+> ```html
+> <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+> <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
+> ```
+>
+> こうすると iOS / Android のダークモード利用者には暗い `theme_color` が、ライトモード利用者には明るい色が反映されます。マニフェストの `theme_color` はインストール後のフォールバックとして残り、`<meta>` が上書きする形になります。
 
-### Edge / Worker 環境での扱い
+### iOS Safari の制約
 
-Cloudflare Workers / Vercel Edge Functions では従来の Sentry SDK が動きにくかったですが、2026 年現在は **`@sentry/cloudflare` / `@sentry/vercel-edge`** など環境別 SDK が整備されています。Next.js の Edge Middleware は `@sentry/nextjs` の `sentry.edge.config.ts` で対応します。
+Web Push は **iOS 16.4 以降のみ** 動作します。それより前の iOS では Push 通知は届きません。
+
+動作条件:
+
+- ホーム画面に **インストール済み**（ホーム画面追加が必要）
+- HTTPS
+- ユーザーの明示的な購読操作
+
+通常の Safari ブラウザ（ホーム画面追加なし）ではまだ Push が動かないので注意が必要です。
+
+### 確認ツール
+
+- Chrome DevTools → **Application** タブ
+  - **Manifest**: マニフェストの内容とアイコン確認
+  - **Service Workers**: 登録状態 / 更新ボタン
+  - **Push Messaging**: Push 通知のテスト送信
+- **Lighthouse** → PWA カテゴリ（インストール可能性のチェック）
+- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
 
 ## 演習
 
 ### ゴール
 
-- React + Vite プロジェクトに Sentry を入れる
-- 意図的にエラーを起こして Sentry に届くことを確認する
-- ユーザーコンテキストとタグを付ける
+- `manifest.webmanifest` を作成して DevTools で PWA スコアを確認する
+- VAPID 鍵を生成して Push 通知の購読コードを書く
 
-### 手順 1: Sentry アカウントとプロジェクト作成
+### 手順 1: manifest.webmanifest を作成する
 
-[sentry.io](https://sentry.io/) で無料アカウントを作り、**新規プロジェクト**（platform = React）を作成。**DSN** を控えます。
+lesson124 で作った `pwa-sample` プロジェクトを使います。`vite-plugin-pwa` がマニフェストを自動生成しますが、ここでは手動で置く方法も確認します。
 
-### 手順 2: 新規 React プロジェクト
+`public/manifest.webmanifest`:
 
-```bash
-npm create vite@latest sentry-sample -- --template react-ts
-cd sentry-sample
-npm install @sentry/react
-npm install
-```
-
-### 手順 3: 初期化
-
-`.env`:
-
-```
-VITE_SENTRY_DSN=（控えた DSN を貼る）
-VITE_APP_VERSION=0.1.0
-```
-
-`src/main.tsx`:
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import * as Sentry from "@sentry/react";
-import App from "./App.tsx";
-import "./index.css";
-
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [Sentry.browserTracingIntegration()],
-  tracesSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: `sentry-sample@${import.meta.env.VITE_APP_VERSION}`,
-});
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-      <App />
-    </Sentry.ErrorBoundary>
-  </StrictMode>,
-);
-```
-
-### 手順 4: わざとエラーを起こす
-
-`src/App.tsx`:
-
-```tsx
-import * as Sentry from "@sentry/react";
-import { useState } from "react";
-
-export default function App() {
-  const [crash, setCrash] = useState(false);
-
-  if (crash) {
-    throw new Error("意図的にクラッシュさせた");
-  }
-
-  const sendCustom = () => {
-    Sentry.captureMessage("カスタムメッセージ from Sentry test");
-  };
-
-  const sendException = () => {
-    try {
-      // @ts-expect-error わざと
-      null.foo();
-    } catch (e) {
-      Sentry.captureException(e);
-    }
-  };
-
-  const setUser = () => {
-    Sentry.setUser({ id: "user-123", username: "テストユーザー" });
-    Sentry.setTag("test-run", "manual");
-  };
-
-  return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>Sentry Demo</h1>
-      <button onClick={() => setCrash(true)}>レンダリングエラー</button>
-      <button onClick={sendException}>例外を送信</button>
-      <button onClick={sendCustom}>メッセージを送信</button>
-      <button onClick={setUser}>ユーザーをセット</button>
-    </div>
-  );
+```json
+{
+  "name": "PWA Sample App",
+  "short_name": "PWA",
+  "description": "Service Worker とオフライン対応のサンプル",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
 }
 ```
 
-### 手順 5: 起動して確認
+`index.html` の `<head>` にリンクを追加します:
 
-```bash
-npm run dev
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a" />
+    <title>PWA Sample</title>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.tsx"></script>
+  </body>
+</html>
 ```
 
-ボタンを押して、Sentry のダッシュボードでイベントが届くのを確認します（数秒〜数十秒の遅延あり）。
+`npm run build && npm run preview` でビルドし、DevTools → Application → Manifest でアイコンと name が表示されることを確認します。
 
 ### 期待出力
 
-- 「レンダリングエラー」を押すと Error Boundary の fallback が表示され、Sentry にイベントが届く
-- 「例外を送信」で `TypeError` が届く
-- 「メッセージを送信」で文字列イベントが届く
-- 「ユーザーをセット」した後のイベントは **ユーザー情報付き** で届く
-- ダッシュボードで `release: sentry-sample@0.1.0` 付きとして表示される
+- DevTools → Application → Manifest でアイコンと `name: "PWA Sample App"` が表示される
+- アドレスバーにインストールアイコンが現れる
+
+### 手順 2: VAPID 鍵を生成して Push 通知の購読コードを書く
+
+VAPID 鍵の生成には `web-push` パッケージを使います。
+
+```bash
+npm install web-push
+npx web-push generate-vapid-keys
+```
+
+出力例:
+
+```
+Public Key:
+BNxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+
+Private Key:
+xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+```
+
+生成した公開鍵を使って購読コードを書きます。`src/subscribe.ts`:
+
+```ts
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+  const padding = "=".repeat((4 - (base64String.length % 4)) % 4);
+  const base64 = (base64String + padding).replace(/-/g, "+").replace(/_/g, "/");
+  const rawData = atob(base64);
+  return Uint8Array.from([...rawData].map((c) => c.charCodeAt(0)));
+}
+
+const VAPID_PUBLIC_KEY = "ここに生成した公開鍵を貼る";
+
+export async function subscribeToPush(): Promise<PushSubscription | null> {
+  const permission = await Notification.requestPermission();
+  if (permission !== "granted") {
+    console.warn("通知が拒否されました");
+    return null;
+  }
+
+  const reg = await navigator.serviceWorker.ready;
+  const subscription = await reg.pushManager.subscribe({
+    userVisibleOnly: true,
+    applicationServerKey: urlBase64ToUint8Array(VAPID_PUBLIC_KEY),
+  });
+
+  console.log("購読情報:", JSON.stringify(subscription));
+  return subscription;
+}
+```
 
 ### 変える
 
-- `tracesSampleRate` を `0.1` にして、パフォーマンス計測のサンプリング率を下げる
-- `Sentry.replayIntegration()` を追加し、セッションリプレイを有効にする
-- `setTag("page", "home")` などタグを増やしてダッシュボードで絞り込みを試す
+`display: "standalone"` を `display: "browser"` に変えてビルドし直します。`browser` ではブラウザの UI バーが残り、アドレスバーやナビゲーションボタンが表示されます。`standalone` と見比べると、インストール後のアプリ体験の違いが分かります。
 
-### 自分で書く（任意）
+### 自分で書く
 
-- Next.js プロジェクトに `npx @sentry/wizard@latest -i nextjs` で Sentry を入れる
-- API Route の中で意図的にエラーを起こし、Sentry に届くことを確認する
-- ビルド時に Source Map をアップロードして、minify 後のコードが元のソースで表示されることを確認
+サーバーサイドから Web Push を送信する最小スクリプトを書きます。
+
+`scripts/send-push.ts`:
+
+```ts
+import webpush from "web-push";
+
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY!;
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY!;
+
+// 手順 2 で subscribeToPush() が出力した購読情報を貼る
+const subscription: webpush.PushSubscription = {
+  endpoint: "https://fcm.googleapis.com/fcm/send/xxxxxxxxxx",
+  keys: {
+    p256dh: "xxxxxxxxxxxxxxxxxxxx",
+    auth: "xxxxxxxxxxxx",
+  },
+};
+
+webpush.setVapidDetails(
+  "mailto:admin@example.com",
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY,
+);
+
+await webpush.sendNotification(
+  subscription,
+  JSON.stringify({
+    title: "テスト通知",
+    body: "Web Push が届きました",
+    url: "/",
+  }),
+);
+
+console.log("Push 送信完了");
+```
+
+`VAPID_PUBLIC_KEY` と `VAPID_PRIVATE_KEY` を環境変数に設定してから実行します:
+
+```bash
+VAPID_PUBLIC_KEY=xxx VAPID_PRIVATE_KEY=yyy npx tsx scripts/send-push.ts
+```
+
+ブラウザで購読済みの状態でこのスクリプトを実行し、通知が届けば成功です。
 
 ## まとめ
 
-- **エラートラッキング** は「ユーザーが言わなければ気づけないバグ」を救うインフラ
-- Sentry は React / Next.js / Node.js を 1 つの SDK でカバー
-- React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
-- **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
-- `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
-- `release` / `environment` で **退行**（regression） を可視化
-- **Breadcrumbs** と **Session Replay** で再現が容易になる
-- 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
+- **Web Push** は Push Service が中継する。購読 → endpoint 保存 → サーバーから送信 → SW が受信の流れ
+- **VAPID** は送信者認証の仕組み。公開鍵をブラウザに登録し、送信時に秘密鍵で署名する
+- **Background Sync** でオフライン時の送信失敗を再接続後に自動リトライできる
+- **`manifest.webmanifest`** の `display` / `icons` / `shortcuts` でアプリ体験を整える
+- **iOS Safari** で Push 通知が使えるのは iOS 16.4 以降かつホーム画面インストール後のみ
+- DevTools の Application タブと **Lighthouse PWA** / **PWA Builder** で診断する

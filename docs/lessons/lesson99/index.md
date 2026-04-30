@@ -1,421 +1,397 @@
-# lesson99: API モック — MSW（Mock Service Worker）
+# lesson97: テスト入門 — Vitest でユニットテスト
 
 ## ゴール
 
-- なぜテストで API モックが必要かを説明できる
-- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
-- `http.get` / `http.post` で HTTP ハンドラを書ける
-- `setupServer` で Vitest にモックを組み込める
-- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
-- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
+- なぜテストを書くか、何が報われるかを自分の言葉で説明できる
+- Vitest をプロジェクトにセットアップできる
+- `describe` / `it` / `expect` の基本構文を読める・書ける
+- 純粋関数（純関数）のユニットテストを書ける
+- watch モードで「コードを直したらテストが即走る」体験を得る
+- テストピラミッド（ユニット 70% / 結合 20% / E2E 10%）の考え方を知る
 
 ## 解説
 
-### なぜテストで API モックが必要か
+### なぜテストを書くか
 
-`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
+「テストは時間の無駄」と感じる人もいます。しかし実務では次のリターンがあります。
 
-- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
-- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
-- 速度が遅い（数百 ms × テスト数だけ待たされる）
-- オフラインで CI が動かない
+1. **デグレ防止**: 一度直したバグが、別の修正でまた壊れることを自動検知
+2. **リファクタリングの安心感**: テストが通っていれば、内部実装を大胆に書き換えられる
+3. **設計のフィードバック**: テストが書きにくいコードは、責務が混ざっている兆候。設計改善のシグナル
+4. **ドキュメント代わり**: テストが「この関数はこう動く」の生きた説明になる
 
-これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
+逆にテストが要らない / 後回しでよいケース:
 
-### MSW とは
+- 試作で捨てる前提のコード
+- 1 度だけ使うスクリプト
+- UI のピクセル単位の見た目（人間の目で確認する方が速い）
 
-**Mock Service Worker**（MSW） は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
+本コースは学習教材なのでテストは書いていませんが、**実務に出るときの必修科目** です。
 
-特徴:
+### テストピラミッド
 
-- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
-- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
-- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
-- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
+テストには規模の違いがあります。
 
-### 他のモック手法との比較
+| 種類 | 速度 | 安定 | 範囲 | 比率の目安 |
+|---|---|---|---|---|
+| ユニット | 速い（ms） | 安定 | 関数 1 つ | 70% |
+| コンポーネント / 結合 | 中間 | 中間 | コンポーネント / 複数モジュール | 20% |
+| E2E | 遅い（秒） | 不安定 | アプリ全体 | 10% |
 
-- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
-- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
-- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
+ピラミッドの考え方は **「下が広く、上が狭い」** です。ユニットを多く書き、E2E は最重要パスだけに絞ります。E2E は「ログイン → 商品購入」のような **失敗するとビジネス的に致命的な経路** に投資する、というのが 2026 年の定番です。
 
-複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
+本レッスンでは **Vitest でユニットテスト**（純粋関数のテスト）を扱います。コンポーネントテスト（Testing Library）、API モック（MSW）、E2E（Playwright）はそれぞれ別の章で扱います。
 
-### セットアップ
+### Vitest とは
 
-「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
+**Vitest** は Vite の上で動くテストランナーです。Jest（昔からある定番）と同じ書き方で、**Vite と同じ設定（TypeScript / JSX / 環境変数 / プラグイン）が自動で効く** のが大きな利点です。冷起動が Jest より一桁速いと言われています。
+
+2026 年現在、新規プロジェクトでは **Vitest が第一候補** です。Jest は既存資産との互換のために残るケースが多いです。
+
+### Vitest のセットアップ
+
+新規 Vite プロジェクトに Vitest を入れるとき:
 
 ```bash
-npm install -D msw
+npm install -D vitest @vitejs/plugin-react jsdom
 ```
 
-`src/mocks/handlers.ts` を作成（ハンドラ定義）:
+`vitest.config.ts` を作成:
 
 ```ts
-import { http, HttpResponse } from "msw";
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-export const handlers = [
-  // GET /api/posts
-  http.get("https://api.example.com/posts", () => {
-    return HttpResponse.json([
-      { id: 1, title: "1 件目" },
-      { id: 2, title: "2 件目" },
-    ]);
-  }),
-
-  // POST /api/posts
-  http.post("https://api.example.com/posts", async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
-  }),
-];
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",  // ブラウザ風 DOM を提供（コンポーネントテスト用）
+    globals: true,         // describe / it / expect を import なしで使える
+    setupFiles: ["./vitest.setup.ts"], // 共通の前処理を書く場合
+  },
+});
 ```
 
-`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
+`package.json` に scripts を足す:
 
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
-
-export const server = setupServer(...handlers);
-```
-
-`vitest.setup.ts` に追記（テスト全体のフック）:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
-
-これで:
-
-- 全テストの前にモックサーバを起動
-- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
-- 全テスト後にサーバを停止
-- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
-
-### 簡単なコンポーネントテスト
-
-`src/PostsList.tsx`:
-
-```tsx
-import { useEffect, useState } from "react";
-
-type Post = { id: number; title: string };
-
-export function PostsList() {
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("https://api.example.com/posts")
-      .then((res) => {
-        if (!res.ok) throw new Error("読み込み失敗");
-        return res.json();
-      })
-      .then(setPosts)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <p>エラー: {error}</p>;
-  if (posts === null) return <p>読み込み中...</p>;
-
-  return (
-    <ul>
-      {posts.map((p) => (
-        <li key={p.id}>{p.title}</li>
-      ))}
-    </ul>
-  );
+```json
+{
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run"
+  }
 }
 ```
 
-`src/PostsList.test.tsx`:
+- `npm run test`: **watch モード** で起動。ファイル変更を検知して再実行
+- `npm run test:run`: 1 回だけ実行（CI 用）
 
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { PostsList } from "./PostsList";
+> **CI で動かす最小例**: GitHub Actions なら `.github/workflows/test.yml` に下記を置くだけで PR / push 時に毎回テストが走ります。
+>
+> ```yaml
+> name: test
+> on: [push, pull_request]
+> jobs:
+>   test:
+>     runs-on: ubuntu-latest
+>     steps:
+>       - uses: actions/checkout@v4
+>       - uses: actions/setup-node@v4
+>         with:
+>           node-version: 22
+>           cache: npm
+>       - run: npm ci
+>       - run: npm run test:run
+> ```
 
-describe("PostsList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<PostsList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
-  });
+### 最小のテスト
 
-  it("読み込みが終わると一覧を表示する", async () => {
-    render(<PostsList />);
-    expect(await screen.findByText("1 件目")).toBeInTheDocument();
-    expect(screen.getByText("2 件目")).toBeInTheDocument();
-  });
-});
-```
-
-`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
-
-### 失敗ケースのテスト: `server.use` で一時上書き
-
-「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { PostsList } from "./PostsList";
-
-describe("PostsList のエラー", () => {
-  it("API が 500 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
-  });
-
-  it("API が 404 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 404 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
-  });
-});
-```
-
-`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
-
-### POST のテスト
-
-書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { CreatePostForm } from "./CreatePostForm";
-
-describe("CreatePostForm", () => {
-  it("送信すると新しい記事 ID が表示される", async () => {
-    const user = userEvent.setup();
-    render(<CreatePostForm />);
-
-    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
-  });
-});
-```
-
-`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
-
-### 遅延を入れる: `delay`
-
-「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
+テストファイルは `*.test.ts` / `*.test.tsx` / `*.spec.ts` の命名で書きます。Vitest が自動で見つけて実行します。
 
 ```ts
-import { http, HttpResponse, delay } from "msw";
-
-export const handlers = [
-  http.get("https://api.example.com/posts", async () => {
-    await delay(100);  // 100ms 遅らせる
-    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
-  }),
-];
+// src/math.ts
+export function add(a: number, b: number): number {
+  return a + b;
+}
 ```
 
-これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
+```ts
+// src/math.test.ts
+import { describe, it, expect } from "vitest";
+import { add } from "./math";
+
+describe("add", () => {
+  it("正の数を 2 つ足す", () => {
+    expect(add(2, 3)).toBe(5);
+  });
+
+  it("負の数も足せる", () => {
+    expect(add(-1, -2)).toBe(-3);
+  });
+
+  it("0 を足すと変わらない", () => {
+    expect(add(10, 0)).toBe(10);
+  });
+});
+```
+
+3 つの基本構造:
+
+- **`describe(名前, () => {...})`**: テストをグループ化
+- **`it(条件, () => {...})`**: 1 つのテストケース。`test(...)` でも同じ
+- **`expect(値).toBe(期待値)`**: アサーション（期待を表明）
+
+`globals: true` を有効にしているので、`import` を省いてもエラーにはなりませんが、**明示的に import するのが推奨** です（IDE の補完が効くため）。
+
+### よく使うアサーション
+
+```ts
+expect(value).toBe(5);              // === で比較（プリミティブ）
+expect(obj).toEqual({ a: 1 });      // 構造比較（オブジェクト / 配列）
+expect(arr).toContain("apple");     // 配列が要素を含むか
+expect(str).toMatch(/hello/);       // 文字列が正規表現にマッチするか
+expect(value).toBeNull();           // null かどうか
+expect(value).toBeUndefined();      // undefined かどうか
+expect(value).toBeTruthy();         // truthy（真値）か
+expect(value).toBeFalsy();          // falsy（偽値）か
+expect(fn).toThrow("エラーメッセージ"); // 関数が例外を投げるか
+expect(arr).toHaveLength(3);        // 配列 / 文字列の長さ
+```
+
+`toBe` と `toEqual` の使い分けは要注意。
+
+```ts
+expect({ a: 1 }).toBe({ a: 1 });    // NG: 別オブジェクトなので fail
+expect({ a: 1 }).toEqual({ a: 1 }); // OK: 構造が同じなので pass
+```
+
+オブジェクト / 配列は `toEqual`、それ以外は `toBe` と覚えてください。
+
+### `beforeEach` と `afterEach`
+
+各テストの前後に共通処理を入れたい場合に使います。
+
+```ts
+import { describe, it, expect, beforeEach, afterEach } from "vitest";
+
+describe("Counter", () => {
+  let count: number;
+
+  beforeEach(() => {
+    count = 0;  // 各テスト前にリセット
+  });
+
+  it("増やすと 1 になる", () => {
+    count++;
+    expect(count).toBe(1);
+  });
+
+  it("リセット後も 0 から始まる", () => {
+    expect(count).toBe(0);  // beforeEach のおかげで毎回 0 から
+  });
+});
+```
+
+### 非同期コードのテスト
+
+`async / await` で書くと自然に通ります。
+
+```ts
+import { describe, it, expect } from "vitest";
+
+async function fetchUser(id: number) {
+  return new Promise((resolve) =>
+    setTimeout(() => resolve({ id, name: "Alice" }), 10)
+  );
+}
+
+describe("fetchUser", () => {
+  it("ユーザーを取得する", async () => {
+    const user = await fetchUser(1);
+    expect(user).toEqual({ id: 1, name: "Alice" });
+  });
+});
+```
+
+「Promise のテスト」を意識しなくても、関数を `async` にして `await` を書くだけで OK です。
+
+### watch モードで開発する
+
+`npm run test` で立ち上がる watch モードでは、
+
+- ファイル変更を検知して自動再実行
+- 失敗したテストを表示しっぱなしにして、対応するファイルを直すと即パス確認
+- キーボード操作で **filter**（特定のテストだけ実行）/ **rerun**（全部再実行）/ **quit** ができる
+
+開発しながらテストを書く / 直す体験は、watch モードがあるとないとで雲泥の差です。
 
 ## 演習
 
 ### ゴール
 
-- MSW のセットアップを完了する
-- ハンドラ 3 種（成功 / エラー / 遅延）を書く
-- `useEffect` で fetch する小さなコンポーネントをテストする
-- `server.use` でテストごとにレスポンスを上書きできる
+- Vitest をセットアップできる
+- 「文字列を処理する関数」のユニットテストを 5 件書ける
+- watch モードで「直したら即通る」を体感する
 
 ### 途中から始める場合
 
-「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
+新規 StackBlitz の Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-vanilla-ts>）を開きます。テンプレートには Vitest が入っていないので追加します。
+
+### 手順 1: Vitest をインストール
+
+ターミナル（StackBlitz の場合は下部の Terminal タブ）で:
 
 ```bash
-npm install -D vitest @vitejs/plugin-react jsdom
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
-npm install -D msw
+npm install -D vitest
 ```
 
-`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
+> 注: 本レッスンはコンポーネントテストではないので `@vitejs/plugin-react` / `jsdom` は不要です。React Testing Library のレッスンで足します。
 
-### 手順 1: モックサーバを構築
+### 手順 2: 設定ファイルを作る
 
-`src/mocks/handlers.ts`:
+プロジェクトルートに `vitest.config.ts` を作成:
 
 ```ts
-import { http, HttpResponse, delay } from "msw";
+import { defineConfig } from "vitest/config";
 
-export const handlers = [
-  http.get("https://api.example.com/users", async () => {
-    await delay(50);
-    return HttpResponse.json([
-      { id: 1, name: "Alice" },
-      { id: 2, name: "Bob" },
-    ]);
-  }),
-];
+export default defineConfig({
+  test: {
+    globals: true,
+  },
+});
 ```
 
-`src/mocks/server.ts`:
+`package.json` の `scripts` に以下を追加:
 
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
-
-export const server = setupServer(...handlers);
-```
-
-`vitest.setup.ts` に追記:
-
-```ts
-import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
-```
-
-### 手順 2: コンポーネントを作る
-
-`src/UsersList.tsx`:
-
-```tsx
-import { useEffect, useState } from "react";
-
-type User = { id: number; name: string };
-
-export function UsersList() {
-  const [users, setUsers] = useState<User[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("https://api.example.com/users")
-      .then((res) => {
-        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
-        return res.json();
-      })
-      .then(setUsers)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <p role="alert">{error}</p>;
-  if (users === null) return <p>読み込み中...</p>;
-
-  return (
-    <ul>
-      {users.map((u) => (
-        <li key={u.id}>{u.name}</li>
-      ))}
-    </ul>
-  );
+```json
+{
+  "scripts": {
+    "test": "vitest"
+  }
 }
 ```
 
-> **補足: `role="alert"` を後挿入で使うときの注意**: `role="alert"` を持つ要素は **live region** として扱われ、内容が更新されるとスクリーンリーダーが即座に読み上げます。ただし、エラー発生時に `<p role="alert">` を **新しく描画** する形（上のコードのように `{error && <p role="alert">...}` で出し入れする形）は、SR 実装によっては読み上げが発火しないことがあります。確実に通知したいときは「常設の `<div role="alert">` を空で置いておき、中身だけ差し替える」「`aria-live="assertive"` を併記する」形を検討します。
+### 手順 3: テスト対象のコードを書く
 
-### 手順 3: テストを書く
+`src/string-utils.ts` を作成:
 
-`src/UsersList.test.tsx`:
+```ts
+export function reverse(s: string): string {
+  return s.split("").reverse().join("");
+}
 
-```tsx
+export function isPalindrome(s: string): boolean {
+  const cleaned = s.toLowerCase().replace(/[^a-z0-9]/g, "");
+  return cleaned === reverse(cleaned);
+}
+
+export function truncate(s: string, max: number): string {
+  if (s.length <= max) return s;
+  return s.slice(0, max) + "...";
+}
+```
+
+### 手順 4: テストを書く
+
+`src/string-utils.test.ts` を作成:
+
+```ts
 import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { UsersList } from "./UsersList";
+import { reverse, isPalindrome, truncate } from "./string-utils";
 
-describe("UsersList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<UsersList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+describe("reverse", () => {
+  it("文字列を反転する", () => {
+    expect(reverse("hello")).toBe("olleh");
   });
 
-  it("読み込みが終わるとユーザーを並べる", async () => {
-    render(<UsersList />);
+  it("空文字は空文字のまま", () => {
+    expect(reverse("")).toBe("");
+  });
+});
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("Bob")).toBeInTheDocument();
+describe("isPalindrome", () => {
+  it("回文は true", () => {
+    expect(isPalindrome("racecar")).toBe(true);
+    expect(isPalindrome("level")).toBe(true);
   });
 
-  it("エラー時はエラーメッセージを表示する", async () => {
-    server.use(
-      http.get("https://api.example.com/users", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
+  it("回文でなければ false", () => {
+    expect(isPalindrome("hello")).toBe(false);
+  });
 
-    render(<UsersList />);
+  it("大文字小文字を無視する", () => {
+    expect(isPalindrome("RaceCar")).toBe(true);
+  });
 
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
+  it("記号と空白を無視する", () => {
+    expect(isPalindrome("A man, a plan, a canal: Panama")).toBe(true);
+  });
+});
+
+describe("truncate", () => {
+  it("最大長以内なら変えない", () => {
+    expect(truncate("hello", 10)).toBe("hello");
+  });
+
+  it("超えたら切り詰めて ... を付ける", () => {
+    expect(truncate("hello world", 5)).toBe("hello...");
+  });
+
+  it("ちょうどなら変えない", () => {
+    expect(truncate("hello", 5)).toBe("hello");
   });
 });
 ```
 
-### 手順 4: 実行
+### 手順 5: 実行
 
 ```bash
 npm run test
 ```
 
-3 件すべて緑になれば成功です。
+Vitest が起動し、watch モードで全テストが走ります。すべて緑のチェックで pass すれば成功です。
 
 ### 期待出力
 
 ```
- PASS  src/UsersList.test.tsx (3)
-   PASS  最初は読み込み中を表示する
-   PASS  読み込みが終わるとユーザーを並べる
-   PASS  エラー時はエラーメッセージを表示する
+ PASS  src/string-utils.test.ts (10)
+   PASS  reverse (2)
+     PASS  文字列を反転する
+     PASS  空文字は空文字のまま
+   PASS  isPalindrome (4)
+     PASS  回文は true
+     PASS  回文でなければ false
+     PASS  大文字小文字を無視する
+     PASS  記号と空白を無視する
+   PASS  truncate (3)
+     PASS  最大長以内なら変えない
+     PASS  超えたら切り詰めて ... を付ける
+     PASS  ちょうどなら変えない
 
  Test Files  1 passed (1)
-      Tests  3 passed (3)
+      Tests  10 passed (10)
 ```
+
+実際の Vitest 出力では緑のチェックマーク記号がそれぞれの行頭に付きます。すべて緑になれば OK です。
 
 ### 変える
 
-- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
-- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
-- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
+- `truncate("hello world", 5)` の期待値を `"hello world"` に変えてみる。fail することを確認（fail 表示で「実際は何が返ったか」が示される）。元に戻す
+- `string-utils.ts` の `truncate` の `+ "..."` を消してみる。watch モードが即座に該当テストの fail を表示する。元に戻す
+- 新しい関数 `wordCount(s: string): number`（空白で区切った単語数を返す）を `string-utils.ts` に足し、テストも 3 件書く
 
 ### 自分で書く
 
-- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
-- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
-- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
+- 配列を扱う関数を作ってテストを書く
+  - `unique<T>(arr: T[]): T[]`（重複を除いた配列）
+  - `chunk<T>(arr: T[], size: number): T[][]`（配列を size ごとに分割）
+- 各関数で **境界値**（空配列 / 1 要素 / size より小さい配列）も忘れずテストする
 
 ## まとめ
 
-- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
-- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
-- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
-- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
-- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
-- テストごとに `server.use(...)` でハンドラを上書きできる
-- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
-- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知
+- テストはデグレ防止 / リファクタリング安心 / 設計フィードバック / ドキュメント代わりの 4 つで報われる
+- テストピラミッド: ユニット 70% / 結合 20% / E2E 10% を目安
+- **Vitest** は Vite の上で動くテストランナー。Jest 互換の書き味で 10x 速い
+- 基本構造: `describe(名前, () => { it(条件, () => { expect(値).toBe(期待値) }) })`
+- アサーション: `toBe` はプリミティブ / `toEqual` はオブジェクト・配列
+- watch モードでファイル変更検知 → 即再実行で開発体験が大きく向上

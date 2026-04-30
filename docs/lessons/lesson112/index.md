@@ -1,444 +1,341 @@
-# lesson112: React Hook Form の基本
+# lesson110: GitHub Actions で CI
 
 ## ゴール
 
-- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
-- RHF を `npm install` してフォームに導入できる
-- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
-- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
-- `formState.errors` でエラーメッセージを表示できる
-- `defaultValues` で初期値を入れる
-- `watch` / `setValue` / `reset` の使い分けを知る
+- CI / CD の意味と価値を説明できる
+- GitHub Actions のワークフロー YAML の基本構造を読める
+- push / pull_request トリガーで Lint / Test / Build を自動実行できる
+- 失敗時の通知・ステータスバッジ・キャッシュの基本を知る
+- ブランチ保護ルールに **CI 必須** を組み合わせる
+- Vercel / Netlify の Preview Deployment が裏でやっていることを理解する
 
 ## 解説
 
-### 制御コンポーネントの限界
+### CI / CD とは
 
-これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
+- **CI**（Continuous Integration、継続的インテグレーション）: コードをリポジトリに統合する **そのたびに** 自動でビルド / テスト / Lint を回す仕組み
+- **CD**（Continuous Delivery / Deployment、継続的デリバリー / デプロイ）: 統合に成功したら自動でステージング / 本番にデプロイする仕組み
 
-```tsx
-const [name, setName] = useState("");
-const [email, setEmail] = useState("");
-const [message, setMessage] = useState("");
-// ...
-<input value={name} onChange={(e) => setName(e.target.value)} />
-<input value={email} onChange={(e) => setEmail(e.target.value)} />
-<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
+CI が崩れたまま開発を続けると、**「どの変更で壊れたか分からない」** 状態になります。1 つの PR ごとに「壊れていない」を保証することで、main は常に動く状態を保てます。
+
+### GitHub Actions とは
+
+GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料・無制限** で実行できます。Private リポジトリは Free プランで月 2,000 分まで（執筆時点）、Pro / Team / Enterprise で枠が増えます。
+
+主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
+
+### 最小のワークフロー
+
+`.github/workflows/ci.yml`:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run test:run
 ```
 
-シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
+このファイルを **commit + push** すると、GitHub Actions タブに最初の実行が現れ、自動で:
 
-- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
-- **コードが冗長**: state と setter の宣言が増える
-- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
-- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
+1. Ubuntu の仮想マシンを起動
+2. リポジトリを `checkout`
+3. Node.js 22 をセットアップ（npm キャッシュも有効化）
+4. `npm ci` で依存パッケージをインストール
+5. `npm run test:run` でテストを実行
 
-これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
+### 構造を読む
 
-### React Hook Form とは
+- **`name`**: ワークフローの表示名
+- **`on`**: トリガー条件
+  - `push.branches`: 指定ブランチへの push で実行
+  - `pull_request.branches`: 指定ブランチを **マージ先** にする PR で実行
+  - `schedule`: cron 式で定期実行
+  - `workflow_dispatch`: 手動実行
+- **`jobs`**: 並列実行できる仕事の単位
+- **`runs-on`**: 実行環境（`ubuntu-latest` / `macos-latest` / `windows-latest`）
+- **`steps`**: 順番に実行する処理
+  - `uses: actions/...@v4`: 既製のアクションを使う
+  - `run: ...`: シェルコマンドを実行
 
-RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
+### Lint / テスト / ビルドを並列で
 
-- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
-- **少ないコード** で大きなフォームを書ける
-- **バリデーション + エラー管理** が組み込み
+実用的には次のような構成です。
 
-2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
+```yaml
+name: CI
 
-### インストール
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-```bash
-npm install react-hook-form
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run test:run
+
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
 ```
 
-### 最小のフォーム
+3 つの job が **並列で実行** されます。1 つでも fail すると全体が fail として扱われ、PR ページに赤い X が出ます。
 
-`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
+### キャッシュで速くする
 
-```tsx
-import { useForm } from "react-hook-form";
+`actions/setup-node@v4` の `cache: npm` を指定するだけで、`~/.npm` の中身がキャッシュされます。2 回目以降の `npm ci` が秒速で終わります。
 
-type FormValues = {
-  name: string;
-  email: string;
-};
+`pnpm` / `yarn` の場合も同様にキャッシュキーを指定できます。
 
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
+### マトリクスで複数バージョンをテスト
 
-  function onSubmit(data: FormValues) {
-    console.log(data);
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)}>
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-required="true"
-          aria-invalid={errors.name ? "true" : "false"}
-          {...register("name", { required: "必須です" })}
-        />
-        {errors.name && <p role="alert">{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-required="true"
-          aria-invalid={errors.email ? "true" : "false"}
-          {...register("email", { required: "必須です" })}
-        />
-        {errors.email && <p role="alert">{errors.email.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        送信
-      </button>
-    </form>
-  );
-}
+```yaml
+test:
+  runs-on: ubuntu-latest
+  strategy:
+    matrix:
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }}, cache: npm }
+    - run: npm ci
+    - run: npm run test:run
 ```
 
-主な要素:
+これで Node 20 と 22 の両方で同じテストが走ります。複数 OS（`os: [ubuntu, macos, windows]`）も同様。
 
-- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
-- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
-- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
-- **`formState.errors`**: バリデーションエラーが格納される
-- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
+### 環境変数とシークレット
 
-### バリデーションオプション
+機密情報（API キー / Vercel トークン等）はリポジトリ設定の **Settings → Secrets and variables → Actions → New repository secret** に登録します。ワークフローからは:
 
-`register` の第 2 引数で各種ルールを指定できます。
-
-```tsx
-{...register("password", {
-  required: "パスワードは必須です",
-  minLength: { value: 8, message: "8 文字以上で入力してください" },
-  maxLength: { value: 100, message: "100 文字以内で入力してください" },
-  pattern: {
-    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
-    message: "英字と数字を混ぜてください",
-  },
-})}
+```yaml
+- run: deploy --token $VERCEL_TOKEN
+  env:
+    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
 ```
 
-`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
+YAML やコードに **直接書くと公開されてしまう** ので絶対に避けます。
 
-```tsx
-{...register("age", {
-  validate: (value) => {
-    if (value < 18) return "18 歳以上である必要があります";
-    if (value > 120) return "値が大きすぎます";
-    return true; // OK
-  },
-})}
+### ステータスバッジ
+
+`README.md` の冒頭に CI バッジを貼ると、ブランチが「動く状態か」が一目で分かります。
+
+```md
+[![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
 ```
 
-### `defaultValues` で初期値
+緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
 
-編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
+### ブランチ保護と CI 必須
 
-```tsx
-const { register, handleSubmit } = useForm<FormValues>({
-  defaultValues: {
-    name: "Alice",
-    email: "alice@example.com",
-  },
-});
+「GitHub の PR とコードレビュー」で設定したブランチ保護に **「Require status checks to pass before merging」** を追加し、`lint` / `test` / `build` の各 job を必須に指定します。
+
+これで:
+
+- CI が通っていない PR は **マージ ボタンが押せない**
+- 「テスト書いてあるけど動かしたら fail してた」が起きなくなる
+- 安心して main を信じられる
+
+### Vercel / Netlify との関係
+
+Vercel / Netlify の **Preview Deployment** は、内部で GitHub Actions と似た仕組みを動かしています。PR を作るたびに **そのブランチの内容で本物のサイトを一時デプロイ** してくれて、URL が PR にコメントされます。
+
+CI（GitHub Actions）と Preview Deployment は **役割が違う** ので両方使うのが普通です:
+
+- **CI**（Actions）: テストや Lint で「壊れてないか」を機械的に検証
+- **Preview Deployment**: 「本物の動作を人間がブラウザで確認」する場所
+
+本コースの教材サイトでも、PR を作ると Vercel が自動でプレビュー URL を作ってくれています。
+
+### Lighthouse CI で a11y / パフォーマンスを CI に
+
+「アクセシビリティの自動チェック」と「Core Web Vitals」で扱った **Lighthouse** を CI に組み込めます。
+
+```yaml
+- name: Lighthouse CI
+  uses: treosh/lighthouse-ci-action@v12
+  with:
+    urls: |
+      https://your-preview-url.vercel.app/
+    uploadArtifacts: true
+    temporaryPublicStorage: true
 ```
 
-非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
+PR ごとに自動で Lighthouse が走り、スコアが下がったら警告できます。
 
-```tsx
-const { register, handleSubmit, reset } = useForm<FormValues>();
+### 通知
 
-useEffect(() => {
-  fetch("/api/me")
-    .then((r) => r.json())
-    .then((user) => reset(user));
-}, [reset]);
+CI 失敗時に Slack / Discord / Email に通知する Action も豊富です。
+
+- `slackapi/slack-github-action`
+- `act10ns/slack`
+- 失敗時のみ通知する条件: `if: failure()`
+
+```yaml
+- name: Slack 通知
+  if: failure()
+  uses: slackapi/slack-github-action@v2
+  with:
+    payload: '{"text": "CI failed!"}'
+  env:
+    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
 ```
 
-### `watch` で値を購読
+### よく使う公式アクション
 
-特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
+| アクション | 用途 |
+|---|---|
+| `actions/checkout@v4` | リポジトリを checkout |
+| `actions/setup-node@v4` | Node.js セットアップ |
+| `actions/cache@v4` | 任意のディレクトリをキャッシュ |
+| `actions/upload-artifact@v4` | テスト結果やビルド成果物を保存 |
+| `actions/download-artifact@v4` | 保存した成果物を取り出す |
+| `pnpm/action-setup` | pnpm セットアップ（Node とは別途） |
 
-```tsx
-const { watch, register } = useForm<FormValues>();
-const subscribe = watch("subscribe");
-
-return (
-  <>
-    <label>
-      <input type="checkbox" {...register("subscribe")} />
-      購読する
-    </label>
-
-    {subscribe && (
-      <div>
-        <label>頻度</label>
-        <select {...register("frequency")}>
-          <option value="daily">毎日</option>
-          <option value="weekly">毎週</option>
-        </select>
-      </div>
-    )}
-  </>
-);
-```
-
-`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
-
-### `setValue` でプログラム的に値を設定
-
-```tsx
-const { setValue } = useForm<FormValues>();
-
-// 別のボタンや非同期処理から値を入れる
-setValue("name", "Bob");
-```
-
-「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
-
-### `reset` でフォームを初期化
-
-送信成功後にフォームを空にする:
-
-```tsx
-async function onSubmit(data: FormValues) {
-  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
-  reset();  // 入力をクリア
-}
-```
-
-### 送信中の表示
-
-`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
-
-```tsx
-const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
-
-return (
-  <button type="submit" disabled={isSubmitting}>
-    {isSubmitting ? "送信中..." : "送信"}
-  </button>
-);
-```
-
-`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
-
-### アクセシブルなエラー表示
-
-「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
-
-```tsx
-<input
-  id="email"
-  type="email"
-  aria-invalid={errors.email ? "true" : "false"}
-  aria-describedby={errors.email ? "email-error" : undefined}
-  {...register("email", { required: "メールは必須です" })}
-/>
-{errors.email && (
-  <p id="email-error" role="alert">
-    {errors.email.message}
-  </p>
-)}
-```
-
-これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
-
-### エラー表示は色だけに頼らない
-
-フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
-
-1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
-2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
-3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
-
-CSS 例:
-
-```css
-.form-error {
-  color: #b91c1c;
-}
-@media (prefers-color-scheme: dark) {
-  .form-error {
-    color: #fca5a5;
-  }
-}
-```
+`actions/checkout` のバージョンは年に数回更新されます。最新版は <https://github.com/marketplace?type=actions> で確認できます。
 
 ## 演習
 
 ### ゴール
 
-- React + TS プロジェクトに RHF を導入する
-- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
-- 必須 / メールパターン / 最大長 のバリデーションを実装
-- 送信時に「送信中...」、成功で「送信しました！」を表示
+- 「GitHub の PR とコードレビュー」で作ったリポジトリに `.github/workflows/ci.yml` を追加する
+- PR を作って CI が走るのを確認する
+- ブランチ保護に CI 必須を追加する
 
-### 途中から始める場合
+### 手順 1: テストスクリプトを用意
 
-これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
+リポジトリにテストが何もない場合、最小のものを足します。`package.json` の `scripts` に:
+
+```json
+{
+  "scripts": {
+    "test:run": "echo 'テスト実行（プレースホルダ）'",
+    "lint": "echo 'Lint 実行（プレースホルダ）'",
+    "build": "echo 'Build 実行（プレースホルダ）'"
+  }
+}
+```
+
+実プロジェクトでは Vitest / ESLint / Vite / Next.js のビルドコマンドを書きます。
+
+### 手順 2: ワークフローを書く
+
+`.github/workflows/ci.yml`（プロジェクトルートから見たパス）:
+
+```yaml
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:run
+      - run: npm run build
+```
+
+### 手順 3: ブランチで commit + push
 
 ```bash
-npm create vite@latest rhf-sample -- --template react-ts
-cd rhf-sample
-npm install
-npm install react-hook-form
+git switch -c chore/ci
+mkdir -p .github/workflows
+# 上記 ci.yml を保存
+git add .github package.json
+git commit -m "chore: GitHub Actions で CI を追加"
+git push -u origin chore/ci
 ```
 
-### `src/ContactForm.tsx`
+### 手順 4: PR を作って CI を観察
 
-> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
+GitHub のリポジトリ → PR を作成。
 
-```tsx
-import { useForm } from "react-hook-form";
-import { useState } from "react";
+PR ページに **「Some checks haven't completed yet」** が出て、しばらくすると **「All checks have passed」** に変わるはずです（プレースホルダなので即終わる）。**Details** リンクから個別の job ログを見られます。
 
-type FormValues = {
-  name: string;
-  email: string;
-  message: string;
-};
+PR 内で右側の **Checks** タブを開くと、各 step ごとの所要時間とログが時系列で見られます。
 
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
+### 手順 5: ブランチ保護に CI 必須を追加
 
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<FormValues>();
+リポジトリの **Settings → Branches → main → Edit rule**:
 
-  async function onSubmit(data: FormValues) {
-    // 実際は fetch で送信。ここでは 1 秒待つだけ
-    await new Promise((r) => setTimeout(r, 1000));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
-  }
+- **Require status checks to pass before merging** にチェック
+- 検索ボックスに `ci` と入力 → 表示されたチェックを **必須** に登録
+- 保存
 
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
-
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          aria-describedby={errors.name ? "name-error" : undefined}
-          {...register("name", {
-            required: "お名前は必須です",
-            maxLength: { value: 50, message: "50 文字以内で入力してください" },
-          })}
-        />
-        {errors.name && (
-          <p id="name-error" role="alert" className="form-error">
-            {errors.name.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          aria-describedby={errors.email ? "email-error" : undefined}
-          {...register("email", {
-            required: "メールは必須です",
-            pattern: {
-              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
-              message: "メールアドレスの形式が正しくありません",
-            },
-          })}
-        />
-        {errors.email && (
-          <p id="email-error" role="alert" className="form-error">
-            {errors.email.message}
-          </p>
-        )}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          aria-describedby={errors.message ? "message-error" : undefined}
-          {...register("message", {
-            required: "メッセージは必須です",
-            minLength: { value: 10, message: "10 文字以上で入力してください" },
-          })}
-        />
-        {errors.message && (
-          <p id="message-error" role="alert" className="form-error">
-            {errors.message.message}
-          </p>
-        )}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
-  );
-}
-```
-
-### `src/App.tsx`
-
-```tsx
-import { ContactForm } from "./ContactForm";
-
-export default function App() {
-  return <ContactForm />;
-}
-```
+これ以降、CI が成功していない PR はマージできなくなります。試しに `ci.yml` をわざと壊して push してみると、CI が fail して PR がマージできない状態になります（確認したら戻す）。
 
 ### 期待出力
 
-- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
-- メールに `abc` を入れて送信 → メール形式エラー
-- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
-- DevTools の Console に送信値が出る
-
-`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
+- PR ページに緑のチェック「All checks have passed」が出る
+- Actions タブにワークフロー実行履歴が並ぶ
+- ブランチ保護でマージボタンが無効化される（CI 失敗時）
 
 ### 変える
 
-- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
-- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
-- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
+- ジョブを 3 つに分割（lint / test / build）して並列実行に変える。CI 全体の時間が短くなる
+- `runs-on` を `windows-latest` に変えて Windows でも動くか確認（Vite / Next なら通常 OK）
+- `if: github.event_name == 'pull_request'` を追加して、特定の job を PR 時だけ実行
+- `actions/cache@v4` で `~/.cache/Cypress` などをキャッシュして E2E を速くする
 
 ### 自分で書く
 
-- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
-- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
+- README に CI バッジを貼る
+- Vercel デプロイのプレビュー URL を Lighthouse CI で計測するワークフローを足す（`treosh/lighthouse-ci-action@v12`）
+- Slack 通知を `if: failure()` で組み込む
 
 ## まとめ
 
-- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
-- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
-- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
-- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
-- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
-- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
-- `isSubmitting` で送信中の UI 制御
+- **CI** は push / PR のたびに自動でビルド / テスト / Lint を回す仕組み
+- GitHub Actions は **`.github/workflows/*.yml`** に書くだけで動く
+- 構造: `on`（トリガー）→ `jobs`（並列の仕事）→ `steps`（順次のコマンド / アクション）
+- `actions/checkout` + `actions/setup-node` が定番の出発点。`cache: npm` で 2 回目以降が爆速
+- マトリクスで複数 OS / 複数 Node バージョンを並列テストできる
+- シークレットは **Settings → Secrets** に登録し、ワークフロー内で `secrets.NAME` を参照（具体的な記法は本文の YAML 例を参照）
+- ブランチ保護で **CI 必須** に設定すると安全
+- Vercel / Netlify の Preview Deployment は CI とは別の役割（実機確認）
+- Lighthouse CI / Slack 通知 / Artifact 保存などの拡張が豊富

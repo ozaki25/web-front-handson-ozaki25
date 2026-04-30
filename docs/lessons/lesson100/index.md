@@ -1,439 +1,490 @@
-# lesson100: E2E テスト — Playwright
+# lesson98: コンポーネントテスト — React Testing Library
 
 ## ゴール
 
-- E2E テストとユニット / コンポーネントテストの違いを説明できる
-- Playwright をプロジェクトにセットアップできる
-- `page.goto` / `page.getByRole` / `page.click` でブラウザ操作を書ける
-- Playwright の **`expect`** で UI の状態を検証できる
-- ヘッドレスモードと UI モード（`--ui`）の使い分けを知る
-- 失敗時のスクリーンショット / トレース / ビデオの仕組みを理解する
-- E2E は「ビジネスクリティカルな経路」だけに絞る判断軸を持てる
+- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
+- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
+- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
+- `userEvent` でクリック / 入力をシミュレートできる
+- 状態変化（`useState`）を含むコンポーネントのテストが書ける
+- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
 
 ## 解説
 
-### E2E テストの位置付け
+### React Testing Library の思想
 
-これまでに学んだテストの違いを再確認します。
+React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
 
-| 種類 | 範囲 | 速度 | 頻度 |
-|---|---|---|---|
-| ユニット (Vitest) | 関数 1 つ | 速い（ms） | 多い（70%） |
-| コンポーネント (RTL) | コンポーネント | 中間（数十 ms） | 中間（20%） |
-| E2E (Playwright) | アプリ全体 | 遅い（秒） | 少ない（10%） |
+1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
+2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
 
-E2E は **本物のブラウザを起動して、ユーザーが実際にやる操作の流れ全体を再現** します。「フォームに入力 → 送信 → 別ページに遷移 → 一覧に表示される」のような **複数画面にまたがる経路** を 1 つのテストで検証できます。
+これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
 
-代償は速度と安定性です。E2E は本物のブラウザを起動するぶん遅く、ネットワーク事情で fail することもあります。だから「最重要パスだけ」に絞るのが鉄則です。
-
-### Playwright とは
-
-**Playwright** は Microsoft 製の E2E テストフレームワークです。2026 年現在、Cypress と並ぶ二大選択肢で、新規プロジェクトでは Playwright が選ばれることが増えています。
-
-特徴:
-
-- Chromium / Firefox / WebKit（Safari エンジン）の **3 ブラウザを 1 つの API で** 操作できる
-- **自動待機**: 要素が現れるまで自動で待つので、`waitFor(...)` を書かなくてよい
-- **トレース・ビデオ・スクリーンショット** が失敗時に自動保存される
-- **codegen** で操作を録画してテストコードを生成できる
-- **UI モード**（`npx playwright test --ui`）で対話的にデバッグできる
+- 内部実装をリファクタしてもテストは壊れない
+- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
 
 ### セットアップ
 
-Vite + React プロジェクトに Playwright を追加します。
+「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
 
 ```bash
-npm install -D @playwright/test
-npx playwright install   # ブラウザ本体（Chromium / Firefox / WebKit）をダウンロード
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
 ```
 
-> StackBlitz のブラウザ環境では `npx playwright install` でブラウザ本体を取れない場合があります。Playwright はローカル環境で動かすのが基本です。本レッスンは「読みながら手元で試す」前提で進めてください。
-
-`playwright.config.ts` を作成（最小形）:
+`vitest.config.ts` を更新:
 
 ```ts
-import { defineConfig, devices } from "@playwright/test";
-
-const isCI = !!process.env.CI;
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  testDir: "./e2e",
-  retries: isCI ? 2 : 0,                 // CI では失敗時に 2 回まで再実行
-  reporter: isCI ? "github" : "list",    // CI では GitHub Actions 連携形式
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",             // 失敗時にトレースを保存
-  },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    // 必要に応じて WebKit / Firefox を足す
-  ],
-  webServer: {
-    // CI では prod build を preview 配信して E2E（dev サーバーは HMR で揺れやすい）
-    command: isCI ? "npm run build && npm run preview" : "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !isCI,
+  plugins: [react()],
+  test: {
+    environment: "jsdom",  // ブラウザ風 DOM を提供
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
   },
 });
 ```
 
-`webServer` を書いておくと、テスト実行時に **自動でアプリを起動** してから E2E を回してくれます。`retries` / `projects` / 環境別の `command` を最初から入れておくと、後で CI に乗せるときに迷いません。
+`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
 
-`package.json` に scripts を追加:
+```ts
+import "@testing-library/jest-dom/vitest";
+```
 
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
+これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
+
+### 最小のコンポーネントテスト
+
+テスト対象:
+
+```tsx
+// src/Greeting.tsx
+type Props = { name: string };
+
+export function Greeting({ name }: Props) {
+  return <h1>こんにちは、{name} さん</h1>;
 }
 ```
 
-### 最小の E2E テスト
+テスト:
 
-`e2e/home.spec.ts`:
+```tsx
+// src/Greeting.test.tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Greeting } from "./Greeting";
 
-```ts
-import { test, expect } from "@playwright/test";
-
-test("トップページに見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
-});
-
-test("About リンクをクリックすると /about に移動する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
+describe("Greeting", () => {
+  it("名前を含む挨拶を表示する", () => {
+    render(<Greeting name="Alice" />);
+    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
+  });
 });
 ```
 
-ポイント:
+3 つの基本要素:
 
-- `page.goto("/")` で baseURL（`http://localhost:5173`）に対して相対パスで遷移
-- `page.getByRole(...)` は React Testing Library と **同じセレクタ思想**（アクセシビリティロール優先）
-- `expect(...).toBeVisible()` 等は **自動で待ってくれる**（要素が出るまで最大 5 秒待つ）
-- すべて `await` を付けて呼ぶ（非同期）
+- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
+- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
+- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
 
-Playwright と Testing Library のクエリ API はほぼ同じ書き味です。両方を使うチームでは認知コストが下がる利点があります。
+### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
 
-### よく使う操作
+要素を探す関数は **接頭辞** で挙動が変わります。
+
+| 接頭辞 | 見つからない時 | 用途 |
+|---|---|---|
+| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
+| `queryBy*` | `null` を返す | 「無いはず」を確認する |
+| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
+
+例:
+
+```tsx
+// 「保存」ボタンが必ずある
+const button = screen.getByRole("button", { name: "保存" });
+
+// エラーメッセージは「無いはず」（成功時）
+expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
+
+// fetch が終わった後に現れるユーザー名
+const userName = await screen.findByText("Alice");
+```
+
+### クエリの優先順位
+
+Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
+
+| 優先度 | クエリ | 何を見るか |
+|---|---|---|
+| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
+| 2 | `getByLabelText` | フォームの `<label>` テキスト |
+| 3 | `getByPlaceholderText` | input の placeholder |
+| 4 | `getByText` | 表示テキスト |
+| 5 | `getByDisplayValue` | input の現在値 |
+| 6 | `getByAltText` | img の alt |
+| 7 | `getByTitle` | title 属性 |
+| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
+
+**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
+
+### `userEvent` でユーザー操作をシミュレート
+
+ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Counter } from "./Counter";
+
+describe("Counter", () => {
+  it("ボタンを押すと数が増える", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+
+    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
+  });
+
+  it("複数回押すと累積する", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    const button = screen.getByRole("button", { name: "+1" });
+    await user.click(button);
+    await user.click(button);
+    await user.click(button);
+
+    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
+  });
+});
+```
+
+`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
+
+### フォーム入力のテスト
+
+`<input>` への入力は `user.type` でシミュレートします。
+
+```tsx
+import { useState } from "react";
+
+export function NameForm() {
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
+  return (
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSubmitted(name);
+      }}
+    >
+      <label htmlFor="name">お名前</label>
+      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+      <button type="submit">送信</button>
+      {submitted && <p>こんにちは、{submitted} さん</p>}
+    </form>
+  );
+}
+```
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { NameForm } from "./NameForm";
+
+describe("NameForm", () => {
+  it("名前を入力して送信すると挨拶が出る", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    const input = screen.getByLabelText("お名前");
+    const button = screen.getByRole("button", { name: "送信" });
+
+    await user.type(input, "Alice");
+    await user.click(button);
+
+    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+  });
+
+  it("入力が空のままだと挨拶は出ない", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
+  });
+});
+```
+
+`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
+
+### よく使う追加マッチャ（jest-dom）
+
+`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
+
+```tsx
+expect(element).toBeInTheDocument();        // DOM に存在する
+expect(element).toHaveTextContent("hello"); // テキストを含む
+expect(element).toBeVisible();              // 見える状態
+expect(input).toHaveValue("Alice");         // input の値
+expect(checkbox).toBeChecked();             // チェック済み
+expect(button).toBeDisabled();              // disabled 属性付き
+expect(element).toHaveClass("active");      // CSS クラス付き
+expect(element).toHaveAttribute("href", "/about");
+```
+
+これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
+
+### テスト間で DOM / タイマーが漏れる落とし穴
+
+RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
+
+- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。この自動 cleanup は、Vitest の `globals: true`（`vitest.config.ts` 設定）が有効な環境でのみ動作します。`globals: false` の場合は各テストファイルで `afterEach(() => cleanup())` を手動で追加してください。
+- **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
 
 ```ts
-// 遷移
-await page.goto("/login");
-
-// クリック
-await page.getByRole("button", { name: "送信" }).click();
-
-// 入力
-await page.getByLabel("お名前").fill("Alice");
-await page.getByPlaceholder("検索").fill("React");
-
-// セレクト
-await page.getByLabel("地域").selectOption("Tokyo");
-
-// チェックボックス
-await page.getByLabel("同意する").check();
-
-// キーボード
-await page.keyboard.press("Enter");
-await page.getByLabel("検索").press("Enter");
+import { afterEach, vi } from "vitest";
+afterEach(() => {
+  vi.useRealTimers();
+});
 ```
-
-### よく使うアサーション
-
-```ts
-// 要素が見える / 見えない
-await expect(page.getByText("ようこそ")).toBeVisible();
-await expect(page.getByText("エラー")).not.toBeVisible();
-
-// テキストを含む
-await expect(page.locator("h1")).toHaveText("こんにちは、Alice さん");
-
-// URL の確認
-await expect(page).toHaveURL("/dashboard");
-await expect(page).toHaveURL(/\/posts\/\d+/);
-
-// 値が入っている
-await expect(page.getByLabel("名前")).toHaveValue("Alice");
-
-// 件数
-await expect(page.getByRole("listitem")).toHaveCount(3);
-```
-
-すべて **自動リトライ付き**。「fetch が終わってから出る要素」を待たなくても、`expect(...).toBeVisible()` 自体が最大 5 秒間繰り返しチェックします。
-
-### UI モードで開発する
-
-`npm run e2e:ui` を起動すると、Playwright の UI モードが立ち上がります。
-
-- テスト一覧から個別に実行できる
-- 各ステップの **ブラウザの状態をタイムライン** で確認できる
-- 失敗時の **DOM スナップショット** をクリックで遡れる
-- 「locator picker」で画面要素を選ぶと、推奨セレクタが自動生成される
-
-最初に E2E を書く時は **UI モード必須** です。「どこでクリックすればいいか」「次の状態は何か」を見ながら書けるので、習得が一気に楽になります。
-
-### Codegen で操作を録画
-
-ゼロからテストを書くのは大変です。Playwright には **画面操作を録画してコードを生成する** 機能があります。
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、人間が普通にサイトを操作します。クリック・入力・遷移のたびに、対応する Playwright コードが横のパネルに自動で出てきます。それをコピペして整形すれば、テストの叩き台が一気にできます。
-
-複雑な経路でも、まずは codegen で粗い形を作ってから手で詰めるワークフローが定番です。
-
-### 失敗時の証拠保存
-
-`playwright.config.ts` に `trace: "on-first-retry"` を書いておくと、失敗時に **トレース** が自動保存されます。トレースには:
-
-- 各ステップで送信されたリクエスト
-- DOM スナップショット
-- スクリーンショット
-- ビデオ
-
-が入っており、`npx playwright show-trace trace.zip` で UI モードと同じインターフェースで再生できます。**CI で起きた fail を後から再現できる** のが強みです。
-
-### MSW を E2E でも使う（軽く紹介）
-
-MSW のハンドラは E2E でも流用できます。Playwright の `page.route(...)` でブラウザ側の fetch を MSW Service Worker 経由で横取りする構成にすれば、ユニット / コンポーネント / E2E の **3 層で同じモックレスポンス** を使い回せます。
-
-設定はやや複雑なので本コースでは触れませんが、本格運用ではこのパターンを取ると「ハンドラ定義の二重管理」が無くせる点だけ覚えておいてください。
-
-### E2E はどこに書くか
-
-E2E は遅いので、**書くべき経路** を絞ります。実務でよく投資されるのは:
-
-1. **ログイン → サインイン関連**
-2. **メイン購入 / 課金フロー**
-3. **新規登録 → 重要な初回操作**
-4. **データを書き換える系（CRUD）の代表的な 1 経路**
-
-「すべての画面を網羅する」ような E2E は壊れまくり、メンテコストで死にます。**ビジネスが止まる経路だけ** を 20〜30 ケースくらい用意して守るのが現実解です。
 
 ## 演習
 
 ### ゴール
 
-- 簡単な Vite + React アプリを起動状態にする
-- Playwright をセットアップする
-- 「トップから About ページに遷移」「フォーム入力 → 送信」の 2 経路を E2E でテストする
-- UI モードで動きを観察する
+- React + RTL のセットアップを `vitest.config.ts` に反映する
+- カウンターコンポーネントのテストを書ける
+- 簡単なフォームのテストを書ける
+- `getByRole` / `getByLabelText` を優先して使える
 
 ### 途中から始める場合
 
-ローカル環境で `create-vite` で React + TS テンプレートを作ります（StackBlitz では Playwright のブラウザ本体を取得できないため、ローカル前提）。
+「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
+
+### 手順 1: 依存パッケージをインストール
 
 ```bash
-npm create vite@latest my-e2e-sample -- --template react-ts
-cd my-e2e-sample
-npm install
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
 ```
 
-### 手順 1: アプリにページを 2 つ追加（ライブラリなしの最小ルーティング）
+### 手順 2: 設定ファイルを更新
 
-`src/App.tsx` をシンプルに書き換え。`location.pathname` で表示を切り替えるだけの自家製ルーティングを使います（学習用に最小化）。
-
-> **補足: この `<a onClick={preventDefault}>` は学習用の最小例**: 自家製ルーティングは `Cmd + クリック`（新タブ）/ `中クリック` / 右クリックメニューの「リンクを開く」のようなブラウザ標準操作を全て壊します。実プロダクトでは **React Router**（Vite 用）や **Next.js の `<Link>`** を使い、自前の `preventDefault` 実装は避けます。本レッスンは Playwright の挙動確認に集中するためにあえて最小化しています。
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  function go(to: string) {
-    window.history.pushState({}, "", to);
-    setPath(to);
-  }
-
-  if (path === "/about") {
-    return (
-      <main>
-        <h1>About</h1>
-        <p>このページは about です。</p>
-        <a
-          href="/"
-          onClick={(e) => {
-            e.preventDefault();
-            go("/");
-          }}
-        >
-          Home に戻る
-        </a>
-      </main>
-    );
-  }
-
-  return (
-    <main>
-      <h1>Home</h1>
-      <p>Playwright のサンプル。</p>
-      <a
-        href="/about"
-        onClick={(e) => {
-          e.preventDefault();
-          go("/about");
-        }}
-      >
-        About
-      </a>
-
-      <hr />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) setSubmitted(name);
-        }}
-      >
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button type="submit">送信</button>
-      </form>
-
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </main>
-  );
-}
-```
-
-### 手順 2: Playwright をインストール
-
-```bash
-npm install -D @playwright/test
-npx playwright install
-```
-
-### 手順 3: 設定ファイル
-
-`playwright.config.ts`:
+`vitest.config.ts`:
 
 ```ts
-import { defineConfig } from "@playwright/test";
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
 export default defineConfig({
-  testDir: "./e2e",
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",
-  },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
+  plugins: [react()],
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
   },
 });
 ```
 
-`package.json` の scripts に追加:
+`vitest.setup.ts` を新規作成:
 
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
+```ts
+import "@testing-library/jest-dom/vitest";
+```
+
+### 手順 3: テスト対象のコンポーネントを書く
+
+`src/Counter.tsx`:
+
+```tsx
+import { useState } from "react";
+
+export function Counter() {
+  const [count, setCount] = useState(0);
+
+  return (
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+      <button onClick={() => setCount((c) => c - 1)}>-1</button>
+      <button onClick={() => setCount(0)}>リセット</button>
+    </div>
+  );
+}
+```
+
+`src/NameForm.tsx`:
+
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
+
+export function NameForm() {
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (name.trim()) {
+      setSubmitted(name);
+    }
   }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <label htmlFor="name">お名前</label>
+      <input
+        id="name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <button type="submit">送信</button>
+      {submitted && <p>こんにちは、{submitted} さん</p>}
+    </form>
+  );
 }
 ```
 
 ### 手順 4: テストを書く
 
-`e2e/sample.spec.ts`:
+`src/Counter.test.tsx`:
 
-```ts
-import { test, expect } from "@playwright/test";
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Counter } from "./Counter";
 
-test("トップに Home の見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+describe("Counter", () => {
+  it("初期値は 0", () => {
+    render(<Counter />);
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+  });
+
+  it("+1 ボタンで増える", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+
+    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
+  });
+
+  it("-1 ボタンで減る", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "-1" }));
+
+    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
+  });
+
+  it("リセットボタンで 0 に戻る", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+    await user.click(screen.getByRole("button", { name: "+1" }));
+    await user.click(screen.getByRole("button", { name: "リセット" }));
+
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+  });
 });
+```
 
-test("About リンクで /about に遷移する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
-  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
-});
+`src/NameForm.test.tsx`:
 
-test("フォーム送信で挨拶が表示される", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("お名前").fill("Alice");
-  await page.getByRole("button", { name: "送信" }).click();
-  await expect(page.getByText("こんにちは、Alice さん")).toBeVisible();
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { NameForm } from "./NameForm";
+
+describe("NameForm", () => {
+  it("名前を入力して送信すると挨拶が出る", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.type(screen.getByLabelText("お名前"), "Alice");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+  });
+
+  it("空のまま送信しても挨拶は出ない", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
+  });
+
+  it("入力中の値が input に反映される", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    const input = screen.getByLabelText("お名前");
+    await user.type(input, "Bob");
+
+    expect(input).toHaveValue("Bob");
+  });
 });
 ```
 
 ### 手順 5: 実行
 
-UI モードで動きを見ながら:
-
 ```bash
-npm run e2e:ui
+npm run test
 ```
 
-CI / 自動実行用（ヘッドレス）:
-
-```bash
-npm run e2e
-```
+すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
 
 ### 期待出力
 
-UI モードでは画面右側にテスト一覧、中央にブラウザのプレビューが出ます。各テストをクリックすると、各ステップごとの DOM スナップショットが時系列で見られます。
-
-ヘッドレスでは:
-
 ```
-Running 3 tests using 1 worker
+ PASS  src/Counter.test.tsx (4)
+ PASS  src/NameForm.test.tsx (3)
 
-  ok 1 [chromium] › sample.spec.ts:4:1 › トップに Home の見出しが表示される
-  ok 2 [chromium] › sample.spec.ts:9:1 › About リンクで /about に遷移する
-  ok 3 [chromium] › sample.spec.ts:16:1 › フォーム送信で挨拶が表示される
-
-3 passed (3.5s)
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
 ```
 
 ### 変える
 
-- `<button>送信</button>` の `<button>` を `<div onclick="...">` に変えてみる。テストの `getByRole("button", ...)` が要素を見つけられず fail する。a11y 的に正しいタグ選びがテストにも効くと体感
-- `playwright.config.ts` の `webServer.command` を `npm run preview` に変えてみる（本番ビルド済みを配信するモード）。本番ビルドで E2E を回せる
-- 失敗するテストを 1 つ作って、`trace.zip` が生成されることを確認。`npx playwright show-trace trace.zip` で再生
+- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
+- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
+- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
 
 ### 自分で書く
 
-- 「フォームを空のまま送信しても挨拶が出ない」テストを足す
-- `page.getByLabel("お名前")` を `page.locator("input")` のような **実装に依存したセレクタ** に変えてみる。動くが、`<input>` が複数あったら壊れる、という弱さを体感
+- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
+  - 入力欄 + 「追加」ボタン
+  - 追加されたら入力欄が空になる
+  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
+- テストで以下を検証:
+  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
+  - 送信後に input が空になる
+  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
 
-### codegen を試す（任意）
-
-サーバーを `npm run dev` で別ターミナルから起動した状態で:
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、リンクをクリックしたりフォームに入力したりすると、横のパネルにテストコードが自動生成されます。コピペして `e2e/auto.spec.ts` を作ってみると、自分で書いたものとの違いが見られます。
+`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
 
 ## まとめ
 
-- E2E は本物のブラウザでアプリ全体を動かすテスト。**最重要パスだけ** に絞る
-- **Playwright** は 3 ブラウザを 1 API で扱える、自動待機 / トレース / codegen 完備
-- 設定は `playwright.config.ts` の `webServer` で `npm run dev` の自動起動が定番
-- API は Testing Library と似た書き味（`getByRole` / `getByLabel`）
-- アサーションも `expect(...).toBeVisible()` 等が自動リトライ
-- **UI モード** で対話的にデバッグ、**codegen** で操作を録画してテストコード生成
-- 失敗時の **トレース** で CI のエラーをローカル再現
-- MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
-- ローディング表示には `role="status"` または `aria-busy="true"` を付け、`getByRole('status')` で待ち合わせると、見た目が変わってもテストが安定する
+- React Testing Library は「ユーザーの見え方」をテストする思想
+- `render` / `screen` でコンポーネントを描画して DOM クエリ
+- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
+- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
+- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
+- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
+- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト

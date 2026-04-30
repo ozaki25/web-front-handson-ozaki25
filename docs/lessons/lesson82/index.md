@@ -1,185 +1,160 @@
-# lesson82: Route Handlers の基本
+# lesson200: useFormStatus で送信中を無効化する
 
 ## ゴール
 
-- `app/api/todos/route.ts` に GET・POST を書いて、DevTools Console から fetch で叩けることを確認できる
-- Server Actions との使い分けを説明できる（内部利用 vs 外部クライアントから叩く）
-- `NextResponse.json()` の基本的な使い方を理解する
+- `useFormStatus` を `react-dom` から import し、送信中に `pending: true` になることを確認できる
+- `<form>` の子孫コンポーネントの中からのみ呼べる制約を説明できる
+- `useActionState`（`react`）と `useFormStatus`（`react-dom`）の import 元の違いを覚えられる
 
 ## 解説
 
-### Server Actions と Route Handlers の違い
+### なぜ送信中に `disabled` にするか
 
-5 章の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
+フォームを送信してサーバーが応答を返すまでの間、ユーザーが「追加」ボタンを連打できます。ネットワーク遅延があるときほど起きやすく、同じ TODO が重複して登録される原因になります。
 
-一方、もっと一般的な用途、例えば:
+送信中にボタンを `disabled` にしておけば、ユーザーは物理的に連打できなくなります。これが **二重送信防止** の基本的な UI 側の対策です。
 
-- モバイルアプリ・別サイトから API を叩きたい
-- `fetch('/api/todos')` で JSON を取得・送信したい
-- 認証ヘッダや CORS を扱いたい
+> **補足**: UI 側の対策だけでは完全ではありません。ネットワーク断後の手動再送など、UI をバイパスした経路もあります。本番では Server 側でも冪等性（べきとう: 同じ操作を何回送っても結果が変わらない性質）を担保するのが作法です。このレッスンでは UI 側の対策を実装します。
 
-といった場面では **Route Handlers** を使います。
+### `useFormStatus` は `<form>` の子孫で呼ぶ
 
-使い分け:
+React DOM が提供するフック `useFormStatus` は、「自分が属している `<form>` の送信状態」を返します。
 
-| 用途 | Server Actions | Route Handlers |
+**重要な制約**: `<form>` を return しているコンポーネント自身の中では呼べません。その `<form>` の**子孫コンポーネント**の中で呼ぶ必要があります。
+
+```tsx
+// これは動かない: <form> を返しているコンポーネント自身で呼んでいる
+export function TodoForm() {
+  const { pending } = useFormStatus(); // 常に pending: false になる
+  return <form action={formAction}>...</form>;
+}
+```
+
+```tsx
+// これが正しい: <form> の子コンポーネントの中で呼ぶ
+function SubmitButton() {
+  const { pending } = useFormStatus(); // 正しく pending が取れる
+  return <button type="submit" disabled={pending}>追加</button>;
+}
+
+export function TodoForm() {
+  return (
+    <form action={formAction}>
+      <SubmitButton /> {/* <form> の子 */}
+    </form>
+  );
+}
+```
+
+### なぜ `SubmitButton` を別ファイルに切り出すか
+
+`TodoForm.tsx` はすでに `"use client"` を付けているので、同じファイル内に `SubmitButton` を定義できます。ただし、実際のコードベースではボタンを独立したファイルに置くことで再利用しやすくなります。
+
+このレッスンでは `app/todos/SubmitButton.tsx` として切り出します。
+
+### import 元の違い
+
+| フック | import 元 | 用途 |
 |---|---|---|
-| 同一 Next.js 内のフォーム送信 | こちらが基本 | 補助的 |
-| 外部クライアント（モバイル・他サイト）が叩く | 不可 | こちらが基本 |
-| 戻り値を UI に結合 | `useActionState` で楽 | 手動で `fetch` + state |
-| 認証ヘッダや CORS が必要 | 向かない | 向く |
+| `useActionState` | `react` | フォームの状態管理 |
+| `useFormStatus` | `react-dom` | 送信中の状態取得 |
 
-両方が使えるときは Server Actions を優先するのが楽です。**外部から叩く可能性があるなら Route Handlers** と覚えてください。
-
-### Route Handlers の書き方
-
-`app/api/xxx/route.ts` を作り、HTTP メソッド名の関数を `export` します。
-
-```ts
-// app/api/todos/route.ts
-import { NextResponse } from "next/server";
-
-const todos = [{ id: "1", text: "牛乳を買う" }];
-
-export async function GET() {
-  return NextResponse.json({ todos });
-}
-
-export async function POST(request: Request) {
-  const body = await request.json();
-  // body.text を todos に追加して返す
-  return NextResponse.json({ message: "ok" });
-}
-```
-
-- ファイル名は **`route.ts`** 固定（`page.tsx` とは別のファイル）
-- URL は `app/api/todos/route.ts` → `/api/todos`
-- `GET` / `POST` / `PUT` / `DELETE` / `PATCH` を同じファイルに並べられる
-- 戻り値は **`NextResponse`（`next/server` から import）を基本に統一** します。素の `Response.json(...)` でも動きますが、Cookie 操作・リダイレクト・型補完が揃っているので `NextResponse` を推奨
-
-### NextResponse.json の使い方
-
-`NextResponse.json(data, options?)` の第 2 引数でステータスコードやヘッダを指定できます。
-
-```ts
-// 200（省略時のデフォルト）
-return NextResponse.json({ todos });
-
-// 201 Created
-return NextResponse.json({ message: "ok", todo: newTodo }, { status: 201 });
-
-// 400 Bad Request
-return NextResponse.json({ message: "不正なリクエストです" }, { status: 400 });
-```
-
-入力検証・CORS ヘッダの付け方は「Route Handlers の入力検証と受信検証」のレッスンで扱います。
+見た目が似ていますが import 元が違います。間違えると「そんな export はない」というエラーが出ます。
 
 ## 演習
 
-### 途中から始める場合
+lesson81 で作った `TodoForm.tsx` を起点に進めます。lesson81 の演習が完了していることを前提にします。
 
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。
+### 手順の進め方
 
-### ゴール
+このレッスンは **2 つのファイル**（`app/todos/SubmitButton.tsx` の新規作成 / `app/todos/TodoForm.tsx` の書き換え）で完結します。`app/todos/page.tsx` と `app/actions.ts` は変更不要です。
 
-- `/api/todos` に `GET` と `POST` を実装する
-- DevTools Console から `fetch` を叩いて動作確認する
+### 手順 1: `SubmitButton.tsx` を新規作成する
 
-### 手順
+`app/todos/SubmitButton.tsx` を新規作成します。
 
-1. これまでのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
-2. `app/types.ts` に `Todo` 型を置く（既にあるなら再利用）
-3. `app/api/todos/route.ts` を新規作成する
+```tsx
+"use client";
 
-### `app/types.ts`
+import { useFormStatus } from "react-dom";
 
-```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
-
-### `app/api/todos/route.ts`
-
-型ガードは 3 章の「型ガード」と同じ発想で書けますが、このレッスンでは基本の GET / POST に絞ります。
-
-```ts
-import { NextResponse } from "next/server";
-import type { Todo } from "../../types";
-
-// モジュールトップレベルでインメモリ保持（"Server Actions の最小形" と同じ割り切り）
-const todos: Todo[] = [];
-
-export async function GET() {
-  return NextResponse.json({ todos });
-}
-
-export async function POST(request: Request) {
-  const body = await request.json();
-  const text = typeof body.text === "string" ? body.text.trim() : "";
-
-  if (text.length === 0) {
-    return NextResponse.json(
-      { message: "text が必要です" },
-      { status: 400 },
-    );
-  }
-
-  const newTodo: Todo = { id: crypto.randomUUID(), text };
-  todos.push(newTodo);
-  return NextResponse.json({ message: "ok", todo: newTodo }, { status: 201 });
+export function SubmitButton() {
+  const { pending } = useFormStatus();
+  return (
+    <button type="submit" disabled={pending}>
+      {pending ? "送信中..." : "追加"}
+    </button>
+  );
 }
 ```
 
 ポイント:
 
-- `await request.json()` でリクエストボディを受け取る
-- text が空なら 400 を返す
-- 成功時は `{ message: "ok", todo: newTodo }` を 201 で返す
+- **`useFormStatus` は `react-dom` から import** します（`react` ではありません）。
+- `disabled={pending}` で送信中にボタンを操作不能にします。
+- `{pending ? "送信中..." : "追加"}` でラベルも変えます。
 
-### DevTools Console からの動作確認
+### 手順 2: `TodoForm.tsx` の `<button>` を差し替える
 
-プレビューを別タブで開き、Console で次を実行します。
+`app/todos/TodoForm.tsx` を書き換えます。
 
-```js
-// GET（初期は空配列）
-fetch('/api/todos').then(r => r.json()).then(console.log)
-// { todos: [] }
+```tsx
+"use client";
 
-// POST（正常）
-const res = await fetch('/api/todos', {
-  method: 'POST',
-  headers: { 'Content-Type': 'application/json' },
-  body: JSON.stringify({ text: '本を返す' }),
-});
-console.log(await res.json());
-// { message: "ok", todo: { id: "...", text: "本を返す" } }
+import { useActionState } from "react";
+import { addTodo, type AddTodoState } from "../actions";
+import { SubmitButton } from "./SubmitButton";
 
-// GET（追加後）
-fetch('/api/todos').then(r => r.json()).then(console.log)
-// { todos: [{ id: "...", text: "本を返す" }] }
+const initialState: AddTodoState = { ok: true };
+
+export function TodoForm() {
+  const [state, formAction] = useActionState(addTodo, initialState);
+
+  return (
+    <form action={formAction}>
+      <input type="text" name="text" placeholder="やることを入力" />
+      <SubmitButton />
+      {state.ok === false && <p className="error">{state.error}</p>}
+    </form>
+  );
+}
 ```
+
+変更点は `<button type="submit">追加</button>` を `<SubmitButton />` に差し替えただけです。`useActionState` の使い方は lesson81 と同じです。
 
 ### 期待出力
 
-- `fetch('/api/todos').then(r=>r.json()).then(console.log)` を Console で実行すると `{ todos: [] }` が返る
-- POST で TODO を追加すると `{ message: "ok", todo: { id: "...", text: "..." } }` が返る
-- GET を再実行すると追加した TODO が含まれる配列が返る
+- 「追加」ボタンを押すと、一瞬ボタンがグレーアウトして押せなくなり、ラベルが「送信中...」に変わります。
+- サーバーの応答が返ってくると、ボタンが元に戻ります。
+- ネットワークが速い環境では変化が一瞬すぎて見えないこともあります。DevTools の Network タブで「Throttling: Slow 3G」を選んで送信すると確認しやすいです。
 
-### 変える
+### よくある間違い
 
-- レスポンスを `{ message: "ok", todo: newTodo }` から `{ message: "created", data: newTodo }` に変えてみる
-- `GET` に `?limit=3` のようなクエリパラメータを受け取って件数を絞る処理を追加してみる（`new URL(request.url).searchParams.get("limit")` で取得できる）
+- `useFormStatus` を `react` から import して「export がない」エラーになる → `react-dom` から import します。
+- `TodoForm` コンポーネント自身の中で `useFormStatus()` を呼んで `pending` が常に `false` になる → `<form>` の子孫コンポーネントに切り出して呼びます。
+- `<SubmitButton>` に `"use client"` を付け忘れる → フックを使うコンポーネントには `"use client"` が必要です。
+
+### 変えてみる
+
+1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちください」など）。
+2. `pending` のとき `aria-busy={true}` を button に付けてみましょう（スクリーンリーダーへの対応です）。
 
 ### 自分で書く
 
-- `/api/users` ルートを同様に作り、GET で適当なユーザー 3 件を返すようにする
-- POST でユーザーを追加できるようにする
+`SubmitButton` に CSS を追加して、`disabled` 状態のときに `opacity: 0.5` で薄く見えるようにしましょう。
+
+```css
+button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+```
+
+これを `app/globals.css` か `SubmitButton.tsx` のインラインスタイルで適用してみましょう。ダークモードでも同じ挙動になることを確認してください。
 
 ## まとめ
 
-- Route Handlers は `app/api/.../route.ts` に HTTP メソッド名の関数を書くだけで動く
-- 戻り値は `NextResponse.json(data, { status: ... })` に統一する
-- Server Actions と Route Handlers の棲み分けは「同一アプリ内のフォーム操作か、外部から叩く API か」
-- 入力検証・受信検証・CORS は「Route Handlers の入力検証と受信検証」のレッスンで扱います
+- `useFormStatus` は `react-dom` から import する
+- `<form>` の子孫コンポーネント内でのみ呼べる（フォーム本体で呼んでも `pending` が取れない）
+- `useActionState`（`react`）は状態管理、`useFormStatus`（`react-dom`）は送信中ステータスの取得と、役割が異なる
+- `SubmitButton` を切り出すことで `useFormStatus` が正しく動き、再利用もしやすくなる

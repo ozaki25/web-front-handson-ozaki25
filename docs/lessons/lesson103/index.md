@@ -1,327 +1,240 @@
-# lesson103: 画像とフォントの最適化
+# lesson101: Core Web Vitals の 3 つの指標と Lighthouse
 
 ## ゴール
 
-- 画像が **LCP の最重要要因** であることを理解する
-- 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
-- `next/image` がやってくれる自動最適化の中身を説明できる
-- フォントが **CLS** と LCP にどう効くかを理解する
-- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
-- Self-hosted フォントと Google Fonts の使い分けを知る
+- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
+- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
+- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
+- 75 パーセンタイル評価の意味を説明できる
+- DevTools の Performance パネルで CWV を計測できる
+- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
 
 ## 解説
 
-### 画像が LCP の最重要要因
+### Core Web Vitals とは
 
-ほとんどのページで **LCP（最大コンテンツ）はヒーロー画像** が選ばれます。だから「LCP を改善する」は事実上「画像を最適化する」とほぼ同義です。
+**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
 
-### 画像最適化 5 つの技
+| 指標 | 何を測る | Good | Needs Improvement | Poor |
+|---|---|---|---|---|
+| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
+| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
+| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
 
-#### 1. フォーマット: WebP / AVIF を使う
+「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
 
-JPEG / PNG はもう古い選択肢です。現代は:
+### LCP: 最大コンテンツが見えるまで
 
-- **WebP**: ブラウザ対応率 95% 超。JPEG より 25-35% 軽い
-- **AVIF**: 比較的新しい。WebP よりさらに 30% 軽い。ブラウザ対応率は約 95%
+LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
 
-両者は **可逆 / 非可逆** 両方サポート。古いブラウザ用に JPEG をフォールバックで残すのが定番です。
+LCP が遅くなる主な原因:
 
-#### 2. サイズ: 表示サイズに合わせる
+1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
+2. **サーバーレスポンスが遅い**（TTFB が長い）
+3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
+4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
 
-3000×2000 の写真を `<img width="300" height="200">` で表示すると、**3000×2000 のファイルがそのまま転送** されます。これが LCP を遅らせる最大の原因です。
+主な対策:
+
+- 画像最適化（`next/image` 系のレッスン参照）
+- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
+- JS のコード分割（バンドルサイズ最適化のレッスン参照）
+- 重要な画像 / フォントを `<link rel="preload">` で先読み
+
+### INP: 反応の遅さ
+
+INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+
+INP が悪くなる主な原因:
+
+1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
+2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
+3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
 
 対策:
 
-- **複数解像度** を用意して `srcset` で適切な一枚を選ばせる
-- ビルド時に **自動リサイズ** するツール（`next/image`、`vite-plugin-image-optimizer` 等）を使う
+- イベントハンドラ内の処理を軽くする
+- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
+- 重い処理を **Web Worker** に逃がす
+- リスト描画は **仮想スクロール**（`react-window` 等）
+- `requestIdleCallback` で空き時間に処理
 
-```html
-<img
-  src="/photo-400.jpg"
-  srcset="/photo-400.jpg 400w, /photo-800.jpg 800w, /photo-1200.jpg 1200w"
-  sizes="(max-width: 600px) 100vw, 800px"
-  alt="海辺で撮影した記念写真"
-/>
+### CLS: レイアウトのガタつき
+
+CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
+
+CLS が悪くなる主な原因:
+
+1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
+2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
+3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
+
+対策:
+
+- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
+- 動的挿入は **下から** か、placeholder で確保したスペースに収める
+- フォントは `next/font` のようなツールで先読み・サブセット化
+- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
+
+### しきい値は「75 パーセンタイル」で評価する
+
+Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
+
+評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
+
+### Lighthouse vs Real User Monitoring（RUM）
+
+CWV を計測する方法は 2 系統あります。
+
+#### Lighthouse（ラボデータ）
+
+Chrome DevTools 内蔵の Lighthouse（7 章「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
+
+- 利点: その場ですぐ計測できる、デプロイ前に確認できる
+- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
+
+主に **開発時のデバッグ** に向きます。
+
+#### RUM（フィールドデータ / 実ユーザー測定）
+
+実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
+
+- 利点: 本物のユーザー体験を反映
+- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
+
+代表的なツール:
+
+- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
+- **Google Search Console** — Core Web Vitals レポート
+- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
+- **web-vitals ライブラリ** + 任意の解析サービスへ送信
+
+Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
+
+### web-vitals ライブラリで RUM を仕込む
+
+自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
+
+```bash
+npm install web-vitals
 ```
 
-`sizes` は CSS のメディアクエリと同じ書き方で「表示サイズの目安」を伝えます。ブラウザがそれを見て `srcset` から最適な 1 枚を選びます。
+```ts
+// src/web-vitals.ts
+import { onLCP, onINP, onCLS } from "web-vitals";
 
-> **`alt` は意味のある文を入れる**: `alt="..."` のような placeholder は本番のコードに残してはいけません。スクリーンリーダーがその文字列を読み上げる形で利用者に届きます。`alt` には **画像が伝えたい情報** を 1 文で書き、見出し近くの装飾画像のように **何の情報も足さない** 画像なら `alt=""`（空文字）を指定します。空文字を指定するとスクリーンリーダーはその要素を読み飛ばします。`alt` 属性自体を省略すると「ファイル名を読み上げる」最悪のフォールバックになるので、必ず `alt=""` を明示します。
-
-#### 3. 遅延読み込み: `loading="lazy"`
-
-画面外の画像は **読み込みを遅らせて** 後から取りに行きます。
-
-```html
-<!-- ページ最初に見える画像（first view）: eager -->
-<img src="/hero.jpg" loading="eager" fetchpriority="high" alt="サイトのトップビジュアル: 海辺の夕焼け" />
-
-<!-- 画面外の画像: lazy -->
-<img src="/below-fold.jpg" loading="lazy" alt="記事中の図表" />
-```
-
-- **`loading="lazy"`**: ブラウザがスクロール位置に応じて読み込み開始
-- **`loading="eager"`**: 即時読み込み（既定）
-- **`fetchpriority="high"`**: ヒーロー画像で優先度を上げる（LCP の最強の武器）
-
-`loading="lazy"` を **first view の画像に付けてはいけません**（LCP が悪化）。ページの最重要画像には `fetchpriority="high"` を付けるのが 2026 年の定番です。
-
-#### 4. プレースホルダ: ぼかし画像の先出し
-
-LQIP（Low Quality Image Placeholder）と呼ばれる手法です。本物が読み込まれるまで、極小サイズのぼかし画像を表示しておきます。
-
-```html
-<!-- placeholder-blur と 本物の差し替え -->
-<img
-  src="/placeholder-blur.jpg"  /* 数 KB の小さい画像 */
-  data-src="/full.jpg"          /* 本物 */
-  ...
-/>
-```
-
-`next/image` の `placeholder="blur"` がこれを自動でやってくれます。
-
-#### 5. `<picture>` でフォーマットを分岐
-
-WebP / AVIF をサポートしていないブラウザに JPEG をフォールバックで返すには `<picture>` を使います。
-
-```html
-<picture>
-  <source srcset="/photo.avif" type="image/avif" />
-  <source srcset="/photo.webp" type="image/webp" />
-  <img src="/photo.jpg" alt="海辺で撮影した記念写真" width="800" height="600" />
-</picture>
-```
-
-ブラウザは上から順に対応形式を探し、最初に対応している `<source>` を使います。すべて非対応なら最後の `<img>` を使います。
-
-### `next/image` は全部やってくれる
-
-5 章 で扱った `<Image>` コンポーネントは、上記 5 つの最適化を **設定なしで** 全部やります。
-
-- フォーマット自動変換（WebP / AVIF）
-- 表示サイズに応じた `srcset` 生成
-- `loading="lazy"`（first view を除く自動判定は手動が確実）
-- `placeholder="blur"` でぼかし
-- `<picture>` 相当のフォールバック
-
-Next.js 以外の環境では同等の自動化は手作業が必要なので、Next.js が選ばれる理由の 1 つになっています。
-
-### フォントが CLS と LCP に効く
-
-フォントの読み込み挙動が悪いと:
-
-- **CLS 悪化**: フォントが切り替わった瞬間にテキスト幅が変わってレイアウトがズレる
-- **LCP 悪化**: テキストが LCP 要素なら、フォント読み込み完了まで描画されない
-
-主な現象:
-
-- **FOIT**（Flash of Invisible Text）: フォント読み込み中、テキストが **見えない**
-- **FOUT**（Flash of Unstyled Text）: フォント読み込み中、フォールバックフォントで一瞬表示 → 切り替わり
-
-### `font-display: swap`
-
-CSS の `@font-face` で `font-display: swap` を指定すると、**FOUT** モードになります。フォールバックフォントで先に表示し、本物のフォントが届いたら差し替えます。
-
-```css
-@font-face {
-  font-family: "MyFont";
-  src: url("/fonts/myfont.woff2") format("woff2");
-  font-display: swap;
+function sendToAnalytics(metric: { name: string; value: number; id: string }) {
+  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
+  console.log(metric);
+  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
 }
+
+onLCP(sendToAnalytics);
+onINP(sendToAnalytics);
+onCLS(sendToAnalytics);
 ```
 
-`swap` は LCP に有利（テキストが先に表示される）ですが、CLS は出やすくなります。トレードオフです。`optional` を選ぶと「100ms 以内に読み込めなければ諦める」という慎重派の挙動になります。
+本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
 
-### `<link rel="preload">` で先読み
+### DevTools の Performance パネルで計測
 
-クリティカルなフォント（first view で使う）は **`<link rel="preload">`** でブラウザに「優先して読んでね」と伝えます。
+Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
 
-```html
-<link
-  rel="preload"
-  href="/fonts/myfont.woff2"
-  as="font"
-  type="font/woff2"
-  crossorigin
-/>
-```
+1. F12 → **Performance** タブ
+2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
+3. レポートが表示される
+   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
+   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
+   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
 
-これで HTML パース中に並行して読み込みが始まり、CSS で `@font-face` が見つかった時にはほぼ準備完了の状態になります。LCP / CLS 双方に効きます。
-
-### `next/font` は全部やってくれる
-
-Next.js では `next/font` が自動で:
-
-- フォントをビルド時にダウンロード（self-host 化、Google Fonts への外部リクエスト削減）
-- サブセット化（必要な文字だけ抽出）
-- preload リンクを HTML に自動挿入
-- `font-display: swap` を既定にする
-- フォールバックフォントの幅メトリクスを近づけて CLS を抑制
-
-```tsx
-import { Inter } from "next/font/google";
-
-const inter = Inter({ subsets: ["latin"], display: "swap" });
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
-  );
-}
-```
-
-`next/font/google` は Google Fonts を自動 self-host 化、`next/font/local` は手元の `.woff2` をビルドに組み込みます。
-
-### Self-host vs Google Fonts CDN
-
-| 方式 | 利点 | 欠点 |
-|---|---|---|
-| Google Fonts CDN（`<link href="fonts.googleapis.com">`） | セットアップ簡単 | 外部ドメインへの追加 DNS / 接続 / プライバシー懸念 |
-| Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
-| `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
-
-2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
-
-### サブセット化
-
-日本語フォント（`Noto Sans JP` 等）はファイルが MB 単位で巨大です。**実際に使う文字だけを抽出した「サブセット」** を配信しないと一気に LCP / CLS が悪化します。
-
-- ラテン文字だけのページなら `subsets: ["latin"]` で 30KB 程度
-- 日本語ページは `Noto Sans JP` の **第一水準漢字 + 平仮名 + 片仮名 + 数字 + 記号** に絞ったサブセットを用意（数百 KB 程度）
-
-ビルド時にサブセット化するツール（`subset-font` パッケージ等）や、`next/font/google` の `subsets` 指定で自動化できます。
+DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
 
 ## 演習
 
 ### ゴール
 
-- 既存の Next.js プロジェクト（または新規）に `<Image>` を入れる前後で Lighthouse の LCP を比較する
-- `next/font/google` で Google Fonts を self-host 化する
-- DevTools Network タブで画像 / フォントの読み込み順序を観察する
+- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
+- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
+- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
 
-### 手順 1: 画像最適化の前後比較（Next.js）
+### 手順 1: Lighthouse で CWV を計測
 
-1. 5 章 で作った Next.js プロジェクト or 新規 `create-next-app` で:
+1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
+2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
+3. レポートを確認:
+   - 全体スコア
+   - **Largest Contentful Paint**（LCP の値）
+   - **Cumulative Layout Shift**（CLS の値）
+   - **Interaction to Next Paint**（条件次第で出る）
 
-   ```bash
-   npx create-next-app@latest perf-image --typescript --tailwind=false --app
-   cd perf-image
-   ```
+### 手順 2: PageSpeed Insights で RUM を見る
 
-2. `app/page.tsx` に大きな画像を **素の `<img>` で** 配置（最初は最適化なし）:
+1. <https://pagespeed.web.dev/> にアクセス
+2. URL を入れて Analyze
+3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
+4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
 
-   ```tsx
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <img
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           style={{ width: 600, height: 400 }}
-         />
-       </main>
-     );
-   }
-   ```
+実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
 
-3. `npm run build && npm run start` でビルド済みを起動し、Lighthouse を Mobile で計測。LCP / 全体スコアをメモ
+### 手順 3: DevTools Performance で観察
 
-4. `<img>` を `<Image>` に置き換え:
-
-   ```tsx
-   import Image from "next/image";
-
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <Image
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           width={600}
-           height={400}
-           priority
-         />
-       </main>
-     );
-   }
-   ```
-
-   `next.config.ts` に `picsum.photos` を許可:
-
-   ```ts
-   const nextConfig = {
-     images: {
-       remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
-     },
-   };
-   export default nextConfig;
-   ```
-
-5. もう一度ビルド + Lighthouse。LCP が大幅に改善するはず（数秒 → 1 秒以下）
-
-### 手順 2: `next/font` でフォント
-
-`app/layout.tsx`:
-
-```tsx
-import { Inter } from "next/font/google";
-
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-});
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
-  return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
-  );
-}
-```
-
-ビルドして Network タブで:
-
-- 自分のドメイン（`localhost:3000`）から `.woff2` が配信される
-- `fonts.googleapis.com` への外部リクエストが消える
-- HTML の `<head>` に `<link rel="preload" as="font">` が自動挿入されている
-
-### 手順 3: 画像のフォーマット確認
-
-Network タブの **Type** 列で:
-
-- `<img>` 直書き: `jpeg` / `png`
-- `<Image>`: `webp` / `avif`（ブラウザ対応に応じて）
-
-「Response Headers」の `content-type` も確認できます。
+1. Chrome で対象ページを開く
+2. F12 → **Performance** タブ
+3. 左上の **Record**（黒丸） を押す
+4. ページをリロード（`Ctrl + R`）
+5. ページが落ち着いたら **Stop**
+6. タイムラインで:
+   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
+   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
+   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
 
 ### 期待出力
 
-- 同じ画像でもファイルサイズが半分以下に縮む
-- LCP の数値が劇的に改善
-- フォントの FOIT / FOUT がほぼ気にならないレベル
+Lighthouse:
+
+- **Performance** スコアが 90 以上なら良好
+- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
+
+PageSpeed Insights:
+
+- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
 
 ### 変える
 
-- `<Image priority>` を外してみる。LCP がやや悪化する（`priority` は first view の画像に必須）
-- `next/font/google` の `display: "swap"` を `display: "block"` に変えると、FOIT になることを確認
-- `<Image>` の `placeholder="blur"` を試す（ローカル画像を使う場合のみ）。読み込み中にぼかしが見える
+- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
+- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
+- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 普段使う画像を `<picture>` でラップして、AVIF / WebP / JPEG のフォールバック構造を手書きで作る
-- `<link rel="preload">` を `<head>` に追加して、特定の画像 / フォントを先読みさせる
+新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
+
+```bash
+npm create vite@latest cwv-sample -- --template vanilla-ts
+cd cwv-sample
+npm install web-vitals
+```
+
+`src/main.ts`:
+
+```ts
+import { onLCP, onINP, onCLS } from "web-vitals";
+
+onLCP(console.log);
+onINP(console.log);
+onCLS(console.log);
+
+document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
+```
+
+`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
 
 ## まとめ
 
-- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
-- 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
-- **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
-- フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
-- **`font-display: swap`** + **`<link rel="preload">`** が基本
-- **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化
+- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
+- 2024 年 3 月に **FID は INP に置き換わった**
+- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
+- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
+- **PageSpeed Insights** が両方を一覧表示してくれる
+- DevTools の **Performance パネル** で詳細を時系列に見る
+- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託

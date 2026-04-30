@@ -1,415 +1,400 @@
-# lesson106: ESLint / Prettier / Biome
+# lesson104: package.json と npm スクリプト
 
 ## ゴール
 
-- Lint と Format が **役割の異なる別物** であることを理解する
-- ESLint の flat config（`eslint.config.js`）の最小形を読める
-- Prettier との連携で衝突しない設定を書ける
-- Biome がこの 2 役を **1 ツール** で 35x 速く処理することを理解する
-- 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
-- VS Code の保存時 autofix で「書きながら直る」体験を得る
+- `dependencies` / `devDependencies` / `peerDependencies` の違いを言える
+- セマンティックバージョニング（`^` / `~` / 固定）の意味を読める
+- `package-lock.json` がなぜ必要か説明できる
+- npm / pnpm / yarn / Bun の違いを把握する
+- `scripts` の書き方と `npm run` の仕組みを理解する
 
 ## 解説
 
-### Lint と Format は別物
+### `package.json` はプロジェクトの「目次」
 
-混同しがちですが、役割が違います。
+Node.js / フロントのプロジェクトには必ず `package.json` があります。役割は次の 4 つ。
 
-| ツール | 守備範囲 |
-|---|---|
-| **Lint**（ESLint） | コードの **品質** チェック。バグの種 / アンチパターン / a11y 違反 / 未使用変数を検知 |
-| **Format**（Prettier） | コードの **見た目** を整える。インデント / クォート / 改行位置 |
+1. **メタ情報**（プロジェクト名 / バージョン / 作者など）
+2. **依存パッケージ** の宣言
+3. **スクリプト** の登録（`npm run dev` など）
+4. **ツール設定** の置き場（lint-staged / browserslist / 各種 CLI の設定）
 
-ESLint は「未使用変数があるよ」「`any` 型は避けて」と教える。Prettier は「シングルクォートに統一して、80 文字で改行して」と整える。両方やると初めて綺麗で安全なコードベースになります。
+最小例:
 
-歴史的には ESLint だけで両方やる時代もありましたが、**役割を分ける** のが現代の合意。最近はさらに **Biome** という「両方を 1 ツールでやる」次世代の選択肢が出てきました。
-
-### ESLint の flat config
-
-ESLint v9（2024 年リリース）から **flat config** が既定になり、古い `.eslintrc` 形式は非推奨です。設定ファイルは **`eslint.config.js`**（ESM）になります。
-
-#### 最小構成（TypeScript + React）
-
-```bash
-npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks
+```json
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0",
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0"
+  }
+}
 ```
 
-`eslint.config.js`:
+### 依存の 3 つの種類
 
-```js
-import js from "@eslint/js";
-import tseslint from "typescript-eslint";
-import reactHooks from "eslint-plugin-react-hooks";
+#### `dependencies`
 
-export default [
-  js.configs.recommended,
-  ...tseslint.configs.recommended,
-  {
-    files: ["**/*.{ts,tsx}"],
-    plugins: {
-      "react-hooks": reactHooks,
-    },
-    rules: {
-      ...reactHooks.configs.recommended.rules,
-    },
-  },
-  {
-    ignores: ["dist/", "node_modules/"],
-  },
-];
+「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要がある。
+
+#### `devDependencies`
+
+「**開発時だけ必要** な依存」。`typescript` / `vite` / `eslint` / `vitest` など、ビルド済みコードを動かすには不要なもの。本番のサーバーで `npm install --omit=dev` すると **dev は入らず、容量が減る** メリットがあります。
+
+#### `peerDependencies`
+
+「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言する。
+
+例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示。
+
+普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
+
+#### `optionalDependencies` / `bundledDependencies`
+
+たまに見かけますが、めったに使いません。`optionalDependencies` は「入らなくても続行」、`bundledDependencies` は「自分のパッケージに同梱」。
+
+### セマンティックバージョニング（semver）
+
+`react: ^19.2.0` の数字は **3 つに区切られた意味** を持ちます。
+
+```
+19.2.0
+│ │ │
+│ │ └── PATCH（バグ修正）
+│ └──── MINOR（後方互換のある機能追加）
+└────── MAJOR（破壊的変更）
 ```
 
-`package.json`:
+ルール:
+
+- **PATCH を上げる** → 既存のコードは動き続けるはず
+- **MINOR を上げる** → 既存のコードは動き、新機能が増える
+- **MAJOR を上げる** → 既存のコードが動かなくなる可能性あり
+
+#### 範囲指定の記号
+
+| 書き方 | 意味 | 例: `^1.2.3` の許容範囲 |
+|---|---|---|
+| `^1.2.3` | MAJOR は固定。MINOR / PATCH は上げて OK | `>= 1.2.3 < 2.0.0` |
+| `~1.2.3` | MINOR も固定。PATCH のみ上げて OK | `>= 1.2.3 < 1.3.0` |
+| `1.2.3` | 完全固定 | `1.2.3` のみ |
+| `>=1.2.3` | これ以上 | `1.2.3` 以降すべて |
+| `1.x` / `1.*` | MAJOR だけ固定 | `>= 1.0.0 < 2.0.0` |
+
+**新規プロジェクトのデフォルトは `^`**。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
+
+ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用も。
+
+### `package-lock.json` の役割
+
+`package.json` に `^19.2.0` と書いてあっても、**実際にインストールされる版は `npm install` 実行時の最新** です。チームで開発していると「**人によって入る版が違う**」事態が起きます。
+
+`package-lock.json` は「**実際に入った全パッケージの正確なバージョン**」を記録するファイル。
+
+```json
+// package-lock.json の中身（抜粋）
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz",
+    "integrity": "sha512-..."
+  }
+}
+```
+
+これにより:
+
+- **再現可能なインストール** が保証される
+- 直接の依存だけでなく、**間接の依存**（dependency の dependency） まで固定される
+- セキュリティ的にも `integrity` でファイルの完全性が確認される
+
+ルール:
+
+- **`package-lock.json` は必ず Git にコミット** する
+- 競合が起きたら片側を採用して `npm install` を再実行する（手動マージはしない）
+- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lock`（旧 `bun.lockb`）が同じ役割
+
+### npm / pnpm / yarn / Bun
+
+2026 年の選択肢は 4 つ。それぞれ「**仕事は同じだが内部の効率と機能が違う**」と理解します。
+
+| | 速度 | ディスク効率 | 安定性 | モノレポ |
+|---|---|---|---|---|
+| npm | 標準 | 普通 | 抜群 | workspaces 対応 |
+| pnpm | 速い | **抜群**（ハードリンク共有） | 抜群 | workspaces 対応 |
+| yarn (v4 / Berry) | 速い | 普通〜良 | 良 | workspaces 対応 |
+| Bun | **最速** | 良 | 改善中 | workspaces 対応 |
+
+#### pnpm の利点
+
+- 同じパッケージを複数プロジェクトで使う場合、**1 回しかディスクに置かない**（`~/.pnpm-store` に集約）
+- 厳密な依存解決（**書いていない依存は import できない**）でバグを防げる
+- `pnpm-workspace.yaml` でモノレポ管理
+
+2026 年現在、**新規プロジェクトで pnpm を選ぶ現場が増えています**。Vue / Vite / Vitest など主要 OSS の公式推奨も pnpm。
+
+#### Bun の利点
+
+- インストールが **桁違いに速い**（並列ダウンロード + 効率的な書き込み）
+- ランタイムも兼ねる（`bun run script.ts` で `tsx` 不要）
+- 仕様が安定してきた 2026 年は、**新規 CLI / バックエンドで採用** が増えている
+
+#### Yarn の現在地
+
+- v1（Classic）は古い。新規には選ばない
+- v4（Berry）は機能豊富だが、PnP モードは **採用が頭打ち**
+
+#### 使い分けの目安
+
+- **学習中 / Next.js 公式チュートリアル** → npm（公式が npm 前提のため）
+- **業務で長く付き合う** → pnpm
+- **試してみたい / インストールの速さ重視** → Bun
+
+このコースの演習では基本 `npm` を使います。これは普及度の問題で、pnpm に置き換えても何も変わりません（コマンド名だけ違う）。
+
+### `scripts` と `npm run`
+
+`package.json` の `scripts` に書いたコマンドを `npm run xxx` で実行できます。
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "test": "vitest",
+    "format": "prettier --write ."
+  }
+}
+```
+
+ルール:
+
+- `npm run dev` で `vite` が走る
+- `npm run` だけで使えるスクリプト一覧が表示される
+- 環境変数 `npm run` 内では `node_modules/.bin` が PATH に追加される（`vite` のパスを書く必要がない）
+- `dev` / `start` / `test` / `restart` / `stop` は `npm run` を省略できる（`npm test` だけで動く）
+
+#### スクリプトを連結する
 
 ```json
 {
   "scripts": {
     "lint": "eslint .",
-    "lint:fix": "eslint . --fix"
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck && npm run test"
   }
 }
 ```
 
-`npm run lint` で全ファイルをチェック、`npm run lint:fix` で自動修正できる範囲は直してくれます。
+`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利。
 
-#### よく使うプラグイン
-
-- `typescript-eslint`: TypeScript の型情報を使った高度なチェック
-- `eslint-plugin-react`: React のお作法
-- `eslint-plugin-react-hooks`: フック規則の検証
-- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（7 章「アクセシビリティ」と相性◎）
-- `eslint-plugin-import`: import の順序とパス解決
-
-### Prettier の最小設定
-
-```bash
-npm install -D prettier
-```
-
-`.prettierrc`（プロジェクトルート）:
-
-```json
-{
-  "semi": true,
-  "singleQuote": false,
-  "trailingComma": "es5",
-  "printWidth": 80,
-  "tabWidth": 2
-}
-```
-
-`package.json`:
+並列実行は `&` ではなく `npm-run-all` / `concurrently` を使うのが安全です。
 
 ```json
 {
   "scripts": {
-    "format": "prettier --write .",
-    "format:check": "prettier --check ."
+    "dev": "concurrently \"npm:dev:*\"",
+    "dev:client": "vite",
+    "dev:server": "node server.js"
   }
 }
 ```
 
-`.prettierignore` に除外を書きます:
+#### pre / post スクリプト
 
-```
-dist/
-node_modules/
-*.min.js
-```
-
-### ESLint と Prettier の衝突を避ける
-
-ESLint にも整形系のルール（インデント / セミコロン）が組み込まれていますが、これが Prettier と衝突します。**`eslint-config-prettier`** を使ってこれらのルールを無効化します。
-
-```bash
-npm install -D eslint-config-prettier
-```
-
-`eslint.config.js` の最後に追加:
-
-```js
-import prettierConfig from "eslint-config-prettier";
-
-export default [
-  // ...上記の設定
-  prettierConfig,  // 最後に置いて整形系のルールを上書きで OFF
-];
-```
-
-これで「ESLint は品質、Prettier は見た目」の役割分担が綺麗に成立します。
-
-### VS Code の保存時 autofix
-
-`.vscode/settings.json`（プロジェクトの設定）:
-
-```json
-{
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "esbenp.prettier-vscode",
-  "editor.codeActionsOnSave": {
-    "source.fixAll.eslint": "explicit"
-  }
-}
-```
-
-これでファイル保存時に:
-
-1. ESLint の自動修正可能な違反が直る
-2. Prettier がコードを整形する
-
-の 2 段階が走ります。「書きながら綺麗になる」体験になり、PR レビューで「インデントが…」と指摘するムダが消えます。
-
-VS Code の拡張は `dbaeumer.vscode-eslint` と `esbenp.prettier-vscode` を入れます。
-
-### Biome: 1 ツールで両方
-
-**Biome** は Rust 製の Lint + Format ツールです。
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
-```
-
-これだけで `biome.json` が生成され、すぐ使えます。
-
-`package.json`:
+`scripts` に `prebuild` / `postbuild` を書くと **`npm run build` の前後で自動実行** されます。
 
 ```json
 {
   "scripts": {
-    "check": "biome check .",
-    "check:fix": "biome check --write ."
+    "prebuild": "npm run lint",
+    "build": "vite build",
+    "postbuild": "echo 'done'"
   }
 }
 ```
 
-#### Biome の魅力
+便利ですが、**チームで把握しづらい** ので連鎖を多用しないほうが無難。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
 
-- **設定ファイルが 1 つだけ**（`biome.json`）
-- **ESLint + Prettier より 35x 速い**（10000 ファイル: ESLint 45.2s vs Biome 0.8s）
-- **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
-- **Lint と Format の衝突がない**（同じツール内なので）
-- **VS Code 拡張**（`biomejs.biome`）も公式
+#### `npx` と `pnpm dlx` / `bunx`
 
-#### Biome の限界
-
-- TypeScript の **型情報を使う高度なルール**（`no-floating-promises` 等）は ESLint だけが提供
-- 既存 ESLint プラグイン（`jsx-a11y` 等）は使えない
-- カスタムルールが書きづらい
-
-### 2026 年の選び方
-
-#### 新規プロジェクト（greenfield）
-
-**Biome 単独** が最有力候補です。設定が少なく速いので、立ち上げの摩擦が圧倒的に小さい。
+「**一度だけ** コマンドを実行したい」場合の使い捨て実行。
 
 ```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+npx create-next-app my-app    # one-shot で create-next-app を取得して実行
+pnpm dlx create-next-app my-app
+bunx create-next-app my-app
 ```
 
-#### 既存プロジェクト（ESLint + Prettier がある）
+`npm install -g` でグローバルに入れずに済むのが利点。**最新版を使える** という意味でも安全。
 
-**ハイブリッド構成** が現実解:
-
-- **Biome**: フォーマット + 基本 Lint（高速）
-- **ESLint**: 型情報を要する高度なルール + 既存プラグイン
-
-または、コストをかけて Biome に完全移行（手動マイグレーションツールあり）。
-
-#### Lighthouse / a11y 検査も Lint で
-
-ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、7 章「アクセシビリティ」と組み合わせると効果的です。
-
-```js
-// eslint.config.js
-import jsxA11y from "eslint-plugin-jsx-a11y";
-
-export default [
-  // ...
-  jsxA11y.configs.recommended,
-];
-```
-
-これで `<img>` の alt 欠落 / `<button>` の `tabindex="-1"` などが Lint で警告されます。
-
-### Husky + lint-staged で commit 時に自動チェック
-
-「commit する時に Lint / Format を自動実行」して、CI で fail する前に直す仕組みです。
-
-```bash
-npm install -D husky lint-staged
-npx husky init
-```
-
-`.husky/pre-commit`:
-
-```sh
-npx lint-staged
-```
-
-`package.json`:
+### `engines` で Node.js のバージョンを縛る
 
 ```json
 {
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx}": ["biome check --write"]
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
   }
 }
 ```
 
-`git commit` のたびに、ステージングされたファイルだけが対象に Lint + Format されます。**全プロジェクトを毎回チェックしないので速い** のが lint-staged の利点。
+`engines` で要求するバージョンを書き、環境が満たさない時に警告 / 失敗させられます。`.nvmrc` / `.node-version` と組み合わせて、**チーム全員が同じ Node を使う** よう揃えます。
+
+### `.npmrc` と `.nvmrc`
+
+| ファイル | 役割 |
+|---|---|
+| `.npmrc` | npm 自身の設定（registry / cache / strict-peer-deps など） |
+| `.nvmrc` | nvm が読む。プロジェクトで使う Node のバージョン |
+| `.node-version` | nvm 以外（asdf / fnm / volta）が読む |
+
+`.npmrc` の代表例:
+
+```
+strict-peer-deps=true
+save-exact=true
+registry=https://registry.npmjs.org/
+```
+
+### よくある事故
+
+#### `npm install` の度に lock が更新される
+
+→ `^` で書いてあると、新しい patch / minor が出ているとロックが更新される。意図しない更新を防ぐには **CI では `npm ci`** を使う。
+
+#### `npm ci` と `npm install` の違い
+
+- `npm install`: 必要に応じて `package-lock.json` を更新
+- `npm ci`: lock の通りに **そのまま** 入れる（CI で **再現性が高く速い**）
+
+#### グローバルインストールに頼らない
+
+`npm install -g` で入れた CLI は **マシン全体に影響**。プロジェクトごとに違う版が必要な時に困る。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本。
 
 ## 演習
 
-> **このレッスンはローカル前提**: VS Code 拡張 + 保存時の自動整形を確認するため、**ローカル環境での Node.js 実行と VS Code 利用を前提** にしています。StackBlitz では VS Code 拡張が動かないので、Biome のコマンドライン実行までは追えますが、エディタ統合の体感はできません。
-
 ### ゴール
 
-- Vite + React + TS プロジェクトに **Biome** を導入する
-- VS Code で保存時に自動整形 / 自動修正が走るようにする
-- わざとエラーを入れて、Biome が検知することを確認する
+- `package.json` の依存とスクリプトを実際に編集する
+- `npm ci` と `npm install` の差を体験する
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest lint-sample -- --template react-ts
-cd lint-sample
+npm create vite@latest pkg-sample -- --template react-ts
+cd pkg-sample
 npm install
 ```
 
-### 手順 2: Biome を導入
+### 手順 2: dependencies / devDependencies を区別する
 
 ```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+npm install dayjs              # dependencies に入る
+npm install -D vitest          # devDependencies に入る
 ```
 
-`biome.json` が生成されます。中身は最小設定:
+`package.json` を開いて、それぞれが正しく入っていることを確認します。
 
 ```json
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "files": {
-    "ignoreUnknown": false,
-    "ignore": ["node_modules", "dist"]
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
   },
-  "formatter": {
-    "enabled": true,
-    "indentStyle": "tab"
-  },
-  "linter": {
-    "enabled": true,
-    "rules": {
-      "recommended": true
-    }
+  "devDependencies": {
+    "@vitejs/plugin-react": "^5.0.0",
+    "typescript": "^5.9.0",
+    "vite": "^8.0.0",
+    "vitest": "^3.0.0"
   }
 }
 ```
 
-`indentStyle` を `space` に変えたい場合は `"indentStyle": "space", "indentWidth": 2` に。
-
-### 手順 3: package.json scripts
+### 手順 3: scripts を増やす
 
 ```json
 {
   "scripts": {
-    "check": "biome check .",
-    "check:fix": "biome check --write ."
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "echo 'lint placeholder'",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "ci": "npm run lint && npm run typecheck && npm run test"
   }
 }
 ```
 
-### 手順 4: VS Code 設定
+`npm run ci` を実行して、3 つのスクリプトが順に走ることを確認します。
 
-`.vscode/settings.json`:
+### 手順 4: lock の挙動を観察する
 
-```json
-{
-  "editor.formatOnSave": true,
-  "editor.defaultFormatter": "biomejs.biome",
-  "editor.codeActionsOnSave": {
-    "quickfix.biome": "explicit",
-    "source.organizeImports.biome": "explicit"
-  },
-  "[typescript]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  },
-  "[typescriptreact]": {
-    "editor.defaultFormatter": "biomejs.biome"
-  }
-}
+```bash
+git init
+git add .
+git commit -m "init"
+
+# package-lock.json を消して install
+rm package-lock.json
+npm install
+git diff --stat package-lock.json
 ```
 
-VS Code の拡張ストアで `biomejs.biome` をインストールします。
+ハッシュや解決バージョンが微妙に変わっていることがあります（依存ツリー全体で再解決される）。これが「lock を Git に入れる理由」です。
 
-### 手順 5: 動作確認
+### 手順 5: npm ci を試す
 
-`src/App.tsx` に、わざと整形が崩れたコードを書きます:
-
-```tsx
-import {useState}from "react"
-
-export default function App(){
-const[count,setCount]=useState(0)
-const unused = "使ってない";
-return <div><h1>Count: {count}</h1><button onClick={()=>setCount(c=>c+1)}>+1</button></div>
-}
+```bash
+rm -rf node_modules
+npm ci
 ```
 
-ファイルを保存すると:
-
-- インデントが揃う
-- 改行が入る
-- 引用符が統一される
-- `unused` 変数が「使われていない」と警告される
-
-ターミナルで `npm run check` を実行すると、すべての違反が一覧されます。`npm run check:fix` で自動修正できる範囲は直されます。
+`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石。
 
 ### 期待出力
 
-```
-Checked 5 files in 200ms. No fixes applied.
-Found 1 warning.
-```
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [count, setCount] = useState(0);
-  const unused = "使ってない";  // 警告: unused
-  return (
-    <div>
-      <h1>Count: {count}</h1>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-    </div>
-  );
-}
-```
+- `npm install dayjs` 後、`dependencies` に `dayjs` が追加される
+- `npm install -D vitest` 後、`devDependencies` に `vitest` が追加される
+- `npm run ci` で 3 ステップが順に走る
+- `package-lock.json` を消して install すると差分が出る場合がある
+- `npm ci` は lock 通りに高速に入る
 
 ### 変える
 
-- `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
-- `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
-- `linter.rules.style.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
+- `dayjs: "^1.11.10"` を `dayjs: "~1.11.10"` に変えて、`npm update` で何が更新されるか観察する
+- `engines: { "node": ">=20" }` を加えて、古い Node で `npm install` が警告を出すことを確認する
+- `prebuild` / `postbuild` を追加して連鎖実行を体験する
 
 ### 自分で書く（任意）
 
-- 既存の Vite テンプレートに **ESLint + Prettier** を入れて、Biome 構成と比較する
-  - 必要なパッケージ数の違い
-  - 設定ファイルの数の違い
-  - `npm run lint` の所要時間
-- Husky + lint-staged を入れて commit 時に自動 Lint / Format される構成を作る
+- pnpm / Bun を入れて、同じプロジェクトの `install` 速度を比べる
+- モノレポ（`workspaces`）の最小構成を作って、共通の utility パッケージを 2 つのアプリから使う
+- `.npmrc` で `save-exact=true` を設定し、`npm install dayjs` した時に `^` が付かなくなることを確認
 
 ## まとめ
 
-- **Lint** はコード品質、**Format** はコード整形。役割が違う
-- **ESLint v9** は flat config が既定。`.eslintrc` は非推奨
-- ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
-- VS Code の保存時 autofix で「書きながら綺麗になる」体験
-- **Biome** は Lint + Format を 1 ツール、Rust 製、35x 速い、設定 1 ファイル
-- **新規プロジェクトは Biome 単独** が 2026 年の有力解
-- 既存 ESLint 資産を活かすなら **Biome（基本）+ ESLint**（型情報を要するルール） のハイブリッド
-- `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
-- Husky + lint-staged で commit 時の自動 Lint / Format
+- `package.json` は **メタ情報 / 依存 / スクリプト / ツール設定** の 4 つを担う
+- `dependencies` / `devDependencies` / `peerDependencies` の使い分け
+- semver の `^` は **MAJOR 固定 / MINOR・PATCH 自動更新**、`~` は MINOR まで固定
+- `package-lock.json` を **必ず Git に入れる**。CI では `npm ci` で再現性を保つ
+- パッケージマネージャは **npm / pnpm / yarn / Bun** の 4 択。新規業務開発は pnpm が増加傾向、最速重視なら Bun
+- `scripts` は `npm run xxx` で起動。`&&` で連結、`pre` / `post` で連鎖
+- `npx` / `pnpm dlx` / `bunx` で **一度だけ実行** できる
+- `engines` と `.nvmrc` でチーム間の Node のバージョンを揃える

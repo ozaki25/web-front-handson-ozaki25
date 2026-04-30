@@ -1,142 +1,430 @@
-# lesson88: Vercel にデプロイする
-
-これまでに作った Next.js プロジェクトを、SNS で共有できる本番 URL として公開します。本レッスンは「自分が StackBlitz で動かしている Next.js アプリを Vercel に乗せる」という **公開フロー** を体験するのが目的で、特定のアプリ内容は前提にしません（過去レッスンの完成品でも、シンプルな Hello World でも構いません）。
+# lesson86: Metadata API で SEO を整える
 
 ## ゴール
 
-- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できる
-- そのリポジトリを Vercel に接続して、数十秒でデプロイできる
-- 発行された `https://<project>.vercel.app` の URL をブラウザで開いて動作確認できる
-- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえる
+- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
+- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
+- `generateMetadata` で動的にタイトルや説明文を組み立てられる
+- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
+- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
 
 ## 解説
 
-### 今までは「自分のブラウザでしか見えない」状態
+### 「SEO を整える」とは
 
-StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
+SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
 
-Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
+- `<title>`: ブラウザタブの文字、検索結果の見出し
+- `<meta name="description">`: 検索結果の説明文
+- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
+- `<link rel="icon">`: タブの左に出る favicon
 
-### 3 ステップの全体像
+これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
 
-以下の 3 つのサービスを繋ぎます。
+### Metadata API の 2 系統
 
-1. **StackBlitz**: コードを書いている場所です。
-2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
-3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
+書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
 
-流れはこうです。
+1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
+2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
 
+### 静的 `metadata` export
+
+`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
+
+```tsx
+// app/about/page.tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "About",
+  description: "このサイトについて",
+};
+
+export default function AboutPage() {
+  return <h1>About</h1>;
+}
 ```
-StackBlitz → GitHub → Vercel → https://<project>.vercel.app
+
+Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
+
+### 動的 `generateMetadata`
+
+URL から情報を取ってタイトルを作るときに使います。
+
+```tsx
+// app/posts/[id]/page.tsx
+import type { Metadata } from "next";
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  const post = await res.json();
+  return {
+    title: post.title,
+    description: post.body.slice(0, 120),
+  };
+}
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  return <h1>記事 ID: {id}</h1>;
+}
 ```
 
-一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
+- `generateMetadata` は非同期関数にできます
+- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
+- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
+- 戻り値は `Metadata` 型のオブジェクト
 
-### アカウントが 2 つ必要
+`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
 
-- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
-- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
+### `title.template` でサイト全体を揃える
+
+記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
+
+```tsx
+// app/layout.tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: {
+    default: "My Next Site",
+    template: "%s | My Next Site",
+  },
+  description: "Next.js App Router の学習用サイト",
+};
+```
+
+- `default`: ページ側でタイトルを書いていないときに使う既定値
+- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
+
+ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
+
+### Open Graph を足す
+
+SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
+
+```tsx
+export const metadata: Metadata = {
+  title: "My Next Site",
+  description: "Next.js App Router の学習用サイト",
+  openGraph: {
+    title: "My Next Site",
+    description: "Next.js App Router の学習用サイト",
+    url: "https://example.com",
+    siteName: "My Next Site",
+    locale: "ja_JP",
+    type: "website",
+  },
+};
+```
+
+最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
+
+### OG 画像 / canonical / robots（実務 SEO 三点セット）
+
+公開サイトでは次の 3 つを揃えるのがほぼ必須です。
+
+```ts
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: "My Site",
+  description: "...",
+
+  // (1) OG 画像（SNS シェア時の見栄え）
+  openGraph: {
+    images: [
+      { url: "/og-image.png", width: 1200, height: 630 },
+    ],
+  },
+
+  // (2) canonical URL（重複コンテンツ対策）
+  alternates: {
+    canonical: "/",
+  },
+
+  // (3) robots（インデックス制御）: 既定は本番だけ index、それ以外は noindex
+  robots: {
+    index: process.env.VERCEL_ENV === "production",
+    follow: true,
+  },
+};
+```
+
+それぞれの「いつ使うか」:
+
+- **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
+- **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
+- **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
+
+実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
+
+### favicon / apple-touch-icon は **ファイル配置だけで OK**
+
+Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
+
+- `app/favicon.ico` → `<link rel="icon">`
+- `app/icon.png` / `app/icon.svg` → 同上
+- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
+
+`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
+
+### `generateMetadata` と `page.tsx` が同じデータを使うとき
+
+`app/posts/[id]/page.tsx` のように、`generateMetadata` でも `page.tsx` でも同じ記事データを fetch するケースがよくあります。そのまま書くと、1 回のリクエストで同じ URL への fetch が 2 回発生します。
+
+これを防ぐのが React 組み込みの **`cache()`** 関数です。
+
+```tsx
+import { cache } from "react";
+
+const getPost = cache(async (id: string) => {
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  return res.json();
+});
+
+// generateMetadata でも PostPage でも getPost(id) を呼ぶが、
+// 同一リクエスト内では 1 回しか fetch しない
+```
+
+`cache()` で包んだ関数は、**同一リクエスト内での重複呼び出しを自動でメモ化**します。`generateMetadata(id)` が先に呼ばれてキャッシュされた値が、`PostPage(id)` の呼び出しでそのまま使われます。
+
+これは lesson75 で扱った Data Cache（`fetch` オプションで制御する永続キャッシュ）とは別物です。`cache()` は「同じリクエストの中での重複排除」に特化した React の仕組みです。
+
+### Server Component の前提
+
+`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあれば、それをそのまま使えます。手元に無くても問題ありません。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、Hello World レベルのプロジェクトでも公開フロー自体は同じように体験できます。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
 
-Vercel デプロイの手順（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。本レッスンの目的は **「自分の Next.js プロジェクトを Vercel に乗せる流れ」を一度通すこと** なので、画面の中身は何でも構いません。
+<details>
+<summary>出発点のファイル</summary>
 
-### 自分の Next.js プロジェクトを開く
+**`app/layout.tsx`**
 
-公開したい Next.js プロジェクトを StackBlitz で開きます。これまでのレッスンで作った成果物でも、新規の Hello World テンプレートでも構いません。
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
 
-### 手順 1: GitHub アカウントを用意
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/about">About</Link>
+          {" | "}
+          <Link href="/posts/1">Post #1</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
+```
 
-1. <https://github.com/> にアクセスします。
-2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
+**`app/page.tsx`**
 
-### 手順 2: StackBlitz から GitHub に保存
+```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
+```
 
-1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
-2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
-3. 保存先のリポジトリ名を指定します。例: `my-next-app`。
-4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
-5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-app` が出ているはずです。
+**`app/about/page.tsx`**
 
-::: tip うまく行かないとき
-StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもあります。本コース想定は前者です。
-:::
+```tsx
+export default function About() {
+  return <h1>About</h1>;
+}
+```
 
-### 手順 3: Vercel アカウントを作る
+**`app/posts/[id]/page.tsx`**
 
-1. <https://vercel.com/> にアクセスします。
-2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
-3. 必要なら Vercel にメール認証を済ませましょう。
+```tsx
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  return <h1>記事 ID: {id}</h1>;
+}
+```
 
-### 手順 4: Vercel で新しいプロジェクトを作る
+</details>
 
-1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
-2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-app` を **「Import」** します。
-   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-app` のみ選択）。
-3. 設定画面が出ます。
-   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
-   - **Root Directory**: デフォルトのままにします。
-   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
-   - **Environment Variables**: 本コースでは使いません。空で OK です。
-4. 画面下の **「Deploy」** をクリックします。
-5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
+### ゴール
 
-### 手順 5: 公開 URL を確認
+- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
+- `app/about/page.tsx` に静的 metadata を追加する
+- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
+- ブラウザタブの文字が各ページで変わることを確認する
 
-1. Vercel の「Dashboard」→ プロジェクト名（`my-next-app`）をクリックします。
-2. 画面上部に **`https://my-next-app-xxxx.vercel.app`** のような URL が出ています。
-3. クリックして開きます。
+### 手順
+
+1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
+2. `app/about/page.tsx` に静的 `metadata` export を追加
+3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
+4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
+
+### 主要ファイルの完成形
+
+**`app/layout.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+import type { ReactNode } from "react";
+import Link from "next/link";
+
+export const metadata: Metadata = {
+  title: {
+    default: "My Next Site",
+    template: "%s | My Next Site",
+  },
+  description: "Next.js App Router の学習用サイト",
+  openGraph: {
+    title: "My Next Site",
+    description: "Next.js App Router の学習用サイト",
+    url: "https://example.com",
+    siteName: "My Next Site",
+    locale: "ja_JP",
+    type: "website",
+  },
+};
+
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/about">About</Link>
+          {" | "}
+          <Link href="/posts/1">Post #1</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
+```
+
+注: **`ReactNode` は `next` の公開型ではなく `react` から import します**。`Metadata` は `next` から、`ReactNode` は `react` から、と use 元が違う点に注意します。
+
+**`app/page.tsx`**
+
+```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
+```
+
+この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
+
+**`app/about/page.tsx`**
+
+```tsx
+import type { Metadata } from "next";
+
+export const metadata: Metadata = {
+  title: "About",
+  description: "このサイトについて",
+};
+
+export default function About() {
+  return <h1>About</h1>;
+}
+```
+
+**`app/posts/[id]/page.tsx`**
+
+```tsx
+import { cache } from "react";
+import type { Metadata } from "next";
+
+type Post = {
+  id: number;
+  title: string;
+  body: string;
+};
+
+// 同一リクエスト内での重複 fetch を 1 回にまとめる
+const getPost = cache(async (id: string): Promise<Post | null> => {
+  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
+  if (!res.ok) return null;
+  return res.json();
+});
+
+export async function generateMetadata({
+  params,
+}: PageProps<"/posts/[id]">): Promise<Metadata> {
+  const { id } = await params;
+  const post = await getPost(id);
+  if (!post) {
+    return { title: "記事が見つかりません" };
+  }
+  return {
+    title: post.title,
+    description: post.body.slice(0, 120),
+  };
+}
+
+export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
+  const { id } = await params;
+  const post = await getPost(id);
+  if (!post) {
+    return <h1>記事が見つかりません</h1>;
+  }
+
+  return (
+    <>
+      <h1>#{post.id} {post.title}</h1>
+      <p>{post.body}</p>
+    </>
+  );
+}
+```
+
 
 ### 期待出力
 
-- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ画面が表示されます。
-- 自分のプロジェクトに含まれる機能（ページ遷移、フォーム、データ表示など）がそのまま動きます。
-- URL を別のブラウザや友人に送っても、同じアプリが見えます。
+ブラウザで次のように動きます。
 
-### 更新を反映する
+1. `/` を開く → タブのタイトルが `My Next Site`
+2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
+3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
+4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
 
-GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
+### 変える
 
-1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
-2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
-3. 数十秒待ちます。
-4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
-5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
-
-### よくある躓き
-
-- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
-- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
-- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
-- 投稿系の機能でデータがリロード後に消える → 次項の通り、サーバーレス環境ではモジュールトップレベルの配列が保持されません。
-
-### 注意: 本番ではメモリ上のデータが保持されない
-
-学習中のコードで「Server Actions の最小形」のように `const items: Item[] = []` のような **モジュール先頭の配列** でデータを持っていた場合、Vercel に乗せると挙動が変わります。
-
-- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
-- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。インスタンスが複数並行で動くと、ユーザー A が追加したデータがユーザー B のインスタンスには見えません。コールドスタートでインスタンスが落ちると配列ごと消えます。
-
-本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。ユーザー単位なら `cookies()` 経由のセッションに永続化する手もあります。本コースでは扱いませんが、次のステップとして「サーバー側のメモリ配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
+- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
+- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
+- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
 
 ### 自分で書く
 
-1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。
-2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
-3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
+- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
+- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
+- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
 
 ## まとめ
 
-- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できる
-- 初回の接続だけ手数がかかるが、以後は Git に push すれば自動デプロイ
-- サーバー側のモジュールトップレベル配列など、メモリで保持していたデータは Vercel では保持されない。本番の永続化には DB が必要（本コースでは扱わない）
-- 次に進みたいときのおすすめ:
-  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
-  - 認証（NextAuth、Clerk など）を足してログインできるアプリにする
-  - スタイリングを Tailwind CSS や CSS Modules に寄せる
-  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る
+- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
+- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
+- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
+- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
+- `metadata` / `generateMetadata` は Server Component 側でだけ書く

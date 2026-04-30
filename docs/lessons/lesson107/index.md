@@ -1,353 +1,334 @@
-# lesson107: 次世代ツールチェイン（Biome / Oxc / Turbopack）
+# lesson105: Vite の仕組みを軽く
 
 ## ゴール
 
-- 「**Rust 製ツール群** に置き換わりつつある」フロントエンド界隈の構図を理解する
-- Biome / Oxc / Rolldown / Turbopack それぞれの **役割と立ち位置** を区別できる
-- **既存プロジェクトに今すぐ導入するか** を判断できる
-- 速さの数字を **誇張なく** 受け取れる
-- 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
-
-::: tip 前提
-このレッスンは「ESLint / Prettier / Biome」と「Vite の仕組み」の発展編です。基本概念はそれぞれのレッスンで確認してください。
-:::
+- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown を中核** に据えて esbuild が担っていた領域を順次置き換えていく方向に進んだ経緯が分かる
+- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
+- 本番ビルドでチャンク分割が起きる理由が言える
+- `import.meta.env` で環境変数を読み込める
+- Vite プラグインの位置付けを把握する
 
 ## 解説
 
-### なぜ Rust 移行が進むのか
+### Vite の立ち位置
 
-JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トランスパイラ）は **JavaScript で書かれて** きました。それは「**自分自身でメタ的に開発できる**」という美点があった一方:
+Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
 
-- **シングルスレッド** 寄りで並列化が難しい
-- **GC のオーバーヘッド**
-- **JS 自体の起動コスト**
+特徴:
 
-これがプロジェクトサイズの増加に追いついていません。**Rust** は次の特徴で対抗:
+- **開発サーバーが速い**（数百 ms で起動）
+- **HMR が一瞬**（保存と同時にブラウザが追随）
+- **本番ビルドはツリーシェイク + 最適化** までやる
+- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
 
-- **並列処理が得意**（fearless concurrency）
-- **GC なし** で予測可能なメモリ使用
-- **コンパイル時の最適化** で実行が速い
-- **WebAssembly に出せる**（CI / IDE 連携）
+### 2 段構成の歴史と Rolldown 統一
 
-結果として 2024〜2026 年の間に主要ツールが **Rust ベースに置き換え** が進んでいます。
+Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
 
-### 次世代ツールチェインの全体像
-
-| 役割 | 旧（JS 製） | 新（Rust 製） |
+| 局面 | 使うツール | 役割 |
 |---|---|---|
-| バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
-| パーサー / トランスパイラ | Babel | **SWC** / Oxc |
-| Lint | ESLint | **Biome** / Oxlint |
-| Format | Prettier | **Biome** / dprint |
-| 型チェック | tsc | **stc**（試行段階） |
+| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
+| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
 
-それぞれを順に見ていきます。
+開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
 
-### Biome
+#### Vite 8（2026 年 3 月）で Rolldown を中核に
 
-[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（「ESLint / Prettier / Biome」で扱い済み）。
+[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを **中核に据え**、Rollup ベースの本番ビルド経路を Rolldown ベース（`rolldown-vite`）に切り替える方向に進みました。esbuild が担当していた依存事前バンドルや TS/JSX 変換も段階的に Rolldown / Oxc に置き換わっていきますが、移行期では **既定として採用** されつつも esbuild が一部経路に残っており、将来の小バージョンで完全に 1 段化する見込みです。
 
-特徴:
+- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
+- **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
+- 結果として Vite はビルドが **最大 10〜30 倍速** になった
+- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
 
-- **設定 1 ファイル**（`biome.json`）
-- **ESLint + Prettier より圧倒的に速い**（35x ベンチマーク）
-- TypeScript / JSX / JSON / CSS をサポート
-- VS Code 拡張あり
+「esbuild + Rollup の 2 段構成」から「Rolldown 中心」へ移っていく流れ、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
+
+### 開発サーバーの仕組み
+
+Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
+
+#### 古典的 webpack の流れ
+
+1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
+2. ブラウザに 1 つの大きな JS を渡す
+3. 一部修正されると **再バンドル**
+
+→ ファイル数が増えると線形に遅くなる。
+
+#### Vite の流れ
+
+1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
+2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
+3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
+
+→ ファイル数が増えても初回の起動が速い。
+
+#### 例: 何が起きているか
+
+ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
+
+ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
+
+### HMR（Hot Module Replacement）
+
+開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
+
+普通のブラウザリロードと違って:
+
+- フォームに入力した値が **保持** される
+- スクロール位置が保たれる
+- 状態（state）も保たれる（フレームワーク側が対応していれば）
+
+#### 仕組みを大づかみに
+
+1. Vite はファイル変更を **fs.watch** で監視
+2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
+3. **影響モジュールだけ** ブラウザに WebSocket で送る
+4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
+
+React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
+
+### 本番ビルドの仕組み
+
+`vite build` で行われること:
+
+1. **エントリポイント** から依存関係を辿る
+2. **ツリーシェイク** で使われない export を削除
+3. **チャンク分割** で複数ファイルに分ける
+4. **minify** でファイルサイズを削減
+5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
+
+#### チャンク分割（コード分割）
+
+すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
+
+- **ベンダー**（`node_modules`）を別チャンクに
+- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
+
+を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（「バンドルサイズの最適化とコード分割」のバンドルサイズ最適化と繋がる話）。
+
+```ts
+// クリック時に初めて読み込む
+const handleClick = async () => {
+  const { showModal } = await import("./modal");
+  showModal();
+};
+```
+
+#### ハッシュ付きファイル名
+
+`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
+
+### `import.meta.env` で環境変数
+
+Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
 
 ```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+# .env
+VITE_API_URL=https://api.example.com
+SECRET_KEY=do_not_expose
 ```
 
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
-}
+```ts
+console.log(import.meta.env.VITE_API_URL); // OK
+console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
 ```
 
-#### Biome の限界
+ルール:
 
-- **TypeScript の型情報を使う高度なルール** は未対応（ESLint の `no-floating-promises` など）
-- 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
-- **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
+- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
+- それ以外は Vite が **読み捨てる**（漏洩対策）
+- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
 
-→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
+組み込みで使える環境情報:
 
-### Oxc / Oxlint
-
-[Oxc](https://oxc-project.github.io/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
-
-#### 構成要素
-
-| 名前 | 役割 |
-|---|---|
-| **oxc_parser** | JavaScript / TypeScript パーサ |
-| **oxlint** | Lint（ESLint 互換ルール） |
-| **oxc_minifier** | minify（terser / esbuild の代替） |
-| **oxc_resolver** | モジュール解決 |
-| **oxc_transformer** | TS / JSX → JS の変換 |
-
-「**Rust で書かれたフロントエンドの基盤一式**」を狙うプロジェクト。
-
-#### Oxlint の最小例
-
-```bash
-npm install -D oxlint
-npx oxlint
+```ts
+import.meta.env.MODE        // "development" / "production"
+import.meta.env.DEV         // true / false
+import.meta.env.PROD        // true / false
+import.meta.env.BASE_URL    // "/" など
 ```
 
-ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。
+### プラグイン
 
-```json
-// .oxlintrc.json
-{
-  "rules": {
-    "no-unused-vars": "error",
-    "no-debugger": "error"
-  }
-}
+Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
+
+```ts
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import svgr from "vite-plugin-svgr";
+import { VitePWA } from "vite-plugin-pwa";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    svgr(),
+    VitePWA({ registerType: "autoUpdate" }),
+  ],
+});
 ```
 
-#### Oxc が他に与える影響
+代表的なプラグイン:
 
-Vite 8（「Vite の仕組みを軽く」）が **Rolldown を採用**、Rolldown は **Oxc を内蔵** しています。つまり Oxc は **Vite / Rolldown / 多くの新ツール** の土台になりつつある。
+- `@vitejs/plugin-react`: React の HMR + JSX 変換
+- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
+- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
+- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
+- `vitest`: テストランナー（「テスト入門 — Vitest でユニットテスト」）
 
-Oxc は **VoidZero**（Evan You が立ち上げた会社）が支援しており、Vite / Rolldown と **同じ会社の同じ方向性** で開発が進んでいます。
+Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
 
-### Rolldown
+### Vite と他ツールの関係
 
-Vite 8 から採用された **Rust 製バンドラ**（「Vite の仕組みを軽く」で扱い済み）。
+Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
 
-- **Rollup と同じプラグイン API**
-- **esbuild より速い**（Oxc を内部で使用）
-- **Vite / Rolldown / Oxc が 1 つのチームで開発**
+- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
+- **Remix v3 / React Router v7+**: 内部で Vite を採用
+- **Nuxt 3+**: 内部で Vite を採用
+- **Astro**: 内部で Vite を採用
+- **SvelteKit**: 内部で Vite を採用
 
-「esbuild と Rollup の両方の良さを Rust で 1 つに」が Rolldown の旗印。Vite 8 のリリースで実用フェーズに入りました。
+つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
 
-### SWC
+### 「ハマる」パターン
 
-[SWC](https://swc.rs/)（Speedy Web Compiler）は **Rust 製の TypeScript / JSX トランスパイラ**。Babel の置き換え狙い。
+#### `process.env` が `undefined`
 
-特徴:
+→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
 
-- Next.js / Parcel 内部で採用
-- Babel より **20〜70 倍速い**
-- プラグインは Rust または WebAssembly
+#### 環境変数がクライアントに出てこない
 
-歴史的には Oxc より早く実用化されましたが、**Oxc が後発として** 機能で追いついています。Next.js は引き続き SWC ベース。
+→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
 
-### Turbopack
+#### CommonJS のパッケージで失敗
 
-[Turbopack](https://turbo.build/pack) は Vercel 製の **Rust 製バンドラ**。Next.js 専用に近い位置付け。
+→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
 
-- Next.js 16 で **`next dev` / `next build` のデフォルト**
-- webpack の **増分ビルド** を更に強化
-- Rolldown と並列に開発されている（**競合関係**）
+#### `node:fs` を import してエラー
 
-Vite 系（Vite + Rolldown + Oxc）と Vercel 系（Next.js + Turbopack + SWC）の 2 派が進む構図。
-
-### dprint
-
-[dprint](https://dprint.dev/) は **Rust 製のフォーマッタ**（Prettier 代替）。
-
-```bash
-npm install -D dprint
-```
-
-```jsonc
-// dprint.json
-{
-  "typescript": { "lineWidth": 100, "indentWidth": 2, "semiColons": "always" },
-  "json": {},
-  "markdown": {},
-  "includes": ["**/*.{ts,tsx,js,json,md}"],
-  "excludes": ["dist", "node_modules"],
-  "plugins": [
-    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
-    "https://plugins.dprint.dev/json-0.19.0.wasm",
-    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
-  ]
-}
-```
-
-特徴:
-
-- 各言語のフォーマッタを **WebAssembly プラグイン** として持つ
-- Prettier より少し古めの設計だが速い
-- Deno / 一部 Rust エコシステムで採用
-
-「Biome に注目が集まる中、**Prettier の代替として地味に使える**」位置付け。
-
-### 「Rust 製で速い」の意味するもの
-
-「**ESLint より 50 倍速い**」のような数字は要 **慎重に**。
-
-- **大規模プロジェクト**（10,000+ ファイル）では **数分 → 数秒** の改善で大きな違い
-- **小規模プロジェクト**（100 ファイル以下）では **既に十分速い** ので体感差はわずか
-- **CI 時間** には大きな影響、**保存時 Lint** には微差
-
-判断:
-
-- **CI が長くなって困っている** → 移行価値あり
-- **そうでもない** → 既存ツールで困っていなければ慌てない
-
-### TypeScript の Rust 化
-
-「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
-
-- [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
-- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、**2025 年に発表 + preview リリース**）: 公式の **Go ベース TypeScript**。型チェック / 言語サービスを Go で書き直し、`tsc` 比 10 倍級の高速化を目指す
-
-特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
-
-::: warning
-2026 年現在、これらは **まだ完全互換ではない**。型チェックは tsc / IDE のままで、ビルドだけ SWC / esbuild という現状が続きます。
-:::
-
-### 既存プロジェクトへの導入判断
-
-#### すぐ導入してもよい
-
-- **新規プロジェクト** で Biome 単独
-- **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
-- **Oxlint を ESLint と並走** させて速度を体感
-
-#### 慎重に
-
-- **ESLint プラグインに依存** している既存プロジェクト
-- **`@types/*` を多用** する大規模 TypeScript（型情報を使うルールが必要）
-- **チームの ESLint 知識** が分厚い場合（再学習コスト）
-
-#### 数年待つ
-
-- **TypeScript の Rust 化**（公式 Go 版を待つ）
-- **完全な ESLint プラグイン互換** が出るまで
-
-### ツール選択のフレーム
-
-新規プロジェクトでの 2026 年標準:
-
-```
-言語: TypeScript 5.9
-バンドラ: Vite 8（内部 Rolldown + Oxc）
-        または Next.js 16（内部 Turbopack + SWC）
-Lint:   Biome / Oxlint
-Format: Biome / Prettier
-テスト: Vitest（内部 Vite）/ Playwright
-パッケージ: pnpm / Bun
-```
-
-「**速い + 設定少ない**」を全方位で享受できる構成。
-
-### 5 年後の展望
-
-おそらく続くもの:
-
-- **Rust ベースの拡大**（CI / dev サーバ全般）
-- **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
-- **TypeScript 公式の Go / Rust 化**（高速化）
-
-まだ揺れているもの:
-
-- **Biome vs ESLint** の決着（プラグイン互換次第）
-- **Vite 系 vs Vercel 系** のシェア
-- **WebAssembly 化したツール**（IDE / ブラウザでの実行）
-
-「**まずは安定の ESLint + Prettier、心の準備として Biome / Oxc を試す**」が 2026 年の堅実なスタンス。
+→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
 
 ## 演習
 
 ### ゴール
 
-- Biome と Oxlint をそれぞれ既存プロジェクトに **共存** させる
-- 速度を **同じプロジェクト** で比較する
+- Vite の開発サーバーで **HMR を体感** する
+- ビルド出力のチャンク分割を眺める
+- `import.meta.env` で環境変数を読む
 
-### 手順 1: ベースのプロジェクト
-
-既存の Vite + React + TS プロジェクトを使うか、新規作成。
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest tooling-bench -- --template react-ts
-cd tooling-bench
+npm create vite@latest vite-internals -- --template react-ts
+cd vite-internals
 npm install
 ```
 
-### 手順 2: ESLint で計測
+### 手順 2: HMR を試す
 
 ```bash
-# Vite テンプレートには ESLint が入っている
-time npm run lint
+npm run dev
 ```
 
-時間を記録。
+ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
 
-### 手順 3: Biome を導入
+### 手順 3: ネットワークタブで個別配信を観察
+
+DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
+
+### 手順 4: 環境変数
+
+`.env` を作成:
 
 ```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
+# .env
+VITE_API_URL=https://api.example.com
+SECRET_TOKEN=xxxxx
 ```
 
-```json
-// biome.json
-{
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
+`src/App.tsx` に追加:
+
+```tsx
+console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
+console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
+console.log("MODE:", import.meta.env.MODE);
+```
+
+ブラウザのコンソールで:
+
+- `VITE_API_URL` は表示される
+- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
+- `MODE` は `"development"`
+
+### 手順 5: 本番ビルド
+
+```bash
+npm run build
+ls -la dist/assets
+npm run preview
+```
+
+`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
+
+### 手順 6: 動的 import でチャンクを分割
+
+`src/App.tsx`:
+
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [text, setText] = useState("");
+
+  const handleClick = async () => {
+    const mod = await import("./heavy");
+    setText(mod.heavyFunction());
+  };
+
+  return (
+    <div>
+      <button onClick={handleClick}>重い処理</button>
+      <p>{text}</p>
+    </div>
+  );
 }
 ```
 
-```bash
-time npx biome check .
+`src/heavy.ts`:
+
+```ts
+export function heavyFunction() {
+  return "計算結果です";
+}
 ```
 
-### 手順 4: Oxlint を試す
-
-```bash
-npm install -D oxlint
-time npx oxlint .
-```
-
-### 手順 5: 結果を比較
-
-実測値の例（小規模プロジェクト）:
-
-| ツール | 時間 | 検出数 |
-|---|---|---|
-| ESLint | 2.5s | 5 |
-| Biome | 0.3s | 4 |
-| Oxlint | 0.1s | 3 |
-
-「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
+`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
 
 ### 期待出力
 
-- 3 つのツールがそれぞれ動き、速度差が見える
-- 検出ルール / 重複が違うので、**ノイズの少ないツール** を選ぶ判断の材料になる
+- HMR でファイル保存と同時に画面が更新（リロードなし）
+- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
+- `VITE_` プレフィックスの環境変数のみクライアントから読める
+- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
 
 ### 変える
 
-- 1000 ファイル規模のプロジェクトで再測定
-- CI でそれぞれを実行し、月のビルド時間を試算
-- IDE 拡張（Biome / Oxlint）を入れて、保存時のレイテンシを比較
+- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
+- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
+- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
 
 ### 自分で書く（任意）
 
-- 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
-- dprint を入れて Prettier と比較
-- TypeScript Go 版（`tsgo`）の preview を試す
+- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
+- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
 
 ## まとめ
 
-- フロントエンドツールが **Rust 製** に置き換わりつつある
-- **Biome**: Lint + Format 1 ツール、設定 1 ファイル、35x 高速
-- **Oxc / Oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
-- **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
-- **SWC / Turbopack**: Next.js / Vercel が独自路線
-- **dprint**: Prettier 代替の Rust 製フォーマッタ
-- **TypeScript 公式の Go 版**（tsgo）が 2025 年に preview リリース、2026 年現在も成熟中
-- 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
-- 既存プロジェクトは「**速度に困ってから**」で良い
-- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
+- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
+- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
+- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
+- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
+- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
+- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
+- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵

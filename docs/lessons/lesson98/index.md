@@ -1,490 +1,225 @@
-# lesson98: コンポーネントテスト — React Testing Library
+# lesson96: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
 
 ## ゴール
 
-- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
-- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
-- `userEvent` でクリック / 入力をシミュレートできる
-- 状態変化（`useState`）を含むコンポーネントのテストが書ける
-- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
+- Chrome DevTools 内蔵の **Lighthouse** で a11y スコアを計測できる
+- **axe DevTools** 拡張で詳細な違反をチェックできる
+- 自動チェックでは拾えない領域（文脈・操作感）を **スクリーンリーダー**（VoiceOver / NVDA）で確認できる
+- CI に **axe-core**（`@axe-core/playwright` など）を組み込む発想を理解する
+- 「自動チェック + 手動チェック + 実ユーザー」の 3 段構えが必要な理由を説明できる
 
 ## 解説
 
-### React Testing Library の思想
+### チェックの 3 段構え
 
-React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
+a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は 3〜4 割で、残りは **文脈** に依存します。たとえば:
 
-1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
-2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
+- `alt="画像"` と書いてあっても、画像の本当の内容を表していなければ機械は気づけない
+- ボタンラベルが `aria-label="保存"` でも、「何を保存するのか」が文脈に合ってなければ機械は気づけない
+- キーボードで Tab 順序が「技術的に通る」でも、論理的な順序として使いづらい場合がある
 
-これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
+実務では次の 3 段階でチェックします。
 
-- 内部実装をリファクタしてもテストは壊れない
-- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
+1. **自動**: Lighthouse / axe DevTools → 開発中の基本ラインを自動検知
+2. **手動**: キーボードだけで操作してみる / スクリーンリーダーで読み上げる → 体験として正しいか
+3. **実ユーザー**: 可能ならアクセシビリティ利用者に触ってもらう → リアルなフィードバック
 
-### セットアップ
+本レッスンでは 1 と 2 を一通り触ります。
 
-「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
+### 1. Lighthouse: 基本ラインを自動で
 
-```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
-```
+Chrome DevTools 内蔵の **Lighthouse** タブは、その場でページを監査して 4 つのカテゴリ（Performance / Accessibility / Best Practices / SEO）を 0〜100 の点数で返します。
 
-`vitest.config.ts` を更新:
+手順:
+
+1. Chrome でチェックしたいページを開く
+2. DevTools（`F12`）→ **Lighthouse** タブ
+3. Categories で **Accessibility** だけ選択（他もまとめて出しても良い）
+4. Device は Desktop / Mobile どちらかを選び、**Analyze page load** をクリック
+5. レポートが出る。Accessibility のスコアが 100 / 90 / 80 ... のように点数化される
+
+典型的な違反の例:
+
+- Background and foreground colors do not have a sufficient contrast ratio（コントラスト不足）
+- Image elements do not have `[alt]` attributes（alt 欠落）
+- Form elements do not have associated labels（label 欠落）
+- Heading elements are not in a sequentially-descending order（見出し階層の飛び）
+- Buttons do not have an accessible name（アクセシブルネーム欠落）
+- `[aria-*]` attributes do not match their roles（ARIA の誤用）
+
+Lighthouse は **違反ごとに該当の DOM ノード** を示してくれるので、クリックすれば Elements タブにジャンプして直すだけです。
+
+**スコア 100 が目標ですが、それが a11y 完璧の意味ではない** 点に注意してください。Lighthouse が拾うのは機械的な項目だけです。
+
+### 2. axe DevTools: より細かく診断
+
+Lighthouse より **詳細な違反情報** が欲しいときは、Chrome 拡張の **axe DevTools**（<https://www.deque.com/axe/devtools/>）を使います。無料版でも十分に使えます。
+
+インストール後:
+
+1. Chrome 拡張からインストール
+2. DevTools に **axe DevTools** タブが追加される
+3. **Scan ALL of my page** を押す
+4. Critical / Serious / Moderate / Minor の優先度別に違反が一覧される
+5. 各違反に「なぜ違反か」「どう直すか」のガイドリンク付き
+
+Lighthouse との違い:
+
+- axe DevTools は **Deque**（a11y 専門会社）が提供。業界標準の axe-core エンジンを使う
+- 違反の説明が詳しく、**修正方法のコード例** まで載っている
+- Lighthouse は axe-core の一部を内蔵している。つまり **axe DevTools の方が厳しめ**
+
+両方回して、Lighthouse で基本を見て、axe で細部を詰めるのが定番です。
+
+### 3. キーボード手動チェック
+
+ここからは **人間の目と手でしか分からない** 領域です。次を試してください。
+
+1. マウスから手を離す
+2. Tab キーだけでページを最初から最後まで操作する
+3. 次を確認する:
+   - **フォーカスリングが常に見える** か（どこにフォーカスがあるか分かるか）
+   - **Tab の順序が論理的** か（画面上の自然な流れと一致しているか）
+   - すべての **操作可能な要素** に Tab で到達できるか（マウスでしかクリックできない部分はないか）
+   - **モーダル**が開いたとき、Tab がモーダル内で巡回し、Esc で閉じられるか
+   - **キーボードの罠** がないか（Tab を押してもフォーカスが進まない場所はないか）
+
+「フォーカスが見えない」は最頻発の違反です。CSS で `outline: none` を書いていないか、`:focus-visible` で代替を用意しているか、再確認しましょう。
+
+### 4. スクリーンリーダー手動チェック
+
+スクリーンリーダーは **OS 付属（VoiceOver）や無料**（NVDA） が使えます。自分で触ってみると、文章だけでは分からない体験が一気に分かります。
+
+#### macOS: VoiceOver
+
+- 起動: `Cmd + F5`（または `Touch ID` を 3 回連打）
+- 停止: もう一度 `Cmd + F5`
+- ページ読み上げ: `Ctrl + Option + A`
+- 次の見出しへ移動: `Ctrl + Option + Cmd + H`
+- ランドマーク一覧: `Ctrl + Option + U`（ローター）
+
+初めての場合、読み上げスピードが速すぎると感じます。システム設定 → アクセシビリティ → VoiceOver で速度を遅くできます。
+
+#### Windows: NVDA（無料）
+
+- <https://www.nvaccess.org/download/> からダウンロード
+- 起動後、Web ページを開くと自動で読み上げ開始
+- 次の見出しへ: `H`
+- 次のランドマークへ: `D`
+- 読み上げ停止: `Ctrl`
+
+#### 何を確認するか
+
+- **ページを開いた瞬間に何が読まれるか**（最初の見出しか、関係ないテキストか）
+- ナビゲーションで **「メインコンテンツにスキップ」** できるか（`<main>` ランドマークがあるか）
+- フォームで **ラベルと入力欄が正しく紐付いている** か
+- **アイコンボタンの名前** が読まれるか（`aria-label` 未設定だと「ボタン」としか読まれない）
+- **動的更新**（通知メッセージなど）が `aria-live` で自動通知されるか
+
+「セマンティック HTML とアクセシビリティの基礎」「ARIA 属性とキーボード操作」で作った演習ページで試してみると、これまで配置した属性が効いているのが体感できます。
+
+### 5. CI に組み込む: `@axe-core/playwright`
+
+手動チェックだけでは、**デグレ**（一度直した違反が再発すること）を防げません。E2E テストで axe を回して CI に組み込むと、PR の段階で自動検知できます。
 
 ```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+// e2e/a11y.spec.ts
+import { test, expect } from "@playwright/test";
+import AxeBuilder from "@axe-core/playwright";
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",  // ブラウザ風 DOM を提供
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-  },
+test("トップページに a11y 違反がない", async ({ page }) => {
+  await page.goto("http://localhost:3000/");
+
+  const results = await new AxeBuilder({ page })
+    // 既知の現状割れているチェックは disable する（後で順次解消）
+    .disableRules(["color-contrast"])
+    // 最初は WCAG A / AA だけに絞ると現実的
+    .withTags(["wcag2a", "wcag2aa"])
+    .analyze();
+
+  expect(results.violations).toEqual([]);
 });
 ```
 
-`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
+「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。`expect(results.violations).toEqual([])` をいきなり全ルールで通すと、新しいルールが追加されたときに **無関係の PR が落ちる** ので、`withTags` でスコープを絞り、`disableRules` で既知の課題を一旦よけてから順次解消するのが定石です。
 
-```ts
-import "@testing-library/jest-dom/vitest";
-```
+> React のユニットテストレベルなら `jest-axe` や `vitest-axe` が使えます。コンポーネント単体の違反チェックに向きます。
 
-これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
+### まとめの「チェックリスト」
 
-### 最小のコンポーネントテスト
+デプロイ前に以下を確認すれば、機械的には OK ラインに届きます（最低限）。
 
-テスト対象:
-
-```tsx
-// src/Greeting.tsx
-type Props = { name: string };
-
-export function Greeting({ name }: Props) {
-  return <h1>こんにちは、{name} さん</h1>;
-}
-```
-
-テスト:
-
-```tsx
-// src/Greeting.test.tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { Greeting } from "./Greeting";
-
-describe("Greeting", () => {
-  it("名前を含む挨拶を表示する", () => {
-    render(<Greeting name="Alice" />);
-    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
-  });
-});
-```
-
-3 つの基本要素:
-
-- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
-- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
-- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
-
-### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
-
-要素を探す関数は **接頭辞** で挙動が変わります。
-
-| 接頭辞 | 見つからない時 | 用途 |
-|---|---|---|
-| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
-| `queryBy*` | `null` を返す | 「無いはず」を確認する |
-| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
-
-例:
-
-```tsx
-// 「保存」ボタンが必ずある
-const button = screen.getByRole("button", { name: "保存" });
-
-// エラーメッセージは「無いはず」（成功時）
-expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
-
-// fetch が終わった後に現れるユーザー名
-const userName = await screen.findByText("Alice");
-```
-
-### クエリの優先順位
-
-Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
-
-| 優先度 | クエリ | 何を見るか |
-|---|---|---|
-| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
-| 2 | `getByLabelText` | フォームの `<label>` テキスト |
-| 3 | `getByPlaceholderText` | input の placeholder |
-| 4 | `getByText` | 表示テキスト |
-| 5 | `getByDisplayValue` | input の現在値 |
-| 6 | `getByAltText` | img の alt |
-| 7 | `getByTitle` | title 属性 |
-| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
-
-**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
-
-### `userEvent` でユーザー操作をシミュレート
-
-ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Counter } from "./Counter";
-
-describe("Counter", () => {
-  it("ボタンを押すと数が増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("複数回押すと累積する", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    const button = screen.getByRole("button", { name: "+1" });
-    await user.click(button);
-    await user.click(button);
-    await user.click(button);
-
-    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
-  });
-});
-```
-
-`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
-
-### フォーム入力のテスト
-
-`<input>` への入力は `user.type` でシミュレートします。
-
-```tsx
-import { useState } from "react";
-
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  return (
-    <form
-      onSubmit={(e) => {
-        e.preventDefault();
-        setSubmitted(name);
-      }}
-    >
-      <label htmlFor="name">お名前</label>
-      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
-```
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    const input = screen.getByLabelText("お名前");
-    const button = screen.getByRole("button", { name: "送信" });
-
-    await user.type(input, "Alice");
-    await user.click(button);
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
-
-  it("入力が空のままだと挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-});
-```
-
-`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
-
-### よく使う追加マッチャ（jest-dom）
-
-`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
-
-```tsx
-expect(element).toBeInTheDocument();        // DOM に存在する
-expect(element).toHaveTextContent("hello"); // テキストを含む
-expect(element).toBeVisible();              // 見える状態
-expect(input).toHaveValue("Alice");         // input の値
-expect(checkbox).toBeChecked();             // チェック済み
-expect(button).toBeDisabled();              // disabled 属性付き
-expect(element).toHaveClass("active");      // CSS クラス付き
-expect(element).toHaveAttribute("href", "/about");
-```
-
-これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
-
-### テスト間で DOM / タイマーが漏れる落とし穴
-
-RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
-
-- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。この自動 cleanup は、Vitest の `globals: true`（`vitest.config.ts` 設定）が有効な環境でのみ動作します。`globals: false` の場合は各テストファイルで `afterEach(() => cleanup())` を手動で追加してください。
-- **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
-
-```ts
-import { afterEach, vi } from "vitest";
-afterEach(() => {
-  vi.useRealTimers();
-});
-```
+- [ ] Lighthouse Accessibility スコアが 90 以上
+- [ ] axe DevTools の Critical / Serious が 0
+- [ ] マウスを使わず Tab だけで全機能を操作できる
+- [ ] Tab を押したときに常にフォーカスリングが見える
+- [ ] モーダルが Esc で閉じ、フォーカスが元に戻る
+- [ ] スクリーンリーダーでページを開いた最初の読み上げが自然
 
 ## 演習
 
 ### ゴール
 
-- React + RTL のセットアップを `vitest.config.ts` に反映する
-- カウンターコンポーネントのテストを書ける
-- 簡単なフォームのテストを書ける
-- `getByRole` / `getByLabelText` を優先して使える
+- ローカル or 公開 Web サイト 1 ページに対して Lighthouse を実行する
+- axe DevTools をインストールして違反を眺める
+- キーボードだけで 1 つのサイトを操作する体験をする
+- （任意）スクリーンリーダーを起動してページを読み上げさせる
 
-### 途中から始める場合
+### 手順 1: Lighthouse を回す
 
-「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
+> **注意**: Lighthouse は StackBlitz では動作しない場合があります。**Chrome の DevTools → Lighthouse タブ**（ローカル環境の場合）、または **PageSpeed Insights** でデプロイ済み URL を計測してください。StackBlitz 環境では axe DevTools Chrome 拡張を使った確認に置き換えても構いません。
 
-### 手順 1: 依存パッケージをインストール
+1. Chrome で本コースの教材サイト、または自分が作ったポートフォリオを開きます
+2. DevTools（`F12`）→ **Lighthouse** タブ
+3. Categories で **Accessibility** だけチェックを残し、**Analyze page load** をクリック
+4. スコアが出るまで 10〜30 秒待ちます
+5. スコアと、違反があれば内容をメモします
 
-```bash
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
-```
+### 手順 2: axe DevTools を使う
 
-### 手順 2: 設定ファイルを更新
+1. Chrome Web Store で「axe DevTools」を検索してインストール
+2. DevTools に **axe DevTools** タブが出る
+3. **Scan ALL of my page** をクリック
+4. 結果ペインで違反一覧を眺めます。各違反をクリックすると詳細と該当 DOM が出ます
 
-`vitest.config.ts`:
+### 手順 3: キーボードだけで操作する
 
-```ts
-import { defineConfig } from "vitest/config";
-import react from "@vitejs/plugin-react";
+1. マウスをデスクから**物理的に離して** みる（誘惑を断つため）
+2. Tab キーだけで全リンク・全ボタンを順に通過する
+3. 「ここに行きたいが Tab で辿り着けない」ポイントがないか確認
+4. 見つかったら、Tab 順序の修正候補をメモ（原因は `tabindex` 誤設定 / 非インタラクティブな `<div>` をボタン代わりにしている、など）
 
-export default defineConfig({
-  plugins: [react()],
-  test: {
-    environment: "jsdom",
-    globals: true,
-    setupFiles: ["./vitest.setup.ts"],
-  },
-});
-```
+### 手順 4（任意）: スクリーンリーダー
 
-`vitest.setup.ts` を新規作成:
+Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストールして起動し、同じページを読ませてみます。
 
-```ts
-import "@testing-library/jest-dom/vitest";
-```
-
-### 手順 3: テスト対象のコンポーネントを書く
-
-`src/Counter.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export function Counter() {
-  const [count, setCount] = useState(0);
-
-  return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-      <button onClick={() => setCount((c) => c - 1)}>-1</button>
-      <button onClick={() => setCount(0)}>リセット</button>
-    </div>
-  );
-}
-```
-
-`src/NameForm.tsx`:
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-export function NameForm() {
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    if (name.trim()) {
-      setSubmitted(name);
-    }
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <label htmlFor="name">お名前</label>
-      <input
-        id="name"
-        value={name}
-        onChange={(e) => setName(e.target.value)}
-      />
-      <button type="submit">送信</button>
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </form>
-  );
-}
-```
-
-### 手順 4: テストを書く
-
-`src/Counter.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { Counter } from "./Counter";
-
-describe("Counter", () => {
-  it("初期値は 0", () => {
-    render(<Counter />);
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-  });
-
-  it("+1 ボタンで増える", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-
-    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
-  });
-
-  it("-1 ボタンで減る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "-1" }));
-
-    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
-  });
-
-  it("リセットボタンで 0 に戻る", async () => {
-    const user = userEvent.setup();
-    render(<Counter />);
-
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "+1" }));
-    await user.click(screen.getByRole("button", { name: "リセット" }));
-
-    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
-  });
-});
-```
-
-`src/NameForm.test.tsx`:
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
-import { NameForm } from "./NameForm";
-
-describe("NameForm", () => {
-  it("名前を入力して送信すると挨拶が出る", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.type(screen.getByLabelText("お名前"), "Alice");
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
-  });
-
-  it("空のまま送信しても挨拶は出ない", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    await user.click(screen.getByRole("button", { name: "送信" }));
-
-    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
-  });
-
-  it("入力中の値が input に反映される", async () => {
-    const user = userEvent.setup();
-    render(<NameForm />);
-
-    const input = screen.getByLabelText("お名前");
-    await user.type(input, "Bob");
-
-    expect(input).toHaveValue("Bob");
-  });
-});
-```
-
-### 手順 5: 実行
-
-```bash
-npm run test
-```
-
-すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
+「何が読まれるか」より「何が読まれないか」に注目すると、見えてないラベルやランドマークが炙り出されます。
 
 ### 期待出力
 
-```
- PASS  src/Counter.test.tsx (4)
- PASS  src/NameForm.test.tsx (3)
-
- Test Files  2 passed (2)
-      Tests  7 passed (7)
-```
+- Lighthouse の Accessibility スコアが数字で出る（教材サイトは 90+ のはず）
+- axe DevTools の違反リストが 0 件 or Critical が 0 件
+- Tab だけで迷子にならずに全操作ができる
+- スクリーンリーダー体験で「どう読まれるか」の感覚が掴める
 
 ### 変える
 
-- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
-- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
-- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
+- 自分のポートフォリオやブログ（あれば）で同じ手順を試してみる。違反が出たら、「セマンティック HTML とアクセシビリティの基礎」と「ARIA 属性とキーボード操作」のレッスンに戻って該当 HTML を直す
+- Lighthouse の **Device** を Mobile に切り替えてみる。タップ領域の不足など、モバイル固有の違反が出る場合がある
+- `axe DevTools` の **Intelligent Guided Tests**（有料版機能）の存在を認識しておく。無料版の自動チェックで拾えないものを、人間をガイドしながら問診してくれる
 
 ### 自分で書く
 
-- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
-  - 入力欄 + 「追加」ボタン
-  - 追加されたら入力欄が空になる
-  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
-- テストで以下を検証:
-  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
-  - 送信後に input が空になる
-  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
-
-`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
+- `@axe-core/playwright` を使った E2E a11y テストのサンプルを読んで、雰囲気を掴む（実装は「テスト入門」で Playwright を導入するレッスンと合わせて）
+- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン
 
 ## まとめ
 
-- React Testing Library は「ユーザーの見え方」をテストする思想
-- `render` / `screen` でコンポーネントを描画して DOM クエリ
-- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
-- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
-- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
-- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
-- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
+- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは 3〜4 割しかカバーできない
+- **Lighthouse**: Chrome 内蔵。a11y スコアと違反一覧を即出せる
+- **axe DevTools**: Chrome 拡張。より詳細・厳しめ。Deque 提供の業界標準
+- 手動チェック: キーボードだけで操作 / スクリーンリーダーで読ませる
+- **VoiceOver**（macOS）/ **NVDA**（Windows 無料）でスクリーンリーダー体験
+- CI に `@axe-core/playwright` や `jest-axe` / `vitest-axe` を組み込むと、デグレ検知が自動化できる
+- `eslint-plugin-jsx-a11y` も併用すると書く段階で違反を捕まえられる
+- これで a11y の 3 レッスン（セマンティック HTML / ARIA とキーボード / 自動チェック）が完結。次のテーマに進んで、実務の周辺知識を積み上げる

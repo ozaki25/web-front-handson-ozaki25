@@ -1,389 +1,437 @@
-# lesson125: IndexedDB 入門
+# lesson122: WebSocket と Server-Sent Events（SSE）
 
 ## ゴール
 
-- IndexedDB が `localStorage` と何が違うか説明できる
-- 生 API の用語（database / objectStore / transaction / cursor）を読める
-- `idb` ライブラリで Promise ベースの最小コードを書ける
-- `Dexie.js` のクラス指向 API の利点を理解する
-- ユースケース（オフライン作業 / 大量データキャッシュ）を判断できる
+- リアルタイム通信の **選択肢** を整理して語れる
+- WebSocket と SSE の **使い分け** を判断できる
+- WebSocket クライアントの最小実装が書ける
+- SSE クライアント（`EventSource`）の最小実装が書ける
+- Next.js / 各サービス（Pusher / Ably / Supabase Realtime）の位置付けを把握する
 
 ## 解説
 
-### `localStorage` の限界
+### リアルタイム通信の選択肢
 
-「Web Storage で値をブラウザに保存する」で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+「サーバーから **押し付けで** データを送りたい」場面の主な選択肢:
 
-- **容量が小さい**（オリジン全体で 5〜10MB）
-- **値は文字列だけ**（オブジェクトは JSON 化が必要）
-- **同期 API**（読み書きで UI が止まる）
-- **検索 / インデックスがない**
-- **トランザクションがない**
+| 方式 | 通信方向 | 用途 |
+|---|---|---|
+| **ポーリング** | クライアント → サーバー（定期） | 単純だが効率悪い |
+| **ロングポーリング** | クライアント → サーバー（待機） | レガシー互換 |
+| **Server-Sent Events**（SSE） | サーバー → クライアントの **一方向** | 通知 / 株価 / AI ストリーム |
+| **WebSocket** | **双方向** | チャット / オンラインゲーム / 共同編集 |
+| **WebTransport** | UDP ベースの双方向（HTTP/3） | 低遅延が要る場面（実験的） |
 
-「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
+「**双方向か単方向か**」「**HTTP の上で済むか**」が選択の軸です。
 
-### IndexedDB とは
+### Server-Sent Events（SSE）
 
-ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
+「サーバーから **テキストイベントをストリーム** で送る」HTTP ベースの仕組み。
 
-- **容量は数十 MB 〜 GB クラス**（ブラウザによる）
-- **オブジェクトをそのまま** 保存（structured clone）
-- **完全に非同期**（イベント / Promise）
-- **インデックスでの検索** が可能
-- **トランザクション** でアトミック操作
-- **Service Worker からも使える**
+#### サーバー側
 
-### 用語
+レスポンスのヘッダを `Content-Type: text/event-stream` にし、本文を **特別なフォーマット** で書き続けます。
 
-| 用語 | 意味 |
-|---|---|
-| **Database** | 1 つの DB。複数の objectStore を持つ |
-| **Object Store** | テーブル / コレクションに相当 |
-| **Key Path** | レコードの主キーフィールド（`id` 等） |
-| **Index** | 検索を速くする補助インデックス |
-| **Transaction** | 読み書きをまとめる単位（`readonly` / `readwrite`） |
-| **Cursor** | 範囲走査するイテレータ |
+```
+HTTP/1.1 200 OK
+Content-Type: text/event-stream
+Cache-Control: no-cache
+Connection: keep-alive
 
-### 生 API の最小例
+data: hello
+
+data: world
+
+event: chat
+data: {"user":"alice","msg":"こんにちは"}
+```
+
+各イベントは **空行** で区切る。`data:` 以外に `event:`（イベント名）/ `id:`（ID）/ `retry:`（再接続秒）が指定可能。
+
+#### クライアント側
 
 ```js
-const open = indexedDB.open("my-db", 1);
+const es = new EventSource("/api/stream");
 
-open.onupgradeneeded = (event) => {
-  const db = event.target.result;
-  const store = db.createObjectStore("posts", { keyPath: "id" });
-  store.createIndex("by-author", "author");
+es.onmessage = (e) => {
+  console.log("受信:", e.data);
 };
 
-open.onsuccess = (event) => {
-  const db = event.target.result;
-
-  const tx = db.transaction("posts", "readwrite");
-  const store = tx.objectStore("posts");
-  store.put({ id: "1", title: "Hello", author: "Alice" });
-
-  tx.oncomplete = () => console.log("保存完了");
-};
-```
-
-ポイント:
-
-- `open` の **`onupgradeneeded`** でスキーマを定義（version を上げると再実行）
-- `transaction(name, mode)` で操作する store を選ぶ
-- `put` / `get` / `delete` / `getAll` などのメソッドはイベントハンドラで結果を受ける
-
-**生 API は冗長で書きづらい** ので、ラッパーを使うのが普通です。
-
-### `idb`（Promise ラッパー）
-
-[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
-
-```bash
-npm install idb
-```
-
-```ts
-import { openDB, DBSchema } from "idb";
-
-interface MyDB extends DBSchema {
-  posts: {
-    key: string;
-    value: { id: string; title: string; author: string };
-    indexes: { "by-author": string };
-  };
-}
-
-const db = await openDB<MyDB>("my-db", 1, {
-  upgrade(db) {
-    const store = db.createObjectStore("posts", { keyPath: "id" });
-    store.createIndex("by-author", "author");
-  },
+es.addEventListener("chat", (e) => {
+  console.log("chat:", JSON.parse(e.data));
 });
 
-await db.put("posts", { id: "1", title: "Hello", author: "Alice" });
-const post = await db.get("posts", "1");
-const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
+es.onerror = (err) => {
+  console.error("エラー or 切断:", err);
+};
 ```
 
-`DBSchema` を使うと **型付きの API** になり、IDE 補完が効きます。
+`EventSource` は:
 
-### `Dexie.js`（クラス指向）
+- **自動再接続**（切れても勝手につなぎ直す）
+- `id:` を覚えていて再接続時に `Last-Event-ID` ヘッダで送る
+- ブラウザ標準（IE 以外）でライブラリ不要
 
-[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
-
-```bash
-npm install dexie
-```
+#### Next.js での実装（Route Handler + ReadableStream）
 
 ```ts
-import Dexie, { Table } from "dexie";
+// app/api/stream/route.ts
+export async function GET() {
+  const stream = new ReadableStream({
+    start(controller) {
+      const encoder = new TextEncoder();
+      let count = 0;
+      const id = setInterval(() => {
+        count++;
+        controller.enqueue(encoder.encode(`data: tick ${count}\n\n`));
+        if (count >= 10) {
+          clearInterval(id);
+          controller.close();
+        }
+      }, 1000);
+    },
+  });
 
-interface Post {
-  id?: number;
-  title: string;
-  author: string;
-  createdAt: number;
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache, no-transform",
+      "Connection": "keep-alive",
+    },
+  });
 }
-
-class MyDB extends Dexie {
-  posts!: Table<Post, number>;
-  constructor() {
-    super("my-db");
-    this.version(1).stores({
-      posts: "++id, author, createdAt",
-    });
-  }
-}
-
-const db = new MyDB();
-
-await db.posts.add({ title: "Hello", author: "Alice", createdAt: Date.now() });
-
-const aliceLatest = await db.posts
-  .where("author").equals("Alice")
-  .reverse()
-  .sortBy("createdAt");
 ```
 
-ポイント:
+::: tip AI ストリーミングと SSE
+ChatGPT のような **トークン単位の応答** にも SSE / `Streaming Responses` が広く使われています。Vercel の AI SDK / Anthropic の Stream / OpenAI Stream など、SaaS の SDK が SSE を内部で扱っています。
+:::
 
-- `++id` は **自動採番** の主キー
-- `stores` の文字列で **インデックスを宣言**
-- `where().equals().reverse().sortBy()` のような **チェーン** が書ける
-- React 用 hooks（`useLiveQuery`）も提供される
+### WebSocket
+
+「**双方向**、**バイナリも送れる**、**HTTP からアップグレード** して始まる」プロトコル（`ws://` / `wss://`）。
+
+#### サーバー側（ws ライブラリ）
+
+```bash
+npm install ws
+```
+
+```js
+import { WebSocketServer } from "ws";
+
+const wss = new WebSocketServer({ port: 4000 });
+
+wss.on("connection", (socket) => {
+  console.log("接続");
+  socket.on("message", (data) => {
+    // 全クライアントにブロードキャスト
+    for (const client of wss.clients) {
+      if (client.readyState === client.OPEN) {
+        client.send(data.toString());
+      }
+    }
+  });
+});
+```
+
+#### クライアント側
+
+```js
+const ws = new WebSocket("ws://localhost:4000");
+
+ws.addEventListener("open", () => {
+  console.log("接続成功");
+  ws.send("hello");
+});
+
+ws.addEventListener("message", (e) => {
+  console.log("受信:", e.data);
+});
+
+ws.addEventListener("close", () => {
+  console.log("切断");
+});
+```
+
+#### バイナリも送れる
+
+```js
+const buffer = new Uint8Array([1, 2, 3, 4]);
+ws.binaryType = "arraybuffer";
+ws.send(buffer);
+```
+
+ゲーム / VoIP / ファイル転送など、テキストでは厳しい用途に向く。
+
+### 切断と再接続
+
+WebSocket は **自動再接続しない**。ネットワーク切断 / サーバー再起動で `close` イベントが飛びます。実装側で再接続を:
+
+```js
+function connect() {
+  const ws = new WebSocket(url);
+  ws.addEventListener("close", () => {
+    setTimeout(connect, 1000); // 1 秒後に再接続
+  });
+  return ws;
+}
+```
+
+実用では **指数バックオフ + 上限** にします（`socket.io` などのライブラリが内部で実装）。
+
+### SSE と WebSocket の使い分け
+
+| 観点 | SSE | WebSocket |
+|---|---|---|
+| 通信方向 | サーバー → クライアント（一方向） | 双方向 |
+| プロトコル | HTTP（追加設定不要） | 専用（プロキシ調整が必要） |
+| 自動再接続 | あり | なし（自前で実装） |
+| ブラウザサポート | 全主要 | 全主要 |
+| バイナリ | 不可 | 可 |
+| プッシュレート | 低〜中 | 低〜高 |
+
+#### 選び方の指針
+
+- **通知 / ストック価格 / AI ストリーム / ライブニュース**: SSE で十分
+- **チャット / 共同編集 / リアルタイムゲーム / カーソル位置共有**: WebSocket
+- **「通知だけ」+ 既存 HTTP インフラを活かしたい**: SSE が楽
+
+### React / Next.js で扱う
+
+#### React Hook で WebSocket
 
 ```tsx
-import { useLiveQuery } from "dexie-react-hooks";
+import { useEffect, useState } from "react";
 
-function PostList() {
-  const posts = useLiveQuery(() => db.posts.toArray(), []);
-  return (
-    <ul>
-      {posts?.map((p) => <li key={p.id}>{p.title}</li>)}
-    </ul>
-  );
+export function useWebSocket(url: string) {
+  const [messages, setMessages] = useState<string[]>([]);
+  const [ws, setWs] = useState<WebSocket | null>(null);
+
+  useEffect(() => {
+    const socket = new WebSocket(url);
+    socket.addEventListener("message", (e) => {
+      setMessages((m) => [...m, e.data]);
+    });
+    setWs(socket);
+    return () => socket.close();
+  }, [url]);
+
+  const send = (msg: string) => ws?.send(msg);
+  return { messages, send };
 }
 ```
 
-`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
+`useEffect` のクリーンアップで **必ず close** すること。React 19 / Strict Mode で **2 度マウント** されて接続が漏れる事故を防げます。
 
-### `localStorage` / `sessionStorage` / IndexedDB の使い分け
+#### Next.js の Route Handler で WebSocket を持つときの注意
 
-| 用途 | 推奨 |
+Next.js の Route Handler は **Node.js Runtime / Edge Runtime** の 2 種類があり、`export const runtime` で切り替えられます。WebSocket をホストできるかは Runtime とデプロイ先で大きく変わります。
+
+- **Edge Runtime**（Vercel Edge / Cloudflare Workers）: WebSocket サーバー側はホストできない。ブラウザ向けの `WebSocket` クライアントとしての利用や SSE の配信は OK
+- **Node.js Runtime + 通常の Node プロセス**（`next start` 等）: 実験的な「Route Handler の WebSocket Upgrade」サポートが入りつつあるが、Vercel の **サーバーレス関数では長時間接続を保てない** ため実運用は不向き
+- **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実解
+
+SSE（一方向ストリーミング）は Vercel の Route Handler でも動きますが、Edge / Node どちらでも **接続時間の上限** に注意します（Vercel Hobby は 10〜60 秒程度）。
+
+### マネージドサービス
+
+「自前で WebSocket サーバーを書く」のは接続管理 / スケーリング / 切断検知が大変。次のサービスが定番:
+
+| サービス | 特徴 |
 |---|---|
-| ユーザー設定（ダークモード / 言語） | `localStorage` |
-| タブ単位の一時状態 | `sessionStorage` |
-| 認証トークン | **どちらも使わない**。HttpOnly Cookie に |
-| Todo / 下書き / オフライン編集データ | **IndexedDB** |
-| 画像 / 動画 / Blob | **IndexedDB**（Cache API も候補） |
-| API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
-| ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
+| **Pusher** | リアルタイム通信の老舗。チャンネル / イベントが分かりやすい |
+| **Ably** | エンタープライズ。再生 / 履歴 / メッセージ TTL |
+| **Supabase Realtime** | DB 変更 → クライアント通知が標準。Postgres 連携 |
+| **PartyKit** | エッジでの WebSocket / Durable Objects ベース |
+| **Liveblocks** | Figma / Notion 風の共同編集 UI ライブラリ |
+| **Cloudflare Durable Objects** | エッジで状態を持つ WebSocket。1 部屋 = 1 オブジェクト |
 
-「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
+「自前で WebSocket を実装する前に、これらで済まないか確認」が現代の判断軸。
 
-### 容量とクォータ
+### Socket.IO の現在地
 
-ブラウザは「**クォータ**」というオリジン単位の上限を割り当てます。`navigator.storage.estimate()` で確認できます。
-
-```js
-const { quota, usage } = await navigator.storage.estimate();
-console.log(`使用 ${usage} / クォータ ${quota}`);
-```
-
-ChromeBook / iOS / 容量不足時に **自動退去**（eviction）されることがあります。**消えても困らない設計** にする / `navigator.storage.persist()` で **退去耐性** をリクエスト:
-
-```js
-const granted = await navigator.storage.persist();
-if (granted) console.log("永続化 OK");
-```
-
-ただしユーザーの Bookmark / インストール等の条件次第。
-
-### `Cache API` との違い
-
-Service Worker と一緒に出てくる **`Cache API`**（「Service Worker と PWA 深掘り」）と IndexedDB は **別物**:
-
-| | Cache API | IndexedDB |
-|---|---|---|
-| 単位 | Request / Response | 任意のオブジェクト |
-| 用途 | HTTP リソースの保存 | アプリのデータ保存 |
-| クエリ | URL マッチ | インデックス検索 |
-| トランザクション | なし | あり |
-
-「画像や HTML を保存 → Cache API」、「ユーザーが編集中の下書き → IndexedDB」と覚えればよいです。
-
-### IndexedDB のオフライン同期パターン
-
-```
-[ユーザー操作] → IndexedDB に保存（pending）
-                       ↓
-              [ネットがある時]
-                       ↓
-              バックエンドに POST
-                       ↓
-            成功したら IndexedDB のフラグを更新
-```
-
-- 書き込みは **常にローカルに保存**（UI が即座に反応）
-- バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
-- 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
-
-ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+長らく WebSocket のデファクトだった `socket.io` は、**2026 年も使えます** が、ブラウザの素の WebSocket / SSE が成熟したので **新規プロジェクトでは選ばない** ケースが増えています。古い案件 / Node.js のサーバー起動が確実な場合 / 低レベルな再接続をライブラリに任せたい場合に。
 
 ### よくある罠
 
-- **transaction が auto-commit する**: `await` を別の Promise で挟むと **トランザクションが終わってしまう**。同じ tx の中ではすべての操作を **同期的に並べる**
-- **構造化クローンの制約**: 関数 / シンボル / DOM ノードは保存できない
-- **大量レコード**: `cursor` で逐次処理する。`getAll()` でメモリ爆発に注意
-- **iOS Safari**: 古いバージョンで挙動が不安定。最新版（17 / 18 系）はかなり改善
-- **マイグレーション**: `version` を上げて `upgrade` 内で `objectStoreNames` をチェックして差分を当てる
+- **`new EventSource(url)` の URL に Cookie を付けたい** → `withCredentials: true` を渡す。サーバーは CORS を通す
+- **WebSocket がプロキシ越しに切れる** → リバースプロキシで `Upgrade` / `Connection` ヘッダのフォワード設定
+- **アイドルタイムアウト**（CDN や LB が 60 秒で切る）→ **ハートビート**（Ping）を 30 秒ごとに送る
+- **`wss://`（HTTPS）を使う**（HTTP/2 のメリット + Mixed Content 対策）
 
 ## 演習
 
 ### ゴール
 
-- Dexie.js で **オフラインメモアプリ** を作る
-- `localStorage` 比較で「容量 / 非同期 / 検索」の差を体感する
+- SSE と WebSocket をそれぞれ Next.js プロジェクトで触る
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 新規 Next.js
 
 ```bash
-npm create vite@latest indexeddb-sample -- --template react-ts
-cd indexeddb-sample
-npm install
-npm install dexie dexie-react-hooks
+npx create-next-app@latest realtime-sample --ts --app
+cd realtime-sample
 ```
 
-### 手順 2: DB の定義
+### 手順 2: SSE のサーバーとクライアント
 
-`src/db.ts`:
+`app/api/clock/route.ts`:
 
 ```ts
-import Dexie, { Table } from "dexie";
+export const dynamic = "force-dynamic";
 
-export interface Memo {
-  id?: number;
-  title: string;
-  body: string;
-  createdAt: number;
-  updatedAt: number;
+export async function GET() {
+  const encoder = new TextEncoder();
+  const stream = new ReadableStream({
+    start(controller) {
+      const id = setInterval(() => {
+        const time = new Date().toISOString();
+        controller.enqueue(encoder.encode(`data: ${time}\n\n`));
+      }, 1000);
+      // 30 秒で終了
+      setTimeout(() => {
+        clearInterval(id);
+        controller.close();
+      }, 30000);
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      "Content-Type": "text/event-stream",
+      "Cache-Control": "no-cache",
+      "Connection": "keep-alive",
+    },
+  });
 }
-
-class MemoDB extends Dexie {
-  memos!: Table<Memo, number>;
-  constructor() {
-    super("memo-app");
-    this.version(1).stores({
-      memos: "++id, updatedAt",
-    });
-  }
-}
-
-export const db = new MemoDB();
 ```
 
-### 手順 3: メモ一覧 + 追加
-
-`src/App.tsx`:
+`app/clock/page.tsx`:
 
 ```tsx
-import { useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, Memo } from "./db";
+"use client";
+import { useEffect, useState } from "react";
 
-export default function App() {
-  const memos = useLiveQuery(
-    () => db.memos.orderBy("updatedAt").reverse().toArray(),
-    [],
-  );
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-
-  const add = async () => {
-    if (!title.trim()) return;
-    await db.memos.add({
-      title,
-      body,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    setTitle("");
-    setBody("");
-  };
-
-  const remove = (id: number) => db.memos.delete(id);
-
+export default function Clock() {
+  const [time, setTime] = useState("...");
+  useEffect(() => {
+    const es = new EventSource("/api/clock");
+    es.onmessage = (e) => setTime(e.data);
+    return () => es.close();
+  }, []);
   return (
-    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>オフラインメモ</h1>
-      <div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="タイトル" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="本文" />
-        <button onClick={add}>追加</button>
-      </div>
-      <ul>
-        {memos?.map((m) => (
-          <li key={m.id}>
-            <strong>{m.title}</strong> — {new Date(m.updatedAt).toLocaleString()}
-            <p>{m.body}</p>
-            <button onClick={() => remove(m.id!)}>削除</button>
-          </li>
-        ))}
-      </ul>
+    <main style={{ padding: 24 }}>
+      <h1>SSE 時計</h1>
+      <p>{time}</p>
     </main>
   );
 }
 ```
 
-### 手順 4: 確認
+`npm run dev` で `/clock` を開くと、毎秒時刻が更新されます。
+
+### 手順 3: WebSocket チャットの最小サーバー
+
+別ディレクトリで:
 
 ```bash
-npm run dev
+mkdir ws-server && cd ws-server
+npm init -y
+npm install ws
 ```
 
-メモを追加し、**ブラウザを閉じて再度開いて** も残っていることを確認。DevTools の Application → IndexedDB → `memo-app` → `memos` で実データが見られる。
+`server.js`:
 
-### 手順 5: ストレージ使用量を表示
+```js
+import { WebSocketServer } from "ws";
 
-`App` 末尾に追加:
+const wss = new WebSocketServer({ port: 4000 });
+
+wss.on("connection", (socket) => {
+  socket.on("message", (data) => {
+    for (const c of wss.clients) {
+      if (c.readyState === c.OPEN) c.send(data.toString());
+    }
+  });
+});
+
+console.log("ws://localhost:4000");
+```
+
+```bash
+node server.js
+```
+
+### 手順 4: チャットクライアント
+
+Next.js の `app/chat/page.tsx`:
 
 ```tsx
-import { useEffect, useState } from "react";
+"use client";
+import { useEffect, useRef, useState } from "react";
 
-const [usage, setUsage] = useState("");
-useEffect(() => {
-  navigator.storage.estimate().then(({ usage, quota }) => {
-    setUsage(`使用 ${Math.round((usage ?? 0) / 1024)}KB / クォータ ${Math.round((quota ?? 0) / 1024 / 1024)}MB`);
-  });
-}, [memos]);
+export default function Chat() {
+  const [messages, setMessages] = useState<string[]>([]);
+  const [text, setText] = useState("");
+  const wsRef = useRef<WebSocket | null>(null);
+
+  useEffect(() => {
+    const ws = new WebSocket("ws://localhost:4000");
+    ws.addEventListener("message", (e) => {
+      setMessages((m) => [...m, e.data]);
+    });
+    wsRef.current = ws;
+    return () => ws.close();
+  }, []);
+
+  const send = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!text.trim()) return;
+    wsRef.current?.send(text);
+    setText("");
+  };
+
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>WebSocket チャット</h1>
+      <ul>
+        {messages.map((m, i) => (
+          <li key={i}>{m}</li>
+        ))}
+      </ul>
+      <form onSubmit={send}>
+        <input value={text} onChange={(e) => setText(e.target.value)} />
+        <button>送信</button>
+      </form>
+    </main>
+  );
+}
 ```
 
-`<p>{usage}</p>` を画面に出す。メモを増やすと使用量が増えていくのが見えます。
+ブラウザを 2 つ開いて `http://localhost:3000/chat` にアクセスし、片方で送信したメッセージがもう片方に届くことを確認。
 
 ### 期待出力
 
-- メモがブラウザを閉じても残る
-- `Application → IndexedDB` でストアの中身が見られる
-- ストレージ使用量が表示され、メモ追加で増える
+- `/clock` で 1 秒ごとに時刻が更新される
+- `/chat` で 2 つのブラウザの間でリアルタイムにメッセージが共有される
 
 ### 変える
 
-- `useLiveQuery(() => db.memos.where("title").startsWithIgnoreCase("a").toArray())` のような **検索** を追加
-- DB の `version(2)` で `body` にインデックスを追加し、マイグレーション挙動を観察
-- 大量データ（1 万件）を一括追加して **`getAll` の遅さ** と **`each` cursor の差** を比較
+- SSE で `event: tick` / `event: alert` の **イベント名付きメッセージ** を送って、クライアントの `addEventListener` で受け分ける
+- WebSocket チャットに **ユーザー名** を持たせ、JSON で送受信する
+- 切断検知 + 再接続のロジックを追加
 
 ### 自分で書く（任意）
 
-- API と同期する Memo アプリを作る（**ローカルに保存 → サーバーに同期**）
-- 画像（Blob）を添付できるようにする
-- `localStorage` から IndexedDB に乗り換えるマイグレーションスクリプトを書く
+- AI ストリーミング: SSE で 1 文字ずつ送るデモを作る
+- Pusher / Ably / Supabase Realtime のいずれかを使って **SaaS で同じチャット** を実装し、自前との比較
+- PartyKit を試して、エッジで WebSocket を動かす
 
 ## まとめ
 
-- `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
-- 用語: **database / objectStore / transaction / cursor**
-- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
-- React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
-- 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
-- クォータ / 退去 / `navigator.storage.persist()` を意識する
-- オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番
+- リアルタイム通信は **ポーリング / SSE / WebSocket / WebTransport** から選ぶ
+- **SSE** はサーバー → クライアントの一方向。HTTP の上で動き、`EventSource` で扱う
+- **WebSocket** は双方向。バイナリも送れるが、自動再接続は自前
+- AI ストリーミングは **SSE** が定番
+- Vercel の **Edge Runtime は WebSocket をホストできない**。SaaS / 別サーバーが必要
+- マネージド: **Pusher / Ably / Supabase Realtime / PartyKit / Liveblocks**
+- React の `useEffect` で **必ずクリーンアップ** で接続を閉じる
+- アイドル切断対策に **ハートビート**、`wss://` を使う

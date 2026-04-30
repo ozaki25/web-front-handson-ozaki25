@@ -1,210 +1,289 @@
-# lesson84: 環境変数の基本
+# lesson201: Route Handlers の入力検証と受信検証
 
 ## ゴール
 
-- `.env.local` に環境変数を書いて `process.env` から読める
-- `NEXT_PUBLIC_` プレフィックスの意味を理解する
-- Server Component と Client Component で **読める変数が違う** ことを体感する
-- `.env.local` が `.gitignore` に入っている前提を知る
+- `await request.json()` を `unknown` で受けて型ガードで絞り込む理由を説明できる
+- サーバー側の入力検証とクライアント側の受信検証の役割分担を理解する
+- Route Handler がデフォルトで別オリジンから叩けないことと、許可する場合の CORS ヘッダの書き方を知っている
 
 ## 解説
 
-### なぜ環境変数か
+### はじめに
 
-アプリには「環境ごとに変えたい値」があります。
+lesson82 で作った `/api/todos` に検証を追加します。GET / POST の基本は動いている前提で進めます。
 
-- ローカル開発では `http://localhost:3000` の API、本番では `https://api.example.com` の API を叩きたい
-- 開発用のテスト API キー、本番用のリリース API キー
-- 機能フラグ（開発では有効、本番では無効）
+### なぜ `unknown` で受けるのか
 
-これをコード本体に直接書くと、環境を変えるたびにコード修正 → デプロイが必要になり、シークレット（秘密鍵）の場合はリポジトリに漏れる危険もあります。
+`request.json()` の戻り値は TypeScript 的には `any` です。`any` は「どんな操作をしても型エラーにならない」型で、`body.text` に直接アクセスしてもコンパイルは通ります。しかし実行時には、送られてきた JSON に `text` がなければ `undefined` になり、後続の処理が壊れます。
 
-そこで、**環境変数**（Environment Variables）として外に出します。Next.js では `.env.local` というファイルに書く形が標準です。
-
-### `.env.local` の書き方
-
-プロジェクトルート直下に `.env.local` を作り、`KEY=VALUE` の形で書きます。
-
-```
-NEXT_PUBLIC_APP_NAME=My Todo App
-APP_SECRET=super-secret-value
-```
-
-- 1 行 1 変数、`=` の左右にスペース不要
-- クォートは不要（ただし空白を含むならクォートも可）
-- ファイル末尾に改行を入れておく
-
-**`.env.local` は `.gitignore` に入っている** のがデフォルト（`create-next-app` で作ったプロジェクトはこうなっています）。シークレットがリポジトリに入らない仕組みです。
-
-### 読み方は `process.env.XXX`
-
-コード側から読むときは、`process.env` オブジェクトを使います。
+`unknown` で受けると TypeScript は「型を確認してから使え」と強制します。`body.text` に直接アクセスしようとすると型エラーになるため、型ガードを書かざるを得なくなります。これは意図的な設計です。
 
 ```ts
-const name = process.env.NEXT_PUBLIC_APP_NAME; // "My Todo App"
-const secret = process.env.APP_SECRET;          // "super-secret-value"（サーバー側のみ）
+// any で受けた場合: コンパイルは通るが実行時に壊れうる
+const body = await request.json();
+console.log(body.text.trim()); // text が存在しない場合に TypeError
+
+// unknown で受けた場合: 型ガードを書かないと型エラーになる
+const body: unknown = await request.json();
+console.log(body.text.trim()); // 型エラー: body は unknown
 ```
 
-戻り値は常に `string | undefined`（TS の型）。値が無ければ `undefined` です。
+### 型ガードの書き方
 
-### `NEXT_PUBLIC_` プレフィックスの意味
+3 章の「型ガード」で学んだ `isTodo` の発想をそのまま使います。POST の入力（`{ text: string }`）を検証するガードは次のように書きます。
 
-Next.js には重要なルールがあります。
+```ts
+// app/types.ts に追加
+export function isTodoInput(value: unknown): value is { text: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.text === "string" && obj.text.trim().length > 0;
+}
+```
 
-> **`NEXT_PUBLIC_` で始まる変数だけが、Client Component からも読める。**
-> **それ以外の変数は、Server Component・Route Handlers・Server Actions からしか読めない。**
+`value is { text: string }` という戻り値の型が **型述語**（type predicate）です。この関数が `true` を返したブロック内では TypeScript が `value` を `{ text: string }` として扱います。
 
-なぜか:
+GET のレスポンスを受け取る側（クライアント）では、配列全体を検証するガードが必要です。
 
-- **サーバー側のみ** = ブラウザに配信される JS に値が入らない。シークレットを隠せる
-- **`NEXT_PUBLIC_` 付き** = ビルド時にクライアント JS に値が埋め込まれる。公開しても構わない値だけ付ける
+```ts
+// app/types.ts に追加
+export function isTodo(value: unknown): value is Todo {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.id === "string" && typeof obj.text === "string";
+}
 
-逆に言うと、`NEXT_PUBLIC_` で始まる変数は **ブラウザのソースを開けば全員が見える** ので、シークレットには絶対に付けません。
+export function isTodoArray(value: unknown): value is Todo[] {
+  return Array.isArray(value) && value.every(isTodo);
+}
+```
 
-### `NEXT_PUBLIC_` の値は「一度公開したら取り消せない」
+### サーバー側検証とクライアント側受信検証の役割分担
 
-`NEXT_PUBLIC_` で始まる値は **ビルド時に JS バンドルへ焼き込まれて配信されます**。これが意味するのは:
+同じ型ガードを使いますが、目的が異なります。
 
-- **CDN / ブラウザキャッシュ / Service Worker** に値が残り、デプロイをロールバックしても回収できない
-- **Git の履歴に `.env.local` を誤って commit してしまった場合**、後から削除しても commit ハッシュをたどれば閲覧可能（force push と git history 削除も完全ではない）
-- **リファラ / アクセスログ / 第三者の Web Archive** に URL ごと値が残ることもある
+| 種別 | 場所 | 目的 | 失敗時の動作 |
+|---|---|---|---|
+| サーバー側入力検証 | Route Handler（POST など） | 不正なリクエストを弾く | 400 を返す |
+| クライアント側受信検証 | fetch の呼び出し元 | サーバーが想定外の形を返したときに壊れないようにする | エラー state にする |
 
-そのため、誤って `NEXT_PUBLIC_API_SECRET=...` のようにシークレットを付けてしまったら、**まずそのキーを発行元でローテート（無効化＋再発行）するのが優先**です。コード修正 / デプロイで取り消すことはできません。
+両方を書く理由は「信頼の境界」です。サーバーはクライアントを信用せず、クライアントもサーバーを盲目的に信用しない、という原則です。
 
-### 命名の指針
+### CORS の仕組み
 
-- 公開しても困らない（URL、アプリ名、GA トラッキング ID など）: `NEXT_PUBLIC_` を付ける
-- 公開すると困る（API キー、DB 接続文字列、JWT の秘密鍵など）: プレフィックスなし
+Route Handler は Server Actions と違い、**別オリジンから直接 `fetch` できる形態**です。ただし、ブラウザには同一オリジンポリシー（Same-Origin Policy）があり、別オリジンへのリクエストはデフォルトで制限されます。
+
+ブラウザは POST など「単純でないリクエスト」を送る前に、**OPTIONS（プリフライト）リクエスト**を自動で送信します。サーバーがそれに対して許可ヘッダ（`Access-Control-Allow-Origin` など）を返した場合に限り、ブラウザは本来のリクエストを送ります。プリフライトを受け取って何も返さないか、許可のないヘッダを返すと、ブラウザは本リクエストをブロックします。
+
+Route Handler でプリフライトに応答するには `OPTIONS` ハンドラを用意します。
+
+```ts
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "https://allowed.example.com",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+```
+
+- `Access-Control-Allow-Origin: *` はすべてのオリジンを許可します。Cookie を送りたい場合は `*` が使えず、特定のオリジンの明示が必要です
+- `Access-Control-Max-Age` はプリフライトのキャッシュ秒数です
+
+### ランタイムの選択
+
+Route Handler はデフォルトで Node.js ランタイムで動きます。ファイルに `export const runtime = "edge"` を追加すると Edge ランタイムに切り替わります。
+
+```ts
+export const runtime = "edge";
+```
+
+Edge ランタイムは起動が速く、世界中のエッジで分散実行されます。ただし `fs` や Node.js 固有の API は使えません。`crypto.randomUUID()` は Edge でも使えるため、今回の TODO 追加には問題ありません。特別な理由がなければ Node.js（デフォルト）のままで構いません。
 
 ## 演習
 
-### 途中から始める場合
-
-このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`.env.local` と `app/env-test/` 配下の 2 ファイルを新規作成するだけです。
-
 ### ゴール
 
-- `.env.local` に 2 種類の変数を書く
-- Server Component と Client Component からそれぞれ読み、**プレフィックスなしの変数は Client では `undefined` になる** ことを体感する
-- 本番（Vercel）での設定は「Vercel にデプロイする」でまとめて扱う
+- `/api/todos` の POST に `isTodoInput` 型ガードを追加して不正リクエストを弾く
+- OPTIONS ハンドラを追加して別オリジンからのアクセスを許可する
+- DevTools Console から動作を確認する
 
 ### 手順
 
-1. 5 章 の既存プロジェクトを開く（どれでも可）
-2. プロジェクトルートに `.env.local` を新規作成
-3. 新しいページ `app/env-test/page.tsx`（Server Component）と `app/env-test/ClientView.tsx`（Client Component）を作る
-4. プレビューで両方を比較
+#### 手順 1: `app/types.ts` に型ガードを追加する
 
-### `.env.local`（プロジェクトルート直下）
+lesson82 で作った `app/types.ts` を次の内容に書き換えます。
 
-```
-NEXT_PUBLIC_APP_NAME=私の TODO アプリ
-APP_SECRET=super-secret-value
-```
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
 
-`.env.local` を編集した後は **開発サーバーを再起動** する必要があります（StackBlitz なら自動再起動、ローカルなら `Ctrl+C` → `npm run dev`）。
+// unknown から Todo に絞り込む
+export function isTodo(value: unknown): value is Todo {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.id === "string" && typeof obj.text === "string";
+}
 
-### `app/env-test/page.tsx`（Server Component）
+// 配列全体を検証する
+export function isTodoArray(value: unknown): value is Todo[] {
+  return Array.isArray(value) && value.every(isTodo);
+}
 
-```tsx
-import { ClientView } from "./ClientView";
-
-export default function EnvTestPage() {
-  const appName = process.env.NEXT_PUBLIC_APP_NAME;
-  const secret = process.env.APP_SECRET;
-
-  return (
-    <main>
-      <h1>環境変数のテスト</h1>
-
-      <section>
-        <h2>Server Component から読む</h2>
-        <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
-        <p>APP_SECRET = {secret ?? "(undefined)"}</p>
-      </section>
-
-      <ClientView />
-    </main>
-  );
+// POST の入力（text のみ）を検証する
+export function isTodoInput(value: unknown): value is { text: string } {
+  if (typeof value !== "object" || value === null) return false;
+  const obj = value as Record<string, unknown>;
+  return typeof obj.text === "string" && obj.text.trim().length > 0;
 }
 ```
 
-### `app/env-test/ClientView.tsx`（Client Component）
+#### 手順 2: `app/api/todos/route.ts` を更新する
 
-```tsx
-"use client";
+```ts
+import { NextResponse } from "next/server";
+import type { Todo } from "../../types";
+import { isTodoInput } from "../../types";
 
-export function ClientView() {
-  const appName = process.env.NEXT_PUBLIC_APP_NAME;
-  const secret = process.env.APP_SECRET;
+const todos: Todo[] = [];
 
-  return (
-    <section>
-      <h2>Client Component から読む</h2>
-      <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
-      <p>APP_SECRET = {secret ?? "(undefined)"}</p>
-    </section>
-  );
+export async function GET() {
+  return NextResponse.json({ todos });
 }
+
+export async function POST(request: Request) {
+  const body: unknown = await request.json();
+
+  // サーバー側の入力検証: isTodoInput が false なら 400 を返す
+  if (!isTodoInput(body)) {
+    return NextResponse.json(
+      { message: "text が必要です" },
+      { status: 400 },
+    );
+  }
+
+  const newTodo: Todo = { id: crypto.randomUUID(), text: body.text.trim() };
+  todos.push(newTodo);
+  return NextResponse.json({ message: "ok", todo: newTodo }, { status: 201 });
+}
+
+// プリフライト（OPTIONS）に応答する
+export async function OPTIONS() {
+  return new Response(null, {
+    status: 204,
+    headers: {
+      "Access-Control-Allow-Origin": "https://allowed.example.com",
+      "Access-Control-Allow-Methods": "GET, POST, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Max-Age": "86400",
+    },
+  });
+}
+```
+
+### DevTools Console からの動作確認
+
+```js
+// 正常な POST
+const res = await fetch('/api/todos', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ text: '本を返す' }),
+});
+console.log(res.status);        // 201
+console.log(await res.json());  // { message: "ok", todo: { id: "...", text: "本を返す" } }
+
+// 不正な POST（text なし）
+const res2 = await fetch('/api/todos', {
+  method: 'POST',
+  headers: { 'Content-Type': 'application/json' },
+  body: JSON.stringify({ foo: 'bar' }),
+});
+console.log(res2.status);       // 400
+console.log(await res2.json()); // { message: "text が必要です" }
 ```
 
 ### 期待出力
 
-`/env-test` にアクセスすると、次のような表示になります。
-
-- **Server Component から読む**
-  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
-  - `APP_SECRET = super-secret-value`
-- **Client Component から読む**
-  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
-  - `APP_SECRET = (undefined)` ← **ここが重要**
-
-`APP_SECRET` は Client 側では読めません。これが「サーバー専用の変数」と「クライアントに公開される変数」の違いを体感する瞬間です。
-
-### さらに確認: ブラウザのソースを見る
-
-1. `/env-test` を開いた状態で、ブラウザで「ページのソースを表示」
-2. HTML ソース内で `super-secret-value` を検索 → **見つからない**（Client Component のバンドル JS にも含まれない）
-3. `私の TODO アプリ` を検索 → 見つかる（`NEXT_PUBLIC_` なのでクライアントに配信されている）
-
-シークレットが本当に漏れない仕組みになっていることを確認できます。
+- 不正な JSON（`{ foo: "bar" }` のような `text` がない形）を送ると 400 が返る
+- 正しい JSON（`{ text: "..." }`）を送ると 201 で追加される
+- GET のレスポンスは変わらず `{ todos: [...] }` の形
 
 ### 変える
 
-- `APP_SECRET` の名前を `NEXT_PUBLIC_APP_SECRET` に変えると、Client 側でも読めるようになる（が、シークレットを付けるのは NG）
-- 新しい変数 `NEXT_PUBLIC_API_URL=https://jsonplaceholder.typicode.com` を追加し、Client 側で `fetch(process.env.NEXT_PUBLIC_API_URL + "/posts")` して動作確認
+- `OPTIONS` ハンドラの `Access-Control-Allow-Origin` を `http://localhost:3001` だけに絞る
+- `isTodoInput` に「text が 100 文字以上なら弾く」を追加してみる（`obj.text.length <= 100` の条件を足す）
 
 ### 自分で書く
 
-- `NEXT_PUBLIC_GA_ID`（Google Analytics の ID 仮置き、`G-XXXXXX` のような値）を追加し、Server Component のレイアウトに表示する
-- `DB_URL=postgres://user:pass@localhost/mydb` を追加し、Server Component でだけ表示する（Client に漏れないことを確認）
+- `isTodoArray` 型ガードを使った受信検証を `app/todos/TodoFetcher.tsx` に書く
 
-### 本番対比の予告
+```tsx
+"use client";
 
-ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **「Vercel にデプロイする」** でまとめて扱います。
+import { useEffect, useState } from "react";
+import type { Todo } from "../types";
+import { isTodoArray } from "../types";
 
-本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
+export function TodoFetcher() {
+  const [todos, setTodos] = useState<Todo[]>([]);
+  const [error, setError] = useState<string | null>(null);
 
-### 環境ごとに値を分ける（Production / Preview / Development）
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await fetch("/api/todos");
+        const data: unknown = await res.json();
 
-Vercel など主要なホスティングでは、環境変数を **Production / Preview / Development の 3 つ** に分けて設定できます。実務ではこの 3 つに **別々の値** を入れるのが定石です。
+        // 受信検証: サーバーが想定と違う形を返した場合にエラーにする
+        if (
+          typeof data !== "object" ||
+          data === null ||
+          !("todos" in data)
+        ) {
+          setError("レスポンスの形式が不正です");
+          return;
+        }
+        const maybeTodos = (data as { todos: unknown }).todos;
+        if (!isTodoArray(maybeTodos)) {
+          setError("todos が Todo 配列ではありません");
+          return;
+        }
 
-- **Production**: 本番ドメイン（`https://my-app.com`）で読み込まれる値
-- **Preview**: PR ごとに作られるプレビュー URL（`https://my-app-pr-42.vercel.app` のような）で読み込まれる値
-- **Development**: ローカルの `.env.development.local` で読み込まれる値（個人開発機向け）
+        setTodos(maybeTodos);
+      } catch {
+        setError("通信に失敗しました");
+      }
+    })();
+  }, []);
 
-たとえば DB やアナリティクス、フィーチャーフラグの SDK key は **Preview と Production で別の環境** を指すように設定します。同じ値を使い回すと、
+  if (error) return <p>{error}</p>;
+  return (
+    <ul>
+      {todos.map((t) => (
+        <li key={t.id}>{t.text}</li>
+      ))}
+    </ul>
+  );
+}
+```
 
-- Preview の動作確認が **本番 DB のデータを書き換える事故** を起こす
-- A/B テスト・アナリティクスの計測値に **開発者の挙動が混ざる**
-- 本番フラグを **誤って Preview から ON にしてしまう**
+このコンポーネントを `app/todos/page.tsx` から使うと、サーバーが壊れた JSON を返したときにエラーメッセージが表示されるようになります。
 
-といった事故になります。Vercel なら `Settings → Environment Variables` で各変数に対して **適用環境にチェックを入れる** UI があるので、新規追加時は「3 つ全部にチェック」ではなく **環境ごとに必要な値を分ける** ことを意識してください。
+### 実務では
+
+本コースでは型ガードを手書きしましたが、実務では **Zod** のようなスキーマバリデーションライブラリがよく使われます。`z.object({ text: z.string().min(1) }).parse(body)` の 1 行で同じ検証が書けるため、プロジェクトが育ったら Zod の導入を検討する価値があります。
 
 ## まとめ
 
-- 環境変数は `.env.local` に `KEY=VALUE` で書く
-- `process.env.XXX` で読む。戻り値は `string | undefined`
-- **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
-- シークレットには絶対に `NEXT_PUBLIC_` を付けない
-- `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない
+- `await request.json()` は `unknown` で受けることで TypeScript が型確認を強制する（`any` との違い）
+- 型ガード（`isTodoInput` / `isTodoArray`）でサーバー側入力検証とクライアント側受信検証の両方を書く
+- サーバー側は不正リクエストを弾く、クライアント側は想定外のレスポンスで壊れないようにする、という役割分担
+- 別オリジンからアクセスを許可するには `OPTIONS` ハンドラで CORS ヘッダを返す
+- Edge ランタイムに切り替えるには `export const runtime = "edge"` を書く（Node.js 固有 API は使えなくなる）

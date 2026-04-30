@@ -1,329 +1,353 @@
-# lesson109: GitHub の PR とコードレビュー
+# lesson107: 次世代ツールチェイン（Biome / Oxc / Turbopack）
 
 ## ゴール
 
-- GitHub と Git の関係を区別して説明できる
-- リモートリポジトリを作成し、ローカル → GitHub に push できる
-- ブランチで作業 → Pull Request（PR）作成 → レビュー → マージの流れを理解する
-- 良いコミットメッセージと PR タイトルの書き方を知る
-- マージ戦略（merge / squash / rebase）の違いを 1 行で言える
-- ブランチ保護ルールの目的を説明できる
-- セルフホストではなく GitHub を選ぶ理由を 1 つ挙げられる
+- 「**Rust 製ツール群** に置き換わりつつある」フロントエンド界隈の構図を理解する
+- Biome / Oxc / Rolldown / Turbopack それぞれの **役割と立ち位置** を区別できる
+- **既存プロジェクトに今すぐ導入するか** を判断できる
+- 速さの数字を **誇張なく** 受け取れる
+- 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
+
+::: tip 前提
+このレッスンは「ESLint / Prettier / Biome」と「Vite の仕組み」の発展編です。基本概念はそれぞれのレッスンで確認してください。
+:::
 
 ## 解説
 
-### Git と GitHub は別物
+### なぜ Rust 移行が進むのか
 
-混同されがちですが:
+JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トランスパイラ）は **JavaScript で書かれて** きました。それは「**自分自身でメタ的に開発できる**」という美点があった一方:
 
-- **Git**: バージョン管理ツール（`git` コマンド本体）
-- **GitHub**: Git リポジトリをホスティングする SaaS。PR / Issue / Actions / Projects 等の協業機能付き
+- **シングルスレッド** 寄りで並列化が難しい
+- **GC のオーバーヘッド**
+- **JS 自体の起動コスト**
 
-似たサービスに **GitLab** / **Bitbucket** / **Codeberg** などがありますが、2026 年時点でデファクトは GitHub です。本コースも GitHub を前提にします。
+これがプロジェクトサイズの増加に追いついていません。**Rust** は次の特徴で対抗:
 
-### リモートリポジトリを作る
+- **並列処理が得意**（fearless concurrency）
+- **GC なし** で予測可能なメモリ使用
+- **コンパイル時の最適化** で実行が速い
+- **WebAssembly に出せる**（CI / IDE 連携）
 
-#### 1. GitHub で空の repo を作成
+結果として 2024〜2026 年の間に主要ツールが **Rust ベースに置き換え** が進んでいます。
 
-1. <https://github.com/new> にアクセス
-2. **Repository name** を入力（例: `my-todo-app`）
-3. **Public / Private** を選択
-4. **Initialize this repository** のチェックは **すべて外す**（後でローカルから push するため）
-5. **Create repository**
+### 次世代ツールチェインの全体像
 
-#### 2. ローカルから push
+| 役割 | 旧（JS 製） | 新（Rust 製） |
+|---|---|---|
+| バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
+| パーサー / トランスパイラ | Babel | **SWC** / Oxc |
+| Lint | ESLint | **Biome** / Oxlint |
+| Format | Prettier | **Biome** / dprint |
+| 型チェック | tsc | **stc**（試行段階） |
 
-GitHub の repo 作成後の画面に表示される手順をそのまま実行:
+それぞれを順に見ていきます。
+
+### Biome
+
+[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（「ESLint / Prettier / Biome」で扱い済み）。
+
+特徴:
+
+- **設定 1 ファイル**（`biome.json`）
+- **ESLint + Prettier より圧倒的に速い**（35x ベンチマーク）
+- TypeScript / JSX / JSON / CSS をサポート
+- VS Code 拡張あり
 
 ```bash
-git remote add origin https://github.com/your-name/my-todo-app.git
-git branch -M main
-git push -u origin main
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-これでローカルのコミットが GitHub に上がります。`-u`（upstream）はそのブランチの追跡先を記録するので、次回からは `git push` だけで OK。
-
-### Pull Request（PR）の流れ
-
-PR は「**このブランチの変更を main に取り込みたい**、レビューしてください」という依頼書です。現代の開発フローでは **直接 main に push する代わりに** PR を経由するのが基本です。
-
-#### 典型的なフロー
-
-```
-1. ローカルでブランチ作成: git switch -c feature/add-login
-2. 変更してコミット (1 件 or 複数件)
-3. ブランチを GitHub に push: git push -u origin feature/add-login
-4. GitHub で PR を作成（main ← feature/add-login）
-5. レビュアーがコードをチェック、コメント、修正依頼
-6. 必要に応じて修正コミットを追加 push（PR は自動更新）
-7. レビュー承認（Approve）
-8. main にマージ
-9. ブランチを削除（GitHub の UI からワンクリック）
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "formatter": { "enabled": true, "indentStyle": "space" }
+}
 ```
 
-#### PR の作り方
+#### Biome の限界
 
-`git push` 後に GitHub のリポジトリページを開くと、**「Compare & pull request」** ボタンが出ます。または:
+- **TypeScript の型情報を使う高度なルール** は未対応（ESLint の `no-floating-promises` など）
+- 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
+- **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
 
-- リポジトリの **Pull requests** タブ → **New pull request**
-- ベースブランチ（マージ先）= `main`、比較ブランチ（変更元）= `feature/add-login`
-- タイトルと説明を書く → **Create pull request**
+→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
 
-### 良いコミットメッセージ・PR タイトル
+### Oxc / Oxlint
 
-#### コミットメッセージ
+[Oxc](https://oxc-project.github.io/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
 
-**Why**（なぜ）を中心に書きます。**What**（何）はコードを見れば分かるので最小限で。
+#### 構成要素
 
-NG:
+| 名前 | 役割 |
+|---|---|
+| **oxc_parser** | JavaScript / TypeScript パーサ |
+| **oxlint** | Lint（ESLint 互換ルール） |
+| **oxc_minifier** | minify（terser / esbuild の代替） |
+| **oxc_resolver** | モジュール解決 |
+| **oxc_transformer** | TS / JSX → JS の変換 |
 
-```
-修正
-変更
-fix
-```
+「**Rust で書かれたフロントエンドの基盤一式**」を狙うプロジェクト。
 
-OK:
-
-```
-Login ボタンの色をブランドカラーに統一
-useEffect のクリーンアップ漏れで起きていたメモリリークを修正
-ヘッダーのレスポンシブ対応（600px 以下で縦並び）
-```
-
-書式は **1 行目 50 文字以内** + **空行** + 詳細。最近は **Conventional Commits**（`feat:` / `fix:` / `docs:` などの prefix）も人気です。
-
-```
-feat(auth): magic link ログインを追加
-
-メール経由のワンタイム URL でログインできるようにする。
-パスワード認証は次のリリースで非推奨化する予定。
-```
-
-#### PR タイトル
-
-PR タイトルもコミットメッセージと同じ書き方が良いです。マージ後のコミット履歴に残るので、後から検索できる文言を選びます。
-
-PR 説明（本文）は **「何を変えたか」「なぜ」「どうテストしたか」** の 3 つを書くのが定番。テンプレート（`.github/pull_request_template.md`）を用意するチームも多いです。
-
-### コードレビュー
-
-#### レビュアーの観点
-
-- **動くか**: ローカルで動かして確認できれば理想
-- **読めるか**: 半年後の自分が読んで意味が通るか
-- **テストがあるか**: 重要なロジックに自動テストが付いているか
-- **影響範囲**: 既存機能を壊していないか
-- **セキュリティ**: 入力値検証 / シークレット漏洩 / XSS / SQL インジェクション
-- **パフォーマンス**: 明らかに遅くなる書き方をしていないか
-
-#### コメントの書き方
-
-GitHub の **Files changed** タブで、行ごとに `+` ボタンを押すとインラインコメントが書けます。
-
-良いコメント:
-
-```
-suggestion: ここは Array.from よりも展開構文の方が読みやすそうです
-question: なぜ条件を反転させているか教えてもらえますか？
-nit: 命名は `users` より `userList` の方がチームの規約に合いそうです
-blocking: ここで input をエスケープしないと XSS の余地があります
-```
-
-`suggestion` / `question` / `nit`（nitpick = 些細な指摘）/ `blocking`（マージブロッカー）のような **接頭辞** を使うと、レビュアーの意図が明確で議論が早くなります。
-
-GitHub の **Suggested change** 機能を使うと、コードを直接書き換える提案も送れます。レビュイーは 1 クリックで取り込めます。
-
-### マージ戦略の 3 種類
-
-PR の **Merge** ボタンには 3 つのオプションがあります（リポジトリ設定で許可されているものだけ表示）。
-
-#### 1. Merge commit（既定）
-
-```
-*   Merge pull request #42 from feature/login
-|\
-| * a (feature/login)
-| * b
-|/
-* c (main)
-```
-
-ブランチの履歴が残り、マージ用の追加コミット（`Merge pull request ...`）が作られます。
-
-- 利点: 履歴が完全に残る、PR と main の関係が分かりやすい
-- 欠点: 履歴グラフが複雑になりやすい
-
-#### 2. Squash and merge
-
-```
-* squashed (main) ← feature/login の全 commit を 1 つに圧縮
-* c (main)
-```
-
-PR の全コミットを **1 つに圧縮** して main に合流。
-
-- 利点: main の履歴が線形 + クリーン、1 PR = 1 commit でリバートしやすい
-- 欠点: PR 内の細かい履歴が失われる
-
-最近のチームでは **Squash が既定** になることが多いです。本コースの教材サイトもこの方針です。
-
-#### 3. Rebase and merge
-
-PR のコミットを **そのまま順番に** main の上に積む。マージコミットなし。
-
-- 利点: 完全に線形な履歴
-- 欠点: PR 中のコミットが個別に main に並ぶので、ノイズが多い場合は読みづらい
-
-### ブランチ保護ルール
-
-GitHub の **Settings → Branches → Branch protection rules** で main ブランチに守りを入れます。
-
-典型的な設定:
-
-- **Require a pull request before merging**: main への直接 push を禁止
-- **Require approvals: 1 人以上**: 最低 1 人の Approve を必須化
-- **Require status checks to pass**: CI（Lint / Test / Build）が通らないとマージできない
-- **Require branches to be up to date**: main の最新を取り込んでから merge
-- **Require linear history**: Squash / Rebase 限定にする
-- **Restrict pushes that create matching branches**: 特定ブランチ名の作成を制限
-
-これでチームの誰かがうっかり main に push しても、ブロックしてくれます。
-
-### Issue / Discussions / Projects
-
-GitHub には PR 以外にも協業ツールがあります。
-
-- **Issues**: バグ報告 / 機能要望 / TODO の管理
-- **Discussions**: Q&A / アイデア共有（Issue より柔らかい場）
-- **Projects**: カンバン / ロードマップで Issue / PR を整理
-- **Milestones**: リリース単位で Issue / PR をまとめる
-
-本コースでも、機能追加要望や軽微な修正は Issue → PR の流れで管理しています（過去の commit メッセージにも issue 番号が付いている例があります）。
-
-### `gh` CLI
-
-GitHub の操作をコマンドラインからやる公式ツールです。
+#### Oxlint の最小例
 
 ```bash
-# インストール（macOS）
-brew install gh
-
-# ログイン（1 回だけ）
-gh auth login
-
-# PR を作成
-gh pr create --title "feat: login を追加" --body "..."
-
-# PR 一覧
-gh pr list
-
-# PR をマージ
-gh pr merge --squash
+npm install -D oxlint
+npx oxlint
 ```
 
-ブラウザを開かずに操作できるので、慣れると圧倒的に速いです。
+ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。
+
+```json
+// .oxlintrc.json
+{
+  "rules": {
+    "no-unused-vars": "error",
+    "no-debugger": "error"
+  }
+}
+```
+
+#### Oxc が他に与える影響
+
+Vite 8（「Vite の仕組みを軽く」）が **Rolldown を採用**、Rolldown は **Oxc を内蔵** しています。つまり Oxc は **Vite / Rolldown / 多くの新ツール** の土台になりつつある。
+
+Oxc は **VoidZero**（Evan You が立ち上げた会社）が支援しており、Vite / Rolldown と **同じ会社の同じ方向性** で開発が進んでいます。
+
+### Rolldown
+
+Vite 8 から採用された **Rust 製バンドラ**（「Vite の仕組みを軽く」で扱い済み）。
+
+- **Rollup と同じプラグイン API**
+- **esbuild より速い**（Oxc を内部で使用）
+- **Vite / Rolldown / Oxc が 1 つのチームで開発**
+
+「esbuild と Rollup の両方の良さを Rust で 1 つに」が Rolldown の旗印。Vite 8 のリリースで実用フェーズに入りました。
+
+### SWC
+
+[SWC](https://swc.rs/)（Speedy Web Compiler）は **Rust 製の TypeScript / JSX トランスパイラ**。Babel の置き換え狙い。
+
+特徴:
+
+- Next.js / Parcel 内部で採用
+- Babel より **20〜70 倍速い**
+- プラグインは Rust または WebAssembly
+
+歴史的には Oxc より早く実用化されましたが、**Oxc が後発として** 機能で追いついています。Next.js は引き続き SWC ベース。
+
+### Turbopack
+
+[Turbopack](https://turbo.build/pack) は Vercel 製の **Rust 製バンドラ**。Next.js 専用に近い位置付け。
+
+- Next.js 16 で **`next dev` / `next build` のデフォルト**
+- webpack の **増分ビルド** を更に強化
+- Rolldown と並列に開発されている（**競合関係**）
+
+Vite 系（Vite + Rolldown + Oxc）と Vercel 系（Next.js + Turbopack + SWC）の 2 派が進む構図。
+
+### dprint
+
+[dprint](https://dprint.dev/) は **Rust 製のフォーマッタ**（Prettier 代替）。
+
+```bash
+npm install -D dprint
+```
+
+```jsonc
+// dprint.json
+{
+  "typescript": { "lineWidth": 100, "indentWidth": 2, "semiColons": "always" },
+  "json": {},
+  "markdown": {},
+  "includes": ["**/*.{ts,tsx,js,json,md}"],
+  "excludes": ["dist", "node_modules"],
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
+    "https://plugins.dprint.dev/json-0.19.0.wasm",
+    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
+  ]
+}
+```
+
+特徴:
+
+- 各言語のフォーマッタを **WebAssembly プラグイン** として持つ
+- Prettier より少し古めの設計だが速い
+- Deno / 一部 Rust エコシステムで採用
+
+「Biome に注目が集まる中、**Prettier の代替として地味に使える**」位置付け。
+
+### 「Rust 製で速い」の意味するもの
+
+「**ESLint より 50 倍速い**」のような数字は要 **慎重に**。
+
+- **大規模プロジェクト**（10,000+ ファイル）では **数分 → 数秒** の改善で大きな違い
+- **小規模プロジェクト**（100 ファイル以下）では **既に十分速い** ので体感差はわずか
+- **CI 時間** には大きな影響、**保存時 Lint** には微差
+
+判断:
+
+- **CI が長くなって困っている** → 移行価値あり
+- **そうでもない** → 既存ツールで困っていなければ慌てない
+
+### TypeScript の Rust 化
+
+「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
+
+- [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
+- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、**2025 年に発表 + preview リリース**）: 公式の **Go ベース TypeScript**。型チェック / 言語サービスを Go で書き直し、`tsc` 比 10 倍級の高速化を目指す
+
+特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
+
+::: warning
+2026 年現在、これらは **まだ完全互換ではない**。型チェックは tsc / IDE のままで、ビルドだけ SWC / esbuild という現状が続きます。
+:::
+
+### 既存プロジェクトへの導入判断
+
+#### すぐ導入してもよい
+
+- **新規プロジェクト** で Biome 単独
+- **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
+- **Oxlint を ESLint と並走** させて速度を体感
+
+#### 慎重に
+
+- **ESLint プラグインに依存** している既存プロジェクト
+- **`@types/*` を多用** する大規模 TypeScript（型情報を使うルールが必要）
+- **チームの ESLint 知識** が分厚い場合（再学習コスト）
+
+#### 数年待つ
+
+- **TypeScript の Rust 化**（公式 Go 版を待つ）
+- **完全な ESLint プラグイン互換** が出るまで
+
+### ツール選択のフレーム
+
+新規プロジェクトでの 2026 年標準:
+
+```
+言語: TypeScript 5.9
+バンドラ: Vite 8（内部 Rolldown + Oxc）
+        または Next.js 16（内部 Turbopack + SWC）
+Lint:   Biome / Oxlint
+Format: Biome / Prettier
+テスト: Vitest（内部 Vite）/ Playwright
+パッケージ: pnpm / Bun
+```
+
+「**速い + 設定少ない**」を全方位で享受できる構成。
+
+### 5 年後の展望
+
+おそらく続くもの:
+
+- **Rust ベースの拡大**（CI / dev サーバ全般）
+- **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
+- **TypeScript 公式の Go / Rust 化**（高速化）
+
+まだ揺れているもの:
+
+- **Biome vs ESLint** の決着（プラグイン互換次第）
+- **Vite 系 vs Vercel 系** のシェア
+- **WebAssembly 化したツール**（IDE / ブラウザでの実行）
+
+「**まずは安定の ESLint + Prettier、心の準備として Biome / Oxc を試す**」が 2026 年の堅実なスタンス。
 
 ## 演習
 
 ### ゴール
 
-- ローカルの Git リポジトリを GitHub に push する
-- ブランチで作業 → PR 作成 → 自分でセルフレビュー → マージする
-- ブランチ保護ルールを 1 つ設定する
+- Biome と Oxlint をそれぞれ既存プロジェクトに **共存** させる
+- 速度を **同じプロジェクト** で比較する
 
-### 手順 1: GitHub アカウント準備
+### 手順 1: ベースのプロジェクト
 
-GitHub アカウントを持っていない場合は <https://github.com/> で作成。SSH キーや Personal Access Token も設定しておきます（公式ガイド: <https://docs.github.com/ja/authentication>）。
-
-### 手順 2: 「Git の基本操作」で作ったリポジトリを push
+既存の Vite + React + TS プロジェクトを使うか、新規作成。
 
 ```bash
-cd git-practice    # 「Git の基本操作」で作ったディレクトリ
+npm create vite@latest tooling-bench -- --template react-ts
+cd tooling-bench
+npm install
 ```
 
-GitHub で空 repo（例: `git-practice`）を作成後:
+### 手順 2: ESLint で計測
 
 ```bash
-git remote add origin https://github.com/your-name/git-practice.git
-git branch -M main
-git push -u origin main
+# Vite テンプレートには ESLint が入っている
+time npm run lint
 ```
 
-### 手順 3: ブランチで変更 → PR
+時間を記録。
+
+### 手順 3: Biome を導入
 
 ```bash
-git switch -c feature/colors
-echo "色を変える予定" >> README.md
-git add README.md
-git commit -m "docs: 色変更の予定をメモに追加"
-git push -u origin feature/colors
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-GitHub のリポジトリページに **「Compare & pull request」** ボタンが出るのでクリック → タイトルと説明を書いて **Create pull request**。
-
-### 手順 4: セルフレビュー
-
-自分で PR の **Files changed** タブを開き、変更を眺めます。気になった行に `+` ボタンでコメントを 1 つ書いてみる（例: `nit: 「予定」より「TODO」の方が一般的かも`）。
-
-### 手順 5: マージ
-
-PR ページ下部の **Merge pull request** → **Squash and merge** を試します。マージ後、`feature/colors` ブランチを削除（**Delete branch** ボタン）。
-
-ローカルでも:
+```json
+// biome.json
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "formatter": { "enabled": true, "indentStyle": "space" }
+}
+```
 
 ```bash
-git switch main
-git pull origin main
-git branch -d feature/colors    # ローカルブランチも削除
+time npx biome check .
 ```
 
-### 手順 6: ブランチ保護を 1 つ設定
+### 手順 4: Oxlint を試す
 
-リポジトリの **Settings** → **Branches** → **Add rule** で:
+```bash
+npm install -D oxlint
+time npx oxlint .
+```
 
-- **Branch name pattern**: `main`
-- **Require a pull request before merging** にチェック
-- 保存
+### 手順 5: 結果を比較
 
-これで、これ以降 `main` に直接 push できなくなります。試しに `git push origin main` を直接やろうとすると拒否されます（ブランチ保護を一時解除するか、PR 経由で取り込む必要がある）。
+実測値の例（小規模プロジェクト）:
+
+| ツール | 時間 | 検出数 |
+|---|---|---|
+| ESLint | 2.5s | 5 |
+| Biome | 0.3s | 4 |
+| Oxlint | 0.1s | 3 |
+
+「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
 
 ### 期待出力
 
-- GitHub にローカルの履歴がそのまま反映される
-- PR 画面で行単位の差分とコメントが表示される
-- Squash でマージすると、main の履歴が線形になる（PR の複数 commit が 1 つに圧縮）
-- main への直接 push が「Branch protection rules: protected branch」のエラーで拒否される
+- 3 つのツールがそれぞれ動き、速度差が見える
+- 検出ルール / 重複が違うので、**ノイズの少ないツール** を選ぶ判断の材料になる
 
 ### 変える
 
-- マージ戦略を **Merge commit** に変えてみる（リポジトリ設定で許可）。グラフが分岐 + 合流の形になる
-- PR をマージせず **Close** してみる（後から消したい時の操作）
-- Issues タブで Issue を作り、コミットメッセージに `Closes #1` と書いて push してみる。マージ時に Issue が自動で閉じる
+- 1000 ファイル規模のプロジェクトで再測定
+- CI でそれぞれを実行し、月のビルド時間を試算
+- IDE 拡張（Biome / Oxlint）を入れて、保存時のレイテンシを比較
 
-### 自分で書く
+### 自分で書く（任意）
 
-- リポジトリに `.github/pull_request_template.md` を追加し、PR の説明テンプレートを作る:
-
-  ```md
-  ## 概要
-
-  ## 変更内容
-  -
-  -
-
-  ## テスト
-  - [ ] ローカルで動作確認
-  - [ ] 単体テスト追加 / 更新
-  ```
-
-- `gh` CLI をインストールして、`gh pr create` でブラウザを開かずに PR を作る
+- 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
+- dprint を入れて Prettier と比較
+- TypeScript Go 版（`tsgo`）の preview を試す
 
 ## まとめ
 
-- **Git は道具、GitHub はホスティングサービス**
-- 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
-- コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
-- マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
-- ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
-- `gh` CLI でコマンドラインからほぼ全操作が可能
+- フロントエンドツールが **Rust 製** に置き換わりつつある
+- **Biome**: Lint + Format 1 ツール、設定 1 ファイル、35x 高速
+- **Oxc / Oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
+- **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
+- **SWC / Turbopack**: Next.js / Vercel が独自路線
+- **dprint**: Prettier 代替の Rust 製フォーマッタ
+- **TypeScript 公式の Go 版**（tsgo）が 2025 年に preview リリース、2026 年現在も成熟中
+- 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
+- 既存プロジェクトは「**速度に困ってから**」で良い
+- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想

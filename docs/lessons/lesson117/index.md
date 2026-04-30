@@ -1,419 +1,487 @@
-# lesson117: フィーチャーフラグ
+# lesson115: Web Components 入門
 
 ## ゴール
 
-- フィーチャーフラグが「**デプロイ** と **機能公開** を分離する」考え方であることを説明できる
-- 環境変数ベースの最小実装ができる
-- ロールアウト（10% → 50% → 100%）の意義を理解する
-- LaunchDarkly / GrowthBook / Vercel Edge Config / Statsig の位置付けが分かる
-- A/B テストとフィーチャーフラグの違いと重なりを説明できる
+- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
+- Shadow DOM でスタイルと DOM を外から隔離できる
+- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
+- `<slot>` で外側から中身を差し込める
+- React との使い分けを判断できる
 
 ## 解説
 
-### 背景: 「リリース」と「公開」を切り離したい
+### Web Components とは
 
-新機能をリリースすると、次の不安が常に付きまといます。
+**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
 
-- **本番で初めて壊れたら？**
-- **想定外のトラフィックで重くなったら？**
-- **特定ユーザーだけが踏むバグがあったら？**
+| 柱 | 役割 |
+|---|---|
+| Custom Elements | 自作の HTML タグを定義 |
+| Shadow DOM | スタイルと DOM を隔離 |
+| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
 
-従来の「**ビルドして本番にデプロイ → 全ユーザーに公開**」は、不具合が出た瞬間に **ロールバックしか選択肢がない** という弱さがあります。
+作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
 
-フィーチャーフラグ（Feature Flag、Feature Toggle）は **「コードはデプロイ済み、機能は OFF」の状態を作る** 仕組みです。
+### なぜ今 Web Components を知るか
 
-```
-[ デプロイ ]──────────────[ 機能公開 ]
-     │                         │
-     ↓                         ↓
-  GitHub で merge          管理画面で ON
-   = 全ユーザーに            = 特定の人 / %
-     コードが届く              に出す
-```
+2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
 
-これによって:
+- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
+- 会社共通のデザインシステムを **React 依存にせず** 配布したい
+- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
 
-- **5% に出してから様子を見る**
-- **問題が出たら 1 クリックで戻す**（ビルド不要）
-- **社内ユーザーだけ先行公開**
-- **A/B テスト**（バリアント A と B の効果を比較）
+React コンポーネントは React の中でしか動きません。Web Components は **どこでも動く**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
 
-### 最小実装: 環境変数で
+### Custom Elements の最小形
 
-「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。Server Component で評価する形がもっとも安全です。
-
-```ts
-// .env.production
-NEW_CHECKOUT=false
-```
-
-```tsx
-// app/checkout/page.tsx (Server Component)
-export default function CheckoutPage() {
-  if (process.env.NEW_CHECKOUT === "true") {
-    return <NewCheckout />;
+```js
+class HelloWorld extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = "<p>Hello, Web Components!</p>";
   }
-  return <LegacyCheckout />;
 }
+
+customElements.define("hello-world", HelloWorld);
 ```
 
-> **補足: `NEXT_PUBLIC_` プレフィックスはクライアントに丸見え**: `NEXT_PUBLIC_` で始まる環境変数は **ビルド時にクライアントバンドルに埋め込まれます**。ブラウザの DevTools で JS を眺めれば値も変数名もそのまま見えます。`NEXT_PUBLIC_NEW_CHECKOUT` のようにフラグ名を `NEXT_PUBLIC_` で出すと「未公開機能の存在」「フラグ名の命名規則」がエンドユーザーに漏れる事故になります。**Server Component で評価できる場合はプレフィックスなしの `process.env.NEW_CHECKOUT`** を使い、どうしても Client Component で参照したい場合だけ `NEXT_PUBLIC_` を付けます。
+HTML で使う:
 
-メリット:
-
-- 何も足さずに始められる
-- ビルド時に値が **インライン** されるので実行時オーバーヘッドゼロ
-
-デメリット:
-
-- 切り替えに **再ビルド + デプロイ** が必要（瞬時には変えられない）
-- ユーザー単位で出し分けできない
-- A/B テストには使えない
-
-「**動作確認用 / 開発中の機能を本番に隠す**」程度なら環境変数で十分。**運用で柔軟に切り替えたい** なら次のステップへ。
-
-### 中規模実装: 設定をリモート管理
-
-ビルドし直さずに切り替えたいなら、**フラグの値を外部から取得** します。
-
-```ts
-// utils/flags.ts
-type Flags = { newCheckout: boolean; aiSummary: boolean };
-
-let cached: Flags | null = null;
-
-export async function getFlags(): Promise<Flags> {
-  if (cached) return cached;
-  const res = await fetch("https://api.example.com/flags", { cache: "no-store" });
-  cached = await res.json();
-  return cached!;
-}
+```html
+<hello-world></hello-world>
 ```
+
+ルール:
+
+- クラスは **`HTMLElement` を継承** する
+- `customElements.define(タグ名, クラス)` で登録
+- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
+
+### ライフサイクル
+
+Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
+
+```js
+class MyCounter extends HTMLElement {
+  connectedCallback() {
+    // DOM に追加された時
+    this.render();
+  }
+
+  disconnectedCallback() {
+    // DOM から外された時。リスナー解除などのクリーンアップ
+  }
+
+  static observedAttributes = ["count"];
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    // 監視対象の属性が変わった時
+    if (name === "count") this.render();
+  }
+
+  render() {
+    const count = this.getAttribute("count") ?? "0";
+    this.innerHTML = `<strong>Count: ${count}</strong>`;
+  }
+}
+
+customElements.define("my-counter", MyCounter);
+```
+
+```html
+<my-counter count="3"></my-counter>
+```
+
+`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
+
+### Shadow DOM でスタイルを隔離
+
+普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
+
+```js
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
+        :host {
+          display: block;
+          padding: 16px;
+          border: 1px solid #ccc;
+          border-radius: 8px;
+        }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2>カードタイトル</h2>
+      <p>カードの中身</p>
+    `;
+  }
+}
+customElements.define("my-card", MyCard);
+```
+
+```html
+<my-card></my-card>
+```
+
+- `attachShadow({ mode: "open" })` で shadow tree を作る
+- `:host` は **このカスタム要素自身** を指すセレクタ
+- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
+
+`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
+
+### `<slot>` で外から中身を差し込む
+
+React の `children` に相当するのが `<slot>` です。
+
+```js
+class FancyBox extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
+        header { font-weight: bold; margin-bottom: 8px; }
+      </style>
+      <header><slot name="title">デフォルトタイトル</slot></header>
+      <div><slot>本文が入ります</slot></div>
+    `;
+  }
+}
+customElements.define("fancy-box", FancyBox);
+```
+
+使う側:
+
+```html
+<fancy-box>
+  <span slot="title">カスタムタイトル</span>
+  <p>ここが本文です。</p>
+</fancy-box>
+```
+
+- `<slot>` は **名前なし** のデフォルトスロット
+- `<slot name="title">` は **名前付き** スロット
+- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
+
+### プロパティ / イベント
+
+ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
+
+```js
+class MyToggle extends HTMLElement {
+  #checked = false;
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.render();
+  }
+
+  get checked() { return this.#checked; }
+  set checked(value) {
+    this.#checked = Boolean(value);
+    this.render();
+    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <button>${this.#checked ? "ON" : "OFF"}</button>
+    `;
+    // render() で innerHTML を書き換えるたびに古い button は消えるので、
+    // クリックリスナーは render() 内で「新しい button」に対してだけ付ける
+    this.shadowRoot.querySelector("button").addEventListener("click", () => {
+      this.checked = !this.checked;
+    });
+  }
+}
+customElements.define("my-toggle", MyToggle);
+```
+
+使う側:
+
+```html
+<my-toggle></my-toggle>
+
+<script>
+  const toggle = document.querySelector("my-toggle");
+  toggle.addEventListener("change", (e) => {
+    console.log("ON/OFF:", e.detail.checked);
+  });
+</script>
+```
+
+- プロパティは **クラスの getter / setter** として定義
+- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
+
+### `<template>` で DOM のクローン元を用意
+
+大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
+
+```html
+<template id="card-template">
+  <style>
+    :host { display: block; border: 1px solid #ccc; padding: 12px; }
+  </style>
+  <slot name="title"></slot>
+  <slot></slot>
+</template>
+
+<script>
+  const tpl = document.getElementById("card-template");
+  class MyCardTpl extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({ mode: "open" });
+      shadow.appendChild(tpl.content.cloneNode(true));
+    }
+  }
+  customElements.define("my-card-tpl", MyCardTpl);
+</script>
+```
+
+`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
+
+### React との使い分け
+
+「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
+
+| | Web Components | React |
+|---|---|---|
+| 動く場所 | どの HTML ページでも | React アプリの中だけ |
+| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
+| 型 | TypeScript と相性が微妙 | 強い |
+| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
+| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
+
+**原則**:
+
+- **アプリ内部** の UI → React で書く（DX が圧倒的）
+- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
+- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
+
+React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
+
+ただし、Custom Element が `dispatchEvent` で投げる **CustomEvent**（例: `change` / `select`）を `onChange` のような JSX プロパティで受ける機能は **入っていません**。React のイベントシステムは標準 DOM イベントを合成イベントに繋ぐ仕組みで、Custom Element の独自 CustomEvent は対象外です。CustomEvent を購読したい場合は **`ref` + `addEventListener`** が現実解です。
 
 ```tsx
-// app/page.tsx
-import { getFlags } from "@/utils/flags";
+import { useEffect, useRef } from "react";
 
-export default async function Home() {
-  const flags = await getFlags();
-  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+function ToggleHost() {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ checked: boolean }>).detail;
+      console.log(detail);
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, []);
+
+  return <my-toggle ref={ref} />;
 }
 ```
 
-API のバックエンドは:
-
-- 自前のテーブル（Postgres / Redis）
-- **Vercel Edge Config**（Vercel 公式の超低遅延 KV）
-- Cloudflare KV / R2
-
-Vercel Edge Config の例:
+::: warning TypeScript で使うときは型宣言が必要
+JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。React 19 では `react` モジュールの `JSX` 名前空間を拡張する形が公式の作法です。
 
 ```ts
-import { get } from "@vercel/edge-config";
+import "react";
 
-const newCheckout = await get<boolean>("newCheckout");
-```
-
-**ms 単位で読める** ので、ページレンダリングの先頭で読んでも遅くなりません。
-
-### ユーザーに紐付くロールアウト
-
-「10% に出す」「特定の社員だけに出す」を実現するには **ユーザー識別子** が要ります。
-
-```ts
-function isFeatureEnabled(userId: string, percent: number): boolean {
-  // ユーザー ID をハッシュ → 0〜99 にマップ
-  const hash = simpleHash(userId) % 100;
-  return hash < percent;
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "my-toggle": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      >;
+    }
+  }
 }
-
-const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
 ```
 
-ハッシュベースだと、**同じユーザーは毎回同じ結果**（再現性）が得られます。「今回は ON、次回は OFF」を防げる。
+`Lit` を使うとデコレータ経由で型が付くので、TypeScript と組み合わせるなら Lit が現実解です。
+:::
 
-### SaaS の選択肢
+### Lit の存在
 
-機能が複雑になると自前は辛いので SaaS を使います。
+Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
 
-| サービス | 特徴 |
-|---|---|
-| **LaunchDarkly** | エンタープライズ標準。機能フラグ + 実験機能 + 監査ログ。価格は高め |
-| **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
-| **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
-| **Flagsmith** | OSS / セルフホスト可能 |
-| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
-| **PostHog Feature Flags** | Analytics と統合 |
+```js
+import { LitElement, html, css } from "lit";
 
-#### LaunchDarkly の最小例
-
-```bash
-npm install launchdarkly-react-client-sdk
-```
-
-```tsx
-import { withLDProvider, useFlags } from "launchdarkly-react-client-sdk";
-
-function App() {
-  const flags = useFlags();
-  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+class MyCard extends LitElement {
+  static styles = css`
+    :host { display: block; padding: 16px; border: 1px solid #ccc; }
+  `;
+  render() {
+    return html`<h2>タイトル</h2><slot></slot>`;
+  }
 }
-
-export default withLDProvider({
-  clientSideID: process.env.NEXT_PUBLIC_LD_CLIENT_ID!,
-  context: { kind: "user", key: "user-123", email: "user@example.com" },
-})(App);
+customElements.define("my-card", MyCard);
 ```
 
-管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
-
-> **補足: 環境ごとに SDK key を分ける**: フラグ SaaS では **Production / Preview / Development それぞれに別の SDK key を発行** できます。同じ key を全環境で使い回すと、Preview デプロイの動作確認が **本番フラグの評価ログを汚す**、A/B テストの母数に開発者の挙動が混ざる、本番フラグを誤って Preview から ON にしてしまう、といった事故になります。Vercel なら `Settings → Environment Variables` で `NEXT_PUBLIC_LD_CLIENT_ID` を **Production / Preview / Development の 3 つに分けて設定する** のが定石です。
-
-#### GrowthBook の最小例
-
-```bash
-npm install @growthbook/growthbook-react
-```
-
-```tsx
-import { GrowthBook, GrowthBookProvider, useFeatureIsOn } from "@growthbook/growthbook-react";
-
-const gb = new GrowthBook({
-  apiHost: "https://cdn.growthbook.io",
-  clientKey: process.env.NEXT_PUBLIC_GB_CLIENT_KEY,
-  attributes: { id: currentUser.id },
-});
-
-await gb.loadFeatures();
-
-function NewCheckoutGuard() {
-  const enabled = useFeatureIsOn("new-checkout");
-  return enabled ? <NewCheckout /> : <LegacyCheckout />;
-}
-
-<GrowthBookProvider growthbook={gb}>
-  <NewCheckoutGuard />
-</GrowthBookProvider>
-```
-
-### A/B テストとの関係
-
-フィーチャーフラグは「**ON か OFF か**」、A/B テストは「**A 案と B 案、どちらの効果が高いか**」を測るもの。
-
-実装は近く、フラグ系 SaaS は両方こなします。
-
-```ts
-// バリアント割当
-const variant = useExperiment("checkout-flow"); // "control" or "v2"
-
-return variant === "v2" ? <NewCheckout /> : <LegacyCheckout />;
-```
-
-A/B テストは **統計的な有意差** の判定が必要なので、SaaS の機能（Bayesian / Frequentist のテスト統計）を活用します。
-
-### Kill Switch（緊急停止）
-
-フィーチャーフラグの **大きな価値** がこれ。本番で問題が起きた時に **コードを巻き戻さず** に機能を即 OFF にできる。
-
-- 「決済 v2 を ON にしたら障害」→ 管理画面で OFF に
-- 「新検索が API を叩きすぎ」→ OFF に
-
-ロールバック（git revert + 再デプロイ）が **数分** かかるのに対し、フラグ OFF は **数秒**。これが本番運用の安心感に直結します。
-
-### フラグの寿命管理
-
-フラグは増えると **コードが if 地獄** になります。**寿命を管理** する習慣が大事。
-
-| フラグの種類 | 寿命の目安 |
-|---|---|
-| Release flag（新機能の段階公開） | 公開完了後すぐ削除 |
-| Experiment flag（A/B テスト） | 結果が出たら削除 |
-| Ops flag（緊急停止用） | 長期保存 |
-| Permission flag（権限による出し分け） | 永続 |
-
-「**Release flag は公開後 2 週間で削除**」のようなルールを決めて、定期清掃します。
-
-#### lint で検出
-
-GrowthBook / LaunchDarkly などの SaaS は「**コードに残っているフラグ一覧**」を検出する CLI を提供しています。CI で「3 ヶ月使われていないフラグ」を warning 出力するのが有効。
-
-### サーバー / クライアント / Edge
-
-Next.js のような SSR / RSC 環境では「**フラグをどこで評価するか**」が重要です。
-
-| 場所 | 例 |
-|---|---|
-| **Server Component** | `await getFlag()` を直接呼ぶ。SSR でフラグ反映 |
-| **Edge Middleware** | リクエストヘッダで分岐し、A/B 用に URL を書き換え |
-| **Client Component** | `useFlag()` フックでクライアントサイド分岐。**ハイドレーション後の表示揺れ** に注意 |
-
-クライアント側だけで分岐すると、ハイドレーションの瞬間に「**ON → OFF のチラつき**」が出ることがあります。なるべく **サーバー側で確定** させて RSC として配るのが安全。
-
-### よくある失敗
-
-#### 1. フラグの ON / OFF が複雑になりすぎる
-
-`if (flag1 && (flag2 || flag3) && !flag4) { ... }` のような状態は **テスト不可能**。フラグは独立に動かす設計を。
-
-#### 2. デフォルト値の事故
-
-ネットワークが落ちた時 / API 失敗時の **fallback 値** を必ず決める。
-
-```ts
-const enabled = (await getFlag("newCheckout")) ?? false; // 失敗時は OFF
-```
-
-#### 3. クライアント露出
-
-「管理画面用フラグ」をクライアントから読めるようにすると、**敵対的なユーザーが ON にしてしまう** 可能性がある。**サーバー側で評価** が原則。
-
-#### 4. 削除されないフラグ
-
-書いたまま忘れて、**コードが永遠に if で分岐**。定期的な清掃を。
+Web Components を本格的に書くなら Lit が現在のデファクト。Google / Adobe / Shopify も使っています。
 
 ## 演習
 
 ### ゴール
 
-- 環境変数ベースのフラグから始め、リモート管理ベースに育てる
-- ユーザー ID ベースの 10% ロールアウトを実装する
+- Counter の Web Component を作る
+- Shadow DOM でスタイル隔離を確認する
+- `<slot>` で外から中身を差し込む
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest flags-sample --ts --app
-cd flags-sample
+npm create vite@latest web-components-sample -- --template vanilla-ts
+cd web-components-sample
+npm install
 ```
 
-### 手順 2: 環境変数フラグ
+### 手順 2: index.html
 
-`.env.local`:
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Web Components Demo</title>
+    <style>
+      /* 外側の CSS（Shadow DOM で隔離されるはず） */
+      h2 { color: red; }
+      body { font-family: sans-serif; padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <h2>外側の h2（赤いはず）</h2>
 
+    <my-card>
+      <span slot="title">内側のタイトル</span>
+      <p>スロットに入る本文</p>
+    </my-card>
+
+    <my-counter start="5"></my-counter>
+    <p id="log">イベントログ: -</p>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
 ```
-NEW_HOMEPAGE=true
-```
 
-`app/page.tsx`:
-
-```tsx
-export default function Home() {
-  const newHomepage = process.env.NEW_HOMEPAGE === "true";
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
-    </main>
-  );
-}
-```
-
-`.env.local` の値を `false` に変えて再起動すると、表示が切り替わります。
-
-### 手順 3: ユーザー ID ベースのロールアウト
-
-`utils/rollout.ts`:
+### 手順 3: src/main.ts
 
 ```ts
-function hash(s: string): number {
-  let h = 2166136261;
-  for (let i = 0; i < s.length; i++) {
-    h ^= s.charCodeAt(i);
-    h = (h * 16777619) >>> 0;
+// my-card
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2><slot name="title">デフォルトタイトル</slot></h2>
+      <div><slot></slot></div>
+    `;
   }
-  return h;
 }
+customElements.define("my-card", MyCard);
 
-export function isInRollout(userId: string, percent: number): boolean {
-  return hash(userId) % 100 < percent;
+// my-counter
+class MyCounter extends HTMLElement {
+  #count = 0;
+
+  static observedAttributes = ["start"];
+
+  attributeChangedCallback(name: string, _old: string, value: string) {
+    if (name === "start") {
+      this.#count = Number(value);
+      this.render();
+    }
+  }
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.#count = Number(this.getAttribute("start") ?? "0");
+    this.render();
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
+        button { padding: 4px 12px; }
+        strong { min-width: 40px; text-align: center; }
+      </style>
+      <button id="dec">-</button>
+      <strong>${this.#count}</strong>
+      <button id="inc">+</button>
+    `;
+    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
+      this.#count++;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
+      this.#count--;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+  }
 }
+customElements.define("my-counter", MyCounter);
+
+// ログ
+const log = document.getElementById("log")!;
+document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
+  const ce = e as CustomEvent<{ count: number }>;
+  log.textContent = `イベントログ: count = ${ce.detail.count}`;
+});
 ```
 
-`app/page.tsx`:
+### 手順 4: 起動して確認
 
-```tsx
-import { isInRollout } from "@/utils/rollout";
-
-const FAKE_USERS = ["user-1", "user-2", "user-3", "user-4", "user-5"];
-
-export default function Home() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>10% ロールアウトのデモ</h1>
-      <ul>
-        {FAKE_USERS.map((id) => (
-          <li key={id}>
-            {id}: {isInRollout(id, 10) ? "ON" : "OFF"}
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
-}
+```bash
+npm run dev
 ```
 
-10% に絞ると **ほとんどの user が OFF**、50% にすると半々、と **再現性** を持って分かれることを確認します。
+ブラウザで以下を確認します。
 
-### 手順 4: フラグを集約する
-
-`utils/flags.ts`:
-
-```ts
-import { isInRollout } from "./rollout";
-
-export type Flags = {
-  newCheckout: boolean;
-  aiSummary: boolean;
-};
-
-export function getFlags(userId: string): Flags {
-  return {
-    newCheckout: process.env.NEW_CHECKOUT === "true" && isInRollout(userId, 10),
-    aiSummary: process.env.AI_SUMMARY === "true",
-  };
-}
-```
-
-`app/dashboard/page.tsx`:
-
-```tsx
-import { getFlags } from "@/utils/flags";
-
-export default function Dashboard() {
-  const flags = getFlags("user-current");
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Dashboard</h1>
-      {flags.newCheckout && <p>新チェックアウト ON</p>}
-      {flags.aiSummary && <p>AI 要約 ON</p>}
-    </main>
-  );
-}
-```
+1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
+2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
+3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
+4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
 
 ### 期待出力
 
-- `.env.local` の値を変えて再起動すると、`new` / `old` が切り替わる
-- ユーザー ID 別に ON / OFF が **再現性** を持って決まる
-- フラグを集約すると、ページごとの分岐が読みやすくなる
+- Shadow DOM の中の h2 は青、外側の h2 は赤
+- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
 
 ### 変える
 
-- 5%、25%、50%、100% に変えて、ロールアウトの比率を実感する
-- ハッシュ関数を `Math.random()` に変えると **同じユーザーで結果がバラつく** ことを確認（NG パターン）
-- フラグ評価を Server Component に閉じ込めて、クライアントには結果だけ渡す
+- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認。**注意**: `closed` のままだと `this.shadowRoot!.getElementById(...)` が null 参照で実行時エラーになるため、観察できたら `open` に戻してから他の手順に進む
+- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
+- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
+- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
 
 ### 自分で書く（任意）
 
-- Vercel Edge Config を使ってフラグをリモート管理にする
-- GrowthBook の SDK を入れて、UI で % を変えて即時反映を体験する
-- A/B テスト用の variant 割当を実装し、analytics に variant をタグ付けして送る
+- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
+- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
+- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
 
 ## まとめ
 
-- フィーチャーフラグは **デプロイと機能公開を分離** する仕組み
-- 最小実装は **環境変数 1 つ**。柔軟性を上げたければリモート管理（Edge Config / DB）
-- **ハッシュベース** のロールアウトで再現性を保つ
-- SaaS は LaunchDarkly / **GrowthBook** / Statsig / Flagsmith / Vercel + PostHog など
-- **Kill Switch** で本番障害をビルドなしに止められる価値が大きい
-- A/B テストはフラグの仲間。SaaS は両方こなす
-- フラグは増える → **寿命を管理して定期清掃**
-- Server / Edge で評価して **クライアントのチラつき** を避ける
+- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
+- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
+- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
+- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
+- プロパティは getter / setter、通知は `CustomEvent` で
+- 本格運用するなら **Lit** が今のデファクト
+- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
+- React 19 以降は Custom Elements の props / event 受け渡しが自然

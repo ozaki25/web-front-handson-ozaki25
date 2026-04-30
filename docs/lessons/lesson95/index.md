@@ -1,488 +1,256 @@
-# lesson95: ARIA 属性とキーボード操作
+# lesson93: Cookie と Web セキュリティ
 
 ## ゴール
 
-- ARIA の **5 つの原則**（特にセマンティック HTML を優先）を理解する
-- よく使う ARIA 属性（`aria-label` / `aria-labelledby` / `aria-describedby` / `aria-expanded` / `aria-hidden` / `aria-live`）を使い分けられる
-- `role` 属性をどんな時に使うかを説明できる
-- キーボード操作（Tab / Shift+Tab / Enter / Space / Esc / 矢印キー）の標準パターンを知る
-- `tabindex` の 3 つの値（`0` / `-1` / 正の数値）の意味を説明できる
-- モーダルでのフォーカストラップ・フォーカスリングを消さない原則を守れる
+- Cookie と Web Storage の違いと使い分けを説明できる
+- Cookie の属性（`HttpOnly` / `Secure` / `SameSite` / `Domain` / `Path` / `Expires` / `Max-Age`）の役割を説明できる
+- XSS（Cross-Site Scripting）と CSRF（Cross-Site Request Forgery）の概要と、それぞれに効く防御を挙げられる
+- セッション Cookie を安全に扱うための実務パターン（HttpOnly / Secure / SameSite=Lax）を知る
+- Content-Security-Policy や HTTPS の位置づけを大まかに把握する
 
 ## 解説
 
-### ARIA の原則: セマンティック HTML を優先する
+### Cookie とは何か（もう一度）
 
-ARIA（Accessible Rich Internet Applications）は、HTML だけでは表現しきれない意味をスクリーンリーダーに伝えるための **追加の属性** です。W3C が **ARIA の 5 つの原則** として次の「使うべきでない条件」を示しています（抜粋）。
+Cookie は「サーバーがブラウザに値を持たせて、次回以降のリクエストに **自動で付けさせる** 仕組み」です。サーバーからのレスポンスに次のヘッダが付いていると、ブラウザは **`user=alice`** を覚え、同じサイトへの次のリクエストに自動で `Cookie: user=alice` を付けます。
 
-1. **HTML 要素で表現できるなら、ARIA を使わない**。`<button>` が使えるなら `<div role="button">` は書かない
-2. **HTML の意味を ARIA で上書きしない**。`<h1 role="button">` のように `<h1>` を無理にボタンにしない
-3. **ARIA 付きの要素もキーボード操作可能に**。role を付けたら Tab で到達でき、Enter や Space で反応する必要がある
-4. **フォーカス可能な要素に `role="presentation"` や `aria-hidden="true"` を付けない**（触れなくなる）
-5. **インタラクティブな要素には、アクセシブルな名前を付ける**（画像ボタンなら `aria-label` を）
+```
+# サーバーからのレスポンス
+HTTP/1.1 200 OK
+Set-Cookie: user=alice; Path=/; HttpOnly; Secure; SameSite=Lax
 
-つまり「**ARIA は最後の手段**」です。まずは `<button>` / `<nav>` / `<h1>` / `<label>` のような意味あるタグを使い、それでも足りないとき（複雑なウィジェット・動的更新・ネイティブ要素がないもの）だけ ARIA を足します。
-
-### よく使う ARIA 属性
-
-実務でよく書くのは以下です。全部を覚える必要はありません。
-
-#### 1. `aria-label`: テキストが無い要素に名前を付ける
-
-アイコンだけのボタンにラベルを与えます。
-
-```html
-<!-- 検索アイコンだけのボタン -->
-<button aria-label="検索">
-  <svg>...</svg>
-</button>
+# 以後、ブラウザが自動で付ける
+GET /profile HTTP/1.1
+Cookie: user=alice
 ```
 
-スクリーンリーダーは「検索、ボタン」と読み上げます。`aria-label` がないと「ボタン」としか読まれず、何のボタンか分かりません。
+この「自動で送る」性質が、認証セッションを維持する用途に向いています。一方で同じ性質が **後述の CSRF 攻撃の温床** にもなります。
 
-#### 2. `aria-labelledby`: 他の要素をラベルにする
+> **`user=alice` は仕組み説明用の架空値**: 上の例では分かりやすさのために `user=alice` という平文を入れていますが、**実例では Cookie に主体識別子を直接入れません**。代わりに、サーバーが発行した **不可逆なセッション ID**（例: `session=abc123xyz...`）を入れて、サーバー側でその ID から「これは alice さんのセッション」と引き当てる形が一般的です。本文の以降の例 (`session=abc123` など) はこの実運用の形を想定しています。
 
-すでに画面に表示されている見出しをラベルとして流用します。
+### Cookie と Web Storage の使い分け（再掲）
 
-```html
-<section aria-labelledby="contact-heading">
-  <h2 id="contact-heading">お問い合わせ</h2>
-  <p>...</p>
-</section>
+| 用途 | Cookie | Web Storage |
+|---|---|---|
+| ログインセッションの維持 | **最適**（サーバーに自動送信される） | 不向き |
+| ユーザー設定（テーマ / 言語） | 可能だが毎リクエストで送信されるのでムダ | **最適** |
+| 容量 | 4KB 程度（小さい） | 5〜10MB |
+| JS からの読み書き | `document.cookie`（`HttpOnly` ならブラウザで JS からは見えない） | `localStorage.setItem` 等 |
+| 有効期限 | 属性で制御 | localStorage は恒久、session は タブ閉じで消える |
+
+認証は Cookie、クライアント完結の設定は Web Storage、というのが現代の定番です。
+
+### Cookie の主要属性
+
+`Set-Cookie` に付けられる属性で、Cookie の振る舞いを細かく制御します。どれもセキュリティに直結します。
+
+#### `HttpOnly`
+
+**JS から読み書きできない** Cookie にします。`document.cookie` で見ようとしても出てきません。
+
+```
+Set-Cookie: session=abc123; HttpOnly
 ```
 
-この `<section>` は「お問い合わせ」というセクションだとスクリーンリーダーが認識します。「セマンティック HTML とアクセシビリティの基礎」の演習でも同じパターンを使いました。
+XSS（後述）でページに悪意ある JS が混入しても、`HttpOnly` 付きのセッション Cookie は盗めません。ログインセッション用の Cookie は **原則 `HttpOnly` を付ける** のが現代の正解です。
 
-#### 3. `aria-describedby`: 追加の説明を関連付ける
+#### `Secure`
 
-入力欄にエラーメッセージや補足説明を結びつけます。
+**HTTPS 経由のリクエストにしか送らせない** 属性です。平文 HTTP で運ばれて盗聴される事故を防ぎます。
 
-```html
-<label for="password">パスワード</label>
-<input
-  id="password"
-  type="password"
-  aria-describedby="password-hint password-error"
-  aria-invalid="true"
-/>
-<p id="password-hint">8 文字以上、英数字混在</p>
-<p id="password-error">英字が含まれていません</p>
+```
+Set-Cookie: session=abc123; Secure
 ```
 
-スクリーンリーダーはラベルに続いて hint と error も読み上げます。フォームのアクセシビリティで定番のパターンです。
+本番はほぼ HTTPS のみになった現在では、**セッション Cookie には常に `Secure`** を付けます。
 
-#### 4. `aria-expanded`: 開閉状態を伝える
+#### `SameSite`
 
-折りたたみ式 UI（アコーディオン / ドロップダウン）で、現在開いているかを伝えます。
+**クロスサイトのリクエストで Cookie を送るか** を制御する属性です。CSRF 攻撃への主要な防御です。
 
-```html
-<button aria-expanded="false" aria-controls="menu">メニュー</button>
-<ul id="menu" hidden>
-  <li>項目 1</li>
-  <li>項目 2</li>
-</ul>
-```
-
-クリックで `aria-expanded` を `true` に切り替え、`hidden` 属性も外します。`aria-controls` は「このボタンがどの要素を操作するか」の関連付けです。
-
-#### 5. `aria-hidden`: スクリーンリーダーから隠す
-
-装飾的な要素（アイコン画像など）を読み上げから除外します。
-
-```html
-<button>
-  <svg aria-hidden="true" width="14" height="14" viewBox="0 0 14 14">
-    <path d="M3 3h8v9H3z" fill="currentColor" />
-  </svg>
-  削除
-</button>
-```
-
-アイコンを画像的に添えるだけで、隣に「削除」というテキストがある場合、アイコンは読ませずテキストだけ読ませたい、というケースです。
-
-> 注意: **フォーカス可能な要素** に `aria-hidden="true"` を付けてはいけません（原則 4）。フォーカスは当たるのに読み上げられない、という矛盾状態が起きます。
-
-#### 6. `aria-live`: 動的に変化する場所を伝える
-
-JS で中身が変わる領域を、スクリーンリーダーに「変化があったら読み上げてね」と伝えます。
-
-```html
-<div aria-live="polite" id="status"></div>
-
-<script>
-  // ボタン押下で「保存しました」に差し替えると、
-  // スクリーンリーダーが自動でその変化を読み上げる
-  document.getElementById('status').textContent = '保存しました';
-</script>
-```
-
-値は 3 種類:
-
-- `polite`: 今の読み上げが終わってから通知。普通はこれ
-- `assertive`: 今の読み上げを割り込んで即通知。緊急通知のみ
-- `off`: 通知しない（省略と同じ）
-
-チャットの新着通知や、フォーム送信後の成功メッセージで使います。
-
-### `role` 属性: 要素に別の役割を与える
-
-HTML にぴったりの要素がないとき、`role` で役割を付与します。ただし **HTML で書けるものは HTML を優先** です。
-
-```html
-<!-- OK: HTML にタブを表す要素がないので role で補う -->
-<div role="tablist">
-  <button role="tab" aria-selected="true">タブ 1</button>
-  <button role="tab" aria-selected="false">タブ 2</button>
-</div>
-
-<!-- NG: button があるのに div + role -->
-<div role="button" tabindex="0" onclick="handleClick()">送信</div>
-<!-- → 素直に <button>送信</button> で良い -->
-```
-
-よく使う role:
-
-- `role="button"` / `role="link"` / `role="checkbox"` など（**原則 HTML 要素を優先**）
-- `role="tablist"` / `role="tab"` / `role="tabpanel"`（タブ UI）
-- `role="dialog"` / `role="alertdialog"`（モーダル。後述）
-- `role="alert"`（`aria-live="assertive"` 相当、即時通知）
-- `role="status"`（`aria-live="polite"` 相当、穏やかな通知）
-
-最近は `<dialog>` タグ（HTML 標準）で済むケースも増えたので、まず `<dialog>` を検討するのが正攻法です。
-
-### キーボード操作の標準パターン
-
-マウスを使わずに操作できるのは、スクリーンリーダー利用者だけでなく **効率重視の開発者や、運動機能に制約のあるユーザー** にとっても重要です。ブラウザと OS が標準で提供している挙動を壊さないのが基本です。
-
-| キー | 標準の挙動 |
+| 値 | 動作 |
 |---|---|
-| **Tab** | フォーカスを次の操作可能要素へ |
-| **Shift + Tab** | フォーカスを前の操作可能要素へ |
-| **Enter** | リンクならページ遷移、ボタンなら実行 |
-| **Space** | ボタンを実行（チェックボックスのトグル、スクロール） |
-| **Esc** | モーダル・メニュー・ドロップダウンを閉じる |
-| **矢印キー** | ラジオグループ内の移動、タブの切り替え、メニュー内の移動 |
+| `Strict` | 他サイトからの遷移では一切送らない（ログインが切れる UX になりがち） |
+| `Lax` | トップレベル GET ナビゲーション（リンククリック等）では送る。フォーム POST や iframe では送らない |
+| `None` | すべて送る。**`Secure` 必須** |
 
-これらを **自分で実装する必要は普通ありません**。`<button>` や `<a>` を使えばブラウザが自動でやってくれます。**独自コンポーネントを作るときだけ** 自分で実装します（ARIA Authoring Practices（<https://www.w3.org/WAI/ARIA/apg/patterns/>）に各パターンが載っています）。
+現代のブラウザの **デフォルトは `Lax`** です。クロスサイトで明示的に送りたい場合のみ `None; Secure` を付けます。通常のセッション Cookie は `Lax` のままで十分な場合が多いです。
 
-### `tabindex` の 3 つの値
+#### `Domain` / `Path`
 
-`tabindex` 属性で Tab 順序を制御できます。覚えるのは 3 パターンだけです。
+どのホスト・どのパスに対して Cookie を送るかの指定です。指定しなければ **発行元のホストとパス以下** になります。
 
-```html
-<!-- 1. tabindex="0": Tab 順序に加える。通常の順番で到達可能に -->
-<div tabindex="0" role="button">カスタムボタン</div>
+- `Domain=example.com`: サブドメイン（`api.example.com` 等）にも送る
+- `Path=/admin`: `/admin` 以下のパスにだけ送る
 
-<!-- 2. tabindex="-1": プログラムから focus() できるが、Tab ではスキップ -->
-<div tabindex="-1" id="modal">...</div>
-<!-- JS で modal.focus() は可能。Tab 巡回には入らない -->
+広く付けすぎるとセキュリティ事故の原因になるので、**必要最小限** に絞るのが原則です。
 
-<!-- 3. 正の数値（tabindex="1", "2" ...）: 使わない -->
-<button tabindex="5">...</button>
-<!-- NG: 自然な順序を壊すので避ける -->
+#### `Expires` / `Max-Age`
+
+有効期限の指定です。
+
+- `Expires=Wed, 21 Oct 2026 07:28:00 GMT`: 指定日時まで
+- `Max-Age=3600`: 3600 秒後まで（現代では推奨）
+
+どちらも付けなかった Cookie は **セッション Cookie**（ブラウザを閉じると消える）になります。
+
+### 典型的な「ログインセッション Cookie」の形
+
+実務で多く見る典型パターンです。
+
+```
+Set-Cookie: session=abc123xyz; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400
 ```
 
-**`tabindex` の正の数値は原則使わない** のが鉄則です。DOM の登場順に従うのが一番自然で、壊れにくいからです。
+読み解き:
 
-### フォーカスを「見えるようにする」
+- `Path=/`: サイト全体で有効
+- `HttpOnly`: JS から見えない（XSS 対策）
+- `Secure`: HTTPS のみ
+- `SameSite=Lax`: 基本的なクロスサイトリクエストでは送らない（CSRF 対策）
+- `Max-Age=86400`: 24 時間有効
 
-キーボード操作でフォーカスがどこにあるか分からないと、ユーザーは迷子になります。ブラウザはデフォルトでフォーカス時に枠（フォーカスリング）を表示します。**これを CSS で消してはいけません**。
+この組み合わせを **デフォルトの出発点** と覚えてください。
 
-```css
-/* NG: フォーカスリングを完全に消す */
-button:focus {
-  outline: none;  /* 絶対にダメ */
-}
+### XSS（Cross-Site Scripting）
 
-/* OK: デフォルトより目立つリングに差し替える */
-button:focus-visible {
-  outline: 3px solid #2563eb;
-  outline-offset: 2px;
-}
+悪意ある JS を **自分のサイトの一部として** 動かされる攻撃です。
+
+代表的な入り口:
+
+1. ユーザー入力をそのまま `innerHTML` で出力（「DOM を操作する」の `innerHTML` 節で扱った）
+2. `<script src="ユーザー入力">` のように属性にも入力が流れ込む
+3. URL のクエリから取った値を HTML にそのまま埋め込む
+
+成功すると、`document.cookie` / `localStorage` の中身を攻撃者のサーバーに送信されたり、ユーザーになりすまして投稿されたりします。
+
+#### 防御の基本
+
+- **出力をエスケープする**: `textContent` を使う、React / Vue のテンプレートを信じる（彼らが自動でエスケープする）
+- **`innerHTML` には自分で書いた安全な文字列だけ**: ユーザー入力は決して入れない
+- **`HttpOnly` Cookie**: セッション Cookie を JS から見えなくする（攻撃が成功しても Cookie だけは守れる）
+- **Content-Security-Policy（CSP）ヘッダ**: `<script>` の実行元を制限する（後述）
+
+React / Next.js は `{variable}` で値を埋め込む限り、自動的にテキストとして扱ってくれます。生の HTML を埋め込みたいときの `dangerouslySetInnerHTML` が「**危険**」という名前なのは、まさにこの XSS を警告するためです。
+
+### CSRF（Cross-Site Request Forgery）
+
+ログインしているユーザーに **意図しないリクエスト** を送らせる攻撃です。仕組み:
+
+1. 攻撃者が罠サイトを用意する
+2. ログイン中の標的ユーザーに罠サイトを踏ませる
+3. 罠サイトの HTML から銀行 API へのリクエストを自動発火させる。GET なら `https://bank.example.com/transfer?to=attacker&amount=10000`、POST なら `<form action="https://bank.example.com/transfer" method="POST">` の自動送信が典型例
+4. ブラウザは `bank.example.com` のセッション Cookie を **自動で付けて** リクエストする
+5. 銀行サーバーから見ると、正規ユーザーの認証済みリクエストに見える
+
+#### 防御
+
+- **`SameSite=Lax` / `Strict`**: クロスサイトの POST で Cookie を送らせない。現代のブラウザのデフォルトが `Lax` なので、大半の単純な CSRF は既にブロック済み
+- **CSRF トークン**: フォーム送信のたびにサーバーから一意のトークンを渡し、リクエスト時に一緒に送らせる。攻撃者の罠サイトはトークンを知らないので送れない
+- **重要操作の再認証**: パスワード変更や送金では、現行セッションでも再度パスワードを入れさせる
+
+現代のフレームワーク（Next.js の Server Actions など）は CSRF トークン処理を内蔵していることが多いため、自分で手書きする機会は減っています。仕組みは知っておく価値があります。
+
+### HTTPS と HSTS
+
+HTTPS は **通信を暗号化** する基本です。HTTPS でない（平文 HTTP）通信は途中経路で改ざん・盗聴される可能性があります。
+
+**HSTS**（HTTP Strict Transport Security） ヘッダを付けると、ブラウザに「今後はこのサイトは必ず HTTPS で来い」と覚えさせられます。初回のみ平文アクセスが発生しうる隙を塞ぎます。
+
+```
+Strict-Transport-Security: max-age=31536000; includeSubDomains
 ```
 
-`:focus-visible` は「キーボード操作でフォーカスが来た時だけ」反応する擬似クラスで、マウスクリック時には出ません。これで「マウス派にはリングが見えず邪魔にならない」「キーボード派には明確に見える」を両立できます。
+Vercel / Netlify などはデフォルトで HTTPS のみでの配信になっています。本コースの教材サイトもすべて HTTPS です。
 
-### モーダルのフォーカストラップ
+> **`includeSubDomains` の罠**: 一度配信すると、ブラウザはこのドメインの **全サブドメインも HTTPS 必須** として `max-age` の期間（上の例では 1 年）覚え続けます。社内ツールなど一部サブドメインに HTTPS が無いと、その期間アクセスできなくなります。`max-age=0` を返しても **既に保存済みのブラウザを巻き戻せません**。本番投入は `max-age` を短めから始めて段階的に伸ばすのが安全です。
 
-モーダル（ダイアログ）を開いたら、**モーダルの中だけで Tab が巡回する** ようにします。背景のボタンに Tab で飛べてしまうと、スクリーンリーダー利用者は「モーダルを開いたはずが、なぜか元のページに戻っている」という混乱が起きます。
+### `SameSite=None; Secure`（クロスサイト Cookie の現代的形）
 
-手動で実装するのは煩雑なので、**`<dialog>` タグの `showModal()` を使う** のが最も簡単です（ブラウザがフォーカストラップを自動で行います）。
+外部サイトからの埋め込み（iframe / クロスオリジン fetch with credentials）で Cookie を送りたい場合は、`SameSite=None` を明示する必要があります。**さらに `Secure` の併記が必須**（Chrome / Safari / Firefox の現行仕様）です。
 
-```html
-<dialog id="my-dialog">
-  <h2>確認</h2>
-  <p>削除しますか？</p>
-  <button type="button" onclick="this.closest('dialog').close()">キャンセル</button>
-  <button type="button" onclick="handleConfirm()">OK</button>
-</dialog>
-
-<button onclick="document.getElementById('my-dialog').showModal()">
-  開く
-</button>
+```
+Set-Cookie: session=abc; Path=/; HttpOnly; Secure; SameSite=None
 ```
 
-`<dialog>.showModal()` を呼ぶと:
+`SameSite=None` 単独や、HTTPS でない通信での `SameSite=None` は **ブラウザが拒否します**。サードパーティ Cookie 廃止の流れも進んでいるため、可能なら `SameSite=Lax` で済ませる設計を選ぶのが現代の標準です。
 
-- モーダルが表示される
-- フォーカスがモーダル内に入り、Tab で外に出られなくなる
-- Esc キーで自動的に閉じる
-- 閉じるとフォーカスが元のトリガー要素に戻る
+### Content-Security-Policy（CSP）
 
-React のモーダルライブラリ（Radix UI の Dialog、Headless UI など）も内部的に同じ作法を守っています。自作する前に既存実装を検討するのがおすすめです。
+レスポンスヘッダで **「このページで実行してよい JS の出所」** を制限する仕組みです。XSS の最後の砦として効きます。
+
+```
+Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com
+```
+
+この例では、`<script>` は自サイトと指定した CDN 以外からは一切読ませない、という宣言です。インラインスクリプトや `eval` も既定では禁止されます。
+
+強力ですが設定を間違えると自分のサイトが動かなくなるので、導入は慎重に（まずは `Content-Security-Policy-Report-Only` で違反だけログに流し、問題がないと確認してから本番適用するのが定番）。
+
+### オリジンと CORS（軽く）
+
+**オリジン** は `スキーム + ホスト + ポート` の 3 つ組で、ブラウザのセキュリティ境界の基本単位です。`https://a.example.com` と `https://b.example.com` は別オリジンです。
+
+ブラウザは既定で **別オリジンへの `fetch` が返すレスポンスを JS から読めなくする** 同一オリジンポリシーを採用しています。別オリジンの API を使いたい場合、サーバー側が `Access-Control-Allow-Origin` 等の CORS ヘッダで明示的に許可する必要があります。
+
+CORS は実務で詰まりやすい分野です。本コースでは深入りせず、「オリジンが違うと fetch 結果が読めないことがある / サーバー側で CORS ヘッダを返してもらう必要がある」という認識だけ押さえてください。
 
 ## 演習
 
 ### ゴール
 
-- アイコンボタンに `aria-label` を付ける
-- 折りたたみ式メニューに `aria-expanded` / `aria-controls` を付ける
-- 動的メッセージに `aria-live` を付ける
-- フォーカスリングを明示的にスタイル（`:focus-visible` で）
-- `<dialog>` で最小のモーダルを作り、フォーカストラップを体験する
+- 本サイトおよび任意のサイトの Cookie 属性を DevTools Application タブで眺める
+- `HttpOnly` / `Secure` / `SameSite` がどう出ているか確認する
+- XSS / CSRF のイメージを自分の言葉で説明できるようにする
 
-### 途中から始める場合
+### 手順 1: Cookie を観察する
 
-独立したレッスンです。新規 StackBlitz の Vanilla テンプレートを開いて、下のコードを貼ってください。
+1. Google や GitHub などログイン済みのサイトを開きます
+2. DevTools → Application タブ → Cookies → そのサイトを選択します
+3. 一覧の `Name` / `Value` / `HttpOnly` / `Secure` / `SameSite` / `Expires` 列を眺めます
+4. セッション系の Cookie には `HttpOnly` と `Secure` がチェックされているはずです
 
-<details>
-<summary>出発点のコード</summary>
+### 手順 2: `document.cookie` で JS からの可視性を確認する
 
-**`index.html`**
+DevTools の Console タブで次を実行します。
 
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>ARIA とキーボード操作</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <h1>ARIA 演習</h1>
-    <p>Tab キーで操作してみてください。</p>
-  </body>
-</html>
+```js
+document.cookie
 ```
 
-**`style.css`**
+出力には **`HttpOnly` が付いていない Cookie だけ** が出ます。セッション系の重要な Cookie が出てこないのは、`HttpOnly` 属性が働いているためです。
 
-```css
-body { font-family: sans-serif; padding: 16px; color: #1a1a1a; background: #fff; }
-```
+試しに適当なサイト（攻撃を想定したメモ）で、もしセッション Cookie が JS から見えてしまっていた場合は、そのサイトは XSS 耐性が弱い可能性があります。
 
-</details>
+### 手順 3: 自分の言葉でまとめる
 
-### 手順
+次の質問に、本レッスンを閉じた状態で自分の言葉で答えてみます（目安: それぞれ 2-3 文）。
 
-1. `index.html` を下の完成形にします
-2. `style.css` を下の完成形にします
-3. プレビューでキーボードの Tab と Enter だけで全操作ができるか確認します
-
-### `index.html` の完成形
-
-```html
-<!DOCTYPE html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>ARIA とキーボード操作</title>
-    <link rel="stylesheet" href="./style.css" />
-  </head>
-  <body>
-    <h1>ARIA 演習</h1>
-
-    <section aria-labelledby="toolbar-heading">
-      <h2 id="toolbar-heading">ツールバー</h2>
-      <button aria-label="保存" id="save">
-        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
-          <rect x="2" y="2" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" />
-          <rect x="5" y="2" width="6" height="4" fill="currentColor" />
-        </svg>
-      </button>
-      <button aria-label="削除" id="delete">
-        <svg aria-hidden="true" width="16" height="16" viewBox="0 0 16 16">
-          <path d="M4 6h8v7H4z M6 3h4v2H6z" fill="currentColor" />
-        </svg>
-      </button>
-    </section>
-
-    <section aria-labelledby="menu-heading">
-      <h2 id="menu-heading">折りたたみメニュー</h2>
-      <button id="menu-toggle" aria-expanded="false" aria-controls="menu">
-        メニューを開く
-      </button>
-      <ul id="menu" hidden>
-        <li><a href="#">項目 1</a></li>
-        <li><a href="#">項目 2</a></li>
-        <li><a href="#">項目 3</a></li>
-      </ul>
-    </section>
-
-    <section aria-labelledby="status-heading">
-      <h2 id="status-heading">保存の通知</h2>
-      <button id="save-btn">保存する</button>
-      <div id="status" aria-live="polite"></div>
-    </section>
-
-    <section aria-labelledby="dialog-heading">
-      <h2 id="dialog-heading">モーダル</h2>
-      <button id="open-dialog">確認ダイアログを開く</button>
-      <dialog id="confirm-dialog" aria-labelledby="dialog-title">
-        <h3 id="dialog-title">削除の確認</h3>
-        <p>本当に削除してもよろしいですか？</p>
-        <button type="button" id="cancel-btn">キャンセル</button>
-        <button type="button" id="confirm-btn">削除する</button>
-      </dialog>
-    </section>
-
-    <script>
-      // 折りたたみメニュー
-      const toggle = document.getElementById('menu-toggle');
-      const menu = document.getElementById('menu');
-      toggle.addEventListener('click', () => {
-        const isOpen = toggle.getAttribute('aria-expanded') === 'true';
-        toggle.setAttribute('aria-expanded', String(!isOpen));
-        toggle.textContent = isOpen ? 'メニューを開く' : 'メニューを閉じる';
-        if (isOpen) {
-          menu.setAttribute('hidden', '');
-        } else {
-          menu.removeAttribute('hidden');
-        }
-      });
-
-      // ツールバーボタン（デモなのでログだけ）
-      document.getElementById('save').addEventListener('click', () => {
-        console.log('保存ボタンが押されました');
-      });
-      document.getElementById('delete').addEventListener('click', () => {
-        console.log('削除ボタンが押されました');
-      });
-
-      // 動的ステータス通知
-      document.getElementById('save-btn').addEventListener('click', () => {
-        const status = document.getElementById('status');
-        status.textContent = '保存しました (' + new Date().toLocaleTimeString() + ')';
-      });
-
-      // モーダル
-      const dialog = document.getElementById('confirm-dialog');
-      document.getElementById('open-dialog').addEventListener('click', () => {
-        dialog.showModal();
-      });
-      document.getElementById('cancel-btn').addEventListener('click', () => {
-        dialog.close();
-      });
-      document.getElementById('confirm-btn').addEventListener('click', () => {
-        console.log('削除を実行しました');
-        dialog.close();
-      });
-    </script>
-  </body>
-</html>
-```
-
-### `style.css` の完成形
-
-```css
-body {
-  font-family: sans-serif;
-  padding: 16px;
-  color: #1a1a1a;
-  background: #ffffff;
-}
-
-section {
-  margin: 24px 0;
-  padding: 16px;
-  border: 1px solid #d1d5db;
-  border-radius: 4px;
-}
-
-h1 {
-  margin-top: 0;
-}
-
-button {
-  padding: 8px 16px;
-  margin-right: 8px;
-  background: #1e3a8a;
-  color: #ffffff;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 14px;
-}
-
-/* フォーカスリング: キーボード操作時だけ目立たせる */
-button:focus-visible,
-a:focus-visible {
-  outline: 3px solid #60a5fa;
-  outline-offset: 2px;
-}
-
-/* マウスクリック時は既定のアウトラインを消してもよい（:focus ではなく :focus-visible を使うため、マウス時は自動で出ない） */
-
-ul {
-  margin-top: 8px;
-  padding-left: 20px;
-}
-
-/* モーダル */
-dialog[open] {
-  border: 1px solid #d1d5db;
-  border-radius: 8px;
-  padding: 24px;
-  min-width: 320px;
-}
-
-dialog::backdrop {
-  background: rgba(0, 0, 0, 0.5);
-}
-
-#status {
-  margin-top: 8px;
-  color: #1e3a8a;
-  font-weight: bold;
-}
-```
+- Q1: XSS と CSRF のそれぞれが「何を悪用する」攻撃か
+- Q2: 典型的なログインセッション Cookie には、どの属性を付けるか（3 つ挙げよ）
+- Q3: `SameSite=Lax` は CSRF にどう効くか
 
 ### 期待出力
 
-- アイコンボタン（保存 / 削除の SVG アイコン）が画面に並び、マウスホバーで tooltip 的に `aria-label` が出るブラウザもある
-- Tab キーで「保存」ボタン → 「削除」ボタン → 「メニューを開く」ボタン → （メニュー展開後は）項目リンク → 「保存する」ボタン → 「確認ダイアログを開く」ボタン と順に移動する
-- 「メニューを開く」を Enter で押すと、メニューが展開されボタンのラベルが「メニューを閉じる」に切り替わる
-- 「保存する」を押すと、下の `aria-live` 領域に時刻付きメッセージが追加される
-- 「確認ダイアログを開く」を押すと、モーダルが表示されフォーカスがモーダル内に移動する。Tab はモーダル内だけを巡回する
-- Esc キーでモーダルが閉じ、フォーカスが元のトリガーボタンに戻る
-
-### スクリーンリーダーで確認（任意）
-
-macOS なら **VoiceOver**（`Cmd + F5` で起動）、Windows なら **NVDA**（無料、<https://www.nvaccess.org/>）を使います。それぞれ:
-
-- アイコンボタンが「保存、ボタン」「削除、ボタン」と読み上げられる
-- 折りたたみボタンが「メニューを開く、ボタン、折りたたみ済み」（展開後は「展開済み」）と状態付きで読まれる
-- 「保存する」を押した瞬間、「保存しました（時刻）」と自動で読み上げられる（`aria-live` のおかげ）
-- モーダル内のコンテンツが「削除の確認、ダイアログ」と読み上げられる
+- DevTools Application タブ → Cookies で、設定した Cookie のキーと値が確認できる
+- `HttpOnly` を付けた Cookie は `document.cookie` で読めないことを Console で確認できる
+- HTTPS でないと `Secure` 属性の Cookie がセットされないことが分かる
 
 ### 変える
 
-- `aria-label="保存"` を削除してみる。スクリーンリーダーでは「ボタン」とだけ読まれ、何のボタンか分からなくなる
-- `aria-expanded="false"` を削除してみる。Lighthouse が「Some elements have no accessible name」と警告する
-- `aria-live="polite"` を `aria-live="assertive"` に変えてみる。保存を連打すると、読み上げが即時割り込みで切り替わる
-- `button:focus-visible` のアウトラインを `outline: none` にしてみる（**試したらすぐ戻す**）。キーボード操作でどこにフォーカスがあるか全く見えなくなる恐ろしさを体感できる
+- **観察対象は本コースの教材サイト / 自分のローカルプロジェクト / StackBlitz プレビュー** などにとどめます。他人のサイトで Cookie 操作を試す行為は、利用規約や攻撃の境界が曖昧になりやすいので避けます。
+- 自分が動かしている開発環境で、Application タブから Cookie を 1 つ選び、右クリック → Delete で削除する。再度アクセスしてもページが見られることを確認
+- 自分が管理するアカウントの開発環境で、セッション Cookie を削除するとログアウトになることを確認（本番アカウントではなく開発用で）
 
 ### 自分で書く
 
-- 「コピーする」ボタンを追加する。クリックで `navigator.clipboard.writeText('...')` を呼び、`aria-live` 領域に「コピーしました」と出す
-- モーダル内の最初のフォーカス可能要素に **最初から** フォーカスが当たることを確認。`showModal()` が自動でやってくれるので特に追記コードは不要
+- 自分がよく使うサイト 3 つの、ログイン後に Application タブの Cookies で確認できる **`HttpOnly` の付き方** を比較する
+- Next.js の Server Actions で POST を送る際、ブラウザ開発者ツールの Network タブから CSRF 関連ヘッダがどう付いているか観察する（将来の発展）
 
 ## まとめ
 
-- ARIA の原則の第一は **「HTML で書けるなら ARIA を使わない」**
-- よく使う ARIA 属性: `aria-label` / `aria-labelledby` / `aria-describedby` / `aria-expanded` / `aria-hidden` / `aria-live`
-- `role` 属性は HTML で表現できない複雑ウィジェット（タブ / アコーディオン）で使う
-- キーボードの標準操作（Tab / Enter / Space / Esc / 矢印）はブラウザがやってくれる。自分で実装するのは独自コンポーネントだけ
-- `tabindex` は `0` / `-1` の 2 種類だけを使う。正の数値は使わない
-- フォーカスリングは **`outline: none` で消さない**。`:focus-visible` で目立たせる
-- モーダルは `<dialog>.showModal()` でフォーカストラップを自動入手
+- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値。セッション維持の本命
+- 属性の黄金律: `HttpOnly; Secure; SameSite=Lax`。セッション Cookie はこれを最低ラインに
+- XSS は「サイトに悪意 JS を混入される」攻撃。`textContent` / エスケープ / `HttpOnly` / CSP で防ぐ
+- CSRF は「ログイン中のユーザーに意図しないリクエストを送らせる」攻撃。`SameSite` / CSRF トークンで防ぐ
+- HTTPS + HSTS は前提。平文 HTTP は現代の Web ではほぼ使わない

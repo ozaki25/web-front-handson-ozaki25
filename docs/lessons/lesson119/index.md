@@ -1,425 +1,419 @@
-# lesson119: CORS の詳細
+# lesson117: フィーチャーフラグ
 
 ## ゴール
 
-- 同一オリジンポリシーと CORS（Cross-Origin Resource Sharing）の関係を説明できる
-- **シンプルリクエスト** と **プリフライト**（OPTIONS）の違いを区別できる
-- `Access-Control-Allow-Origin` / `Allow-Credentials` / `Allow-Headers` の使い分けが分かる
-- `credentials: "include"` と Cookie の絡みを理解する
-- よくある CORS エラーを **メッセージから即座に原因に到達** できる
+- フィーチャーフラグが「**デプロイ** と **機能公開** を分離する」考え方であることを説明できる
+- 環境変数ベースの最小実装ができる
+- ロールアウト（10% → 50% → 100%）の意義を理解する
+- LaunchDarkly / GrowthBook / Vercel Edge Config / Statsig の位置付けが分かる
+- A/B テストとフィーチャーフラグの違いと重なりを説明できる
 
 ## 解説
 
-### 同一オリジンポリシーの復習
+### 背景: 「リリース」と「公開」を切り離したい
 
-ブラウザは「**異なるオリジン** からの応答を JS に渡さない」という規則（同一オリジンポリシー）を持っています。
+新機能をリリースすると、次の不安が常に付きまといます。
 
-オリジン = `スキーム + ホスト + ポート`。
+- **本番で初めて壊れたら？**
+- **想定外のトラフィックで重くなったら？**
+- **特定ユーザーだけが踏むバグがあったら？**
 
-| URL A | URL B | 同一オリジン？ |
-|---|---|---|
-| `https://example.com` | `https://example.com/api` | はい |
-| `https://example.com` | `http://example.com` | **いいえ**（スキームが違う） |
-| `https://example.com` | `https://api.example.com` | **いいえ**（ホストが違う） |
-| `https://example.com:443` | `https://example.com:8080` | **いいえ**（ポートが違う） |
+従来の「**ビルドして本番にデプロイ → 全ユーザーに公開**」は、不具合が出た瞬間に **ロールバックしか選択肢がない** という弱さがあります。
 
-### CORS = 「異なるオリジンからの読み取りを **明示的に許可**」
-
-API がブラウザから直接呼ばれる現代では、別オリジンから読みたい場面が多発します。CORS は「**サーバー側がレスポンスヘッダで許可を出した時** に限り、ブラウザが JS にレスポンスを渡す」仕組みです。
-
-ポイント:
-
-- **送信は誰でもできる**（リクエスト自体はブラウザが送る）
-- **応答を JS が読めるかどうか** は CORS ヘッダ次第
-- だから **CSRF とは別問題**（CSRF は送信を防ぐ話）
-
-### シンプルリクエスト
-
-GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエストは、ブラウザが直接送信します。
-
-条件（ざっくり）:
-
-- メソッドは GET / POST / HEAD
-- カスタムヘッダなし
-- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
-
-例:
-
-```js
-fetch("https://api.example.com/posts");
-```
-
-サーバーは応答に CORS ヘッダを返す:
-
-```http
-HTTP/1.1 200 OK
-Access-Control-Allow-Origin: https://my-site.example
-Content-Type: application/json
-```
-
-`Access-Control-Allow-Origin` がリクエスト元オリジンと一致 / `*` ならブラウザが JS に応答を渡す。一致しなければ **JS から読めずエラー**。
-
-### プリフライト（OPTIONS）
-
-メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
+フィーチャーフラグ（Feature Flag、Feature Toggle）は **「コードはデプロイ済み、機能は OFF」の状態を作る** 仕組みです。
 
 ```
-OPTIONS /posts HTTP/1.1
-Origin: https://my-site.example
-Access-Control-Request-Method: PUT
-Access-Control-Request-Headers: Content-Type, Authorization
+[ デプロイ ]──────────────[ 機能公開 ]
+     │                         │
+     ↓                         ↓
+  GitHub で merge          管理画面で ON
+   = 全ユーザーに            = 特定の人 / %
+     コードが届く              に出す
 ```
 
-サーバーが応答:
+これによって:
 
+- **5% に出してから様子を見る**
+- **問題が出たら 1 クリックで戻す**（ビルド不要）
+- **社内ユーザーだけ先行公開**
+- **A/B テスト**（バリアント A と B の効果を比較）
+
+### 最小実装: 環境変数で
+
+「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。Server Component で評価する形がもっとも安全です。
+
+```ts
+// .env.production
+NEW_CHECKOUT=false
 ```
-HTTP/1.1 204 No Content
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE
-Access-Control-Allow-Headers: Content-Type, Authorization
-Access-Control-Max-Age: 3600
+
+```tsx
+// app/checkout/page.tsx (Server Component)
+export default function CheckoutPage() {
+  if (process.env.NEW_CHECKOUT === "true") {
+    return <NewCheckout />;
+  }
+  return <LegacyCheckout />;
+}
 ```
 
-OPTIONS の応答が **OK + 適切なヘッダ** ならブラウザは本リクエストを送る。NG なら本リクエストは飛ばない。
+> **補足: `NEXT_PUBLIC_` プレフィックスはクライアントに丸見え**: `NEXT_PUBLIC_` で始まる環境変数は **ビルド時にクライアントバンドルに埋め込まれます**。ブラウザの DevTools で JS を眺めれば値も変数名もそのまま見えます。`NEXT_PUBLIC_NEW_CHECKOUT` のようにフラグ名を `NEXT_PUBLIC_` で出すと「未公開機能の存在」「フラグ名の命名規則」がエンドユーザーに漏れる事故になります。**Server Component で評価できる場合はプレフィックスなしの `process.env.NEW_CHECKOUT`** を使い、どうしても Client Component で参照したい場合だけ `NEXT_PUBLIC_` を付けます。
 
-#### `Access-Control-Max-Age`
+メリット:
 
-OPTIONS の結果を **キャッシュする秒数**。これがないとリクエストごとに OPTIONS が走って遅くなります。`3600`（1 時間）程度が目安。
+- 何も足さずに始められる
+- ビルド時に値が **インライン** されるので実行時オーバーヘッドゼロ
 
-### 主要ヘッダ
+デメリット:
 
-#### サーバー → ブラウザ（応答）
+- 切り替えに **再ビルド + デプロイ** が必要（瞬時には変えられない）
+- ユーザー単位で出し分けできない
+- A/B テストには使えない
 
-| ヘッダ | 内容 |
+「**動作確認用 / 開発中の機能を本番に隠す**」程度なら環境変数で十分。**運用で柔軟に切り替えたい** なら次のステップへ。
+
+### 中規模実装: 設定をリモート管理
+
+ビルドし直さずに切り替えたいなら、**フラグの値を外部から取得** します。
+
+```ts
+// utils/flags.ts
+type Flags = { newCheckout: boolean; aiSummary: boolean };
+
+let cached: Flags | null = null;
+
+export async function getFlags(): Promise<Flags> {
+  if (cached) return cached;
+  const res = await fetch("https://api.example.com/flags", { cache: "no-store" });
+  cached = await res.json();
+  return cached!;
+}
+```
+
+```tsx
+// app/page.tsx
+import { getFlags } from "@/utils/flags";
+
+export default async function Home() {
+  const flags = await getFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
+```
+
+API のバックエンドは:
+
+- 自前のテーブル（Postgres / Redis）
+- **Vercel Edge Config**（Vercel 公式の超低遅延 KV）
+- Cloudflare KV / R2
+
+Vercel Edge Config の例:
+
+```ts
+import { get } from "@vercel/edge-config";
+
+const newCheckout = await get<boolean>("newCheckout");
+```
+
+**ms 単位で読める** ので、ページレンダリングの先頭で読んでも遅くなりません。
+
+### ユーザーに紐付くロールアウト
+
+「10% に出す」「特定の社員だけに出す」を実現するには **ユーザー識別子** が要ります。
+
+```ts
+function isFeatureEnabled(userId: string, percent: number): boolean {
+  // ユーザー ID をハッシュ → 0〜99 にマップ
+  const hash = simpleHash(userId) % 100;
+  return hash < percent;
+}
+
+const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
+```
+
+ハッシュベースだと、**同じユーザーは毎回同じ結果**（再現性）が得られます。「今回は ON、次回は OFF」を防げる。
+
+### SaaS の選択肢
+
+機能が複雑になると自前は辛いので SaaS を使います。
+
+| サービス | 特徴 |
 |---|---|
-| `Access-Control-Allow-Origin` | 許可するオリジン（または `*`） |
-| `Access-Control-Allow-Methods` | 許可するメソッド |
-| `Access-Control-Allow-Headers` | 許可するリクエストヘッダ |
-| `Access-Control-Allow-Credentials` | Cookie / Authorization を含むリクエストを許可するか |
-| `Access-Control-Expose-Headers` | JS から読めるレスポンスヘッダの追加リスト |
-| `Access-Control-Max-Age` | プリフライトのキャッシュ秒 |
+| **LaunchDarkly** | エンタープライズ標準。機能フラグ + 実験機能 + 監査ログ。価格は高め |
+| **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
+| **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
+| **Flagsmith** | OSS / セルフホスト可能 |
+| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
+| **PostHog Feature Flags** | Analytics と統合 |
 
-#### ブラウザ → サーバー（リクエスト）
+#### LaunchDarkly の最小例
 
-| ヘッダ | 内容 |
-|---|---|
-| `Origin` | リクエスト元オリジン（**ブラウザが自動付与、JS から偽装不能**） |
-| `Access-Control-Request-Method` | プリフライト時の本来のメソッド |
-| `Access-Control-Request-Headers` | プリフライト時の本来のヘッダ |
+```bash
+npm install launchdarkly-react-client-sdk
+```
 
-### Cookie / 認証ヘッダを含めるには
+```tsx
+import { withLDProvider, useFlags } from "launchdarkly-react-client-sdk";
 
-デフォルトで `fetch` は **クロスオリジンで Cookie を送らない**。送る場合は **両側に追加設定** が必要です。
+function App() {
+  const flags = useFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
 
-#### クライアント側
+export default withLDProvider({
+  clientSideID: process.env.NEXT_PUBLIC_LD_CLIENT_ID!,
+  context: { kind: "user", key: "user-123", email: "user@example.com" },
+})(App);
+```
 
-```js
-fetch("https://api.example.com/me", {
-  credentials: "include",   // Cookie / Authorization を送る
+管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
+
+> **補足: 環境ごとに SDK key を分ける**: フラグ SaaS では **Production / Preview / Development それぞれに別の SDK key を発行** できます。同じ key を全環境で使い回すと、Preview デプロイの動作確認が **本番フラグの評価ログを汚す**、A/B テストの母数に開発者の挙動が混ざる、本番フラグを誤って Preview から ON にしてしまう、といった事故になります。Vercel なら `Settings → Environment Variables` で `NEXT_PUBLIC_LD_CLIENT_ID` を **Production / Preview / Development の 3 つに分けて設定する** のが定石です。
+
+#### GrowthBook の最小例
+
+```bash
+npm install @growthbook/growthbook-react
+```
+
+```tsx
+import { GrowthBook, GrowthBookProvider, useFeatureIsOn } from "@growthbook/growthbook-react";
+
+const gb = new GrowthBook({
+  apiHost: "https://cdn.growthbook.io",
+  clientKey: process.env.NEXT_PUBLIC_GB_CLIENT_KEY,
+  attributes: { id: currentUser.id },
 });
+
+await gb.loadFeatures();
+
+function NewCheckoutGuard() {
+  const enabled = useFeatureIsOn("new-checkout");
+  return enabled ? <NewCheckout /> : <LegacyCheckout />;
+}
+
+<GrowthBookProvider growthbook={gb}>
+  <NewCheckoutGuard />
+</GrowthBookProvider>
 ```
 
-`credentials` の値:
+### A/B テストとの関係
 
-- `"omit"`: 送らない（デフォルトのクロスオリジン）
-- `"same-origin"`: 同一オリジンの時だけ送る（デフォルトの同一オリジン）
-- `"include"`: 常に送る（クロスオリジンでも）
+フィーチャーフラグは「**ON か OFF か**」、A/B テストは「**A 案と B 案、どちらの効果が高いか**」を測るもの。
 
-#### サーバー側
-
-```
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Credentials: true
-```
-
-**重要な制約**:
-
-- `Allow-Credentials: true` の時、`Allow-Origin: *` は **使えない**。**具体的なオリジン** を返す必要がある
-- `Access-Control-Allow-Origin` に複数のオリジンは並べられない（`*` か **1 つだけ**）
-
-複数許可したい場合は **リクエストの Origin を見て動的に返す**:
+実装は近く、フラグ系 SaaS は両方こなします。
 
 ```ts
-const allowed = [
-  "https://my-site.example",
-  "https://staging.example",
-  "http://localhost:3000",
-];
+// バリアント割当
+const variant = useExperiment("checkout-flow"); // "control" or "v2"
 
-export async function GET(req: Request) {
-  const origin = req.headers.get("Origin") ?? "";
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (allowed.includes(origin)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Vary", "Origin");
-  }
-  return new Response(JSON.stringify({ ok: true }), { headers });
-}
+return variant === "v2" ? <NewCheckout /> : <LegacyCheckout />;
 ```
 
-`Vary: Origin` を入れると **CDN がオリジン別にキャッシュ** してくれます。これがないと、別オリジンのキャッシュを別の人に返してしまう事故が起きます。
+A/B テストは **統計的な有意差** の判定が必要なので、SaaS の機能（Bayesian / Frequentist のテスト統計）を活用します。
 
-### Cookie 側の `SameSite`
+### Kill Switch（緊急停止）
 
-「クロスオリジンで Cookie を送る」には Cookie 側の **`SameSite`** 属性も `None`（+ `Secure`）でないといけません。
+フィーチャーフラグの **大きな価値** がこれ。本番で問題が起きた時に **コードを巻き戻さず** に機能を即 OFF にできる。
 
-```
-Set-Cookie: session=abc; SameSite=None; Secure; HttpOnly; Path=/
-```
+- 「決済 v2 を ON にしたら障害」→ 管理画面で OFF に
+- 「新検索が API を叩きすぎ」→ OFF に
 
-- `SameSite=Strict`: クロスサイトには絶対送らない
-- `SameSite=Lax`: トップレベルナビゲーションでは送る（デフォルト）
-- `SameSite=None`（+ Secure）: クロスサイトでも送る（同意必要）
+ロールバック（git revert + 再デプロイ）が **数分** かかるのに対し、フラグ OFF は **数秒**。これが本番運用の安心感に直結します。
 
-これをセットで考えないと、CORS 設定だけ整えても **Cookie が飛ばずログイン状態が維持されない** 事故になります。
+### フラグの寿命管理
 
-### Next.js / Express での設定例
+フラグは増えると **コードが if 地獄** になります。**寿命を管理** する習慣が大事。
 
-#### Next.js（Route Handler）
-
-```ts
-// app/api/posts/route.ts
-import { NextResponse } from "next/server";
-
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "https://my-site.example",
-];
-
-function corsHeaders(origin: string | null): HeadersInit {
-  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "3600",
-    "Vary": "Origin",
-  };
-  // 許可されていないオリジンには Allow-Origin ヘッダ自体を返さない
-  // （空文字を返すとブラウザは「許可なし」だがプロキシ / CDN のキャッシュ汚染源になる）
-  if (isAllowed) {
-    headers["Access-Control-Allow-Origin"] = origin!;
-  }
-  return headers;
-}
-
-export async function OPTIONS(req: Request) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
-
-export async function GET(req: Request) {
-  return NextResponse.json({ posts: [] }, {
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
-```
-
-#### Express の `cors` パッケージ
-
-```js
-import cors from "cors";
-
-app.use(
-  cors({
-    origin: ["https://my-site.example", "http://localhost:3000"],
-    credentials: true,
-    maxAge: 3600,
-  }),
-);
-```
-
-### よくある CORS エラーと原因
-
-ブラウザのコンソールに出るメッセージ別の対処。
-
-#### `No 'Access-Control-Allow-Origin' header is present on the requested resource`
-
-→ サーバーがそもそも CORS ヘッダを返していない / OPTIONS で 4xx を返している。サーバー側設定を見直す。
-
-#### `The 'Access-Control-Allow-Origin' header has a value 'X' that is not equal to the supplied origin`
-
-→ `Allow-Origin` が **間違ったオリジン** を返している。動的に Origin を見て一致するものを返す。
-
-#### `The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'`
-
-→ `credentials: "include"` の時は **`*` ではなく具体的オリジン** を返す。
-
-#### `Method PUT is not allowed by Access-Control-Allow-Methods`
-
-→ `Allow-Methods` に PUT を追加。OPTIONS の応答に必ず含める。
-
-#### `Request header 'X-Custom' is not allowed by Access-Control-Allow-Headers`
-
-→ `Allow-Headers` にカスタムヘッダを追加。
-
-#### `Cookie が送られない`
-
-→ クライアント側 `credentials: "include"`、サーバー側 `Allow-Credentials: true`、Cookie の `SameSite=None; Secure` の **3 点セット** を確認。
-
-### CORS が要らないケース
-
-- **同一オリジンへのリクエスト**（`/api/...` のような相対パス）
-- **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
-- **サーバー → サーバー**（fetch がブラウザを通らない）
-
-「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
-
-### CORB / CORP / COEP / COOP
-
-似た名前の仕組みが他にもあります。混同しないように整理:
-
-| 名前 | 役割 |
+| フラグの種類 | 寿命の目安 |
 |---|---|
-| **CORS** | クロスオリジンレスポンスを **JS に読ませるか** |
-| **CORB**（Cross-Origin Read Blocking） | ブラウザが Spectre 対策で内部的に行うレスポンス遮断 |
-| **CORP**（`Cross-Origin-Resource-Policy`） | リソース側が **誰に埋め込まれるか** を制限 |
-| **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
-| **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
+| Release flag（新機能の段階公開） | 公開完了後すぐ削除 |
+| Experiment flag（A/B テスト） | 結果が出たら削除 |
+| Ops flag（緊急停止用） | 長期保存 |
+| Permission flag（権限による出し分け） | 永続 |
 
-通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
+「**Release flag は公開後 2 週間で削除**」のようなルールを決めて、定期清掃します。
+
+#### lint で検出
+
+GrowthBook / LaunchDarkly などの SaaS は「**コードに残っているフラグ一覧**」を検出する CLI を提供しています。CI で「3 ヶ月使われていないフラグ」を warning 出力するのが有効。
+
+### サーバー / クライアント / Edge
+
+Next.js のような SSR / RSC 環境では「**フラグをどこで評価するか**」が重要です。
+
+| 場所 | 例 |
+|---|---|
+| **Server Component** | `await getFlag()` を直接呼ぶ。SSR でフラグ反映 |
+| **Edge Middleware** | リクエストヘッダで分岐し、A/B 用に URL を書き換え |
+| **Client Component** | `useFlag()` フックでクライアントサイド分岐。**ハイドレーション後の表示揺れ** に注意 |
+
+クライアント側だけで分岐すると、ハイドレーションの瞬間に「**ON → OFF のチラつき**」が出ることがあります。なるべく **サーバー側で確定** させて RSC として配るのが安全。
+
+### よくある失敗
+
+#### 1. フラグの ON / OFF が複雑になりすぎる
+
+`if (flag1 && (flag2 || flag3) && !flag4) { ... }` のような状態は **テスト不可能**。フラグは独立に動かす設計を。
+
+#### 2. デフォルト値の事故
+
+ネットワークが落ちた時 / API 失敗時の **fallback 値** を必ず決める。
+
+```ts
+const enabled = (await getFlag("newCheckout")) ?? false; // 失敗時は OFF
+```
+
+#### 3. クライアント露出
+
+「管理画面用フラグ」をクライアントから読めるようにすると、**敵対的なユーザーが ON にしてしまう** 可能性がある。**サーバー側で評価** が原則。
+
+#### 4. 削除されないフラグ
+
+書いたまま忘れて、**コードが永遠に if で分岐**。定期的な清掃を。
 
 ## 演習
 
 ### ゴール
 
-- 自前 API に対して CORS エラーを **出してから直す** 流れを体験する
-- プリフライトの OPTIONS が飛ぶことを観察する
+- 環境変数ベースのフラグから始め、リモート管理ベースに育てる
+- ユーザー ID ベースの 10% ロールアウトを実装する
 
-### 手順 1: API サーバー（Hono）
-
-```bash
-mkdir cors-server
-cd cors-server
-npm init -y
-npm install hono @hono/node-server
-```
-
-`server.ts`:
-
-```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-
-const app = new Hono();
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-
-serve({ fetch: app.fetch, port: 4000 });
-console.log("API on http://localhost:4000");
-```
+### 手順 1: 新規プロジェクト
 
 ```bash
-npx tsx server.ts
+npx create-next-app@latest flags-sample --ts --app
+cd flags-sample
 ```
 
-### 手順 2: クライアント（別ポート）
+### 手順 2: 環境変数フラグ
 
-別ターミナルで:
+`.env.local`:
 
-```bash
-npm create vite@latest cors-client -- --template vanilla-ts
-cd cors-client
-npm install
-npm run dev
+```
+NEW_HOMEPAGE=true
 ```
 
-`src/main.ts`:
+`app/page.tsx`:
 
-```ts
-async function load() {
-  const res = await fetch("http://localhost:4000/posts");
-  const data = await res.json();
-  document.body.textContent = JSON.stringify(data);
+```tsx
+export default function Home() {
+  const newHomepage = process.env.NEW_HOMEPAGE === "true";
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
+    </main>
+  );
 }
-load();
 ```
 
-ブラウザで `http://localhost:5173`（Vite のデフォルトポート）を開くと、コンソールに **CORS エラー** が出るはずです。
+`.env.local` の値を `false` に変えて再起動すると、表示が切り替わります。
 
-```
-Access to fetch at 'http://localhost:4000/posts' from origin 'http://localhost:5173' has been blocked by CORS policy:
-No 'Access-Control-Allow-Origin' header is present on the requested resource.
-```
+### 手順 3: ユーザー ID ベースのロールアウト
 
-### 手順 3: サーバーで CORS を許可
-
-`server.ts`:
+`utils/rollout.ts`:
 
 ```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-import { cors } from "hono/cors";
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h;
+}
 
-const app = new Hono();
-
-app.use(
-  "*",
-  cors({
-    origin: ["http://localhost:5173"],
-    credentials: true,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    maxAge: 3600,
-  }),
-);
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-app.put("/posts/:id", (c) => c.json({ ok: true }));
-
-serve({ fetch: app.fetch, port: 4000 });
+export function isInRollout(userId: string, percent: number): boolean {
+  return hash(userId) % 100 < percent;
+}
 ```
 
-再起動するとクライアントから読めるようになります。
+`app/page.tsx`:
 
-### 手順 4: プリフライトを観察
+```tsx
+import { isInRollout } from "@/utils/rollout";
 
-PUT を呼ぶ:
+const FAKE_USERS = ["user-1", "user-2", "user-3", "user-4", "user-5"];
+
+export default function Home() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>10% ロールアウトのデモ</h1>
+      <ul>
+        {FAKE_USERS.map((id) => (
+          <li key={id}>
+            {id}: {isInRollout(id, 10) ? "ON" : "OFF"}
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
+
+10% に絞ると **ほとんどの user が OFF**、50% にすると半々、と **再現性** を持って分かれることを確認します。
+
+### 手順 4: フラグを集約する
+
+`utils/flags.ts`:
 
 ```ts
-await fetch("http://localhost:4000/posts/1", {
-  method: "PUT",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ title: "updated" }),
-});
+import { isInRollout } from "./rollout";
+
+export type Flags = {
+  newCheckout: boolean;
+  aiSummary: boolean;
+};
+
+export function getFlags(userId: string): Flags {
+  return {
+    newCheckout: process.env.NEW_CHECKOUT === "true" && isInRollout(userId, 10),
+    aiSummary: process.env.AI_SUMMARY === "true",
+  };
+}
 ```
 
-DevTools の Network タブで:
+`app/dashboard/page.tsx`:
 
-1. まず **OPTIONS** が飛ぶ
-2. 200 / 204 が返る
-3. その後 **PUT** が飛ぶ
+```tsx
+import { getFlags } from "@/utils/flags";
 
-を確認します。
+export default function Dashboard() {
+  const flags = getFlags("user-current");
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Dashboard</h1>
+      {flags.newCheckout && <p>新チェックアウト ON</p>}
+      {flags.aiSummary && <p>AI 要約 ON</p>}
+    </main>
+  );
+}
+```
 
 ### 期待出力
 
-- 最初は CORS エラー
-- サーバーで許可してから読める
-- PUT 時に **OPTIONS → PUT** の 2 段階のリクエストが見える
+- `.env.local` の値を変えて再起動すると、`new` / `old` が切り替わる
+- ユーザー ID 別に ON / OFF が **再現性** を持って決まる
+- フラグを集約すると、ページごとの分岐が読みやすくなる
 
 ### 変える
 
-- `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
-- `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
-- `allowOrigins` に `*` を入れると、`credentials` を使う場合だけエラー（仕様違反）
+- 5%、25%、50%、100% に変えて、ロールアウトの比率を実感する
+- ハッシュ関数を `Math.random()` に変えると **同じユーザーで結果がバラつく** ことを確認（NG パターン）
+- フラグ評価を Server Component に閉じ込めて、クライアントには結果だけ渡す
 
 ### 自分で書く（任意）
 
-- Next.js の Route Handler で同じ CORS 設定を再現する
-- `SameSite=None; Secure` の Cookie を使ってログインを成立させる
-- バックエンドプロキシ（Next.js の `/api/proxy`）を立てて、CORS を消す構成にする
+- Vercel Edge Config を使ってフラグをリモート管理にする
+- GrowthBook の SDK を入れて、UI で % を変えて即時反映を体験する
+- A/B テスト用の variant 割当を実装し、analytics に variant をタグ付けして送る
 
 ## まとめ
 
-- CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
-- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
-- 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
-- **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
-- **Cookie の `SameSite=None; Secure`** とセットで考える
-- 動的に Origin を見て返す時は **`Vary: Origin`** をつけて CDN を安全に
-- エラーメッセージから原因を特定できる定型パターンを覚える
-- 「バックエンドプロキシで CORS を消す」も実用解
+- フィーチャーフラグは **デプロイと機能公開を分離** する仕組み
+- 最小実装は **環境変数 1 つ**。柔軟性を上げたければリモート管理（Edge Config / DB）
+- **ハッシュベース** のロールアウトで再現性を保つ
+- SaaS は LaunchDarkly / **GrowthBook** / Statsig / Flagsmith / Vercel + PostHog など
+- **Kill Switch** で本番障害をビルドなしに止められる価値が大きい
+- A/B テストはフラグの仲間。SaaS は両方こなす
+- フラグは増える → **寿命を管理して定期清掃**
+- Server / Edge で評価して **クライアントのチラつき** を避ける

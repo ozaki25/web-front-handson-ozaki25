@@ -1,398 +1,415 @@
-# lesson108: Git の基本操作
+# lesson106: ESLint / Prettier / Biome
 
 ## ゴール
 
-- Git が「ファイルの履歴を残す」道具であることを説明できる
-- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
-- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
-- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
-- `.gitignore` でコミットしないファイルを除外できる
-- マージコンフリクトの解消手順を 1 度経験する
+- Lint と Format が **役割の異なる別物** であることを理解する
+- ESLint の flat config（`eslint.config.js`）の最小形を読める
+- Prettier との連携で衝突しない設定を書ける
+- Biome がこの 2 役を **1 ツール** で 35x 速く処理することを理解する
+- 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
+- VS Code の保存時 autofix で「書きながら直る」体験を得る
 
 ## 解説
 
-### Git とは
+### Lint と Format は別物
 
-**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
+混同しがちですが、役割が違います。
 
-なぜ必要か:
+| ツール | 守備範囲 |
+|---|---|
+| **Lint**（ESLint） | コードの **品質** チェック。バグの種 / アンチパターン / a11y 違反 / 未使用変数を検知 |
+| **Format**（Prettier） | コードの **見た目** を整える。インデント / クォート / 改行位置 |
 
-- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
-- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
-- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
-- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
+ESLint は「未使用変数があるよ」「`any` 型は避けて」と教える。Prettier は「シングルクォートに統一して、80 文字で改行して」と整える。両方やると初めて綺麗で安全なコードベースになります。
 
-2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
+歴史的には ESLint だけで両方やる時代もありましたが、**役割を分ける** のが現代の合意。最近はさらに **Biome** という「両方を 1 ツールでやる」次世代の選択肢が出てきました。
 
-### リポジトリ（repository）と作業ディレクトリ
+### ESLint の flat config
 
-- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
-- **作業ディレクトリ**: あなたが今編集しているファイル群
+ESLint v9（2024 年リリース）から **flat config** が既定になり、古い `.eslintrc` 形式は非推奨です。設定ファイルは **`eslint.config.js`**（ESM）になります。
 
-### `git init` で履歴管理を開始
-
-新規プロジェクトを Git 管理下に置くには:
+#### 最小構成（TypeScript + React）
 
 ```bash
-mkdir my-project
-cd my-project
-git init
+npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks
 ```
 
-`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
-
-### 3 つのエリア（変更が辿る道）
-
-Git では変更が次の 3 段階を辿ります。
-
-```
-作業ディレクトリ          ステージング         リポジトリ（履歴）
-（編集中のファイル）  →  （add した変更）  →  （commit した変更）
-       │                      │                      │
-       └─ git add ─────────────                       │
-       └─ git commit -m "..." ────────────────────────┘
-```
-
-- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
-- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
-- **リポジトリ**: `git commit` で履歴に固定された状態
-
-### 基本コマンド
-
-#### `git status`: 今の状態を確認
-
-```bash
-git status
-```
-
-未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
-
-#### `git add`: ステージングに追加
-
-```bash
-git add file.txt        # 1 ファイル
-git add src/            # ディレクトリ全部
-git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
-```
-
-#### `git commit`: 履歴に固定
-
-```bash
-git commit -m "ボタンの色を変更"
-```
-
-`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
-
-#### `git log`: 履歴を見る
-
-```bash
-git log              # 詳しく見る
-git log --oneline    # 1 行ずつ簡潔に
-git log --graph      # ブランチをグラフで
-git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
-```
-
-#### `git diff`: 変更内容を見る
-
-```bash
-git diff              # 作業ディレクトリ vs ステージング
-git diff --staged     # ステージング vs リポジトリ
-git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
-```
-
-### `.gitignore` でコミット対象を絞る
-
-`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
-
-`.gitignore`（プロジェクトルート）:
-
-```
-# 依存パッケージ（巨大、再生成可能）
-node_modules/
-
-# ビルド成果物
-dist/
-build/
-
-# 環境変数（秘匿）。.env* で派生形（.env.local, .env.production.local など）も含めて除外
-.env
-.env.*
-!.env.example
-
-# OS のメタファイル
-.DS_Store
-Thumbs.db
-
-# エディタ
-.vscode/
-.idea/
-```
-
-`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。`.env.example` はテンプレートとしてコミットしたいので `!.env.example` で除外を打ち消しています。
-
-> **補足: `.env` を間違えて push したら revert ではなく secret rotation が先**: `.env` を 1 度でも push してしまうと、`git revert` で履歴を取り消しても **過去のコミットには値が残ったまま**で、git history を遡れば誰でも読めます。**まずやるべきは** 「漏れた値を無効化（rotation）すること」です。API キーは新しいキーに発行し直す、DB のパスワードを変える、トークンを revoke する。GitHub には自動で漏洩を検出する **secret scanning** や、push の時点で止める **push protection** がありますが、自分の責任範囲で値を rotate することが最優先です。履歴自体を消すには `git filter-repo` / `BFG Repo-Cleaner` などのツールが必要で、共有リポジトリでは全員に強制 push の調整が要るため、**「キーは漏れたものとして扱い、すぐ rotate する」のが現実的な初手**です。
-
-### ブランチ: 並行作業の単位
-
-**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
-
-#### ブランチを作って切り替える
-
-```bash
-# 旧来の書き方
-git branch feature/login
-git checkout feature/login
-
-# 現代の書き方（Git 2.23 以降推奨）
-git switch -c feature/login   # -c は「create」
-```
-
-`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
-
-#### ブランチを切り替える
-
-```bash
-git switch main
-git switch feature/login
-```
-
-`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
-
-#### ブランチを一覧
-
-```bash
-git branch          # ローカルブランチ
-git branch -a       # リモート含む全部
-```
-
-### マージ: ブランチを統合
-
-`feature/login` での作業が終わったら、main に統合します。
-
-```bash
-git switch main
-git merge feature/login
-```
-
-これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
-
-### マージコンフリクト
-
-両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
-
-```
-<<<<<<< HEAD
-const message = "こんにちは";
-=======
-const message = "Hello";
->>>>>>> feature/login
-```
-
-このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
+`eslint.config.js`:
 
 ```js
-const message = "Hello, こんにちは";  // 例: 両方を統合
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+
+export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+  },
+  {
+    ignores: ["dist/", "node_modules/"],
+  },
+];
 ```
 
-その後:
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
+  }
+}
+```
+
+`npm run lint` で全ファイルをチェック、`npm run lint:fix` で自動修正できる範囲は直してくれます。
+
+#### よく使うプラグイン
+
+- `typescript-eslint`: TypeScript の型情報を使った高度なチェック
+- `eslint-plugin-react`: React のお作法
+- `eslint-plugin-react-hooks`: フック規則の検証
+- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（7 章「アクセシビリティ」と相性◎）
+- `eslint-plugin-import`: import の順序とパス解決
+
+### Prettier の最小設定
 
 ```bash
-git add path/to/conflicted-file.js
-git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
+npm install -D prettier
 ```
 
-### リモートリポジトリ（GitHub / GitLab）
+`.prettierrc`（プロジェクトルート）:
 
-`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
+```json
+{
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "tabWidth": 2
+}
+```
 
-#### リモートを追加
+`package.json`:
 
-GitHub で空の repo を作って、ローカルから紐付け:
+```json
+{
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}
+```
+
+`.prettierignore` に除外を書きます:
+
+```
+dist/
+node_modules/
+*.min.js
+```
+
+### ESLint と Prettier の衝突を避ける
+
+ESLint にも整形系のルール（インデント / セミコロン）が組み込まれていますが、これが Prettier と衝突します。**`eslint-config-prettier`** を使ってこれらのルールを無効化します。
 
 ```bash
-git remote add origin https://github.com/your-name/your-repo.git
+npm install -D eslint-config-prettier
 ```
 
-`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
+`eslint.config.js` の最後に追加:
 
-#### push: ローカル → リモート
+```js
+import prettierConfig from "eslint-config-prettier";
+
+export default [
+  // ...上記の設定
+  prettierConfig,  // 最後に置いて整形系のルールを上書きで OFF
+];
+```
+
+これで「ESLint は品質、Prettier は見た目」の役割分担が綺麗に成立します。
+
+### VS Code の保存時 autofix
+
+`.vscode/settings.json`（プロジェクトの設定）:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}
+```
+
+これでファイル保存時に:
+
+1. ESLint の自動修正可能な違反が直る
+2. Prettier がコードを整形する
+
+の 2 段階が走ります。「書きながら綺麗になる」体験になり、PR レビューで「インデントが…」と指摘するムダが消えます。
+
+VS Code の拡張は `dbaeumer.vscode-eslint` と `esbenp.prettier-vscode` を入れます。
+
+### Biome: 1 ツールで両方
+
+**Biome** は Rust 製の Lint + Format ツールです。
 
 ```bash
-git push -u origin main
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
+これだけで `biome.json` が生成され、すぐ使えます。
 
-#### pull: リモート → ローカル
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
+```
+
+#### Biome の魅力
+
+- **設定ファイルが 1 つだけ**（`biome.json`）
+- **ESLint + Prettier より 35x 速い**（10000 ファイル: ESLint 45.2s vs Biome 0.8s）
+- **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
+- **Lint と Format の衝突がない**（同じツール内なので）
+- **VS Code 拡張**（`biomejs.biome`）も公式
+
+#### Biome の限界
+
+- TypeScript の **型情報を使う高度なルール**（`no-floating-promises` 等）は ESLint だけが提供
+- 既存 ESLint プラグイン（`jsx-a11y` 等）は使えない
+- カスタムルールが書きづらい
+
+### 2026 年の選び方
+
+#### 新規プロジェクト（greenfield）
+
+**Biome 単独** が最有力候補です。設定が少なく速いので、立ち上げの摩擦が圧倒的に小さい。
 
 ```bash
-git pull origin main
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
+#### 既存プロジェクト（ESLint + Prettier がある）
 
-#### fetch: リモートの内容だけ取得
+**ハイブリッド構成** が現実解:
+
+- **Biome**: フォーマット + 基本 Lint（高速）
+- **ESLint**: 型情報を要する高度なルール + 既存プラグイン
+
+または、コストをかけて Biome に完全移行（手動マイグレーションツールあり）。
+
+#### Lighthouse / a11y 検査も Lint で
+
+ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、7 章「アクセシビリティ」と組み合わせると効果的です。
+
+```js
+// eslint.config.js
+import jsxA11y from "eslint-plugin-jsx-a11y";
+
+export default [
+  // ...
+  jsxA11y.configs.recommended,
+];
+```
+
+これで `<img>` の alt 欠落 / `<button>` の `tabindex="-1"` などが Lint で警告されます。
+
+### Husky + lint-staged で commit 時に自動チェック
+
+「commit する時に Lint / Format を自動実行」して、CI で fail する前に直す仕組みです。
 
 ```bash
-git fetch origin
+npm install -D husky lint-staged
+npx husky init
 ```
 
-リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
+`.husky/pre-commit`:
 
-### よくある初学者のつまずき
-
-1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
-2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
-3. **main で直接作業**: ブランチを切る習慣を最初から
-4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
-
-### 設定の基本
-
-最初の 1 回だけ:
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "you@example.com"
-git config --global init.defaultBranch main
+```sh
+npx lint-staged
 ```
 
-これがないと commit で「誰が」が記録できません。
+`package.json`:
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": ["biome check --write"]
+  }
+}
+```
+
+`git commit` のたびに、ステージングされたファイルだけが対象に Lint + Format されます。**全プロジェクトを毎回チェックしないので速い** のが lint-staged の利点。
 
 ## 演習
 
+> **このレッスンはローカル前提**: VS Code 拡張 + 保存時の自動整形を確認するため、**ローカル環境での Node.js 実行と VS Code 利用を前提** にしています。StackBlitz では VS Code 拡張が動かないので、Biome のコマンドライン実行までは追えますが、エディタ統合の体感はできません。
+
 ### ゴール
 
-- ローカルで Git リポジトリを作って commit を 3 回打つ
-- ブランチを作って別の変更を入れ、main にマージする
-- わざとコンフリクトを起こして解消する
+- Vite + React + TS プロジェクトに **Biome** を導入する
+- VS Code で保存時に自動整形 / 自動修正が走るようにする
+- わざとエラーを入れて、Biome が検知することを確認する
 
-### 途中から始める場合
-
-ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
-
-### 手順 1: リポジトリを初期化
+### 手順 1: 新規プロジェクト
 
 ```bash
-mkdir git-practice
-cd git-practice
-git init
+npm create vite@latest lint-sample -- --template react-ts
+cd lint-sample
+npm install
 ```
 
-### 手順 2: ファイルを作って 1 回目の commit
-
-`README.md`:
-
-```md
-# Git 練習用リポジトリ
-```
+### 手順 2: Biome を導入
 
 ```bash
-git add README.md
-git commit -m "README を追加"
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-### 手順 3: ファイルを増やして 2 回目の commit
+`biome.json` が生成されます。中身は最小設定:
 
-`hello.txt`:
-
-```
-Hello, Git!
-```
-
-```bash
-git status              # 変更が見える
-git add hello.txt
-git commit -m "hello.txt を追加"
-git log --oneline       # 2 件の履歴が見える
-```
-
-### 手順 4: ブランチで作業
-
-```bash
-git switch -c feature/greeting
-# hello.txt を編集 → 「Hello, Git! こんにちは。」に
-git add hello.txt
-git commit -m "挨拶を日本語追記"
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "files": {
+    "ignoreUnknown": false,
+    "ignore": ["node_modules", "dist"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}
 ```
 
-### 手順 5: main に切り替えて、main 側でも変更
+`indentStyle` を `space` に変えたい場合は `"indentStyle": "space", "indentWidth": 2` に。
 
-```bash
-git switch main
-# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」に
-git add hello.txt
-git commit -m "ビックリマーク追加"
+### 手順 3: package.json scripts
+
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
 ```
 
-これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
+### 手順 4: VS Code 設定
 
-### 手順 6: マージ → コンフリクト発生
+`.vscode/settings.json`:
 
-```bash
-git merge feature/greeting
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}
 ```
 
-エラーが出ます:
+VS Code の拡張ストアで `biomejs.biome` をインストールします。
 
-```
-Auto-merging hello.txt
-CONFLICT (content): Merge conflict in hello.txt
-Automatic merge failed; fix conflicts and then commit the result.
-```
+### 手順 5: 動作確認
 
-`hello.txt` を開くと:
+`src/App.tsx` に、わざと整形が崩れたコードを書きます:
 
-```
-<<<<<<< HEAD
-Hello, Git!! ビックリマーク追加
-=======
-Hello, Git! こんにちは。
->>>>>>> feature/greeting
+```tsx
+import {useState}from "react"
+
+export default function App(){
+const[count,setCount]=useState(0)
+const unused = "使ってない";
+return <div><h1>Count: {count}</h1><button onClick={()=>setCount(c=>c+1)}>+1</button></div>
+}
 ```
 
-両方を取り込むよう手動で編集:
+ファイルを保存すると:
 
-```
-Hello, Git!! こんにちは。ビックリマーク追加
-```
+- インデントが揃う
+- 改行が入る
+- 引用符が統一される
+- `unused` 変数が「使われていない」と警告される
 
-```bash
-git add hello.txt
-git commit               # エディタが開く → 自動メッセージのまま保存
-git log --oneline --graph
-```
-
-ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
+ターミナルで `npm run check` を実行すると、すべての違反が一覧されます。`npm run check:fix` で自動修正できる範囲は直されます。
 
 ### 期待出力
 
 ```
-*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
-|\
-| * abcdef0 (feature/greeting) 挨拶を日本語追記
-* | fedcba9 ビックリマーク追加
-|/
-* 7654321 hello.txt を追加
-* 0987654 README を追加
+Checked 5 files in 200ms. No fixes applied.
+Found 1 warning.
+```
+
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [count, setCount] = useState(0);
+  const unused = "使ってない";  // 警告: unused
+  return (
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
+  );
+}
 ```
 
 ### 変える
 
-- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
-- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
-- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
+- `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
+- `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
+- `linter.rules.style.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
-- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
+- 既存の Vite テンプレートに **ESLint + Prettier** を入れて、Biome 構成と比較する
+  - 必要なパッケージ数の違い
+  - 設定ファイルの数の違い
+  - `npm run lint` の所要時間
+- Husky + lint-staged を入れて commit 時に自動 Lint / Format される構成を作る
 
 ## まとめ
 
-- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
-- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
-- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
-- `.gitignore` で `node_modules` / `.env` 等を除外
-- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
-- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
-- リモート: `remote add origin URL` / `push` / `pull` / `fetch`
+- **Lint** はコード品質、**Format** はコード整形。役割が違う
+- **ESLint v9** は flat config が既定。`.eslintrc` は非推奨
+- ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
+- VS Code の保存時 autofix で「書きながら綺麗になる」体験
+- **Biome** は Lint + Format を 1 ツール、Rust 製、35x 速い、設定 1 ファイル
+- **新規プロジェクトは Biome 単独** が 2026 年の有力解
+- 既存 ESLint 資産を活かすなら **Biome（基本）+ ESLint**（型情報を要するルール） のハイブリッド
+- `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
+- Husky + lint-staged で commit 時の自動 Lint / Format

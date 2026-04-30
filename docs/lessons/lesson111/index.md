@@ -1,483 +1,329 @@
-# lesson111: CI/CD パイプラインの設計
+# lesson109: GitHub の PR とコードレビュー
 
 ## ゴール
 
-- 「CI」と「CD」を正しく区別して語れる
-- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
-- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
-- Lighthouse CI で速度劣化を **PR 単位** で検知できる
-- Vercel の **Preview Deployment** とテストを連携できる
-
-::: tip 前提
-このレッスンは「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は「GitHub Actions で CI」を参照してください。
-:::
+- GitHub と Git の関係を区別して説明できる
+- リモートリポジトリを作成し、ローカル → GitHub に push できる
+- ブランチで作業 → Pull Request（PR）作成 → レビュー → マージの流れを理解する
+- 良いコミットメッセージと PR タイトルの書き方を知る
+- マージ戦略（merge / squash / rebase）の違いを 1 行で言える
+- ブランチ保護ルールの目的を説明できる
+- セルフホストではなく GitHub を選ぶ理由を 1 つ挙げられる
 
 ## 解説
 
-### CI と CD の違い
+### Git と GitHub は別物
 
-| 略 | 正式名称 | やること |
-|---|---|---|
-| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
-| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
+混同されがちですが:
 
-「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
+- **Git**: バージョン管理ツール（`git` コマンド本体）
+- **GitHub**: Git リポジトリをホスティングする SaaS。PR / Issue / Actions / Projects 等の協業機能付き
 
-### パイプラインの基本構成
+似たサービスに **GitLab** / **Bitbucket** / **Codeberg** などがありますが、2026 年時点でデファクトは GitHub です。本コースも GitHub を前提にします。
 
-```
-push / PR
-   ↓
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
-└─────────┘  └─────────┘  └─────────┘
-        ↓        ↓        ↓
-        └────────┴────────┘
-                   ↓
-              ┌─────────┐
-              │  Build  │
-              └─────────┘
-                   ↓
-              ┌─────────┐
-              │ Deploy  │  ← main にマージされた時のみ
-              └─────────┘
-```
+### リモートリポジトリを作る
 
-ポイント:
+#### 1. GitHub で空の repo を作成
 
-- **lint / test / typecheck は並列**（独立しているので速い）
-- **build は依存** が解決した後（手戻りを早く検知）
-- **deploy は最後** にする
-- **PR では deploy しない**（preview deployment は別フロー）
+1. <https://github.com/new> にアクセス
+2. **Repository name** を入力（例: `my-todo-app`）
+3. **Public / Private** を選択
+4. **Initialize this repository** のチェックは **すべて外す**（後でローカルから push するため）
+5. **Create repository**
 
-### GitHub Actions の最小パイプライン
+#### 2. ローカルから push
 
-`.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm test
-
-  build:
-    needs: [lint, typecheck, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run build
-```
-
-`needs:` で **前のジョブが成功した時だけ** 次に進みます。
-
-### キャッシュで速くする
-
-毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
-
-#### `actions/cache` で任意のディレクトリ
-
-```yaml
-- uses: actions/cache@v4
-  with:
-    path: |
-      ~/.npm
-      .next/cache
-    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
-    restore-keys: |
-      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
-```
-
-Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
-
-::: warning キャッシュの落とし穴
-キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
-:::
-
-### マトリクスビルド
-
-複数の Node.js バージョン / OS で同時にテストする時に便利。
-
-```yaml
-test:
-  runs-on: ${{ matrix.os }}
-  strategy:
-    matrix:
-      os: [ubuntu-latest, macos-latest, windows-latest]
-      node: [20, 22]
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: ${{ matrix.node }} }
-    - run: npm ci
-    - run: npm test
-```
-
-これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
-
-### 並列の使いどころ
-
-- **Lint / Typecheck / Test を並列に**
-- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
-- **Storybook ビルドを別ジョブに**
-- **Cypress / Playwright を shard** で分割
-
-シャーディング例（Playwright）:
-
-```yaml
-strategy:
-  fail-fast: false
-  matrix:
-    shard: [1, 2, 3, 4]
-steps:
-  - run: npx playwright test --shard=${{ matrix.shard }}/4
-```
-
-### CD（デプロイ）の戦略
-
-#### Vercel / Netlify / Cloudflare Pages を使うなら
-
-これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
-
-#### 自前でデプロイする時の最小例
-
-```yaml
-deploy:
-  if: github.ref == 'refs/heads/main'
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 22, cache: npm }
-    - run: npm ci
-    - run: npm run build
-    - run: npm run deploy
-      env:
-        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
-```
-
-`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
-
-### Vercel の Preview Deployment と組み合わせる
-
-Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
-
-- レビュアーが **動作確認しながら** レビューできる
-- E2E テストを **本番に近い環境** で走らせられる
-- Lighthouse CI を **プレビュー URL に対して** 実行できる
-
-#### プレビュー URL に E2E を回す
-
-```yaml
-e2e:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 22, cache: npm }
-    - run: npm ci
-    - run: npx playwright install --with-deps
-    - name: Wait for Vercel preview
-      uses: patrickedqvist/wait-for-vercel-preview@v1
-      id: vercel
-      with:
-        token: ${{ secrets.GITHUB_TOKEN }}
-        max_timeout: 300
-    - run: npx playwright test
-      env:
-        BASE_URL: ${{ steps.vercel.outputs.url }}
-```
-
-### Lighthouse CI
-
-PR 単位で **Lighthouse スコアの劣化** を検知します。
+GitHub の repo 作成後の画面に表示される手順をそのまま実行:
 
 ```bash
-npm install -D @lhci/cli
+git remote add origin https://github.com/your-name/my-todo-app.git
+git branch -M main
+git push -u origin main
 ```
 
-`lighthouserc.json`:
+これでローカルのコミットが GitHub に上がります。`-u`（upstream）はそのブランチの追跡先を記録するので、次回からは `git push` だけで OK。
 
-```json
-{
-  "ci": {
-    "collect": {
-      "url": ["https://example.com/"],
-      "numberOfRuns": 3
-    },
-    "assert": {
-      "assertions": {
-        "categories:performance": ["error", { "minScore": 0.9 }],
-        "categories:accessibility": ["error", { "minScore": 0.95 }]
-      }
-    },
-    "upload": {
-      "target": "temporary-public-storage"
-    }
-  }
-}
+### Pull Request（PR）の流れ
+
+PR は「**このブランチの変更を main に取り込みたい**、レビューしてください」という依頼書です。現代の開発フローでは **直接 main に push する代わりに** PR を経由するのが基本です。
+
+#### 典型的なフロー
+
+```
+1. ローカルでブランチ作成: git switch -c feature/add-login
+2. 変更してコミット (1 件 or 複数件)
+3. ブランチを GitHub に push: git push -u origin feature/add-login
+4. GitHub で PR を作成（main ← feature/add-login）
+5. レビュアーがコードをチェック、コメント、修正依頼
+6. 必要に応じて修正コミットを追加 push（PR は自動更新）
+7. レビュー承認（Approve）
+8. main にマージ
+9. ブランチを削除（GitHub の UI からワンクリック）
 ```
 
-GitHub Actions で:
+#### PR の作り方
 
-```yaml
-lighthouse:
-  needs: build
-  runs-on: ubuntu-latest
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: 22, cache: npm }
-    - run: npm ci
-    - run: npx lhci autorun
+`git push` 後に GitHub のリポジトリページを開くと、**「Compare & pull request」** ボタンが出ます。または:
+
+- リポジトリの **Pull requests** タブ → **New pull request**
+- ベースブランチ（マージ先）= `main`、比較ブランチ（変更元）= `feature/add-login`
+- タイトルと説明を書く → **Create pull request**
+
+### 良いコミットメッセージ・PR タイトル
+
+#### コミットメッセージ
+
+**Why**（なぜ）を中心に書きます。**What**（何）はコードを見れば分かるので最小限で。
+
+NG:
+
+```
+修正
+変更
+fix
 ```
 
-スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
+OK:
 
-### シークレットの取り扱い
-
-- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
-- workflow ファイルに **平文で書かない**
-- **fork からの Pull Request** に対する `pull_request` トリガーでは **secrets は読めません**（空文字列になります）。これは「fork してきた攻撃者が悪意ある workflow を入れて secrets を盗む」サプライチェーン攻撃を防ぐためです。CI で secrets が必要な処理は「自分のリポジトリ内のブランチからの PR」だけで動くように分けます
-- `pull_request_target` を使うと fork PR でも secrets が読めますが、**fork の悪意あるコードがそのまま走るため極めて危険** です。利用は「ラベル付けや welcome コメント等、コードを実行しない処理に限る」のが鉄則です
-
-### 環境（Environment）の活用
-
-`environment: production` を指定すると:
-
-- Required reviewers（**承認が必要**）
-- Wait timer（**N 分待つ**）
-- Branch policy（**main 限定**）
-- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
-
-を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
-
-```yaml
-deploy-prod:
-  environment: production
-  runs-on: ubuntu-latest
-  steps: ...
+```
+Login ボタンの色をブランドカラーに統一
+useEffect のクリーンアップ漏れで起きていたメモリリークを修正
+ヘッダーのレスポンシブ対応（600px 以下で縦並び）
 ```
 
-### 再利用可能な workflow
+書式は **1 行目 50 文字以内** + **空行** + 詳細。最近は **Conventional Commits**（`feat:` / `fix:` / `docs:` などの prefix）も人気です。
 
-組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
+```
+feat(auth): magic link ログインを追加
 
-```yaml
-# .github/workflows/_node-ci.yml（呼ばれる側）
-on:
-  workflow_call:
-    inputs:
-      node-version: { type: string, default: "20" }
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: ${{ inputs.node-version }}, cache: npm }
-      - run: npm ci
-      - run: npm run lint && npm run test
+メール経由のワンタイム URL でログインできるようにする。
+パスワード認証は次のリリースで非推奨化する予定。
 ```
 
-```yaml
-# 呼び出す側
-jobs:
-  ci:
-    uses: my-org/.github/.github/workflows/_node-ci.yml@main
-    with:
-      node-version: "22"
+#### PR タイトル
+
+PR タイトルもコミットメッセージと同じ書き方が良いです。マージ後のコミット履歴に残るので、後から検索できる文言を選びます。
+
+PR 説明（本文）は **「何を変えたか」「なぜ」「どうテストしたか」** の 3 つを書くのが定番。テンプレート（`.github/pull_request_template.md`）を用意するチームも多いです。
+
+### コードレビュー
+
+#### レビュアーの観点
+
+- **動くか**: ローカルで動かして確認できれば理想
+- **読めるか**: 半年後の自分が読んで意味が通るか
+- **テストがあるか**: 重要なロジックに自動テストが付いているか
+- **影響範囲**: 既存機能を壊していないか
+- **セキュリティ**: 入力値検証 / シークレット漏洩 / XSS / SQL インジェクション
+- **パフォーマンス**: 明らかに遅くなる書き方をしていないか
+
+#### コメントの書き方
+
+GitHub の **Files changed** タブで、行ごとに `+` ボタンを押すとインラインコメントが書けます。
+
+良いコメント:
+
+```
+suggestion: ここは Array.from よりも展開構文の方が読みやすそうです
+question: なぜ条件を反転させているか教えてもらえますか？
+nit: 命名は `users` より `userList` の方がチームの規約に合いそうです
+blocking: ここで input をエスケープしないと XSS の余地があります
 ```
 
-### 失敗を早く検知するコツ
+`suggestion` / `question` / `nit`（nitpick = 些細な指摘）/ `blocking`（マージブロッカー）のような **接頭辞** を使うと、レビュアーの意図が明確で議論が早くなります。
 
-- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
-- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
-- **`timeout-minutes`** を設定して暴走を止める
-- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
+GitHub の **Suggested change** 機能を使うと、コードを直接書き換える提案も送れます。レビュイーは 1 クリックで取り込めます。
 
-### コスト管理
+### マージ戦略の 3 種類
 
-GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
+PR の **Merge** ボタンには 3 つのオプションがあります（リポジトリ設定で許可されているものだけ表示）。
 
-- **キャッシュ** で `npm ci` の時間を削る
-- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
-- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
+#### 1. Merge commit（既定）
 
-```yaml
-on:
-  pull_request:
-    paths:
-      - "src/**"
-      - "package*.json"
 ```
+*   Merge pull request #42 from feature/login
+|\
+| * a (feature/login)
+| * b
+|/
+* c (main)
+```
+
+ブランチの履歴が残り、マージ用の追加コミット（`Merge pull request ...`）が作られます。
+
+- 利点: 履歴が完全に残る、PR と main の関係が分かりやすい
+- 欠点: 履歴グラフが複雑になりやすい
+
+#### 2. Squash and merge
+
+```
+* squashed (main) ← feature/login の全 commit を 1 つに圧縮
+* c (main)
+```
+
+PR の全コミットを **1 つに圧縮** して main に合流。
+
+- 利点: main の履歴が線形 + クリーン、1 PR = 1 commit でリバートしやすい
+- 欠点: PR 内の細かい履歴が失われる
+
+最近のチームでは **Squash が既定** になることが多いです。本コースの教材サイトもこの方針です。
+
+#### 3. Rebase and merge
+
+PR のコミットを **そのまま順番に** main の上に積む。マージコミットなし。
+
+- 利点: 完全に線形な履歴
+- 欠点: PR 中のコミットが個別に main に並ぶので、ノイズが多い場合は読みづらい
+
+### ブランチ保護ルール
+
+GitHub の **Settings → Branches → Branch protection rules** で main ブランチに守りを入れます。
+
+典型的な設定:
+
+- **Require a pull request before merging**: main への直接 push を禁止
+- **Require approvals: 1 人以上**: 最低 1 人の Approve を必須化
+- **Require status checks to pass**: CI（Lint / Test / Build）が通らないとマージできない
+- **Require branches to be up to date**: main の最新を取り込んでから merge
+- **Require linear history**: Squash / Rebase 限定にする
+- **Restrict pushes that create matching branches**: 特定ブランチ名の作成を制限
+
+これでチームの誰かがうっかり main に push しても、ブロックしてくれます。
+
+### Issue / Discussions / Projects
+
+GitHub には PR 以外にも協業ツールがあります。
+
+- **Issues**: バグ報告 / 機能要望 / TODO の管理
+- **Discussions**: Q&A / アイデア共有（Issue より柔らかい場）
+- **Projects**: カンバン / ロードマップで Issue / PR を整理
+- **Milestones**: リリース単位で Issue / PR をまとめる
+
+本コースでも、機能追加要望や軽微な修正は Issue → PR の流れで管理しています（過去の commit メッセージにも issue 番号が付いている例があります）。
+
+### `gh` CLI
+
+GitHub の操作をコマンドラインからやる公式ツールです。
+
+```bash
+# インストール（macOS）
+brew install gh
+
+# ログイン（1 回だけ）
+gh auth login
+
+# PR を作成
+gh pr create --title "feat: login を追加" --body "..."
+
+# PR 一覧
+gh pr list
+
+# PR をマージ
+gh pr merge --squash
+```
+
+ブラウザを開かずに操作できるので、慣れると圧倒的に速いです。
 
 ## 演習
 
 ### ゴール
 
-- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
-- キャッシュを効かせて 2 倍速にする
+- ローカルの Git リポジトリを GitHub に push する
+- ブランチで作業 → PR 作成 → 自分でセルフレビュー → マージする
+- ブランチ保護ルールを 1 つ設定する
 
-### 手順 1: ベースのプロジェクト
+### 手順 1: GitHub アカウント準備
 
-```bash
-npm create vite@latest cicd-sample -- --template react-ts
-cd cicd-sample
-npm install
-git init && git add . && git commit -m "init"
-```
+GitHub アカウントを持っていない場合は <https://github.com/> で作成。SSH キーや Personal Access Token も設定しておきます（公式ガイド: <https://docs.github.com/ja/authentication>）。
 
-GitHub にリポジトリを作って push。
-
-### 手順 2: scripts を整える
-
-`package.json`:
-
-```json
-{
-  "scripts": {
-    "dev": "vite",
-    "build": "vite build",
-    "lint": "eslint .",
-    "typecheck": "tsc --noEmit",
-    "test": "vitest run"
-  }
-}
-```
-
-ESLint 設定 / 簡単な test は省略可。
-
-### 手順 3: workflow
-
-`.github/workflows/ci.yml`:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run lint
-
-  typecheck:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run typecheck
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm test
-
-  build:
-    needs: [lint, typecheck, test]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build
-```
-
-### 手順 4: PR を作って動作確認
+### 手順 2: 「Git の基本操作」で作ったリポジトリを push
 
 ```bash
-git checkout -b feature/test
-echo "// test" >> src/App.tsx
-git commit -am "test"
-git push -u origin feature/test
+cd git-practice    # 「Git の基本操作」で作ったディレクトリ
 ```
 
-PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
+GitHub で空 repo（例: `git-practice`）を作成後:
+
+```bash
+git remote add origin https://github.com/your-name/git-practice.git
+git branch -M main
+git push -u origin main
+```
+
+### 手順 3: ブランチで変更 → PR
+
+```bash
+git switch -c feature/colors
+echo "色を変える予定" >> README.md
+git add README.md
+git commit -m "docs: 色変更の予定をメモに追加"
+git push -u origin feature/colors
+```
+
+GitHub のリポジトリページに **「Compare & pull request」** ボタンが出るのでクリック → タイトルと説明を書いて **Create pull request**。
+
+### 手順 4: セルフレビュー
+
+自分で PR の **Files changed** タブを開き、変更を眺めます。気になった行に `+` ボタンでコメントを 1 つ書いてみる（例: `nit: 「予定」より「TODO」の方が一般的かも`）。
+
+### 手順 5: マージ
+
+PR ページ下部の **Merge pull request** → **Squash and merge** を試します。マージ後、`feature/colors` ブランチを削除（**Delete branch** ボタン）。
+
+ローカルでも:
+
+```bash
+git switch main
+git pull origin main
+git branch -d feature/colors    # ローカルブランチも削除
+```
+
+### 手順 6: ブランチ保護を 1 つ設定
+
+リポジトリの **Settings** → **Branches** → **Add rule** で:
+
+- **Branch name pattern**: `main`
+- **Require a pull request before merging** にチェック
+- 保存
+
+これで、これ以降 `main` に直接 push できなくなります。試しに `git push origin main` を直接やろうとすると拒否されます（ブランチ保護を一時解除するか、PR 経由で取り込む必要がある）。
 
 ### 期待出力
 
-- 4 つのジョブが Actions のタブに並ぶ
-- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
-- どれか fail すると build が走らない（`needs:` のおかげ）
+- GitHub にローカルの履歴がそのまま反映される
+- PR 画面で行単位の差分とコメントが表示される
+- Squash でマージすると、main の履歴が線形になる（PR の複数 commit が 1 つに圧縮）
+- main への直接 push が「Branch protection rules: protected branch」のエラーで拒否される
 
 ### 変える
 
-- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
-- マトリクスを使って Node 20 と 22 の両方でテストする
-- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
+- マージ戦略を **Merge commit** に変えてみる（リポジトリ設定で許可）。グラフが分岐 + 合流の形になる
+- PR をマージせず **Close** してみる（後から消したい時の操作）
+- Issues タブで Issue を作り、コミットメッセージに `Closes #1` と書いて push してみる。マージ時に Issue が自動で閉じる
 
-### 自分で書く（任意）
+### 自分で書く
 
-- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
-- Vercel に連携して PR で Preview URL が作られる構成にする
-- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
-- `environment: production` で本番デプロイに承認ステップを入れる
+- リポジトリに `.github/pull_request_template.md` を追加し、PR の説明テンプレートを作る:
+
+  ```md
+  ## 概要
+
+  ## 変更内容
+  -
+  -
+
+  ## テスト
+  - [ ] ローカルで動作確認
+  - [ ] 単体テスト追加 / 更新
+  ```
+
+- `gh` CLI をインストールして、`gh pr create` でブラウザを開かずに PR を作る
 
 ## まとめ
 
-- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
-- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
-- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
-- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
-- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
-- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
-- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
-- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える
+- **Git は道具、GitHub はホスティングサービス**
+- 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
+- コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
+- マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）
+- ブランチ保護ルールで **main への直接 push を禁止 + レビュー必須 + CI 必須**
+- `gh` CLI でコマンドラインからほぼ全操作が可能

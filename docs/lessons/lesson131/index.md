@@ -1,368 +1,591 @@
-# lesson131: AI を前提にした開発（Copilot / Cursor / Claude Code）
+# lesson127: Server Components の設計論
 
 ## ゴール
 
-- 2026 年の **AI コーディングツール** の主要 3 種類を区別できる
-- ツールに **コンテキストを渡す** 仕組み（`CLAUDE.md` / `.cursorrules` / `.github/copilot-instructions.md`）が分かる
-- AI 生成コードの **典型的な落とし穴** を見抜けるようになる
-- 「**AI に任せる仕事 / 人間がやる仕事**」の境界を持てる
-- 学習者として AI を **学習補助** に活かす方法を持つ
+- 「**どこまでサーバー、どこから Client**」の判断軸を持てる
+- データ取得とインタラクションの **分離** が説明できる
+- Server Actions と Client Component の **協調パターン** を書ける
+- よくある設計ミス（巨大 Client Component / 不要なシリアライズ）を避けられる
+- 自分の Next.js プロジェクトで Server / Client の境界設計を整理できる
+
+::: tip 前提
+このレッスンは「Server Component と Client Component」「Server Component でデータ取得」「Server Actions の最小形」の発展編です。基本概念はそれぞれのレッスンで確認してください。
+:::
 
 ## 解説
 
-### 2026 年の前提
+### Server / Client の境界判断
 
-「AI を **使うか / 使わないか**」の議論は 2024〜2025 年で終わりました。**使うのが前提** で、その上で **どう付き合うか** が問われる時代です。
+Next.js App Router では **すべてのコンポーネントがデフォルトで Server Component**。Client Component にしたい時に **`"use client"`** を明示します。
 
-職場でも:
+判断の **基本原則**:
 
-- **個人開発**: AI で初動 1〜2 倍速
-- **小規模チーム**: AI レビュー / テスト生成が定常化
-- **エンタープライズ**: 社内ガードレール付きで全員に配布
+1. **デフォルトは Server**（バンドルから外せて速い）
+2. **状態 / イベントが必要な葉だけ Client**（最小限）
+3. **Client は子に Client / Server を持てるが、Server を import するなら children prop 経由**
 
-新人エンジニアがコードを書く時、隣に「**経験 10 年の同僚が常時付いている**」状態が AI ツールの実態に近い。
+### Client Component が必要な合図
 
-### 主要なツール
+次のいずれかが要るなら Client Component:
 
-#### GitHub Copilot
+- `useState` / `useReducer` で **state を持つ**
+- `useEffect` で **副作用** を行う
+- `onClick` / `onChange` などの **イベントハンドラ**
+- `useRef` / `useContext` などの Hook
+- ブラウザ API（`window` / `localStorage` / `navigator`）
 
-GitHub / OpenAI が提供する **エディタ補完型** AI。
+それ以外は **Server Component に置いた方が良い**:
 
-特徴:
+- データ取得（DB / 外部 API）
+- マークダウンや HTML のレンダリング
+- 認証情報を使う処理（Cookie 読み取り）
+- フォントやレイアウト
 
-- **VS Code / JetBrains / Neovim** などにプラグイン
-- **エディタ内の Tab 補完** が中核
-- **Copilot Chat** で質問もできる
-- GitHub の workflow（PR レビュー / Issue 提案）に統合
+### 「Client Component が大きすぎる」アンチパターン
 
-価格: 個人 月 10 USD 程度、Business / Enterprise プランあり。
+**よくある失敗**: ページ全体を Client Component にしてしまう。
 
-#### Cursor
+```tsx
+// app/page.tsx
+"use client";  // 危険信号
 
-[Cursor](https://www.cursor.com/) は **VS Code フォークの AI ファースト IDE**。
+export default function HomePage() {
+  // すべての処理がブラウザに送られる
+  return (
+    <div>
+      <Header />
+      <Hero />
+      <FeatureList />     {/* 静的でも Client */}
+      <Counter />          {/* これだけ state が必要 */}
+      <Footer />
+    </div>
+  );
+}
+```
 
-特徴:
+**バンドルサイズが膨らむ**、**SEO に悪い**、**ハイドレーション** が遅い。
 
-- VS Code 拡張がそのまま動く
-- **複数ファイルにまたがるリファクタ** が得意
-- **エージェント機能**（Composer）でタスクを自律実行
-- **モデル選択**（Claude / GPT / Gemini）が可能
+### 改善: Client は **葉に閉じ込める**
 
-「**コードを書く専用 IDE**」として人気。
+```tsx
+// app/page.tsx（Server Component）
+import Header from "@/components/Header";
+import Hero from "@/components/Hero";
+import FeatureList from "@/components/FeatureList";
+import Counter from "@/components/Counter";  // Client
+import Footer from "@/components/Footer";
 
-#### Claude Code
+export default function HomePage() {
+  return (
+    <div>
+      <Header />
+      <Hero />
+      <FeatureList />
+      <Counter />
+      <Footer />
+    </div>
+  );
+}
+```
 
-[Claude Code](https://www.anthropic.com/claude-code) は Anthropic 公式の **CLI / IDE / Web 版** の AI コーディング環境。
+```tsx
+// components/Counter.tsx
+"use client";
+import { useState } from "react";
 
-特徴:
+export default function Counter() {
+  const [n, setN] = useState(0);
+  return <button onClick={() => setN(n + 1)}>{n}</button>;
+}
+```
 
-- **CLI**（ターミナル） で動くのが原型
-- **長いコンテキスト**（100 万トークン）と **計画 → 実行** の 2 段階
-- **Agent SDK** でカスタムエージェントを書ける
-- **Hooks** / **Skills** / **MCP** で拡張
-- VS Code 拡張 / Web UI / モバイル / API がそろう
+**Counter だけ** がブラウザに送られ、他は Server で解決される。
 
-このコース自体も **Claude Code を使って書かれて** います（CLAUDE.md がそのコンテキスト）。
+### Server Component から Client Component に **データを渡す**
 
-#### その他
+これは普通に **props で渡す** だけです。**渡せるのは serializable な値のみ**:
 
-| ツール | 特徴 |
+| 渡せる | 渡せない |
 |---|---|
-| **Cody**（Sourcegraph） | コードベース検索を強みに |
-| **Codeium / Windsurf** | 無料枠が手厚い、IDE フォーク版 Windsurf も |
-| **Tabnine** | プライバシー重視 |
-| **JetBrains AI Assistant** | JetBrains 系 IDE と統合 |
-| **Aider** | CLI 寄り、Git ベースの差分管理 |
-| **Replit Agent** | ブラウザ完結で MVP を作る |
+| 文字列 / 数値 / boolean / null / undefined | 関数 |
+| 配列 / プレーンオブジェクト | クラスインスタンス |
+| Date / Map / Set | Symbol（一部例外） |
+| Promise（React 19 以降） | DOM ノード |
 
-「**Copilot で補完、Cursor / Claude Code で実装、Aider / Replit でプロトタイプ**」のような **使い分け** が浸透しています。
-
-### コンテキストを渡す仕組み
-
-AI に **プロジェクトの方針** を伝える定型ファイルが各ツールにあります。
-
-#### `CLAUDE.md`（Claude Code）
-
-リポジトリのルートに置きます。プロジェクトの目的 / 命名規則 / アーキテクチャ / **やってはいけないこと** を書きます。
-
-```markdown
-# CLAUDE.md
-
-## 概要
-- Next.js (App Router) 16
-- TypeScript strict、tsconfig は `@tsconfig/strictest`
-- パッケージマネージャは pnpm
-
-## コーディング規約
-- React のクラスコンポーネントは使わない
-- メモ化（useMemo / useCallback）は React Compiler に任せる
-- API は tRPC（公開 API は別途 OpenAPI）
-
-## やってはいけない
-- グローバル CSS の追加
-- `any` の使用
-- `git push --force` を main に
+```tsx
+// Server Component
+export default async function Page() {
+  const user = await db.user.findFirst();
+  return <UserCard user={user} />; // user はプレーンオブジェクトなら OK
+}
 ```
 
-このコースの `CLAUDE.md` を見ると、**執筆原則 / レッスン構成テンプレート / 避けたい書き方** が書かれています。
+### Client Component から Server Component を **使う**
 
-#### `.cursorrules`（Cursor）
+直接 import はできません。代わりに **`children` prop** で受け取ります。
 
-Cursor の旧形式（`.cursor/rules` の YAML / MD ファイルが新形式）。
+`"use client"` はそのファイルとその依存関係をすべてクライアントバンドルに含める境界線です。Client Component が Server Component を直接 import すると、Server Component のコードもクライアントバンドルに引き込まれてしまいます。`children` 経由で渡すと、Server Component の実行はサーバー側に保たれたまま、描画結果だけがクライアントに渡ります。
 
-```
-- TypeScript で書く
-- React Server Components を優先
-- import path は `@/` のエイリアス
-- テストは Vitest + React Testing Library
-```
+```tsx
+// app/layout.tsx（Server Component）
+import Sidebar from "@/components/Sidebar";          // Client
+import RecentPosts from "@/components/RecentPosts";  // Server
 
-#### `.github/copilot-instructions.md`（Copilot）
-
-GitHub Copilot Workspace / Pull Request 用の指示。
-
-#### Cursor / Claude / Copilot 共通の発想
-
-「**良いプロンプト** ではなく、**良いコンテキスト**」が結果を決めます:
-
-- README / ARCHITECTURE.md を整備しておく
-- ファイル名と関数名で **意図を伝える**
-- **PR テンプレート** に「変更の意図」「影響範囲」を書く
-
-「AI に分かりやすいコード」と「人間に分かりやすいコード」は **同じ方向** です。
-
-### MCP（Model Context Protocol）
-
-[MCP](https://modelcontextprotocol.io/) は Anthropic が公開した「**AI に外部ツールを繋ぐ標準**」。
-
-```
-[ Claude / GPT / Cursor ] ←→ [ MCP サーバー ] ←→ [ 外部システム ]
-                                          ├ GitHub
-                                          ├ Slack
-                                          ├ Datadog
-                                          └ 自社 DB / API
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return (
+    <Sidebar>           {/* Client */}
+      <RecentPosts />   {/* Sidebar は中身を知らずに描画 */}
+      {children}
+    </Sidebar>
+  );
+}
 ```
 
-OpenAI / Google / Anthropic などが採用し、2025〜2026 年で **共通プロトコル** として定着。Claude Code / Cursor / VS Code Copilot などから同じ MCP サーバーを呼べる。
+```tsx
+// components/Sidebar.tsx
+"use client";
 
-「自社の DB / 監視 / Slack を **AI から触れる** ようにする」のは MCP サーバーを書くだけ。
+export default function Sidebar({ children }: { children: React.ReactNode }) {
+  return (
+    <aside>
+      <h2>サイドバー</h2>
+      {children}
+    </aside>
+  );
+}
+```
 
-### AI 生成コードの落とし穴
+「Client Component の中身に Server Component を **slot で挿入する**」発想。Sidebar は中身がServer か Client かを知らず、ただ描画する。
 
-#### 1. **存在しない API を呼ぶ**（ハルシネーション）
+### Server Actions との協調
 
-例: 「Next.js の `getServerSideProps` を App Router で...」のような **古い API の混入**、または **まったく実在しない関数**。
+Server Actions（「Server Actions の最小形」）は **「サーバー上で実行される関数を、クライアントのフォーム送信から直接呼ぶ」** 仕組み。
 
-対策:
+```tsx
+// app/posts/page.tsx
+import { createPost } from "./actions";
 
-- **公式ドキュメントで確認**
-- **TypeScript の型** を信じる（赤字が出るなら間違い）
-- **テストを走らせる**
+export default function NewPostPage() {
+  return (
+    <form action={createPost}>
+      <input name="title" />
+      <textarea name="body" />
+      <button>投稿</button>
+    </form>
+  );
+}
+```
 
-#### 2. **古い慣習** で書く
+```ts
+// app/posts/actions.ts
+"use server";
+import { revalidatePath } from "next/cache";
 
-学習データのカットオフが原因で、**Pages Router 時代** / **React 17 時代** のコードを出すことがある。
+export async function createPost(formData: FormData) {
+  const title = formData.get("title") as string;
+  const body = formData.get("body") as string;
+  await db.post.create({ data: { title, body } });
+  revalidatePath("/posts");
+}
+```
 
-対策:
+#### Client Component から呼ぶ
 
-- `CLAUDE.md` に **「Next.js 16 / React 19 を前提に」** と明記
-- 新機能（Server Actions / Cache Components）を **使うように指示**
-- 出力後に「**最新の構文に書き換えて**」と再依頼
+```tsx
+"use client";
+import { useTransition } from "react";
+import { createPost } from "./actions";
 
-#### 3. **過度な抽象化**
+export default function NewPostForm() {
+  const [pending, startTransition] = useTransition();
 
-「使いまわせるように」と **早すぎる抽象化** をしがち。
+  return (
+    <form
+      action={(formData) => {
+        startTransition(async () => {
+          await createPost(formData);
+        });
+      }}
+    >
+      <input name="title" disabled={pending} />
+      <button disabled={pending}>{pending ? "送信中..." : "投稿"}</button>
+    </form>
+  );
+}
+```
 
-対策:
+`useTransition` で **送信中** の UI を切り替え。Server Component に **戻り値** を返すこともできます。
 
-- 「**3 回出てから抽象化**」をルール化
-- 「**この関数は今 1 回しか使わない、シンプルに**」と明示
+### `useActionState`（旧 `useFormState`）
 
-#### 4. **エラーハンドリングが過剰**
+React 19 / Next.js 16 では `useActionState` で **action の結果を state として** 受け取れます。
 
-存在しないエラーケースに **try / catch** を撒く。
+```tsx
+"use client";
+import { useActionState } from "react";
+import { createPost } from "./actions";
 
-対策:
+const initialState = { ok: false, error: "" };
 
-- 「**入力は信頼してよい**」「**バリデーションは別レイヤで**」と伝える
-- 出力後に **不要な try / catch を削る**
+export default function NewPostForm() {
+  const [state, formAction, pending] = useActionState(createPost, initialState);
 
-#### 5. **テストが抜ける**
+  return (
+    <form action={formAction}>
+      <input name="title" />
+      <button disabled={pending}>投稿</button>
+      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
+      {state.ok && <p>投稿しました</p>}
+    </form>
+  );
+}
+```
 
-「動く」コードを優先して、テストを書かないことがある。
+```ts
+"use server";
+export async function createPost(prev: any, formData: FormData) {
+  try {
+    await db.post.create({ data: {/* ... */} });
+    return { ok: true, error: "" };
+  } catch (e) {
+    return { ok: false, error: "保存失敗" };
+  }
+}
+```
 
-対策:
+「Server Action から **エラーメッセージを返す**」が型安全に書けます。
 
-- 「**実装と一緒にテストも**」と毎回伝える
-- CI で **カバレッジ低下** を検知
+### よくある設計ミス
 
-#### 6. **セキュリティの抜け**
+#### 1. データを Server Component で取って **JSON に詰めて Client Component に丸投げ**
 
-`.env` の値をログ出力 / SQL インジェクション可能な文字列連結など。
+```tsx
+// NG パターン
+export default async function Page() {
+  const posts = await db.post.findMany();  // Server で取得
+  return <PostListClient posts={posts} />; // 全部 Client にバンドル
+}
+```
 
-対策:
+→ 結局すべて JS にシリアライズされて送られる。**せっかくの Server Component の意味が薄れる**。
 
-- **コードレビューで人間が必ず見る**
-- セキュリティ Lint（gitleaks / Snyk）を CI に
-- AI に「**ユーザー入力は信頼しない**」と明示
+改善: **表示は Server で**、操作だけ Client に切り出す。
 
-### 「AI に任せる / 人間がやる」の境界
+```tsx
+// 改善
+export default async function Page() {
+  const posts = await db.post.findMany();
+  return (
+    <ul>
+      {posts.map((p) => (
+        <li key={p.id}>
+          <h2>{p.title}</h2>
+          <p>{p.body}</p>
+          <DeleteButton postId={p.id} />  {/* Client は削除ボタンだけ */}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
 
-#### AI が得意
+#### 2. Server Component の中で Client Component を再描画させたい
 
-- **定型的なコード**（CRUD / フォーム / バリデーション）
-- **テストの追加**（既存仕様から想定）
-- **リファクタリング**（変数名一括 / 抽象化候補）
-- **ドキュメント生成**（既存コードからの README）
-- **エラーメッセージの読み解き**
-- **学習補助**（「`Promise.allSettled` って何？」）
+Server Component の **再実行はナビゲーション / 再検証** がトリガー。「state が変わったので再取得」したい時は:
 
-#### 人間が得意 / 必須
+- **Server Action + `revalidatePath()`**（推薦）
+- **Client 側で fetch**（やむを得ない時）
 
-- **要件の合意**（顧客と話してスコープを決める）
-- **アーキテクチャの選択**（Server Component を使うか / DB を選ぶか）
-- **セキュリティ設計**（権限 / 認証フロー）
-- **パフォーマンス計測 → 改善**（実測しないと分からない）
-- **コードレビュー**（生成コードを **本当に動かして** 検証）
-- **倫理 / コンプライアンス**
+```ts
+"use server";
+export async function deletePost(id: string) {
+  await db.post.delete({ where: { id } });
+  revalidatePath("/posts");  // Server Component を再実行
+}
+```
 
-「**AI が下書き、人間が最終判断**」は今後も変わりません。
+#### 3. Server / Client を混ぜてシリアライズ不能なものを渡す
 
-### 学習者としての AI 活用
+```tsx
+// NG: 関数を渡す
+<ClientComponent onClick={() => doSomething()} />
+```
 
-#### 良い使い方
+→ Server Component から関数は **渡せない**。`onClick` を持つロジックは **Client Component の中** で完結させる。
 
-- **「これは何？」** を聞く（古い記事を読むより速い）
-- **コードを写経 → AI に解説** してもらう
-- **エラーメッセージ** を貼って原因を尋ねる
-- **テストデータ** を作ってもらう
-- **逆方向の質問**「この設計の弱点は？」
+#### 4. `"use client"` の場所を間違える
 
-#### 避けたい使い方
+```tsx
+// app/page.tsx（Server Component）
+"use client";   // ファイルの先頭でないと無効
+```
 
-- **「全部書いて」** で投げる（**学びがゼロ**）
-- **理解せずコピペ**（**動いていてもバグの種**）
-- **「最新の React で〜」だけで詳細を書かない**（**期待値が伝わらない**）
-- **AI のコードを **「公式」と扱う**（**間違いはある**）
+`"use client"` は **ファイルの先頭** に書く必要があります。途中に書いても効きません。
 
-「**自分で 7 割書く → AI で 3 割補強 → 全部読んで理解**」のサイクルが学びを最大化します。
+### `server-only` と `client-only`
 
-### Vibe Coding
+「**意図しない場所で import される事故**」を防ぐ仕組み。
 
-Andrej Karpathy が広めた **Vibe Coding**（2025 年）= 「**雰囲気でプロンプト → AI 実装 → 動けば OK**」のスタイル。プロトタイピングや個人プロジェクトで広く実践されています。
+```ts
+// db.ts
+import "server-only";
 
-注意:
+export const db = /* DB クライアント */;
+```
 
-- **本番の品質には届かない**（テスト / セキュリティ / 性能の検証が抜ける）
-- 個人プロジェクト / MVP には **超有効**
-- 仕事のコードベースに持ち込む時は **必ず人間レビュー**
+これを誤って Client Component から import するとビルド時にエラー。**シークレットの漏洩防止** に有効（「環境変数とシークレット管理」）。
 
-### コミュニティ / チームへの影響
+```ts
+// browser-utils.ts
+import "client-only";
 
-- **ペアプロは AI と** が増える
-- **PR レビューは AI が一次** で、**人間が二次** で深掘り
-- **「AI 不要な深いスキル」** に価値が集中する: 設計 / 仕様詰め / 検証 / コーチング
+export function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
+}
+```
 
-「**AI で代替できる仕事**」と「**できない仕事**」の境界が動き続けるので、**継続的に試して感覚を更新** するしかありません。
+逆も同様。
+
+### Suspense と Loading
+
+データ取得中の UI を **Suspense + Loading UI** で書きます（「Error Boundary と Suspense」「Loading UI と Streaming」と関連）。
+
+```tsx
+// app/posts/page.tsx
+import { Suspense } from "react";
+import PostList from "./PostList";
+import PostListSkeleton from "./PostListSkeleton";
+
+export default function Page() {
+  return (
+    <Suspense fallback={<PostListSkeleton />}>
+      <PostList />
+    </Suspense>
+  );
+}
+```
+
+`PostList` が `await` を含む Server Component なら、待ち時間に **Skeleton が表示** される。**ストリーミング SSR** で各部分が **独立に到着** します。
+
+### `cache()` / `cacheSignal()`
+
+Next.js 16 / React 19 では **同一リクエスト内** のデータをメモ化する `cache()` が安定。`cacheSignal()` は React 19.2 時点で **experimental（実験的）** であり、安定 API になるまでは API が変わる可能性があります。
+
+```ts
+import { cache } from "react";
+
+export const getUser = cache(async (id: string) => {
+  return db.user.findUnique({ where: { id } });
+});
+```
+
+複数の Server Component が `getUser("1")` を呼んでも **DB は 1 回しかヒット** しない。リクエストスコープのメモ化。
+
+### 「全体構造」のテンプレート
+
+経験則で次のように分割します:
+
+```
+app/
+├── layout.tsx                    ← Server（フォント / Provider 設置）
+├── page.tsx                       ← Server
+├── components/
+│   ├── Header.tsx                 ← Server
+│   ├── ThemeToggle.tsx            ← Client（state 必要）
+│   ├── PostList.tsx               ← Server（DB 取得）
+│   ├── PostCard.tsx               ← Server（表示のみ）
+│   ├── DeleteButton.tsx           ← Client（onClick → Action）
+│   └── CommentForm.tsx            ← Client（form + useActionState）
+├── posts/
+│   ├── actions.ts                 ← Server Actions
+│   └── [id]/page.tsx              ← Server
+└── api/
+    └── webhook/route.ts           ← Route Handler
+```
+
+### よくある質問
+
+#### Q: 全部 Client にしてもいいか？
+
+→ **動くけど遅い**。バンドルが膨らみ、ハイドレーションも遅い。最低限「データ取得は Server」を守る。
+
+#### Q: 古い React パターン（Pages Router / `getServerSideProps`）から移行するには？
+
+→ Pages Router の `getServerSideProps` は App Router の **Server Component** に置き換わる。**そのまま Server で `await fetch()`** を書けば良い。
+
+#### Q: Edge Runtime と Node.js Runtime の違いは？
+
+→ **Edge** は軽量・高速だが利用できる API に制限がある、**Node.js** は Node API がまるごと使える。App Router は **Server Component / Route Handler とも Node.js Runtime がデフォルト** で、Edge を使いたいファイルだけ `export const runtime = "edge"` で opt-in する。Next.js 16 では **Middleware も Node.js Runtime を選べる** ようになり、Node API を必要とする処理を Middleware に書きやすくなった。
 
 ## 演習
 
 ### ゴール
 
-- 自分のプロジェクトに `CLAUDE.md` / `.cursorrules` を整える
-- AI 生成コードを **意図的にレビュー** してミスを発見する
-- 学習補助として AI に質問する練習
+- 「ブログ記事一覧 + 投稿フォーム + 削除」を Server / Client の境界を意識して設計する
+- 既存の Client Component を **Server に格上げ** する練習
 
-### 手順 1: `CLAUDE.md` を書く
+### 手順 1: 新規プロジェクト
 
-任意の既存プロジェクトに `CLAUDE.md` を追加します。雛形:
-
-```markdown
-# CLAUDE.md
-
-## プロジェクト概要
-- 簡単な説明
-- 想定ユーザー
-
-## 技術スタック
-- フレームワーク: Next.js 16
-- 言語: TypeScript（strict）
-- スタイル: Tailwind CSS v4
-- パッケージマネージャ: pnpm
-
-## コーディング規約
-- React Server Components を優先
-- 状態管理は最小限（必要なら Zustand）
-- API は tRPC
-
-## ファイル構成
-- src/app/* : App Router
-- src/components/* : 再利用コンポーネント
-- src/lib/* : ユーティリティ
-
-## してはいけない
-- pages/ ディレクトリ（古い）
-- グローバル CSS の追加
-- any の使用
-- console.log を本番に残す
+```bash
+npx create-next-app@latest rsc-design --ts --app
+cd rsc-design
 ```
 
-### 手順 2: AI に「Todo リストを作って」と頼んで観察
+### 手順 2: Server Component で一覧
 
-Claude Code / Cursor / Copilot Chat に依頼:
+`app/page.tsx`:
 
-> Todo を CRUD できる Next.js のページを作ってください
+```tsx
+import DeleteButton from "./DeleteButton";
+import { posts } from "@/data/posts";
 
-出てきたコードを **読み込んで** 評価:
+export default async function Home() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>記事一覧</h1>
+      <ul>
+        {posts.map((p) => (
+          <li key={p.id}>
+            <h2>{p.title}</h2>
+            <p>{p.body}</p>
+            <DeleteButton id={p.id} />
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
 
-- [ ] App Router で書かれているか？
-- [ ] Server Component / Client Component の境界は妥当か？
-- [ ] Server Actions を使っているか？
-- [ ] バリデーション（Zod など）はあるか？
-- [ ] 不要な try / catch はないか？
-- [ ] アクセシビリティ（label / role）は考慮されているか？
+`data/posts.ts`（仮データ）:
 
-### 手順 3: 「最新の API で書き直して」と再依頼
+```ts
+export const posts = [
+  { id: "1", title: "Hello", body: "本文 1" },
+  { id: "2", title: "World", body: "本文 2" },
+];
+```
 
-最初の出力が古い API を使っていたら、`CLAUDE.md` を引用しながら依頼:
+### 手順 3: Server Action と Client Component
 
-> CLAUDE.md に従って、Server Actions / useActionState を使う形に書き直してください
+`app/actions.ts`:
 
-差分を見比べて、**何が変わったか** を確認します。
+```ts
+"use server";
+import { revalidatePath } from "next/cache";
 
-### 手順 4: AI を学習補助に使う
+export async function deletePost(id: string) {
+  // 実際には DB から削除
+  console.log("Deleting:", id);
+  revalidatePath("/");
+}
+```
 
-学習中の任意のトピックで:
+`app/DeleteButton.tsx`:
 
-> React の useTransition と useDeferredValue の違いを、コード例つきで教えてください
+```tsx
+"use client";
+import { useTransition } from "react";
+import { deletePost } from "./actions";
 
-説明を読み、**自分で書き直して動かしてみる**。動かしてから「**この実装の弱点は？**」と再質問すると深まります。
+export default function DeleteButton({ id }: { id: string }) {
+  const [pending, startTransition] = useTransition();
+  return (
+    <button
+      disabled={pending}
+      onClick={() => startTransition(() => deletePost(id))}
+    >
+      {pending ? "..." : "削除"}
+    </button>
+  );
+}
+```
+
+### 手順 4: 投稿フォーム（useActionState）
+
+`app/PostForm.tsx`:
+
+```tsx
+"use client";
+import { useActionState } from "react";
+import { createPost } from "./actions";
+
+export default function PostForm() {
+  const [state, action, pending] = useActionState(createPost, { ok: false, error: "" });
+
+  return (
+    <form action={action}>
+      <input name="title" placeholder="タイトル" required />
+      <textarea name="body" placeholder="本文" />
+      <button disabled={pending}>{pending ? "送信中" : "投稿"}</button>
+      {state.error && <p style={{ color: "red" }}>{state.error}</p>}
+      {state.ok && <p>投稿完了</p>}
+    </form>
+  );
+}
+```
+
+`actions.ts` に `createPost` を追加:
+
+```ts
+export async function createPost(prev: any, formData: FormData) {
+  const title = String(formData.get("title") ?? "");
+  if (!title.trim()) return { ok: false, error: "タイトル必須" };
+  console.log("Created:", title);
+  revalidatePath("/");
+  return { ok: true, error: "" };
+}
+```
+
+### 手順 5: 動作確認
+
+`npm run dev` で:
+
+- 記事一覧は **Server で描画**（ソース表示で HTML に文字列が含まれる）
+- 削除ボタンの onClick 部分だけ **Client にハイドレーション**
+- 投稿フォームでバリデーションエラーをサーバーから返却
 
 ### 期待出力
 
-- `CLAUDE.md` を読み込んだ AI が、**自分のプロジェクトに合わせた** コードを出すようになる
-- レビューチェックリストで生成コードの **問題点** を 1〜2 個見つけられる
-- 学習補助で「**自分の知識の 1 段深い穴**」が見える
+- ページの初回 HTML には **記事タイトルと本文がそのまま** 含まれている（Server で描画）
+- 削除 / 投稿のロジックはサーバーで実行
+- バリデーションエラーが Client Component の state に反映
 
 ### 変える
 
-- `.cursor/rules/` に YAML 形式のルールを書いて、Cursor で同じことを試す
-- Copilot Chat で同じ依頼をして、**モデル別の差** を観察
-- AI に **テストケースだけ** 作ってもらい、実装は自分で書く
+- `Suspense` + `loading.tsx` でストリーミング表示にする
+- `cache()` で同じデータの取得を 1 回に集約する
+- `server-only` パッケージを入れて、誤って Client から import されないように守る
 
-### 自分で書く（任意）
+### 自分で書く（手元の Next.js プロジェクトに適用）
 
-- 自分のリポジトリに **MCP サーバー**（Notion / Slack / 自社 API）を 1 つ繋いでみる
-- AI に PR を作ってもらって、人間レビューで **改善点** を出す
-- AI 生成コードを **テストカバレッジ 100% にする** までレビューを繰り返す
+これまでのレッスンで作った Next.js プロジェクト（`page.tsx` / 動的ルート / Server Actions などを含むもの）を **境界の目で見直す** 演習です。
+
+1. プロジェクトの全 `.tsx` を `grep "use client"` で抽出 → どれが Client Component か一覧化
+2. 各 Client Component について、**本当に Client が必要か** を確認:
+   - 状態 / イベント / ブラウザ API があるか?
+   - 無いなら `"use client"` を外して Server Component に戻す
+3. **`server-only` パッケージで「壊す」テスト**:
+   - `app/actions.ts` の冒頭に `import "server-only";` を追加
+   - 試しに Client Component から Server Action を import してビルド → **エラーが出る**ことを確認
+4. **データ取得の場所** をチェック: Client Component の `useEffect` 内で `fetch` していないか? あれば Server Component に **吸い上げて props で渡す**
+5. 「`<DeleteButton>` だけが Client、リスト本体は Server」のように **葉に閉じ込める** 形になっているか確認
+
+before / after で「Client にバンドルされる JS」が減っていれば成功です（Network タブで JS の合計サイズを見る）。
+
+### 単独の任意課題
+
+- DB（Prisma + SQLite / PlanetScale）と接続して、本物の永続化に置き換える
+- React Compiler（「React Compiler」）と組み合わせて、`useMemo` を消した状態で動かす
 
 ## まとめ
 
-- **2026 年は AI 前提**。Copilot / Cursor / Claude Code が主要 3 種
-- **コンテキスト**（`CLAUDE.md` / `.cursorrules`）が結果を大きく変える
-- **MCP** で AI と外部システムを標準的に接続
-- 落とし穴: **ハルシネーション / 古い API / 過度な抽象化 / テスト抜け / セキュリティ抜け**
-- AI に任せるのは **定型 / 学習補助 / 一次レビュー**、人間がやるのは **要件 / 設計 / 最終判断**
-- 学習者は「**自分で書く → AI で補強 → 全部読む**」のサイクルが最大の学び
-- **Vibe Coding** はプロトタイプには有効だが、本番には人間レビュー必須
-- このハンズオンの執筆そのものが **Claude Code との協働** で、`CLAUDE.md` がその知恵
+- **デフォルトは Server Component**、必要な葉だけ `"use client"`
+- データ取得は Server、インタラクションは Client、書き込みは **Server Actions**
+- Client から Server を使うには **children prop** で挿入
+- props は **serializable な値だけ**（関数 / クラスは渡らない）
+- `useActionState` で Server Action の結果を Client の state に
+- 巨大 Client Component / 不要シリアライズ / 関数受け渡しは **アンチパターン**
+- `server-only` / `client-only` で誤 import を防ぐ
+- `Suspense` + Loading UI で **ストリーミング表示**、`cache()` で同一リクエストのメモ化
+- 「全体構造」を Server / Client で **ファイル単位で分割** すると見通しが良い

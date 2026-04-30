@@ -1,430 +1,210 @@
-# lesson86: Metadata API で SEO を整える
+# lesson84: 環境変数の基本
 
 ## ゴール
 
-- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
-- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
-- `generateMetadata` で動的にタイトルや説明文を組み立てられる
-- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
-- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
+- `.env.local` に環境変数を書いて `process.env` から読める
+- `NEXT_PUBLIC_` プレフィックスの意味を理解する
+- Server Component と Client Component で **読める変数が違う** ことを体感する
+- `.env.local` が `.gitignore` に入っている前提を知る
 
 ## 解説
 
-### 「SEO を整える」とは
+### なぜ環境変数か
 
-SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
+アプリには「環境ごとに変えたい値」があります。
 
-- `<title>`: ブラウザタブの文字、検索結果の見出し
-- `<meta name="description">`: 検索結果の説明文
-- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
-- `<link rel="icon">`: タブの左に出る favicon
+- ローカル開発では `http://localhost:3000` の API、本番では `https://api.example.com` の API を叩きたい
+- 開発用のテスト API キー、本番用のリリース API キー
+- 機能フラグ（開発では有効、本番では無効）
 
-これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
+これをコード本体に直接書くと、環境を変えるたびにコード修正 → デプロイが必要になり、シークレット（秘密鍵）の場合はリポジトリに漏れる危険もあります。
 
-### Metadata API の 2 系統
+そこで、**環境変数**（Environment Variables）として外に出します。Next.js では `.env.local` というファイルに書く形が標準です。
 
-書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
+### `.env.local` の書き方
 
-1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
-2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
+プロジェクトルート直下に `.env.local` を作り、`KEY=VALUE` の形で書きます。
 
-### 静的 `metadata` export
-
-`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
-
-```tsx
-// app/about/page.tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function AboutPage() {
-  return <h1>About</h1>;
-}
+```
+NEXT_PUBLIC_APP_NAME=My Todo App
+APP_SECRET=super-secret-value
 ```
 
-Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
+- 1 行 1 変数、`=` の左右にスペース不要
+- クォートは不要（ただし空白を含むならクォートも可）
+- ファイル末尾に改行を入れておく
 
-### 動的 `generateMetadata`
+**`.env.local` は `.gitignore` に入っている** のがデフォルト（`create-next-app` で作ったプロジェクトはこうなっています）。シークレットがリポジトリに入らない仕組みです。
 
-URL から情報を取ってタイトルを作るときに使います。
+### 読み方は `process.env.XXX`
 
-```tsx
-// app/posts/[id]/page.tsx
-import type { Metadata } from "next";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  const post = await res.json();
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
-```
-
-- `generateMetadata` は非同期関数にできます
-- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
-- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
-- 戻り値は `Metadata` 型のオブジェクト
-
-`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
-
-### `title.template` でサイト全体を揃える
-
-記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
-
-```tsx
-// app/layout.tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-};
-```
-
-- `default`: ページ側でタイトルを書いていないときに使う既定値
-- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
-
-ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
-
-### Open Graph を足す
-
-SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
-
-```tsx
-export const metadata: Metadata = {
-  title: "My Next Site",
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
-```
-
-最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
-
-### OG 画像 / canonical / robots（実務 SEO 三点セット）
-
-公開サイトでは次の 3 つを揃えるのがほぼ必須です。
+コード側から読むときは、`process.env` オブジェクトを使います。
 
 ```ts
-export const metadata: Metadata = {
-  metadataBase: new URL("https://example.com"),
-  title: "My Site",
-  description: "...",
-
-  // (1) OG 画像（SNS シェア時の見栄え）
-  openGraph: {
-    images: [
-      { url: "/og-image.png", width: 1200, height: 630 },
-    ],
-  },
-
-  // (2) canonical URL（重複コンテンツ対策）
-  alternates: {
-    canonical: "/",
-  },
-
-  // (3) robots（インデックス制御）: 既定は本番だけ index、それ以外は noindex
-  robots: {
-    index: process.env.VERCEL_ENV === "production",
-    follow: true,
-  },
-};
+const name = process.env.NEXT_PUBLIC_APP_NAME; // "My Todo App"
+const secret = process.env.APP_SECRET;          // "super-secret-value"（サーバー側のみ）
 ```
 
-それぞれの「いつ使うか」:
+戻り値は常に `string | undefined`（TS の型）。値が無ければ `undefined` です。
 
-- **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
-- **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
-- **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
+### `NEXT_PUBLIC_` プレフィックスの意味
 
-実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
+Next.js には重要なルールがあります。
 
-### favicon / apple-touch-icon は **ファイル配置だけで OK**
+> **`NEXT_PUBLIC_` で始まる変数だけが、Client Component からも読める。**
+> **それ以外の変数は、Server Component・Route Handlers・Server Actions からしか読めない。**
 
-Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
+なぜか:
 
-- `app/favicon.ico` → `<link rel="icon">`
-- `app/icon.png` / `app/icon.svg` → 同上
-- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
+- **サーバー側のみ** = ブラウザに配信される JS に値が入らない。シークレットを隠せる
+- **`NEXT_PUBLIC_` 付き** = ビルド時にクライアント JS に値が埋め込まれる。公開しても構わない値だけ付ける
 
-`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
+逆に言うと、`NEXT_PUBLIC_` で始まる変数は **ブラウザのソースを開けば全員が見える** ので、シークレットには絶対に付けません。
 
-### `generateMetadata` と `page.tsx` が同じデータを使うとき
+### `NEXT_PUBLIC_` の値は「一度公開したら取り消せない」
 
-`app/posts/[id]/page.tsx` のように、`generateMetadata` でも `page.tsx` でも同じ記事データを fetch するケースがよくあります。そのまま書くと、1 回のリクエストで同じ URL への fetch が 2 回発生します。
+`NEXT_PUBLIC_` で始まる値は **ビルド時に JS バンドルへ焼き込まれて配信されます**。これが意味するのは:
 
-これを防ぐのが React 組み込みの **`cache()`** 関数です。
+- **CDN / ブラウザキャッシュ / Service Worker** に値が残り、デプロイをロールバックしても回収できない
+- **Git の履歴に `.env.local` を誤って commit してしまった場合**、後から削除しても commit ハッシュをたどれば閲覧可能（force push と git history 削除も完全ではない）
+- **リファラ / アクセスログ / 第三者の Web Archive** に URL ごと値が残ることもある
 
-```tsx
-import { cache } from "react";
+そのため、誤って `NEXT_PUBLIC_API_SECRET=...` のようにシークレットを付けてしまったら、**まずそのキーを発行元でローテート（無効化＋再発行）するのが優先**です。コード修正 / デプロイで取り消すことはできません。
 
-const getPost = cache(async (id: string) => {
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  return res.json();
-});
+### 命名の指針
 
-// generateMetadata でも PostPage でも getPost(id) を呼ぶが、
-// 同一リクエスト内では 1 回しか fetch しない
-```
-
-`cache()` で包んだ関数は、**同一リクエスト内での重複呼び出しを自動でメモ化**します。`generateMetadata(id)` が先に呼ばれてキャッシュされた値が、`PostPage(id)` の呼び出しでそのまま使われます。
-
-これは lesson75 で扱った Data Cache（`fetch` オプションで制御する永続キャッシュ）とは別物です。`cache()` は「同じリクエストの中での重複排除」に特化した React の仕組みです。
-
-### Server Component の前提
-
-`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
+- 公開しても困らない（URL、アプリ名、GA トラッキング ID など）: `NEXT_PUBLIC_` を付ける
+- 公開すると困る（API キー、DB 接続文字列、JWT の秘密鍵など）: プレフィックスなし
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-**`app/about/page.tsx`**
-
-```tsx
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
-```
-
-</details>
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`.env.local` と `app/env-test/` 配下の 2 ファイルを新規作成するだけです。
 
 ### ゴール
 
-- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
-- `app/about/page.tsx` に静的 metadata を追加する
-- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
-- ブラウザタブの文字が各ページで変わることを確認する
+- `.env.local` に 2 種類の変数を書く
+- Server Component と Client Component からそれぞれ読み、**プレフィックスなしの変数は Client では `undefined` になる** ことを体感する
+- 本番（Vercel）での設定は「Vercel にデプロイする」でまとめて扱う
 
 ### 手順
 
-1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
-2. `app/about/page.tsx` に静的 `metadata` export を追加
-3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
-4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
+1. 5 章 の既存プロジェクトを開く（どれでも可）
+2. プロジェクトルートに `.env.local` を新規作成
+3. 新しいページ `app/env-test/page.tsx`（Server Component）と `app/env-test/ClientView.tsx`（Client Component）を作る
+4. プレビューで両方を比較
 
-### 主要ファイルの完成形
+### `.env.local`（プロジェクトルート直下）
 
-**`app/layout.tsx`**
+```
+NEXT_PUBLIC_APP_NAME=私の TODO アプリ
+APP_SECRET=super-secret-value
+```
+
+`.env.local` を編集した後は **開発サーバーを再起動** する必要があります（StackBlitz なら自動再起動、ローカルなら `Ctrl+C` → `npm run dev`）。
+
+### `app/env-test/page.tsx`（Server Component）
 
 ```tsx
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
-import Link from "next/link";
+import { ClientView } from "./ClientView";
 
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
+export default function EnvTestPage() {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME;
+  const secret = process.env.APP_SECRET;
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
   return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
+    <main>
+      <h1>環境変数のテスト</h1>
+
+      <section>
+        <h2>Server Component から読む</h2>
+        <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
+        <p>APP_SECRET = {secret ?? "(undefined)"}</p>
+      </section>
+
+      <ClientView />
+    </main>
   );
 }
 ```
 
-注: **`ReactNode` は `next` の公開型ではなく `react` から import します**。`Metadata` は `next` から、`ReactNode` は `react` から、と use 元が違う点に注意します。
-
-**`app/page.tsx`**
+### `app/env-test/ClientView.tsx`（Client Component）
 
 ```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
+"use client";
 
-この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
-
-**`app/about/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-import { cache } from "react";
-import type { Metadata } from "next";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-// 同一リクエスト内での重複 fetch を 1 回にまとめる
-const getPost = cache(async (id: string): Promise<Post | null> => {
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  if (!res.ok) return null;
-  return res.json();
-});
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const post = await getPost(id);
-  if (!post) {
-    return { title: "記事が見つかりません" };
-  }
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  const post = await getPost(id);
-  if (!post) {
-    return <h1>記事が見つかりません</h1>;
-  }
+export function ClientView() {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME;
+  const secret = process.env.APP_SECRET;
 
   return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
+    <section>
+      <h2>Client Component から読む</h2>
+      <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
+      <p>APP_SECRET = {secret ?? "(undefined)"}</p>
+    </section>
   );
 }
 ```
-
 
 ### 期待出力
 
-ブラウザで次のように動きます。
+`/env-test` にアクセスすると、次のような表示になります。
 
-1. `/` を開く → タブのタイトルが `My Next Site`
-2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
-3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
-4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
+- **Server Component から読む**
+  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
+  - `APP_SECRET = super-secret-value`
+- **Client Component から読む**
+  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
+  - `APP_SECRET = (undefined)` ← **ここが重要**
+
+`APP_SECRET` は Client 側では読めません。これが「サーバー専用の変数」と「クライアントに公開される変数」の違いを体感する瞬間です。
+
+### さらに確認: ブラウザのソースを見る
+
+1. `/env-test` を開いた状態で、ブラウザで「ページのソースを表示」
+2. HTML ソース内で `super-secret-value` を検索 → **見つからない**（Client Component のバンドル JS にも含まれない）
+3. `私の TODO アプリ` を検索 → 見つかる（`NEXT_PUBLIC_` なのでクライアントに配信されている）
+
+シークレットが本当に漏れない仕組みになっていることを確認できます。
 
 ### 変える
 
-- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
-- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
-- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
+- `APP_SECRET` の名前を `NEXT_PUBLIC_APP_SECRET` に変えると、Client 側でも読めるようになる（が、シークレットを付けるのは NG）
+- 新しい変数 `NEXT_PUBLIC_API_URL=https://jsonplaceholder.typicode.com` を追加し、Client 側で `fetch(process.env.NEXT_PUBLIC_API_URL + "/posts")` して動作確認
 
 ### 自分で書く
 
-- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
-- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
-- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
+- `NEXT_PUBLIC_GA_ID`（Google Analytics の ID 仮置き、`G-XXXXXX` のような値）を追加し、Server Component のレイアウトに表示する
+- `DB_URL=postgres://user:pass@localhost/mydb` を追加し、Server Component でだけ表示する（Client に漏れないことを確認）
+
+### 本番対比の予告
+
+ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **「Vercel にデプロイする」** でまとめて扱います。
+
+本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
+
+### 環境ごとに値を分ける（Production / Preview / Development）
+
+Vercel など主要なホスティングでは、環境変数を **Production / Preview / Development の 3 つ** に分けて設定できます。実務ではこの 3 つに **別々の値** を入れるのが定石です。
+
+- **Production**: 本番ドメイン（`https://my-app.com`）で読み込まれる値
+- **Preview**: PR ごとに作られるプレビュー URL（`https://my-app-pr-42.vercel.app` のような）で読み込まれる値
+- **Development**: ローカルの `.env.development.local` で読み込まれる値（個人開発機向け）
+
+たとえば DB やアナリティクス、フィーチャーフラグの SDK key は **Preview と Production で別の環境** を指すように設定します。同じ値を使い回すと、
+
+- Preview の動作確認が **本番 DB のデータを書き換える事故** を起こす
+- A/B テスト・アナリティクスの計測値に **開発者の挙動が混ざる**
+- 本番フラグを **誤って Preview から ON にしてしまう**
+
+といった事故になります。Vercel なら `Settings → Environment Variables` で各変数に対して **適用環境にチェックを入れる** UI があるので、新規追加時は「3 つ全部にチェック」ではなく **環境ごとに必要な値を分ける** ことを意識してください。
 
 ## まとめ
 
-- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
-- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
-- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
-- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
-- `metadata` / `generateMetadata` は Server Component 側でだけ書く
+- 環境変数は `.env.local` に `KEY=VALUE` で書く
+- `process.env.XXX` で読む。戻り値は `string | undefined`
+- **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
+- シークレットには絶対に `NEXT_PUBLIC_` を付けない
+- `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない

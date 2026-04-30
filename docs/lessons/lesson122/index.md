@@ -1,437 +1,339 @@
-# lesson122: WebSocket と Server-Sent Events（SSE）
+# lesson120: 依存性セキュリティ（npm audit / Dependabot）
 
 ## ゴール
 
-- リアルタイム通信の **選択肢** を整理して語れる
-- WebSocket と SSE の **使い分け** を判断できる
-- WebSocket クライアントの最小実装が書ける
-- SSE クライアント（`EventSource`）の最小実装が書ける
-- Next.js / 各サービス（Pusher / Ably / Supabase Realtime）の位置付けを把握する
+- 「依存パッケージ経由で攻撃される」という **サプライチェーン** リスクを理解する
+- `npm audit` のレポートを読み、優先度を判断できる
+- **Dependabot / Renovate** で更新を自動化できる
+- パッケージを採用する時の判断軸（DL 数 / メンテナンス / 依存の深さ）を持つ
+- ロックファイル / 整合性検証 / SBOM の役割を知る
 
 ## 解説
 
-### リアルタイム通信の選択肢
+### サプライチェーン攻撃とは
 
-「サーバーから **押し付けで** データを送りたい」場面の主な選択肢:
+「自分のコードは安全」でも、**依存している npm パッケージ** が改ざんされると、そのまま自分のサイトに **攻撃コードが配布** されます。実際に過去:
 
-| 方式 | 通信方向 | 用途 |
-|---|---|---|
-| **ポーリング** | クライアント → サーバー（定期） | 単純だが効率悪い |
-| **ロングポーリング** | クライアント → サーバー（待機） | レガシー互換 |
-| **Server-Sent Events**（SSE） | サーバー → クライアントの **一方向** | 通知 / 株価 / AI ストリーム |
-| **WebSocket** | **双方向** | チャット / オンラインゲーム / 共同編集 |
-| **WebTransport** | UDP ベースの双方向（HTTP/3） | 低遅延が要る場面（実験的） |
+- `event-stream` 事件（2018）: 人気ライブラリの管理権限を譲り受けた攻撃者が暗号通貨ウォレット狙いのコードを混入
+- `colors.js` / `faker.js` 事件（2022）: 作者本人が抗議で暴走コードを混入
+- typosquatting: `react-doom`（react-dom の typo）のような偽パッケージ
 
-「**双方向か単方向か**」「**HTTP の上で済むか**」が選択の軸です。
+これらは npm 公式に公開されたパッケージ経由で広がります。**依存ツリー** が深くなるほど面が広がり、リスクも増す。
 
-### Server-Sent Events（SSE）
+### npm audit
 
-「サーバーから **テキストイベントをストリーム** で送る」HTTP ベースの仕組み。
-
-#### サーバー側
-
-レスポンスのヘッダを `Content-Type: text/event-stream` にし、本文を **特別なフォーマット** で書き続けます。
-
-```
-HTTP/1.1 200 OK
-Content-Type: text/event-stream
-Cache-Control: no-cache
-Connection: keep-alive
-
-data: hello
-
-data: world
-
-event: chat
-data: {"user":"alice","msg":"こんにちは"}
-```
-
-各イベントは **空行** で区切る。`data:` 以外に `event:`（イベント名）/ `id:`（ID）/ `retry:`（再接続秒）が指定可能。
-
-#### クライアント側
-
-```js
-const es = new EventSource("/api/stream");
-
-es.onmessage = (e) => {
-  console.log("受信:", e.data);
-};
-
-es.addEventListener("chat", (e) => {
-  console.log("chat:", JSON.parse(e.data));
-});
-
-es.onerror = (err) => {
-  console.error("エラー or 切断:", err);
-};
-```
-
-`EventSource` は:
-
-- **自動再接続**（切れても勝手につなぎ直す）
-- `id:` を覚えていて再接続時に `Last-Event-ID` ヘッダで送る
-- ブラウザ標準（IE 以外）でライブラリ不要
-
-#### Next.js での実装（Route Handler + ReadableStream）
-
-```ts
-// app/api/stream/route.ts
-export async function GET() {
-  const stream = new ReadableStream({
-    start(controller) {
-      const encoder = new TextEncoder();
-      let count = 0;
-      const id = setInterval(() => {
-        count++;
-        controller.enqueue(encoder.encode(`data: tick ${count}\n\n`));
-        if (count >= 10) {
-          clearInterval(id);
-          controller.close();
-        }
-      }, 1000);
-    },
-  });
-
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache, no-transform",
-      "Connection": "keep-alive",
-    },
-  });
-}
-```
-
-::: tip AI ストリーミングと SSE
-ChatGPT のような **トークン単位の応答** にも SSE / `Streaming Responses` が広く使われています。Vercel の AI SDK / Anthropic の Stream / OpenAI Stream など、SaaS の SDK が SSE を内部で扱っています。
-:::
-
-### WebSocket
-
-「**双方向**、**バイナリも送れる**、**HTTP からアップグレード** して始まる」プロトコル（`ws://` / `wss://`）。
-
-#### サーバー側（ws ライブラリ）
+`npm audit` は **既知の脆弱性 DB**（GitHub Advisory Database） に対し、現在の依存ツリーをチェックします。
 
 ```bash
-npm install ws
+npm audit
 ```
 
-```js
-import { WebSocketServer } from "ws";
+出力例:
 
-const wss = new WebSocketServer({ port: 4000 });
+```
+# npm audit report
 
-wss.on("connection", (socket) => {
-  console.log("接続");
-  socket.on("message", (data) => {
-    // 全クライアントにブロードキャスト
-    for (const client of wss.clients) {
-      if (client.readyState === client.OPEN) {
-        client.send(data.toString());
-      }
-    }
-  });
-});
+semver  <5.7.2
+Severity: high
+ReDoS in semver - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
+fix available via `npm audit fix`
+node_modules/semver
+
+5 vulnerabilities (2 high, 3 moderate)
 ```
 
-#### クライアント側
+### 重要度（Severity）
 
-```js
-const ws = new WebSocket("ws://localhost:4000");
-
-ws.addEventListener("open", () => {
-  console.log("接続成功");
-  ws.send("hello");
-});
-
-ws.addEventListener("message", (e) => {
-  console.log("受信:", e.data);
-});
-
-ws.addEventListener("close", () => {
-  console.log("切断");
-});
-```
-
-#### バイナリも送れる
-
-```js
-const buffer = new Uint8Array([1, 2, 3, 4]);
-ws.binaryType = "arraybuffer";
-ws.send(buffer);
-```
-
-ゲーム / VoIP / ファイル転送など、テキストでは厳しい用途に向く。
-
-### 切断と再接続
-
-WebSocket は **自動再接続しない**。ネットワーク切断 / サーバー再起動で `close` イベントが飛びます。実装側で再接続を:
-
-```js
-function connect() {
-  const ws = new WebSocket(url);
-  ws.addEventListener("close", () => {
-    setTimeout(connect, 1000); // 1 秒後に再接続
-  });
-  return ws;
-}
-```
-
-実用では **指数バックオフ + 上限** にします（`socket.io` などのライブラリが内部で実装）。
-
-### SSE と WebSocket の使い分け
-
-| 観点 | SSE | WebSocket |
-|---|---|---|
-| 通信方向 | サーバー → クライアント（一方向） | 双方向 |
-| プロトコル | HTTP（追加設定不要） | 専用（プロキシ調整が必要） |
-| 自動再接続 | あり | なし（自前で実装） |
-| ブラウザサポート | 全主要 | 全主要 |
-| バイナリ | 不可 | 可 |
-| プッシュレート | 低〜中 | 低〜高 |
-
-#### 選び方の指針
-
-- **通知 / ストック価格 / AI ストリーム / ライブニュース**: SSE で十分
-- **チャット / 共同編集 / リアルタイムゲーム / カーソル位置共有**: WebSocket
-- **「通知だけ」+ 既存 HTTP インフラを活かしたい**: SSE が楽
-
-### React / Next.js で扱う
-
-#### React Hook で WebSocket
-
-```tsx
-import { useEffect, useState } from "react";
-
-export function useWebSocket(url: string) {
-  const [messages, setMessages] = useState<string[]>([]);
-  const [ws, setWs] = useState<WebSocket | null>(null);
-
-  useEffect(() => {
-    const socket = new WebSocket(url);
-    socket.addEventListener("message", (e) => {
-      setMessages((m) => [...m, e.data]);
-    });
-    setWs(socket);
-    return () => socket.close();
-  }, [url]);
-
-  const send = (msg: string) => ws?.send(msg);
-  return { messages, send };
-}
-```
-
-`useEffect` のクリーンアップで **必ず close** すること。React 19 / Strict Mode で **2 度マウント** されて接続が漏れる事故を防げます。
-
-#### Next.js の Route Handler で WebSocket を持つときの注意
-
-Next.js の Route Handler は **Node.js Runtime / Edge Runtime** の 2 種類があり、`export const runtime` で切り替えられます。WebSocket をホストできるかは Runtime とデプロイ先で大きく変わります。
-
-- **Edge Runtime**（Vercel Edge / Cloudflare Workers）: WebSocket サーバー側はホストできない。ブラウザ向けの `WebSocket` クライアントとしての利用や SSE の配信は OK
-- **Node.js Runtime + 通常の Node プロセス**（`next start` 等）: 実験的な「Route Handler の WebSocket Upgrade」サポートが入りつつあるが、Vercel の **サーバーレス関数では長時間接続を保てない** ため実運用は不向き
-- **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実解
-
-SSE（一方向ストリーミング）は Vercel の Route Handler でも動きますが、Edge / Node どちらでも **接続時間の上限** に注意します（Vercel Hobby は 10〜60 秒程度）。
-
-### マネージドサービス
-
-「自前で WebSocket サーバーを書く」のは接続管理 / スケーリング / 切断検知が大変。次のサービスが定番:
-
-| サービス | 特徴 |
+| レベル | 対応の目安 |
 |---|---|
-| **Pusher** | リアルタイム通信の老舗。チャンネル / イベントが分かりやすい |
-| **Ably** | エンタープライズ。再生 / 履歴 / メッセージ TTL |
-| **Supabase Realtime** | DB 変更 → クライアント通知が標準。Postgres 連携 |
-| **PartyKit** | エッジでの WebSocket / Durable Objects ベース |
-| **Liveblocks** | Figma / Notion 風の共同編集 UI ライブラリ |
-| **Cloudflare Durable Objects** | エッジで状態を持つ WebSocket。1 部屋 = 1 オブジェクト |
+| **critical** | 即座に対応。本番が止まっても直す |
+| **high** | 計画的に修正、長くて 1 週間 |
+| **moderate** | 月次でまとめて対応 |
+| **low** | 余力で対応 |
 
-「自前で WebSocket を実装する前に、これらで済まないか確認」が現代の判断軸。
+### `npm audit fix`
 
-### Socket.IO の現在地
+```bash
+npm audit fix
+```
 
-長らく WebSocket のデファクトだった `socket.io` は、**2026 年も使えます** が、ブラウザの素の WebSocket / SSE が成熟したので **新規プロジェクトでは選ばない** ケースが増えています。古い案件 / Node.js のサーバー起動が確実な場合 / 低レベルな再接続をライブラリに任せたい場合に。
+semver の範囲内で **自動アップデート** します。安全だが、メジャーバージョン更新が必要なケースは手動。
 
-### よくある罠
+```bash
+npm audit fix --force
+```
 
-- **`new EventSource(url)` の URL に Cookie を付けたい** → `withCredentials: true` を渡す。サーバーは CORS を通す
-- **WebSocket がプロキシ越しに切れる** → リバースプロキシで `Upgrade` / `Connection` ヘッダのフォワード設定
-- **アイドルタイムアウト**（CDN や LB が 60 秒で切る）→ **ハートビート**（Ping）を 30 秒ごとに送る
-- **`wss://`（HTTPS）を使う**（HTTP/2 のメリット + Mixed Content 対策）
+`--force` で **メジャーアップデート込み** で直してくれますが、**破壊的変更** が混じる可能性があります。CI / 動作確認とセットでないと危険。
+
+### 「audit だけ」では足りない
+
+`npm audit` の限界:
+
+- **devDependencies の脆弱性** がノイズになりやすい（本番に届かないものまで警告）
+- **fix なし** の脆弱性は手動で対処するしかない
+- **新しい脆弱性** は DB に登録された後に通知される（ゼロデイには無力）
+
+→ **audit + 自動アップデート + パッケージ選定** の三本柱で守る。
+
+### Dependabot
+
+GitHub の純正サービス。**依存パッケージのバージョンを自動で PR 作成** してくれます。
+
+`.github/dependabot.yml`:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      production:
+        dependency-type: "production"
+      development:
+        dependency-type: "development"
+```
+
+挙動:
+
+- **毎週月曜** に依存をチェック
+- 更新があれば PR を作る（`production` / `development` でグループ化）
+- セキュリティ脆弱性は **常時監視** され、即時 PR
+
+GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
+
+### Renovate
+
+[Renovate](https://docs.renovatebot.com/) は OSS の代替。Dependabot より **設定が柔軟** で、Bot が活発に開発されています。
+
+`renovate.json`:
+
+```json
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "schedule": ["before 9am on monday"],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^@types/"],
+      "groupName": "type definitions"
+    },
+    {
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true
+    }
+  ]
+}
+```
+
+特徴:
+
+- **Group で複数パッケージをまとめて** PR
+- `automerge: true` で **CI 通過すれば自動マージ**（patch だけなど安全範囲）
+- Dependency Dashboard の Issue で **全更新を一覧** できる
+- monorepo / 言語 / Docker などへの対応が広い
+
+「Dependabot は標準、Renovate はもっと管理したい場合」の使い分け。
+
+### Socket と OSV-Scanner
+
+audit では拾えない攻撃を補う 2 つのツール。
+
+#### Socket
+
+[socket.dev](https://socket.dev/) は **疑わしいパッケージの挙動** を静的解析で検知。`postinstall` でネットに繋いだ / 環境変数を読んだ / shell を起動した、などのフラグを立てます。
+
+```bash
+npx @socketsecurity/cli scan
+```
+
+GitHub Actions で **PR 単位** に新規依存をスキャンする運用も可能。
+
+#### OSV-Scanner（Google）
+
+```bash
+npx osv-scanner -L package-lock.json
+```
+
+OSV.dev という横断的脆弱性 DB を参照。Python / Go / Rust などにも使えます。
+
+### 整合性検証
+
+`package-lock.json` には各パッケージの **`integrity`** フィールドがあり、ハッシュで完全性を確認します。
+
+```json
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "integrity": "sha512-...",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz"
+  }
+}
+```
+
+`npm ci` は **lock の通りにそのままインストール** し、ハッシュが合わなければエラー。CI ではこれを使って改ざんを検知。
+
+### SBOM（Software Bill of Materials）
+
+「ソフトウェアの **部品表**」。何のパッケージをどのバージョンで使っているかを **機械可読な形式**（SPDX / CycloneDX） で出力します。
+
+```bash
+npm sbom --sbom-format=cyclonedx > sbom.json
+```
+
+なぜ必要:
+
+- 新しい脆弱性が報告された時、**自社のどのプロダクトが影響を受けるか** を即座に確認できる
+- 米国の調達基準では SBOM の提出を求めるケースが増えている
+
+GitHub には **Dependency Graph** が組み込みで、リポジトリの依存を可視化してくれます。
+
+### パッケージを採用する時の判断軸
+
+新しい npm パッケージを入れる時、次を見る習慣を。
+
+#### 1. ダウンロード数
+
+[npmtrends](https://npmtrends.com/) でダウンロード推移を確認。**月数百万 DL** あると安定。**急増** はバズ後で挙動が変わるかも、**減少** はメンテナンスが止まった可能性。
+
+#### 2. メンテナンスの頻度
+
+GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** をチェック。**3 ヶ月コミットがない** と要注意。
+
+#### 3. 依存の深さ
+
+`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
+
+#### 4. ライセンス
+
+MIT / Apache 2.0 / BSD は OK。**GPL** は公開要件があるので業務利用前に法務確認。
+
+#### 5. メンテナーの質
+
+GitHub の **メンテナー一覧** / セキュリティポリシーの整備状況。**1 人メンテナンス** はリスクが集中する。
+
+#### 6. 代替案
+
+「**標準で書ける** ことを依存追加で済ませていないか」を再検討。`Date.now()` / `fetch` / `Intl` / `Set` など、**ブラウザ / Node 標準で書ける** ものは依存を入れない方がよい。
+
+### ゼロデイへの備え
+
+audit に載る前の脆弱性（ゼロデイ）への対処は限定的:
+
+- **GitHub Advisory** をウォッチ
+- **新パッケージの即採用は避ける**（少なくとも数日寝かせる）
+- **`postinstall` を実行しないインストール**（`--ignore-scripts`）を CI で
+- **lockfile を厳しく**（`npm ci`、`pnpm install --frozen-lockfile`）
+
+### おすすめの基本セット
+
+最小構成:
+
+1. **Dependabot Alerts ON**（GitHub の Security タブ）
+2. **Dependabot version updates** で週次 PR
+3. **CI で `npm audit --omit=dev`** を実行（本番依存だけチェック）
+4. **`npm ci`** で lockfile 通りインストール
+5. **SBOM をビルド成果物に含める**（後で照会できる）
+
+これで「**最低限** のサプライチェーン対策」になります。
 
 ## 演習
 
 ### ゴール
 
-- SSE と WebSocket をそれぞれ Next.js プロジェクトで触る
+- `npm audit` を読む
+- Dependabot を有効にして PR が来る状態を作る
+- 新しいパッケージを採用する判断材料を集める
 
-### 手順 1: 新規 Next.js
-
-```bash
-npx create-next-app@latest realtime-sample --ts --app
-cd realtime-sample
-```
-
-### 手順 2: SSE のサーバーとクライアント
-
-`app/api/clock/route.ts`:
-
-```ts
-export const dynamic = "force-dynamic";
-
-export async function GET() {
-  const encoder = new TextEncoder();
-  const stream = new ReadableStream({
-    start(controller) {
-      const id = setInterval(() => {
-        const time = new Date().toISOString();
-        controller.enqueue(encoder.encode(`data: ${time}\n\n`));
-      }, 1000);
-      // 30 秒で終了
-      setTimeout(() => {
-        clearInterval(id);
-        controller.close();
-      }, 30000);
-    },
-  });
-  return new Response(stream, {
-    headers: {
-      "Content-Type": "text/event-stream",
-      "Cache-Control": "no-cache",
-      "Connection": "keep-alive",
-    },
-  });
-}
-```
-
-`app/clock/page.tsx`:
-
-```tsx
-"use client";
-import { useEffect, useState } from "react";
-
-export default function Clock() {
-  const [time, setTime] = useState("...");
-  useEffect(() => {
-    const es = new EventSource("/api/clock");
-    es.onmessage = (e) => setTime(e.data);
-    return () => es.close();
-  }, []);
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>SSE 時計</h1>
-      <p>{time}</p>
-    </main>
-  );
-}
-```
-
-`npm run dev` で `/clock` を開くと、毎秒時刻が更新されます。
-
-### 手順 3: WebSocket チャットの最小サーバー
-
-別ディレクトリで:
+### 手順 1: 既存プロジェクトで audit
 
 ```bash
-mkdir ws-server && cd ws-server
-npm init -y
-npm install ws
+cd /path/to/your-project
+npm audit
+npm audit --json | jq '.metadata.vulnerabilities'
 ```
 
-`server.js`:
+`.metadata.vulnerabilities` で重要度ごとの件数が JSON で見えます。
 
-```js
-import { WebSocketServer } from "ws";
-
-const wss = new WebSocketServer({ port: 4000 });
-
-wss.on("connection", (socket) => {
-  socket.on("message", (data) => {
-    for (const c of wss.clients) {
-      if (c.readyState === c.OPEN) c.send(data.toString());
-    }
-  });
-});
-
-console.log("ws://localhost:4000");
-```
+### 手順 2: 自動修正を試す
 
 ```bash
-node server.js
+npm audit fix       # semver 範囲内で自動更新
+git diff package*.json
 ```
 
-### 手順 4: チャットクライアント
+修正後は **必ず動作確認 + テスト**。
 
-Next.js の `app/chat/page.tsx`:
+### 手順 3: Dependabot を有効化
 
-```tsx
-"use client";
-import { useEffect, useRef, useState } from "react";
+`.github/dependabot.yml`:
 
-export default function Chat() {
-  const [messages, setMessages] = useState<string[]>([]);
-  const [text, setText] = useState("");
-  const wsRef = useRef<WebSocket | null>(null);
-
-  useEffect(() => {
-    const ws = new WebSocket("ws://localhost:4000");
-    ws.addEventListener("message", (e) => {
-      setMessages((m) => [...m, e.data]);
-    });
-    wsRef.current = ws;
-    return () => ws.close();
-  }, []);
-
-  const send = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!text.trim()) return;
-    wsRef.current?.send(text);
-    setText("");
-  };
-
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>WebSocket チャット</h1>
-      <ul>
-        {messages.map((m, i) => (
-          <li key={i}>{m}</li>
-        ))}
-      </ul>
-      <form onSubmit={send}>
-        <input value={text} onChange={(e) => setText(e.target.value)} />
-        <button>送信</button>
-      </form>
-    </main>
-  );
-}
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
 ```
 
-ブラウザを 2 つ開いて `http://localhost:3000/chat` にアクセスし、片方で送信したメッセージがもう片方に届くことを確認。
+GitHub の **Settings → Code security → Dependabot alerts** を ON。`Settings → Code security → Dependabot security updates` も ON。
+
+### 手順 4: パッケージ採用の練習
+
+候補: `dayjs` / `date-fns` / `luxon`
+
+それぞれを次の観点で比較:
+
+- npmtrends の DL 推移
+- GitHub のメンテナンス頻度
+- Bundlephobia のサイズと依存
+- TypeScript 型定義の有無
+- ライセンス
+
+採用する 1 つを決めて、`npm install` する。
+
+### 手順 5: SBOM を出す
+
+```bash
+npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json
+ls -la sbom.json
+```
 
 ### 期待出力
 
-- `/clock` で 1 秒ごとに時刻が更新される
-- `/chat` で 2 つのブラウザの間でリアルタイムにメッセージが共有される
+- `npm audit` で脆弱性の表が出る（または `0 vulnerabilities`）
+- Dependabot を有効化すると **数時間〜1 日で初回の PR / Alert** が来る
+- パッケージ比較の表ができ、採用根拠を説明できる
+- SBOM の JSON が生成される
 
 ### 変える
 
-- SSE で `event: tick` / `event: alert` の **イベント名付きメッセージ** を送って、クライアントの `addEventListener` で受け分ける
-- WebSocket チャットに **ユーザー名** を持たせ、JSON で送受信する
-- 切断検知 + 再接続のロジックを追加
+- `dependabot.yml` の `interval` を `daily` に変えて頻度を上げる
+- `automerge: true` のルールで patch 更新を自動マージにする
+- CI に `npm audit --omit=dev --audit-level=high` を追加して **high 以上で fail** にする
 
 ### 自分で書く（任意）
 
-- AI ストリーミング: SSE で 1 文字ずつ送るデモを作る
-- Pusher / Ably / Supabase Realtime のいずれかを使って **SaaS で同じチャット** を実装し、自前との比較
-- PartyKit を試して、エッジで WebSocket を動かす
+- Renovate を導入し、Dashboard Issue で全更新を一覧する
+- Socket / OSV-Scanner を CI に組み込む
+- 自社で許可するライセンスを決め、許可外があれば fail するルールを CI に書く
 
 ## まとめ
 
-- リアルタイム通信は **ポーリング / SSE / WebSocket / WebTransport** から選ぶ
-- **SSE** はサーバー → クライアントの一方向。HTTP の上で動き、`EventSource` で扱う
-- **WebSocket** は双方向。バイナリも送れるが、自動再接続は自前
-- AI ストリーミングは **SSE** が定番
-- Vercel の **Edge Runtime は WebSocket をホストできない**。SaaS / 別サーバーが必要
-- マネージド: **Pusher / Ably / Supabase Realtime / PartyKit / Liveblocks**
-- React の `useEffect` で **必ずクリーンアップ** で接続を閉じる
-- アイドル切断対策に **ハートビート**、`wss://` を使う
+- 自分のコードが安全でも **依存パッケージ経由** で攻撃される（サプライチェーン）
+- **`npm audit`** で既知の脆弱性をチェック。Severity に従って対応
+- 自動修正は `npm audit fix`、メジャー込みなら `--force`（要動作確認）
+- **Dependabot / Renovate** で依存更新を自動 PR 化
+- `npm audit` の補完に **Socket / OSV-Scanner**
+- **lockfile + `npm ci` + integrity** で改ざん検知
+- **SBOM** で「自社の何が影響を受けるか」を素早く特定
+- 新しいパッケージは **DL 数 / メンテ頻度 / 依存の深さ / ライセンス** で判断
+- 「**標準で書けるなら依存しない**」が最大の防御

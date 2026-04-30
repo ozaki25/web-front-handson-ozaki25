@@ -1,297 +1,220 @@
-# lesson87: Loading UI と Streaming
+# lesson85: Tailwind CSS の紹介
 
 ## ゴール
 
-- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
-- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
-- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
-- React 19.2 + Next.js 16 の Server Component で Streaming がどう動くかを理解する
+- Tailwind CSS v4 の存在と基本的な使い方を知る
+- 本コースの「素の CSS で書く」方式との違いを説明できる
+- Next.js プロジェクトに Tailwind v4 を導入する手順を観察できる
+- 本コースを終えた後の「次のステップ」として判断できる
 
 ## 解説
 
-### `loading.tsx` の役割
+### 本コースのスタンス
 
-Server Component でデータを取得すると、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
+ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
 
+一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
+
+**本コースの結論**: 「Tailwind は **次のステップ** として学ぶ選択肢」。本コースの自己紹介 / TODO プロジェクトには **持ち込みません**。
+
+### Tailwind CSS とは
+
+Tailwind は **ユーティリティファースト** の CSS フレームワークです。`margin: 16px` のような個別のスタイルをコード上に書かず、`m-4` のような短いクラス名を HTML に重ねて見た目を作ります。
+
+素の CSS で書いたコード:
+
+```html
+<div class="card">
+  <h2 class="card-title">タイトル</h2>
+  <p class="card-body">本文</p>
+</div>
 ```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
-```
 
-- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
-- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
-
-これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
-
-### ルート単位のローディングだけだと粗い
-
-`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
-
-例: 記事ページに
-
-- 記事本文（速い、キャッシュ済み）
-- 関連記事（遅い、外部 API から取得）
-
-があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
-
-### 部分的 Streaming: `<Suspense>` で囲む
-
-遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
-
-```tsx
-// app/posts/[id]/page.tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
-
-export default async function PostPage() {
-  return (
-    <>
-      <h1>記事本文（すぐ出る）</h1>
-      <p>...本文...</p>
-
-      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
-        <RelatedPosts />
-      </Suspense>
-    </>
-  );
+```css
+.card {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+}
+.card-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+.card-body {
+  color: #666;
 }
 ```
 
-- `<h1>` と `<p>` は先にブラウザに届く
-- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
-- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
+Tailwind で書くと:
 
-これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
-
-### `loading.tsx` と `<Suspense>` の棲み分け
-
-ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
-
-- **`loading.tsx`**（ルート単位）: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
-- **`<Suspense>`**（コンポーネント単位）: ページの中で遅い領域だけを個別に待たせる
-
-両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
-
-### `error.tsx` との関係
-
-「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
-
-| 何が起きた？ | 担当ファイル |
-|---|---|
-| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
-| 取得に失敗・例外が飛んだ | `error.tsx` |
-
-両方置いておくのが実用的な構成です。
-
-```
-app/
-└── posts/
-    ├── page.tsx
-    ├── loading.tsx
-    └── error.tsx
+```html
+<div class="p-4 bg-white rounded-lg">
+  <h2 class="text-lg font-bold">タイトル</h2>
+  <p class="text-gray-600">本文</p>
+</div>
 ```
 
-### スケルトン UI を返すコツ
+CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た目を組み立てます。
 
-`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
+長所:
 
-- 見出しの位置にグレーのバー
-- 本文の位置に複数の細いバー
-- 画像の位置に正方形のプレースホルダ
+- クラス名の衝突がない（`.card` の名前を考えなくてよい）
+- 小さな変更が HTML 内で完結する
+- VS Code 拡張で補完が強い
 
-これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
+短所:
 
-### 実行順のイメージ
+- クラス名が長くなる
+- 「なぜこのプロパティなのか」が CSS の知識無しだと理解しづらい（だから本コースでは素の CSS から学んだ）
 
-`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+### Tailwind v4 の特徴（2025 年 GA）
 
-1. ブラウザが `/posts/1` にアクセス
-2. Server が `page.tsx` を評価し始める
-3. `<h1>` と `<p>` の部分は即座に生成される
-4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
-5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
-6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
-7. ブラウザが追加分を受け取り、`fallback` を置き換える
+本レッスンは **Tailwind v4** 準拠で紹介します。v3 から **設定方法が大きく変わった** ため、古い記事のコピペは通用しません。
 
-「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
+主な変更点:
+
+- **CSS ファイル 1 行で導入**:
+  ```css
+  @import "tailwindcss";
+  ```
+  v3 の `@tailwind base; @tailwind components; @tailwind utilities;` の 3 行は廃止
+- **`init` コマンド廃止**: v3 の `npx tailwindcss init -p` で `tailwind.config.ts` を生成する手順は不要
+- **PostCSS プラグイン名の変更**: `postcss.config.mjs` に `@tailwindcss/postcss` を指定する
+- **Vite 用プラグイン**: Vite プロジェクトでは `@tailwindcss/vite`（PostCSS 経由ではない）
+- **パフォーマンス大幅改善**: ビルドが高速、開発時のホットリロードも速い
+
+`create-next-app --tailwind` で新規プロジェクトを作ると、デフォルトで Tailwind v4 の設定が入ります。古いチュートリアルを見る前に、まずは `create-next-app` 生成物を観察するのが確実です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/streaming">Streaming</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-</details>
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
 
 ### ゴール
 
-- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
-- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
-- fetch が終わると fallback が実データに置き換わる
+- `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
+- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
+
+**本コースのプロジェクトには持ち込まない**（素の CSS 資産を壊さないため）。別プロジェクトで観察するだけで十分。
 
 ### 手順
 
-1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
-2. `app/streaming/loading.tsx` を置く
-3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
-4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
-5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
+1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
+2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
+3. プロジェクト内の以下のファイルを観察する
+   - `app/globals.css`
+   - `postcss.config.mjs`（または `.js`）
+   - `package.json` の `devDependencies`
+4. 任意で、`app/page.tsx` にユーティリティクラスを 1〜2 個書いてみる（`@theme` などカスタマイズは扱わない）
 
-### 主要ファイルの完成形
+### `app/globals.css`（観察対象）
 
-**`app/streaming/page.tsx`**
+Tailwind v4 の導入は、CSS ファイル冒頭に **この 1 行だけ**:
 
-```tsx
-import { Suspense } from "react";
-import RelatedPosts from "./RelatedPosts";
-import { PostsSkeleton } from "./skeleton";
-
-export default function StreamingPage() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1>Streaming デモ</h1>
-      <p>
-        このテキストと見出しは <strong>すぐに</strong> 表示されます。
-        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
-      </p>
-
-      <h2>関連記事</h2>
-      <Suspense fallback={<PostsSkeleton />}>
-        <RelatedPosts />
-      </Suspense>
-
-      <p>フッター（これも先に出ます）</p>
-    </div>
-  );
-}
+```css
+@import "tailwindcss";
 ```
 
-**`app/streaming/RelatedPosts.tsx`**
+v3 の時代は 3 行書いていました:
 
-```tsx
-type Post = {
-  id: number;
-  title: string;
+```css
+/* v3（古い、書かない） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+v4 では `@import "tailwindcss";` に統合されています。
+
+### `postcss.config.mjs`（観察対象）
+
+```js
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
+  },
 };
+export default config;
+```
 
-export default async function RelatedPosts() {
-  // わざと 2 秒待つ
-  await new Promise((r) => setTimeout(r, 2000));
+v3 で必要だった `autoprefixer` は **v4 ではプラグイン内に内蔵** されたため、別途書かなくて済むようになりました。
 
-  // Next.js 16 のデフォルトは no-store（キャッシュしない）なのでオプション不要
-  const res = await fetch(
-    "https://jsonplaceholder.typicode.com/posts?_limit=3"
-  );
-  const posts: Post[] = await res.json();
+### `package.json` の `devDependencies`（観察対象）
 
-  return (
-    <ul>
-      {posts.map((post) => (
-        <li key={post.id}>{post.title}</li>
-      ))}
-    </ul>
-  );
+```json
+{
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
 }
 ```
 
-**`app/streaming/skeleton.tsx`**
+`tailwind.config.ts` は **v4 では原則不要**（デフォルト設定で十分）。カスタマイズしたい場合は CSS 内で `@theme { ... }` を書く方式に変わりました。本レッスンでは `@theme` の深掘りはしません。
+
+### 小さく試す（参考 — 任意）
+
+本コースのプロジェクトには持ち込まないため、この演習は完全に任意です。
+
+生成されたプロジェクトの `app/page.tsx` を次のように書き換えて、Tailwind v4 のデフォルトパレットを試せます。
 
 ```tsx
-export function PostsSkeleton() {
+export default function Page() {
   return (
-    <ul style={{ listStyle: "none", padding: 0 }}>
-      {[0, 1, 2].map((i) => (
-        <li
-          key={i}
-          style={{
-            height: 16,
-            margin: "8px 0",
-            background: "#e5e5e5",
-            borderRadius: 4,
-          }}
-        />
-      ))}
-    </ul>
+    <main className="p-8 max-w-xl mx-auto">
+      <h1 className="text-3xl font-bold text-slate-800">Tailwind v4 の練習</h1>
+      <p className="mt-4 text-slate-600">
+        素の CSS なしで、クラス名だけで見た目を組み立てている。
+      </p>
+      <button className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+        ボタン
+      </button>
+    </main>
   );
 }
 ```
 
-**`app/streaming/loading.tsx`**
+- `p-8`（padding 2rem）、`max-w-xl`（max-width）、`mx-auto`（水平中央寄せ）
+- `text-3xl`（フォントサイズ）、`font-bold`（太字）
+- `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
 
-```tsx
-export default function Loading() {
-  return (
-    <div style={{ padding: 16, fontFamily: "system-ui" }}>
-      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
-    </div>
-  );
-}
-```
+1 章で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが分かります。本コースで CSS の仕組みを先に押さえたのが効いてきます。
 
 ### 期待出力
 
-1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
-2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
-3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
-4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
+- 生成されたプロジェクトで、`@import "tailwindcss";` 1 行で Tailwind が動いていることを確認
+- `app/page.tsx` にユーティリティクラスを書くと、即座にスタイルが適用される
+- `tailwind.config.ts` が無いことを確認（デフォルトで動く）
 
-DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
+### 本コースのプロジェクトに入れない理由
 
-### 変える
+本コースの自己紹介 / TODO プロジェクトには **Tailwind を持ち込みません**。理由:
 
-- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
-- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
-- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
+- これまで素の CSS で書いた資産（`.site-header`、`.cards`、`.card` など）が多い
+- Tailwind に置き換えるには全 JSX を書き直す必要がある
+- 「学ぶ手段」として Tailwind を見るだけなら、別プロジェクトで十分
 
-### 自分で書く
+本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
 
-- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
-- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
-- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
+### 変える（任意）
+
+任意。本コースのプロジェクトへの適用は不要です。
+
+- 生成した Tailwind プロジェクトで `bg-blue-500` を `bg-green-500` / `bg-red-500` に変えて色の組を観察
+- `hover:` や `md:` などのプレフィックス（状態・ブレークポイント）を使ってみる
+
+### 自分で書く（挑戦）
+
+任意。本コースのプロジェクトへの適用は不要です。
+
+- Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
+- 書き終えたら、1 章 の「Flexbox とレスポンシブ」で書いた素の CSS 版と見比べて **同じ見た目をどう表現しているか** 対比する
 
 ## まとめ
 
-- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
-- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
-- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
-- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
-- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける
+- Tailwind は「ユーティリティファースト」の CSS、クラス名だけで見た目を作る
+- v4（2025 GA）は `@import "tailwindcss";` 1 行で導入、`init` コマンドや `tailwind.config.ts` は原則不要
+- `create-next-app --tailwind` でデフォルトで v4 がセットアップされる
+- 本コースの自己紹介 / TODO プロジェクトには持ち込まない（素の CSS 資産を壊さないため）
+- 学ぶ意義を感じたら、本コース完走後に次のステップとして挑戦する

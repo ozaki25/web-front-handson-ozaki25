@@ -1,256 +1,191 @@
-# lesson93: Cookie と Web セキュリティ
+# lesson91: HTTP キャッシュ
 
 ## ゴール
 
-- Cookie と Web Storage の違いと使い分けを説明できる
-- Cookie の属性（`HttpOnly` / `Secure` / `SameSite` / `Domain` / `Path` / `Expires` / `Max-Age`）の役割を説明できる
-- XSS（Cross-Site Scripting）と CSRF（Cross-Site Request Forgery）の概要と、それぞれに効く防御を挙げられる
-- セッション Cookie を安全に扱うための実務パターン（HttpOnly / Secure / SameSite=Lax）を知る
-- Content-Security-Policy や HTTPS の位置づけを大まかに把握する
+- ブラウザがリソースをキャッシュしている場所（メモリ / ディスク）を説明できる
+- `Cache-Control` の主要ディレクティブ（`public` / `private` / `max-age` / `no-cache` / `no-store` / `immutable`）の違いを説明できる
+- 強キャッシュ（期限内はサーバーに聞かない）と 弱キャッシュ（サーバーに聞くが中身は省略）の違いを説明できる
+- `ETag` / `Last-Modified` と `304 Not Modified` の関係を説明できる
+- キャッシュ起因で「新しいデプロイが反映されない」古典的なハマりを避ける実務パターンを知る
 
 ## 解説
 
-### Cookie とは何か（もう一度）
+### そもそもキャッシュはなぜ要るか
 
-Cookie は「サーバーがブラウザに値を持たせて、次回以降のリクエストに **自動で付けさせる** 仕組み」です。サーバーからのレスポンスに次のヘッダが付いていると、ブラウザは **`user=alice`** を覚え、同じサイトへの次のリクエストに自動で `Cookie: user=alice` を付けます。
+ブラウザがリソース（HTML / CSS / JS / 画像）を取りに行くのは、毎回遅くてトラフィックもかかります。一度取ったものを **同じなら再利用する** のがキャッシュです。効き方の強い順に、次の 3 段階があると覚えると整理しやすいです。
 
-```
-# サーバーからのレスポンス
-HTTP/1.1 200 OK
-Set-Cookie: user=alice; Path=/; HttpOnly; Secure; SameSite=Lax
+1. **強キャッシュ**: サーバーに問い合わせもしない。ローカルのキャッシュから即配る
+2. **弱キャッシュ**（条件付きリクエスト）: サーバーに「変わってますか？」だけ聞く。変わってなければ `304 Not Modified` が返り、ボディは送られてこない
+3. **キャッシュなし**: 毎回フルで取りに行く
 
-# 以後、ブラウザが自動で付ける
-GET /profile HTTP/1.1
-Cookie: user=alice
-```
+どのモードになるかは、レスポンスヘッダ `Cache-Control` / `ETag` / `Last-Modified` で決まります。
 
-この「自動で送る」性質が、認証セッションを維持する用途に向いています。一方で同じ性質が **後述の CSRF 攻撃の温床** にもなります。
+### `Cache-Control` の主要ディレクティブ
 
-> **`user=alice` は仕組み説明用の架空値**: 上の例では分かりやすさのために `user=alice` という平文を入れていますが、**実例では Cookie に主体識別子を直接入れません**。代わりに、サーバーが発行した **不可逆なセッション ID**（例: `session=abc123xyz...`）を入れて、サーバー側でその ID から「これは alice さんのセッション」と引き当てる形が一般的です。本文の以降の例 (`session=abc123` など) はこの実運用の形を想定しています。
+サーバーがレスポンスヘッダに **`Cache-Control: ...`** を付けて「このリソースはどう扱っていいか」をブラウザに伝えます。代表的なものを並べます。
 
-### Cookie と Web Storage の使い分け（再掲）
-
-| 用途 | Cookie | Web Storage |
-|---|---|---|
-| ログインセッションの維持 | **最適**（サーバーに自動送信される） | 不向き |
-| ユーザー設定（テーマ / 言語） | 可能だが毎リクエストで送信されるのでムダ | **最適** |
-| 容量 | 4KB 程度（小さい） | 5〜10MB |
-| JS からの読み書き | `document.cookie`（`HttpOnly` ならブラウザで JS からは見えない） | `localStorage.setItem` 等 |
-| 有効期限 | 属性で制御 | localStorage は恒久、session は タブ閉じで消える |
-
-認証は Cookie、クライアント完結の設定は Web Storage、というのが現代の定番です。
-
-### Cookie の主要属性
-
-`Set-Cookie` に付けられる属性で、Cookie の振る舞いを細かく制御します。どれもセキュリティに直結します。
-
-#### `HttpOnly`
-
-**JS から読み書きできない** Cookie にします。`document.cookie` で見ようとしても出てきません。
-
-```
-Set-Cookie: session=abc123; HttpOnly
-```
-
-XSS（後述）でページに悪意ある JS が混入しても、`HttpOnly` 付きのセッション Cookie は盗めません。ログインセッション用の Cookie は **原則 `HttpOnly` を付ける** のが現代の正解です。
-
-#### `Secure`
-
-**HTTPS 経由のリクエストにしか送らせない** 属性です。平文 HTTP で運ばれて盗聴される事故を防ぎます。
-
-```
-Set-Cookie: session=abc123; Secure
-```
-
-本番はほぼ HTTPS のみになった現在では、**セッション Cookie には常に `Secure`** を付けます。
-
-#### `SameSite`
-
-**クロスサイトのリクエストで Cookie を送るか** を制御する属性です。CSRF 攻撃への主要な防御です。
-
-| 値 | 動作 |
+| ディレクティブ | 意味 |
 |---|---|
-| `Strict` | 他サイトからの遷移では一切送らない（ログインが切れる UX になりがち） |
-| `Lax` | トップレベル GET ナビゲーション（リンククリック等）では送る。フォーム POST や iframe では送らない |
-| `None` | すべて送る。**`Secure` 必須** |
+| `public` | 誰でも（ブラウザ / 中間キャッシュ / CDN）キャッシュしてよい |
+| `private` | ブラウザ本体だけキャッシュしてよい。CDN には持たせない |
+| `max-age=N` | N 秒間は新鮮。その間はサーバーに聞かない（強キャッシュ） |
+| `s-maxage=N` | 中間キャッシュ（CDN 等）向けの max-age。ブラウザは無視 |
+| `no-cache` | 毎回サーバーに問い合わせ（弱キャッシュは効く）。ボディは返ってこないこともある |
+| `no-store` | 一切キャッシュしない。毎回フルで取り直し |
+| `must-revalidate` | 期限が切れたら **必ず** 再検証（古いキャッシュを出さない） |
+| `immutable` | 期限内は絶対に変わらない。リロードでも再検証しない |
+| `stale-while-revalidate=N` | 期限切れから N 秒はそのまま返して、裏で再検証 |
 
-現代のブラウザの **デフォルトは `Lax`** です。クロスサイトで明示的に送りたい場合のみ `None; Secure` を付けます。通常のセッション Cookie は `Lax` のままで十分な場合が多いです。
+混乱しやすいのは `no-cache` と `no-store` です:
 
-#### `Domain` / `Path`
+- **`no-cache`**: キャッシュ **は** する。ただし使う前に毎回サーバーに聞く
+- **`no-store`**: キャッシュ **しない**
 
-どのホスト・どのパスに対して Cookie を送るかの指定です。指定しなければ **発行元のホストとパス以下** になります。
+名前と挙動が逆に見えるので、都度仕様を見に行く癖を付けるのが安全です。
 
-- `Domain=example.com`: サブドメイン（`api.example.com` 等）にも送る
-- `Path=/admin`: `/admin` 以下のパスにだけ送る
+### 強キャッシュ: `max-age` の世界
 
-広く付けすぎるとセキュリティ事故の原因になるので、**必要最小限** に絞るのが原則です。
-
-#### `Expires` / `Max-Age`
-
-有効期限の指定です。
-
-- `Expires=Wed, 21 Oct 2026 07:28:00 GMT`: 指定日時まで
-- `Max-Age=3600`: 3600 秒後まで（現代では推奨）
-
-どちらも付けなかった Cookie は **セッション Cookie**（ブラウザを閉じると消える）になります。
-
-### 典型的な「ログインセッション Cookie」の形
-
-実務で多く見る典型パターンです。
+レスポンスにこういうヘッダが付いていたとします。
 
 ```
-Set-Cookie: session=abc123xyz; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=86400
+Cache-Control: public, max-age=3600
 ```
 
-読み解き:
+これは「このリソースを **1 時間**（3600 秒）は新鮮とみなす」という意味です。この間はブラウザは **サーバーに一切問い合わせずに** ローカルのキャッシュを使います。
 
-- `Path=/`: サイト全体で有効
-- `HttpOnly`: JS から見えない（XSS 対策）
-- `Secure`: HTTPS のみ
-- `SameSite=Lax`: 基本的なクロスサイトリクエストでは送らない（CSRF 対策）
-- `Max-Age=86400`: 24 時間有効
-
-この組み合わせを **デフォルトの出発点** と覚えてください。
-
-### XSS（Cross-Site Scripting）
-
-悪意ある JS を **自分のサイトの一部として** 動かされる攻撃です。
-
-代表的な入り口:
-
-1. ユーザー入力をそのまま `innerHTML` で出力（「DOM を操作する」の `innerHTML` 節で扱った）
-2. `<script src="ユーザー入力">` のように属性にも入力が流れ込む
-3. URL のクエリから取った値を HTML にそのまま埋め込む
-
-成功すると、`document.cookie` / `localStorage` の中身を攻撃者のサーバーに送信されたり、ユーザーになりすまして投稿されたりします。
-
-#### 防御の基本
-
-- **出力をエスケープする**: `textContent` を使う、React / Vue のテンプレートを信じる（彼らが自動でエスケープする）
-- **`innerHTML` には自分で書いた安全な文字列だけ**: ユーザー入力は決して入れない
-- **`HttpOnly` Cookie**: セッション Cookie を JS から見えなくする（攻撃が成功しても Cookie だけは守れる）
-- **Content-Security-Policy（CSP）ヘッダ**: `<script>` の実行元を制限する（後述）
-
-React / Next.js は `{variable}` で値を埋め込む限り、自動的にテキストとして扱ってくれます。生の HTML を埋め込みたいときの `dangerouslySetInnerHTML` が「**危険**」という名前なのは、まさにこの XSS を警告するためです。
-
-### CSRF（Cross-Site Request Forgery）
-
-ログインしているユーザーに **意図しないリクエスト** を送らせる攻撃です。仕組み:
-
-1. 攻撃者が罠サイトを用意する
-2. ログイン中の標的ユーザーに罠サイトを踏ませる
-3. 罠サイトの HTML から銀行 API へのリクエストを自動発火させる。GET なら `https://bank.example.com/transfer?to=attacker&amount=10000`、POST なら `<form action="https://bank.example.com/transfer" method="POST">` の自動送信が典型例
-4. ブラウザは `bank.example.com` のセッション Cookie を **自動で付けて** リクエストする
-5. 銀行サーバーから見ると、正規ユーザーの認証済みリクエストに見える
-
-#### 防御
-
-- **`SameSite=Lax` / `Strict`**: クロスサイトの POST で Cookie を送らせない。現代のブラウザのデフォルトが `Lax` なので、大半の単純な CSRF は既にブロック済み
-- **CSRF トークン**: フォーム送信のたびにサーバーから一意のトークンを渡し、リクエスト時に一緒に送らせる。攻撃者の罠サイトはトークンを知らないので送れない
-- **重要操作の再認証**: パスワード変更や送金では、現行セッションでも再度パスワードを入れさせる
-
-現代のフレームワーク（Next.js の Server Actions など）は CSRF トークン処理を内蔵していることが多いため、自分で手書きする機会は減っています。仕組みは知っておく価値があります。
-
-### HTTPS と HSTS
-
-HTTPS は **通信を暗号化** する基本です。HTTPS でない（平文 HTTP）通信は途中経路で改ざん・盗聴される可能性があります。
-
-**HSTS**（HTTP Strict Transport Security） ヘッダを付けると、ブラウザに「今後はこのサイトは必ず HTTPS で来い」と覚えさせられます。初回のみ平文アクセスが発生しうる隙を塞ぎます。
+DevTools の Network タブで見ると、`Size` 列が **`(memory cache)`** や **`(disk cache)`** になり、サーバーに行かなかったことが表示されます。
 
 ```
-Strict-Transport-Security: max-age=31536000; includeSubDomains
+Size        Status
+(disk cache) 200
 ```
 
-Vercel / Netlify などはデフォルトで HTTPS のみでの配信になっています。本コースの教材サイトもすべて HTTPS です。
+`max-age` が切れるまでは、コードをいじってデプロイし直しても **古いファイルが配られ続けます**。これがキャッシュ起因の「デプロイしたのに反映されない」問題の典型です。
 
-> **`includeSubDomains` の罠**: 一度配信すると、ブラウザはこのドメインの **全サブドメインも HTTPS 必須** として `max-age` の期間（上の例では 1 年）覚え続けます。社内ツールなど一部サブドメインに HTTPS が無いと、その期間アクセスできなくなります。`max-age=0` を返しても **既に保存済みのブラウザを巻き戻せません**。本番投入は `max-age` を短めから始めて段階的に伸ばすのが安全です。
+### 弱キャッシュ: `304 Not Modified` の世界
 
-### `SameSite=None; Secure`（クロスサイト Cookie の現代的形）
+`max-age` が切れた、または `no-cache` が付いているリソースは、ブラウザがサーバーに **「これ、まだ有効？」** と確認しに行きます。この確認のために使うのが `ETag` と `Last-Modified` です。
 
-外部サイトからの埋め込み（iframe / クロスオリジン fetch with credentials）で Cookie を送りたい場合は、`SameSite=None` を明示する必要があります。**さらに `Secure` の併記が必須**（Chrome / Safari / Firefox の現行仕様）です。
-
-```
-Set-Cookie: session=abc; Path=/; HttpOnly; Secure; SameSite=None
-```
-
-`SameSite=None` 単独や、HTTPS でない通信での `SameSite=None` は **ブラウザが拒否します**。サードパーティ Cookie 廃止の流れも進んでいるため、可能なら `SameSite=Lax` で済ませる設計を選ぶのが現代の標準です。
-
-### Content-Security-Policy（CSP）
-
-レスポンスヘッダで **「このページで実行してよい JS の出所」** を制限する仕組みです。XSS の最後の砦として効きます。
+レスポンスに `ETag` が付いていたら、ブラウザは次回のリクエストに `If-None-Match` ヘッダで同じ値を送ります。
 
 ```
-Content-Security-Policy: default-src 'self'; script-src 'self' https://cdn.example.com
+# 初回レスポンス
+HTTP/1.1 200 OK
+Cache-Control: no-cache
+ETag: "abc123"
+Content-Type: image/png
+...（画像ボディ）
+
+# 2 回目のリクエスト
+GET /logo.png HTTP/1.1
+If-None-Match: "abc123"
+
+# サーバーのレスポンス
+HTTP/1.1 304 Not Modified
+（ボディは空）
 ```
 
-この例では、`<script>` は自サイトと指定した CDN 以外からは一切読ませない、という宣言です。インラインスクリプトや `eval` も既定では禁止されます。
+サーバーは「変わってない」と分かれば **ボディを送らずに 304 だけ返す** ので、通信量はほぼゼロになります。ブラウザは手元のキャッシュを使います。
 
-強力ですが設定を間違えると自分のサイトが動かなくなるので、導入は慎重に（まずは `Content-Security-Policy-Report-Only` で違反だけログに流し、問題がないと確認してから本番適用するのが定番）。
+`Last-Modified` の場合は `If-Modified-Since` ヘッダで日時を送り返します。考え方は同じです。`ETag` のほうが識別が厳密で、現代では主流です。
 
-### オリジンと CORS（軽く）
+### 実務での定番パターン: 「ハッシュ付きファイル名 + immutable」
 
-**オリジン** は `スキーム + ホスト + ポート` の 3 つ組で、ブラウザのセキュリティ境界の基本単位です。`https://a.example.com` と `https://b.example.com` は別オリジンです。
+Web アプリの CSS / JS は「ビルドのたびに中身が変わる可能性があるが、変わったときは URL も変えておく」という運用が主流です。
 
-ブラウザは既定で **別オリジンへの `fetch` が返すレスポンスを JS から読めなくする** 同一オリジンポリシーを採用しています。別オリジンの API を使いたい場合、サーバー側が `Access-Control-Allow-Origin` 等の CORS ヘッダで明示的に許可する必要があります。
+```
+/assets/main.CEDo5b9P.css
+/assets/main.8c29f6e4.js
+```
 
-CORS は実務で詰まりやすい分野です。本コースでは深入りせず、「オリジンが違うと fetch 結果が読めないことがある / サーバー側で CORS ヘッダを返してもらう必要がある」という認識だけ押さえてください。
+`CEDo5b9P` のようなハッシュ（コード内容から計算した識別子）をファイル名に入れておき、**中身が変われば URL も変わる** ようにします。すると、サーバーは次のヘッダを安全に付けられます。
+
+```
+Cache-Control: public, max-age=31536000, immutable
+```
+
+1 年間（31536000 秒）は絶対に変えないと宣言します。`immutable` は「リロードされても再検証しない」という追加の念押しです。
+
+中身を更新したければ、ビルド時にハッシュが変わって **別の URL** になるので、HTML から参照される URL もそれに合わせて書き換わります。古いキャッシュは持ち続けてもらってよく、新しい URL は新規リクエストとして取りに行くだけです。
+
+一方 **HTML 自体** は `no-cache` または短い `max-age` にしておきます。HTML が古いキャッシュを使うと、新しいハッシュ入りの `<link>` / `<script>` タグに切り替わらないためです。
+
+### Vercel / VitePress など現代のホスティングは既定が賢い
+
+Vercel を使うと、静的アセットには自動で `immutable` が付き、HTML には短いキャッシュが付く形になっています。VitePress のビルド出力もハッシュ付きファイル名です。本コースのような教材サイトでは **設定を触らなくてもキャッシュ運用は成立** しています。
+
+> **補足**: ブラウザキャッシュは「最も外側」のキャッシュです。1 つのリクエストには複数のキャッシュ層が関与しています。**ブラウザキャッシュ → CDN（Vercel Edge / Cloudflare 等）→ 中間プロキシ → オリジンサーバー** の順に問い合わせていき、どこかでヒットした時点で返ってきます。Next.js を使う場合はさらにアプリ内部にも **fetch のレスポンスキャッシュ**（`force-cache` / `revalidate`）と **Router Cache**（クライアント側のページ単位キャッシュ）があります。本レッスンで扱っているのは一番外側のブラウザキャッシュだけですが、「古い値が返ってくる」事故が起きたら **どの層で固まっているか** を切り分けるのが調査の入口です。
+
+とはいえ、仕組みを知らないと「トップだけ更新されて中ページが古い」「CSS だけ反映されない」といった症状に遭遇したときに原因が分からなくなるので、`Cache-Control` の値を読めるようになっておくことは重要です。
+
+### デバッグのコツ
+
+キャッシュまわりの調査では次を覚えておいてください。
+
+- **DevTools の Disable cache**: Network タブを開いているあいだ、キャッシュを無効化できる。開発中はオンにしておくと安心
+- **Hard reload**: `Ctrl+Shift+R` / `Cmd+Shift+R` で強制再読込（キャッシュを無視）
+- **Application → Clear storage**: 特定のサイトのキャッシュ・ストレージを一括削除
+- **Network タブの Size 列**: `(memory cache)` / `(disk cache)` / 実サイズ で、どこから来たか判断
+- **Network タブで行をクリック → Headers**: `Cache-Control` / `ETag` の実際の値を確認
 
 ## 演習
 
 ### ゴール
 
-- 本サイトおよび任意のサイトの Cookie 属性を DevTools Application タブで眺める
-- `HttpOnly` / `Secure` / `SameSite` がどう出ているか確認する
-- XSS / CSRF のイメージを自分の言葉で説明できるようにする
+- 実際のサイトのレスポンスヘッダから `Cache-Control` / `ETag` を読み取る
+- 強キャッシュ・弱キャッシュ・キャッシュなしを切り替えたときの Network タブの見え方の違いを体感する
+- `curl` で条件付きリクエストを自分で送って `304` を取得する
 
-### 手順 1: Cookie を観察する
+### 手順 1: DevTools で観察する
 
-1. Google や GitHub などログイン済みのサイトを開きます
-2. DevTools → Application タブ → Cookies → そのサイトを選択します
-3. 一覧の `Name` / `Value` / `HttpOnly` / `Secure` / `SameSite` / `Expires` 列を眺めます
-4. セッション系の Cookie には `HttpOnly` と `Secure` がチェックされているはずです
+1. 本教材サイト（または任意の Web サイト）を開きます
+2. DevTools の Network タブを開き、リロードします
+3. 1 行クリックして `Headers` → `Response Headers` を確認します
+4. `Cache-Control` と `ETag` の値をメモします
+5. もう一度リロードします。同じ行の `Status` が `304` になる（または `Size` が `(disk cache)` になる）ことを確認します
+6. `Disable cache` にチェックを入れてリロードします。全行が `200` に戻り、Size が実サイズになることを確認します
 
-### 手順 2: `document.cookie` で JS からの可視性を確認する
+### 手順 2: `curl` で条件付きリクエストを送る
 
-DevTools の Console タブで次を実行します。
+`ETag` の挙動を手で確かめます。ターミナルで次を実行してください。
 
-```js
-document.cookie
+```bash
+# 1 回目: ETag を含むレスポンスヘッダを取る
+curl -I https://jsonplaceholder.typicode.com/posts/1
 ```
 
-出力には **`HttpOnly` が付いていない Cookie だけ** が出ます。セッション系の重要な Cookie が出てこないのは、`HttpOnly` 属性が働いているためです。
+出力の中の `etag: "..."` の値をメモします。次にこの ETag を付けて 2 回目のリクエストを送ります。
 
-試しに適当なサイト（攻撃を想定したメモ）で、もしセッション Cookie が JS から見えてしまっていた場合は、そのサイトは XSS 耐性が弱い可能性があります。
+```bash
+# 2 回目: 先ほどの ETag を If-None-Match で送り返す
+curl -I https://jsonplaceholder.typicode.com/posts/1 \
+  -H 'If-None-Match: "W/\"xxxxxxxxxxxx\""'
+```
 
-### 手順 3: 自分の言葉でまとめる
+`-H` で送る値は、1 回目の `etag:` の値をそのまま入れてください（バックスラッシュのエスケープが必要な場合もあります）。成功すると **`HTTP/2 304`** が返り、ボディは送られてきません。
 
-次の質問に、本レッスンを閉じた状態で自分の言葉で答えてみます（目安: それぞれ 2-3 文）。
-
-- Q1: XSS と CSRF のそれぞれが「何を悪用する」攻撃か
-- Q2: 典型的なログインセッション Cookie には、どの属性を付けるか（3 つ挙げよ）
-- Q3: `SameSite=Lax` は CSRF にどう効くか
+手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
 
 ### 期待出力
 
-- DevTools Application タブ → Cookies で、設定した Cookie のキーと値が確認できる
-- `HttpOnly` を付けた Cookie は `document.cookie` で読めないことを Console で確認できる
-- HTTPS でないと `Secure` 属性の Cookie がセットされないことが分かる
+- 同じリソースを 2 回目にリクエストすると、Network タブの Status 欄に `304` または `(disk cache)` / `(memory cache)` が表示される
+- `Cache-Control: no-cache` のリソースは毎回サーバーに確認リクエストが飛ぶ
 
 ### 変える
 
-- **観察対象は本コースの教材サイト / 自分のローカルプロジェクト / StackBlitz プレビュー** などにとどめます。他人のサイトで Cookie 操作を試す行為は、利用規約や攻撃の境界が曖昧になりやすいので避けます。
-- 自分が動かしている開発環境で、Application タブから Cookie を 1 つ選び、右クリック → Delete で削除する。再度アクセスしてもページが見られることを確認
-- 自分が管理するアカウントの開発環境で、セッション Cookie を削除するとログアウトになることを確認（本番アカウントではなく開発用で）
+- DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
+- `Hard reload`（`Ctrl+Shift+R` / `Cmd+Shift+R`）を試す。`Disable cache` と同様だが、開発者ツールが閉じていてもキャッシュを無視できる
+- Network タブで `Throttling` を `Slow 4G` に。キャッシュから取っているときはほぼ無影響だが、キャッシュを無効にして比較すると体感差が大きい
 
 ### 自分で書く
 
-- 自分がよく使うサイト 3 つの、ログイン後に Application タブの Cookies で確認できる **`HttpOnly` の付き方** を比較する
-- Next.js の Server Actions で POST を送る際、ブラウザ開発者ツールの Network タブから CSRF 関連ヘッダがどう付いているか観察する（将来の発展）
+- 「`no-cache` と `no-store` の違いを 2 行で説明する」文章を書いてみる（本文を隠した状態で挑戦）
+- `Cache-Control: public, max-age=31536000, immutable` が付いたリソースをリロードしたとき、Network タブでどう見えるか予想し、実際に本サイトの `/assets/*.css` などで確認する
 
 ## まとめ
 
-- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値。セッション維持の本命
-- 属性の黄金律: `HttpOnly; Secure; SameSite=Lax`。セッション Cookie はこれを最低ラインに
-- XSS は「サイトに悪意 JS を混入される」攻撃。`textContent` / エスケープ / `HttpOnly` / CSP で防ぐ
-- CSRF は「ログイン中のユーザーに意図しないリクエストを送らせる」攻撃。`SameSite` / CSRF トークンで防ぐ
-- HTTPS + HSTS は前提。平文 HTTP は現代の Web ではほぼ使わない
+- キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
+- `Cache-Control` でモードを指定。よく使うのは `max-age` / `no-cache` / `no-store` / `immutable`
+- `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
+- 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
+- DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く

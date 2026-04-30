@@ -1,343 +1,439 @@
-# lesson102: バンドルサイズの最適化とコード分割
+# lesson100: E2E テスト — Playwright
 
 ## ゴール
 
-- バンドルサイズが LCP や INP に効く理由を説明できる
-- Vite のビルド出力を **Visualizer** で可視化できる
-- `import("...")` の **動的インポート** でコードを分割できる
-- `React.lazy` + `<Suspense>` でルート / コンポーネント単位の遅延読み込みができる
-- 「最初の 1 画面で **必要なコードだけ** を送る」考え方を持てる
-- Tree shaking が効く / 効かない書き方を区別できる
+- E2E テストとユニット / コンポーネントテストの違いを説明できる
+- Playwright をプロジェクトにセットアップできる
+- `page.goto` / `page.getByRole` / `page.click` でブラウザ操作を書ける
+- Playwright の **`expect`** で UI の状態を検証できる
+- ヘッドレスモードと UI モード（`--ui`）の使い分けを知る
+- 失敗時のスクリーンショット / トレース / ビデオの仕組みを理解する
+- E2E は「ビジネスクリティカルな経路」だけに絞る判断軸を持てる
 
 ## 解説
 
-### バンドルサイズと CWV の関係
+### E2E テストの位置付け
 
-ブラウザは JS を **ダウンロード → パース → 実行** してから初めて画面を描画できます。バンドルが大きいと:
+これまでに学んだテストの違いを再確認します。
 
-- ダウンロードに時間がかかる → **LCP 悪化**
-- パース・実行で **メインスレッドが詰まる** → **INP 悪化**
-- 大きな `<script>` が `<body>` を遮る → **First Paint も遅延**
+| 種類 | 範囲 | 速度 | 頻度 |
+|---|---|---|---|
+| ユニット (Vitest) | 関数 1 つ | 速い（ms） | 多い（70%） |
+| コンポーネント (RTL) | コンポーネント | 中間（数十 ms） | 中間（20%） |
+| E2E (Playwright) | アプリ全体 | 遅い（秒） | 少ない（10%） |
 
-特にモバイル + 遅い回線では 100KB 違うだけで体感が劇的に変わります。**「送らないコードが最速」** が鉄則です。
+E2E は **本物のブラウザを起動して、ユーザーが実際にやる操作の流れ全体を再現** します。「フォームに入力 → 送信 → 別ページに遷移 → 一覧に表示される」のような **複数画面にまたがる経路** を 1 つのテストで検証できます。
 
-### バンドル分析: rollup-plugin-visualizer
+代償は速度と安定性です。E2E は本物のブラウザを起動するぶん遅く、ネットワーク事情で fail することもあります。だから「最重要パスだけ」に絞るのが鉄則です。
 
-Vite は **Rollup** をベースにビルドします。`rollup-plugin-visualizer` を入れると、ビルド成果物の中身を **木構造の図** で見られます。
+### Playwright とは
+
+**Playwright** は Microsoft 製の E2E テストフレームワークです。2026 年現在、Cypress と並ぶ二大選択肢で、新規プロジェクトでは Playwright が選ばれることが増えています。
+
+特徴:
+
+- Chromium / Firefox / WebKit（Safari エンジン）の **3 ブラウザを 1 つの API で** 操作できる
+- **自動待機**: 要素が現れるまで自動で待つので、`waitFor(...)` を書かなくてよい
+- **トレース・ビデオ・スクリーンショット** が失敗時に自動保存される
+- **codegen** で操作を録画してテストコードを生成できる
+- **UI モード**（`npx playwright test --ui`）で対話的にデバッグできる
+
+### セットアップ
+
+Vite + React プロジェクトに Playwright を追加します。
 
 ```bash
-npm install -D rollup-plugin-visualizer
+npm install -D @playwright/test
+npx playwright install   # ブラウザ本体（Chromium / Firefox / WebKit）をダウンロード
 ```
 
-`vite.config.ts`:
+> StackBlitz のブラウザ環境では `npx playwright install` でブラウザ本体を取れない場合があります。Playwright はローカル環境で動かすのが基本です。本レッスンは「読みながら手元で試す」前提で進めてください。
+
+`playwright.config.ts` を作成（最小形）:
 
 ```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { visualizer } from "rollup-plugin-visualizer";
+import { defineConfig, devices } from "@playwright/test";
+
+const isCI = !!process.env.CI;
 
 export default defineConfig({
-  plugins: [
-    react(),
-    visualizer({
-      open: true,        // ビルド後に自動でブラウザで開く
-      filename: "stats.html",
-      gzipSize: true,    // gzip 圧縮後のサイズも表示
-      brotliSize: true,  // brotli 圧縮後のサイズも表示
-    }),
+  testDir: "./e2e",
+  retries: isCI ? 2 : 0,                 // CI では失敗時に 2 回まで再実行
+  reporter: isCI ? "github" : "list",    // CI では GitHub Actions 連携形式
+  use: {
+    baseURL: "http://localhost:5173",
+    trace: "on-first-retry",             // 失敗時にトレースを保存
+  },
+  projects: [
+    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
+    // 必要に応じて WebKit / Firefox を足す
   ],
+  webServer: {
+    // CI では prod build を preview 配信して E2E（dev サーバーは HMR で揺れやすい）
+    command: isCI ? "npm run build && npm run preview" : "npm run dev",
+    url: "http://localhost:5173",
+    reuseExistingServer: !isCI,
+  },
 });
 ```
 
-`npm run build` を実行すると `dist/` 出力後に `stats.html` がブラウザで開き、各依存パッケージのサイズが視覚的に分かります。意外なほど大きいライブラリ（例: `moment`、`lodash` 全部）が見つかることがあります。
+`webServer` を書いておくと、テスト実行時に **自動でアプリを起動** してから E2E を回してくれます。`retries` / `projects` / 環境別の `command` を最初から入れておくと、後で CI に乗せるときに迷いません。
 
-### よくある肥大化パターン
-
-| パターン | 解決策 |
-|---|---|
-| `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
-| `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
-| `motion/react`（旧 `framer-motion`、2024 年に `motion` パッケージへ改称）を `import * as motion` で全部読み込み | `import { motion } from "motion/react"` の named import で必要分だけ |
-| Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
-| 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
-| アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
-
-「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
-
-### コード分割（Code Splitting）
-
-「最初の 1 画面で必要なコードだけ送る」を実現するのが **コード分割** です。アプリ全体を 1 つの大きなバンドルにせず、**画面 / 機能ごとに小さな chunk** に分けます。
-
-#### 1. 動的インポート `import("...")`
-
-JavaScript 標準の **動的 `import()`** を使うと、その行に到達するまでファイルを読み込みません。
-
-```ts
-// 静的 import: ビルド時に main bundle に含まれる
-import { heavyFunction } from "./heavy";
-
-// 動的 import: 実行時に必要になったら別 chunk として読み込む
-button.addEventListener("click", async () => {
-  const { heavyFunction } = await import("./heavy");
-  heavyFunction();
-});
-```
-
-ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
-
-### 2. React.lazy + `<Suspense>`
-
-React コンポーネントを動的に読み込むには `React.lazy` を使います。
-
-```tsx
-import { lazy, Suspense } from "react";
-
-// 通常の import
-// import { HeavyChart } from "./HeavyChart";
-
-// 動的 import + lazy
-const HeavyChart = lazy(() => import("./HeavyChart"));
-
-function App() {
-  const [showChart, setShowChart] = useState(false);
-
-  return (
-    <div>
-      <button onClick={() => setShowChart(true)}>グラフを表示</button>
-      {showChart && (
-        <Suspense
-          fallback={
-            <p role="status" aria-live="polite">グラフ読み込み中...</p>
-          }
-        >
-          <HeavyChart />
-        </Suspense>
-      )}
-    </div>
-  );
-}
-```
-
-`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。fallback 要素には `role="status"` と `aria-live="polite"` を付けるのがおすすめです。スクリーンリーダーが「読み込み中」を発話してくれるようになり、何も無いまま黙って待たせる事故を防げます。
-
-#### 3. Next.js でのコード分割
-
-Next.js の App Router は **デフォルトで自動コード分割** をします。`app/posts/page.tsx` の中身は `/posts` を訪れた時だけ送られ、トップ `/` には含まれません。
-
-明示的に分割したい時は `next/dynamic` を使います:
-
-```tsx
-import dynamic from "next/dynamic";
-
-const Chart = dynamic(() => import("./Chart"), {
-  loading: () => <p>読み込み中...</p>,
-  ssr: false,  // クライアント側でだけ実行
-});
-
-export default function Page() {
-  return <Chart />;
-}
-```
-
-`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
-
-### Tree Shaking の落とし穴
-
-**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
-
-#### 効く書き方（named import）
-
-```ts
-import { format } from "date-fns";
-// 使うのは format だけ。他の関数はバンドルされない
-```
-
-#### 効きにくい書き方
-
-```ts
-import * as dateFns from "date-fns";
-dateFns.format(...);
-// すべての export を読み込む可能性が上がる
-```
-
-```ts
-import _ from "lodash";
-// CommonJS の lodash は tree shaking が効かない。lodash 全部が含まれる
-```
-
-代替策:
-
-- `lodash` → `lodash-es`（ESM 版） or 個別関数 import（`import debounce from "lodash/debounce"`）
-- `moment` → `dayjs` / `date-fns`
-- 大きな UI ライブラリ → 個別パッケージ化されているものを選ぶ（Chakra UI v3、Radix UI のように）
-
-### `package.json` の `sideEffects: false`
-
-ライブラリ作者向けですが、自作のライブラリで Tree Shaking を効かせるには `package.json` に `sideEffects: false` を書きます。
+`package.json` に scripts を追加:
 
 ```json
 {
-  "name": "my-lib",
-  "sideEffects": false
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
+  }
 }
 ```
 
-「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
+### 最小の E2E テスト
+
+`e2e/home.spec.ts`:
+
+```ts
+import { test, expect } from "@playwright/test";
+
+test("トップページに見出しが表示される", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+});
+
+test("About リンクをクリックすると /about に移動する", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "About" }).click();
+  await expect(page).toHaveURL("/about");
+});
+```
+
+ポイント:
+
+- `page.goto("/")` で baseURL（`http://localhost:5173`）に対して相対パスで遷移
+- `page.getByRole(...)` は React Testing Library と **同じセレクタ思想**（アクセシビリティロール優先）
+- `expect(...).toBeVisible()` 等は **自動で待ってくれる**（要素が出るまで最大 5 秒待つ）
+- すべて `await` を付けて呼ぶ（非同期）
+
+Playwright と Testing Library のクエリ API はほぼ同じ書き味です。両方を使うチームでは認知コストが下がる利点があります。
+
+### よく使う操作
+
+```ts
+// 遷移
+await page.goto("/login");
+
+// クリック
+await page.getByRole("button", { name: "送信" }).click();
+
+// 入力
+await page.getByLabel("お名前").fill("Alice");
+await page.getByPlaceholder("検索").fill("React");
+
+// セレクト
+await page.getByLabel("地域").selectOption("Tokyo");
+
+// チェックボックス
+await page.getByLabel("同意する").check();
+
+// キーボード
+await page.keyboard.press("Enter");
+await page.getByLabel("検索").press("Enter");
+```
+
+### よく使うアサーション
+
+```ts
+// 要素が見える / 見えない
+await expect(page.getByText("ようこそ")).toBeVisible();
+await expect(page.getByText("エラー")).not.toBeVisible();
+
+// テキストを含む
+await expect(page.locator("h1")).toHaveText("こんにちは、Alice さん");
+
+// URL の確認
+await expect(page).toHaveURL("/dashboard");
+await expect(page).toHaveURL(/\/posts\/\d+/);
+
+// 値が入っている
+await expect(page.getByLabel("名前")).toHaveValue("Alice");
+
+// 件数
+await expect(page.getByRole("listitem")).toHaveCount(3);
+```
+
+すべて **自動リトライ付き**。「fetch が終わってから出る要素」を待たなくても、`expect(...).toBeVisible()` 自体が最大 5 秒間繰り返しチェックします。
+
+### UI モードで開発する
+
+`npm run e2e:ui` を起動すると、Playwright の UI モードが立ち上がります。
+
+- テスト一覧から個別に実行できる
+- 各ステップの **ブラウザの状態をタイムライン** で確認できる
+- 失敗時の **DOM スナップショット** をクリックで遡れる
+- 「locator picker」で画面要素を選ぶと、推奨セレクタが自動生成される
+
+最初に E2E を書く時は **UI モード必須** です。「どこでクリックすればいいか」「次の状態は何か」を見ながら書けるので、習得が一気に楽になります。
+
+### Codegen で操作を録画
+
+ゼロからテストを書くのは大変です。Playwright には **画面操作を録画してコードを生成する** 機能があります。
+
+```bash
+npx playwright codegen http://localhost:5173
+```
+
+ブラウザが立ち上がるので、人間が普通にサイトを操作します。クリック・入力・遷移のたびに、対応する Playwright コードが横のパネルに自動で出てきます。それをコピペして整形すれば、テストの叩き台が一気にできます。
+
+複雑な経路でも、まずは codegen で粗い形を作ってから手で詰めるワークフローが定番です。
+
+### 失敗時の証拠保存
+
+`playwright.config.ts` に `trace: "on-first-retry"` を書いておくと、失敗時に **トレース** が自動保存されます。トレースには:
+
+- 各ステップで送信されたリクエスト
+- DOM スナップショット
+- スクリーンショット
+- ビデオ
+
+が入っており、`npx playwright show-trace trace.zip` で UI モードと同じインターフェースで再生できます。**CI で起きた fail を後から再現できる** のが強みです。
+
+### MSW を E2E でも使う（軽く紹介）
+
+MSW のハンドラは E2E でも流用できます。Playwright の `page.route(...)` でブラウザ側の fetch を MSW Service Worker 経由で横取りする構成にすれば、ユニット / コンポーネント / E2E の **3 層で同じモックレスポンス** を使い回せます。
+
+設定はやや複雑なので本コースでは触れませんが、本格運用ではこのパターンを取ると「ハンドラ定義の二重管理」が無くせる点だけ覚えておいてください。
+
+### E2E はどこに書くか
+
+E2E は遅いので、**書くべき経路** を絞ります。実務でよく投資されるのは:
+
+1. **ログイン → サインイン関連**
+2. **メイン購入 / 課金フロー**
+3. **新規登録 → 重要な初回操作**
+4. **データを書き換える系（CRUD）の代表的な 1 経路**
+
+「すべての画面を網羅する」ような E2E は壊れまくり、メンテコストで死にます。**ビジネスが止まる経路だけ** を 20〜30 ケースくらい用意して守るのが現実解です。
 
 ## 演習
 
 ### ゴール
 
-- 既存の Vite + React プロジェクトに `rollup-plugin-visualizer` を入れる
-- `stats.html` を見てバンドル内容を可視化する
-- `React.lazy` でページ単位のコード分割を体験する
-- ビルド前後でサイズの違いを比較する
+- 簡単な Vite + React アプリを起動状態にする
+- Playwright をセットアップする
+- 「トップから About ページに遷移」「フォーム入力 → 送信」の 2 経路を E2E でテストする
+- UI モードで動きを観察する
 
 ### 途中から始める場合
 
-新規 Vite + React + TypeScript テンプレートを作ります（StackBlitz でも可）。
+ローカル環境で `create-vite` で React + TS テンプレートを作ります（StackBlitz では Playwright のブラウザ本体を取得できないため、ローカル前提）。
 
 ```bash
-npm create vite@latest perf-sample -- --template react-ts
-cd perf-sample
+npm create vite@latest my-e2e-sample -- --template react-ts
+cd my-e2e-sample
 npm install
-npm install -D rollup-plugin-visualizer
 ```
 
-### 手順 1: Visualizer を有効化
+### 手順 1: アプリにページを 2 つ追加（ライブラリなしの最小ルーティング）
 
-`vite.config.ts`:
+`src/App.tsx` をシンプルに書き換え。`location.pathname` で表示を切り替えるだけの自家製ルーティングを使います（学習用に最小化）。
 
-```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { visualizer } from "rollup-plugin-visualizer";
-
-export default defineConfig({
-  plugins: [
-    react(),
-    visualizer({
-      open: true,
-      filename: "dist/stats.html",
-      gzipSize: true,
-    }),
-  ],
-});
-```
-
-### 手順 2: わざと大きなコンポーネントを作る
-
-`src/HeavyChart.tsx`:
+> **補足: この `<a onClick={preventDefault}>` は学習用の最小例**: 自家製ルーティングは `Cmd + クリック`（新タブ）/ `中クリック` / 右クリックメニューの「リンクを開く」のようなブラウザ標準操作を全て壊します。実プロダクトでは **React Router**（Vite 用）や **Next.js の `<Link>`** を使い、自前の `preventDefault` 実装は避けます。本レッスンは Playwright の挙動確認に集中するためにあえて最小化しています。
 
 ```tsx
-export function HeavyChart() {
-  // 実際のグラフライブラリの代わりに、大きな配列を生成
-  const data = Array.from({ length: 1000 }, (_, i) => ({
-    label: `点 ${i}`,
-    value: Math.sin(i / 50) * 100 + 100,
-  }));
-
-  return (
-    <div>
-      <h2>グラフ（モック）</h2>
-      <ul>
-        {data.slice(0, 20).map((d) => (
-          <li key={d.label}>
-            {d.label}: {d.value.toFixed(2)}
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-```
-
-### 手順 3: lazy で読み込む
-
-`src/App.tsx`:
-
-```tsx
-import { lazy, Suspense, useState } from "react";
-
-const HeavyChart = lazy(() =>
-  import("./HeavyChart").then((m) => ({ default: m.HeavyChart }))
-);
+import { useState } from "react";
 
 export default function App() {
-  const [show, setShow] = useState(false);
+  const [path, setPath] = useState(window.location.pathname);
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
+  function go(to: string) {
+    window.history.pushState({}, "", to);
+    setPath(to);
+  }
+
+  if (path === "/about") {
+    return (
+      <main>
+        <h1>About</h1>
+        <p>このページは about です。</p>
+        <a
+          href="/"
+          onClick={(e) => {
+            e.preventDefault();
+            go("/");
+          }}
+        >
+          Home に戻る
+        </a>
+      </main>
+    );
+  }
 
   return (
     <main>
-      <h1>パフォーマンス演習</h1>
-      <button onClick={() => setShow(true)}>グラフを表示</button>
+      <h1>Home</h1>
+      <p>Playwright のサンプル。</p>
+      <a
+        href="/about"
+        onClick={(e) => {
+          e.preventDefault();
+          go("/about");
+        }}
+      >
+        About
+      </a>
 
-      {show && (
-        <Suspense fallback={<p>読み込み中...</p>}>
-          <HeavyChart />
-        </Suspense>
-      )}
+      <hr />
+
+      <form
+        onSubmit={(e) => {
+          e.preventDefault();
+          if (name.trim()) setSubmitted(name);
+        }}
+      >
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
+        />
+        <button type="submit">送信</button>
+      </form>
+
+      {submitted && <p>こんにちは、{submitted} さん</p>}
     </main>
   );
 }
 ```
 
-`HeavyChart` は **named export** なので `lazy` の中で `default` に変換しています。`export default function HeavyChart() {...}` にすれば変換は不要です。
-
-### 手順 4: ビルドして可視化
+### 手順 2: Playwright をインストール
 
 ```bash
-npm run build
+npm install -D @playwright/test
+npx playwright install
 ```
 
-ビルド完了後、自動で `stats.html` がブラウザで開きます。
+### 手順 3: 設定ファイル
 
-- 中央の大きなブロックが React 本体
-- 別の小さな chunk として `HeavyChart` のコードが分かれているはず
-- **Initial bundle**（最初に送られる JS）から `HeavyChart` が外れている
+`playwright.config.ts`:
+
+```ts
+import { defineConfig } from "@playwright/test";
+
+export default defineConfig({
+  testDir: "./e2e",
+  use: {
+    baseURL: "http://localhost:5173",
+    trace: "on-first-retry",
+  },
+  webServer: {
+    command: "npm run dev",
+    url: "http://localhost:5173",
+    reuseExistingServer: !process.env.CI,
+  },
+});
+```
+
+`package.json` の scripts に追加:
+
+```json
+{
+  "scripts": {
+    "e2e": "playwright test",
+    "e2e:ui": "playwright test --ui"
+  }
+}
+```
+
+### 手順 4: テストを書く
+
+`e2e/sample.spec.ts`:
+
+```ts
+import { test, expect } from "@playwright/test";
+
+test("トップに Home の見出しが表示される", async ({ page }) => {
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
+});
+
+test("About リンクで /about に遷移する", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("link", { name: "About" }).click();
+  await expect(page).toHaveURL("/about");
+  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
+});
+
+test("フォーム送信で挨拶が表示される", async ({ page }) => {
+  await page.goto("/");
+  await page.getByLabel("お名前").fill("Alice");
+  await page.getByRole("button", { name: "送信" }).click();
+  await expect(page.getByText("こんにちは、Alice さん")).toBeVisible();
+});
+```
+
+### 手順 5: 実行
+
+UI モードで動きを見ながら:
+
+```bash
+npm run e2e:ui
+```
+
+CI / 自動実行用（ヘッドレス）:
+
+```bash
+npm run e2e
+```
 
 ### 期待出力
 
-`dist/assets/` を見ると、複数の `.js` ファイルがあるはずです。
+UI モードでは画面右側にテスト一覧、中央にブラウザのプレビューが出ます。各テストをクリックすると、各ステップごとの DOM スナップショットが時系列で見られます。
+
+ヘッドレスでは:
 
 ```
-dist/
-├── index.html
-├── assets/
-│   ├── index-XXXXX.js     ← Initial bundle (App.tsx + React)
-│   └── HeavyChart-XXXXX.js ← lazy でロードされる別 chunk
-└── stats.html
+Running 3 tests using 1 worker
+
+  ok 1 [chromium] › sample.spec.ts:4:1 › トップに Home の見出しが表示される
+  ok 2 [chromium] › sample.spec.ts:9:1 › About リンクで /about に遷移する
+  ok 3 [chromium] › sample.spec.ts:16:1 › フォーム送信で挨拶が表示される
+
+3 passed (3.5s)
 ```
-
-開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
-
-- 最初に index-XXXXX.js が読み込まれる
-- 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
-
-の流れが見えます。
 
 ### 変える
 
-- `lazy` の動的 import を **静的 import** に戻してみる（`import { HeavyChart } from "./HeavyChart"`）。再ビルドすると `HeavyChart` のコードが Initial bundle に統合され、`stats.html` 上で 1 つの大きな塊になることを確認
-- `HeavyChart` の中身を増やしてみる（`Array.from({ length: 100000 }, ...)`）。バンドル内のサイズが目に見えて増える
-- `import * as dateFns from "date-fns"` を入れて、tree shaking が効いていない場合に何が起きるか観察（事前に `npm install date-fns`）
+- `<button>送信</button>` の `<button>` を `<div onclick="...">` に変えてみる。テストの `getByRole("button", ...)` が要素を見つけられず fail する。a11y 的に正しいタグ選びがテストにも効くと体感
+- `playwright.config.ts` の `webServer.command` を `npm run preview` に変えてみる（本番ビルド済みを配信するモード）。本番ビルドで E2E を回せる
+- 失敗するテストを 1 つ作って、`trace.zip` が生成されることを確認。`npx playwright show-trace trace.zip` で再生
 
 ### 自分で書く
 
-- 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
-- `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
-- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
+- 「フォームを空のまま送信しても挨拶が出ない」テストを足す
+- `page.getByLabel("お名前")` を `page.locator("input")` のような **実装に依存したセレクタ** に変えてみる。動くが、`<input>` が複数あったら壊れる、という弱さを体感
 
-### Next.js での実例
+### codegen を試す（任意）
 
-教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
+サーバーを `npm run dev` で別ターミナルから起動した状態で:
 
-それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
+```bash
+npx playwright codegen http://localhost:5173
+```
+
+ブラウザが立ち上がるので、リンクをクリックしたりフォームに入力したりすると、横のパネルにテストコードが自動生成されます。コピペして `e2e/auto.spec.ts` を作ってみると、自分で書いたものとの違いが見られます。
 
 ## まとめ
 
-- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
-- **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
-- 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
-- **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
-- Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
-- Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意
+- E2E は本物のブラウザでアプリ全体を動かすテスト。**最重要パスだけ** に絞る
+- **Playwright** は 3 ブラウザを 1 API で扱える、自動待機 / トレース / codegen 完備
+- 設定は `playwright.config.ts` の `webServer` で `npm run dev` の自動起動が定番
+- API は Testing Library と似た書き味（`getByRole` / `getByLabel`）
+- アサーションも `expect(...).toBeVisible()` 等が自動リトライ
+- **UI モード** で対話的にデバッグ、**codegen** で操作を録画してテストコード生成
+- 失敗時の **トレース** で CI のエラーをローカル再現
+- MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
+- ローディング表示には `role="status"` または `aria-busy="true"` を付け、`getByRole('status')` で待ち合わせると、見た目が変わってもテストが安定する

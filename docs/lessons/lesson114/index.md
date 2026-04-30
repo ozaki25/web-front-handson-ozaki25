@@ -1,394 +1,444 @@
-# lesson114: 状態管理の地図（TanStack Query / Zustand / Jotai）
+# lesson112: React Hook Form の基本
 
 ## ゴール
 
-- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
-- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
-- **TanStack Query** が **サーバー state** に特化していることを理解する
-- **Zustand** が **グローバルクライアント state** の現代の定番であることを知る
-- **Jotai** の atom 思想と Zustand との使い分けを 1 行で言える
-- **Redux Toolkit** の現在地（特定用途に残る）を把握する
-- 「迷ったら何を選ぶか」の判断軸を持つ
+- 制御コンポーネント（`useState` で都度更新）と React Hook Form（RHF）の違いを説明できる
+- RHF を `npm install` してフォームに導入できる
+- `useForm` / `register` / `handleSubmit` の最小パターンを書ける
+- バリデーション（必須 / 最大長 / パターン）を `register` のオプションで書ける
+- `formState.errors` でエラーメッセージを表示できる
+- `defaultValues` で初期値を入れる
+- `watch` / `setValue` / `reset` の使い分けを知る
 
 ## 解説
 
-### state を 5 種類に分ける
+### 制御コンポーネントの限界
 
-「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
-
-| 種類 | 例 | 最適なツール |
-|---|---|---|
-| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
-| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
-| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
-| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
-| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
-
-> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
-
-### 1. ローカル state: `useState` / `useReducer`
-
-特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
+これまでのレッスンでは、入力欄ごとに `useState` を持って `onChange` で更新する **制御コンポーネント** を書いてきました。
 
 ```tsx
-const [isOpen, setIsOpen] = useState(false);
+const [name, setName] = useState("");
+const [email, setEmail] = useState("");
+const [message, setMessage] = useState("");
+// ...
+<input value={name} onChange={(e) => setName(e.target.value)} />
+<input value={email} onChange={(e) => setEmail(e.target.value)} />
+<textarea value={message} onChange={(e) => setMessage(e.target.value)} />
 ```
 
-「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
+シンプルなフォームならこれで十分ですが、フィールドが 5〜10 個になると次の問題が出ます。
 
-### 2. URL state: `useSearchParams`
+- **キーストロークごとに全コンポーネント再レンダリング**: 大きなフォームだと体感の遅延が出る
+- **コードが冗長**: state と setter の宣言が増える
+- **バリデーションが分散**: 各 onChange に if 文を書くと見通しが悪い
+- **エラー状態の管理が手作業**: 「送信したらエラーを表示、入力したら消す」を自前で
 
-「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。
+これらを根本的に解決するのが **React Hook Form**（以下 RHF）です。
+
+### React Hook Form とは
+
+RHF は **非制御** ベースのフォームライブラリで、内部で `ref` を使って DOM の値を直接読みます。React の状態に閉じ込めないので:
+
+- **入力中の再レンダリングがほぼゼロ**（パフォーマンスが良い）
+- **少ないコード** で大きなフォームを書ける
+- **バリデーション + エラー管理** が組み込み
+
+2026 年現在、React のフォームライブラリのデファクトです。サードパーティ UI（Material UI / Mantine / shadcn/ui 等）との統合も豊富。
+
+### インストール
+
+```bash
+npm install react-hook-form
+```
+
+### 最小のフォーム
+
+`useForm` でフォームインスタンスを作り、`register` で各 input を登録します。
 
 ```tsx
-"use client";
-import { useSearchParams, useRouter, usePathname } from "next/navigation";
+import { useForm } from "react-hook-form";
 
-export function FilterBar() {
-  const searchParams = useSearchParams();
-  const router = useRouter();
-  const pathname = usePathname();
-  const tag = searchParams.get("tag") ?? "all";
+type FormValues = {
+  name: string;
+  email: string;
+};
 
-  function setTag(newTag: string) {
-    const params = new URLSearchParams(searchParams);
-    params.set("tag", newTag);
-    router.push(`${pathname}?${params}`);
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>();
+
+  function onSubmit(data: FormValues) {
+    console.log(data);
   }
 
   return (
-    <select value={tag} onChange={(e) => setTag(e.target.value)}>
-      <option value="all">すべて</option>
-      <option value="js">JavaScript</option>
-      <option value="css">CSS</option>
-    </select>
+    <form onSubmit={handleSubmit(onSubmit)}>
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-required="true"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name", { required: "必須です" })}
+        />
+        {errors.name && <p role="alert">{errors.name.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-required="true"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email", { required: "必須です" })}
+        />
+        {errors.email && <p role="alert">{errors.email.message}</p>}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        送信
+      </button>
+    </form>
   );
 }
 ```
 
-URL に状態が入ると:
+主な要素:
 
-- ブラウザの戻る / 進むで遷移できる
-- URL を共有すれば同じ画面が再現できる
-- ブックマークできる
+- **`useForm<FormValues>()`**: ジェネリクスでフォームの型を渡す
+- **`register("name", options)`**: input を RHF に登録。スプレッド `{...register(...)}` で `ref` / `onChange` / `onBlur` / `name` がまとめて適用される
+- **`handleSubmit(onSubmit)`**: フォーム全体のバリデーションが通ったら `onSubmit(data)` を呼ぶ
+- **`formState.errors`**: バリデーションエラーが格納される
+- **`formState.isSubmitting`**: 送信中フラグ（`onSubmit` が async なら自動で true）
 
-「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
+### バリデーションオプション
 
-### 3. サーバー state: TanStack Query
-
-API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
-
-- **古くなる**（他のユーザーの書き換えで上書きされる可能性がある）
-- **キャッシュしたい**（同じデータを何度も取りたくない）
-- **再取得したい**（ページに戻ってきた時など）
-- **楽観的更新したい**（UI を先に変えて、サーバー応答で確定）
-
-これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。
-
-**TanStack Query**（React Query から改名）はこの問題を **`useQuery` 1 行** で解決します。
-
-```bash
-npm install @tanstack/react-query
-```
+`register` の第 2 引数で各種ルールを指定できます。
 
 ```tsx
-import { useQuery } from "@tanstack/react-query";
+{...register("password", {
+  required: "パスワードは必須です",
+  minLength: { value: 8, message: "8 文字以上で入力してください" },
+  maxLength: { value: 100, message: "100 文字以内で入力してください" },
+  pattern: {
+    value: /^(?=.*[A-Za-z])(?=.*\d).+$/,
+    message: "英字と数字を混ぜてください",
+  },
+})}
+```
 
-function PostsList() {
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("/api/posts");
-      return res.json();
-    },
-  });
+`required` / `minLength` / `maxLength` / `pattern` / `validate`（カスタム関数）が代表的です。
 
-  if (isLoading) return <p>読み込み中...</p>;
-  if (error) return <p>エラー</p>;
-  return <ul>{data.map((p) => <li key={p.id}>{p.title}</li>)}</ul>;
+```tsx
+{...register("age", {
+  validate: (value) => {
+    if (value < 18) return "18 歳以上である必要があります";
+    if (value > 120) return "値が大きすぎます";
+    return true; // OK
+  },
+})}
+```
+
+### `defaultValues` で初期値
+
+編集画面のように **既存値をプリセット** したい場合は `defaultValues` を使います。
+
+```tsx
+const { register, handleSubmit } = useForm<FormValues>({
+  defaultValues: {
+    name: "Alice",
+    email: "alice@example.com",
+  },
+});
+```
+
+非同期で取得した値を初期値にしたい場合は `reset(...)` で後から差し替え:
+
+```tsx
+const { register, handleSubmit, reset } = useForm<FormValues>();
+
+useEffect(() => {
+  fetch("/api/me")
+    .then((r) => r.json())
+    .then((user) => reset(user));
+}, [reset]);
+```
+
+### `watch` で値を購読
+
+特定フィールドの値を **監視して再レンダリング** したい場合は `watch`:
+
+```tsx
+const { watch, register } = useForm<FormValues>();
+const subscribe = watch("subscribe");
+
+return (
+  <>
+    <label>
+      <input type="checkbox" {...register("subscribe")} />
+      購読する
+    </label>
+
+    {subscribe && (
+      <div>
+        <label>頻度</label>
+        <select {...register("frequency")}>
+          <option value="daily">毎日</option>
+          <option value="weekly">毎週</option>
+        </select>
+      </div>
+    )}
+  </>
+);
+```
+
+`watch` は **その field が変わるたび** にコンポーネントを再レンダリングします。RHF が「再レンダリングを最小化する」設計なので、`watch` を使う箇所だけ反応する形です。
+
+### `setValue` でプログラム的に値を設定
+
+```tsx
+const { setValue } = useForm<FormValues>();
+
+// 別のボタンや非同期処理から値を入れる
+setValue("name", "Bob");
+```
+
+「住所オートコンプリートで郵便番号から市区町村を埋める」のような場面で使います。
+
+### `reset` でフォームを初期化
+
+送信成功後にフォームを空にする:
+
+```tsx
+async function onSubmit(data: FormValues) {
+  await fetch("/api/contact", { method: "POST", body: JSON.stringify(data) });
+  reset();  // 入力をクリア
 }
 ```
 
-`useQuery` がやってくれること:
+### 送信中の表示
 
-- **キャッシュ**: 同じ `queryKey` のデータは再利用
-- **重複排除**: 同じ key で複数コンポーネントから呼んでも 1 回だけ fetch
-- **再取得**: ウィンドウフォーカス時 / ネットワーク復帰時
-- **ステール管理**: `staleTime` を超えたら古い扱いに
-- **楽観的更新**: `useMutation` で送信中に UI を先に更新
-- **無限スクロール**: `useInfiniteQuery`
-
-2026 年の React アプリで **API 呼び出しがある** なら、TanStack Query 入れない理由はほぼないです。
-
-> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
-
-### 4. グローバルクライアント state: Zustand / Jotai / Context
-
-「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には:
-
-#### 軽量な定番: Zustand
-
-```bash
-npm install zustand
-```
+`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
 
 ```tsx
-import { create } from "zustand";
+const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
 
-type AuthStore = {
-  user: { id: string; name: string } | null;
-  login: (user: { id: string; name: string }) => void;
-  logout: () => void;
-};
-
-export const useAuthStore = create<AuthStore>((set) => ({
-  user: null,
-  login: (user) => set({ user }),
-  logout: () => set({ user: null }),
-}));
+return (
+  <button type="submit" disabled={isSubmitting}>
+    {isSubmitting ? "送信中..." : "送信"}
+  </button>
+);
 ```
 
-```tsx
-function Header() {
-  const user = useAuthStore((s) => s.user);
-  const logout = useAuthStore((s) => s.logout);
+`onSubmit` が async（`Promise` を返す）なら、その完了まで `isSubmitting` が true に保たれます。
 
-  return user ? (
-    <div>
-      ようこそ、{user.name} さん
-      <button onClick={logout}>ログアウト</button>
-    </div>
-  ) : (
-    <p>未ログイン</p>
-  );
+### アクセシブルなエラー表示
+
+「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
+
+```tsx
+<input
+  id="email"
+  type="email"
+  aria-invalid={errors.email ? "true" : "false"}
+  aria-describedby={errors.email ? "email-error" : undefined}
+  {...register("email", { required: "メールは必須です" })}
+/>
+{errors.email && (
+  <p id="email-error" role="alert">
+    {errors.email.message}
+  </p>
+)}
+```
+
+これでスクリーンリーダーが「メール、必須、エラー: メールは必須です」と読み上げてくれます。
+
+### エラー表示は色だけに頼らない
+
+フォームのエラー文を **赤色だけ** で知らせる UI は、**色覚特性を持つ人** や **コントラストが低いディスプレイ** で見落としやすくなります。次の 3 点を組み合わせるのが堅い書き方です。
+
+1. **AA 基準のコントラスト**: `color: red` は環境によって背景とのコントラスト比が 4.5:1 を割ります。`#b91c1c`（ライト背景向け）/ `#fca5a5`（ダーク背景向け）のような **AA を満たす色** に置き換え、CSS で定義します
+2. **テキストでも知らせる**: 「エラー: 」という接頭辞、`!` アイコン、`<strong>` などの強調を併用すると、色が見えなくても伝わります
+3. **`role="alert"` で読み上げ**: スクリーンリーダーには `role="alert"` を付けた要素が即座に通知される（既に上の例で実施済み）
+
+CSS 例:
+
+```css
+.form-error {
+  color: #b91c1c;
+}
+@media (prefers-color-scheme: dark) {
+  .form-error {
+    color: #fca5a5;
+  }
 }
 ```
-
-利点:
-
-- **Provider が要らない**: import するだけで使える
-- **boilerplate が少ない**: Redux に比べて 1/5 のコード
-- **TypeScript フレンドリー**
-- **React 外でも呼べる**: `useAuthStore.getState()` で外部からも参照可能
-
-2026 年の **グローバルクライアント state の第一候補**。Redux Toolkit の boilerplate に疲れた人が大量に乗り換えました。
-
-#### atom ベース: Jotai
-
-```bash
-npm install jotai
-```
-
-```tsx
-import { atom, useAtom } from "jotai";
-
-const countAtom = atom(0);
-
-function Counter() {
-  const [count, setCount] = useAtom(countAtom);
-  return <button onClick={() => setCount(count + 1)}>{count}</button>;
-}
-```
-
-特徴:
-
-- 状態を **小さな atom** に分割。それぞれが独立に管理される
-- 「明確な store がない、散らばった state を組み合わせる」アプリ向け
-- 派生状態（derived atom）が綺麗に書ける
-
-Zustand の **明確な store** とは対照的に、Jotai は **粒度の細かい atom** を組み合わせる思想です。React の useState を「アプリ全体に拡張した版」と考えると分かりやすい。
-
-#### React Context（組み込み）
-
-`useContext` も簡易な共有手段ですが、**頻繁に変わる state には向きません**（全消費者が再レンダリングされる）。テーマや言語設定のような「滅多に変わらない」共有値に使うのが定番です。
-
-「`Context` で済むなら Context、頻繁に変わるなら Zustand or Jotai、サーバー由来なら TanStack Query」が 2026 年の使い分けです。
-
-### Redux / Redux Toolkit の現在地
-
-Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。
-
-Redux が今でも残るのは:
-
-- **既存プロジェクト**: 移行コストで残る
-- **大規模 + 複雑な action / reducer ロジック** が要る場合
-- **Redux DevTools の時間旅行デバッグ** が欲しい場合
-- **ミドルウェア（thunk / saga）の生態系** に依存
-
-新規アプリなら **Zustand から始める** のが軽量で十分です。
-
-### SWR（TanStack Query の代替）
-
-Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。
-
-- TanStack Query: 機能豊富、エコシステム大、複雑系も得意
-- SWR: シンプル、API が小さい、学習コスト低、Next.js との親和性
-
-「シンプルさを優先」なら SWR、「全部入りで困らない」なら TanStack Query、というイメージです。
-
-### 「迷ったらこう選ぶ」フローチャート
-
-1. **コンポーネント内だけで完結？** → `useState`
-2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
-3. **サーバーから取るデータ？** → **TanStack Query**
-4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
-5. **散らばった派生状態が多い？** → **Jotai**
-6. **滅多に変わらない設定値？** → **Context**
-7. **フォームの入力値？** → **React Hook Form**
-
-これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
 
 ## 演習
 
 ### ゴール
 
-- 「TanStack Query で API データ取得」「Zustand でテーマ切替」「URL state でフィルタ」を 1 つのアプリで体験する
-- それぞれが **どの種類の state** を扱っているか意識する
+- React + TS プロジェクトに RHF を導入する
+- 「お問い合わせフォーム」を作る（名前 / メール / メッセージ）
+- 必須 / メールパターン / 最大長 のバリデーションを実装
+- 送信時に「送信中...」、成功で「送信しました！」を表示
 
 ### 途中から始める場合
 
-新規 Vite + React + TS プロジェクトを作成。
+これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
 
 ```bash
-npm create vite@latest state-sample -- --template react-ts
-cd state-sample
+npm create vite@latest rhf-sample -- --template react-ts
+cd rhf-sample
 npm install
-npm install @tanstack/react-query zustand
+npm install react-hook-form
 ```
 
-### 手順 1: TanStack Query の Provider を入れる
+### `src/ContactForm.tsx`
 
-`src/main.tsx`:
+> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
 
 ```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import App from "./App";
+import { useForm } from "react-hook-form";
+import { useState } from "react";
 
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
-);
-```
-
-### 手順 2: Zustand store
-
-`src/themeStore.ts`:
-
-```ts
-import { create } from "zustand";
-
-type ThemeStore = {
-  theme: "light" | "dark";
-  toggle: () => void;
+type FormValues = {
+  name: string;
+  email: string;
+  message: string;
 };
 
-// 初期値は OS 設定 (prefers-color-scheme) を尊重する
-const prefersDark =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-color-scheme: dark)").matches;
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
 
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: prefersDark ? "dark" : "light",
-  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-}));
-```
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<FormValues>();
 
-> **`aria-pressed` と `prefers-color-scheme`**: 切替ボタン側には `aria-pressed={theme === "dark"}` を付けて、スクリーンリーダーに「現在 ON / OFF どちらの状態か」を伝えます。初期値は `prefers-color-scheme: dark` を見て OS 設定に揃えると、ダークモード設定の利用者が **明るい画面で迎えられる事故** を防げます。
-
-### 手順 3: 統合した App
-
-`src/App.tsx`:
-
-```tsx
-import { useState } from "react";
-import { useQuery } from "@tanstack/react-query";
-import { useThemeStore } from "./themeStore";
-
-type Post = { id: number; title: string };
-
-export default function App() {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggle);
-  const [filter, setFilter] = useState("all");  // 簡易版（本来は URL state）
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-      return (await res.json()) as Post[];
-    },
-  });
-
-  const filtered = filter === "all" ? data : data?.filter((p) => p.id <= 10);
+  async function onSubmit(data: FormValues) {
+    // 実際は fetch で送信。ここでは 1 秒待つだけ
+    await new Promise((r) => setTimeout(r, 1000));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
+  }
 
   return (
-    <main
-      style={{
-        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
-        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
-        padding: 16,
-        minHeight: "100vh",
-      }}
-    >
-      <h1>状態管理の地図</h1>
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
 
-      <button
-        type="button"
-        aria-pressed={theme === "dark"}
-        onClick={toggleTheme}
-      >
-        テーマ: {theme}（クリックで切替 — Zustand）
-      </button>
-
-      <div style={{ marginTop: 12 }}>
-        <button onClick={() => setFilter("all")}>すべて（ローカル state）</button>
-        <button onClick={() => setFilter("first10")}>最初の 10 件</button>
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          aria-describedby={errors.name ? "name-error" : undefined}
+          {...register("name", {
+            required: "お名前は必須です",
+            maxLength: { value: 50, message: "50 文字以内で入力してください" },
+          })}
+        />
+        {errors.name && (
+          <p id="name-error" role="alert" className="form-error">
+            {errors.name.message}
+          </p>
+        )}
       </div>
 
-      <h2>記事一覧（TanStack Query で fetch）</h2>
-      {isLoading && <p>読み込み中...</p>}
-      {error && <p>エラー</p>}
-      <ul>
-        {filtered?.slice(0, 20).map((p) => (
-          <li key={p.id}>#{p.id} {p.title}</li>
-        ))}
-      </ul>
-    </main>
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          aria-describedby={errors.email ? "email-error" : undefined}
+          {...register("email", {
+            required: "メールは必須です",
+            pattern: {
+              value: /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
+              message: "メールアドレスの形式が正しくありません",
+            },
+          })}
+        />
+        {errors.email && (
+          <p id="email-error" role="alert" className="form-error">
+            {errors.email.message}
+          </p>
+        )}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          aria-describedby={errors.message ? "message-error" : undefined}
+          {...register("message", {
+            required: "メッセージは必須です",
+            minLength: { value: 10, message: "10 文字以上で入力してください" },
+          })}
+        />
+        {errors.message && (
+          <p id="message-error" role="alert" className="form-error">
+            {errors.message.message}
+          </p>
+        )}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
   );
+}
+```
+
+### `src/App.tsx`
+
+```tsx
+import { ContactForm } from "./ContactForm";
+
+export default function App() {
+  return <ContactForm />;
 }
 ```
 
 ### 期待出力
 
-- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示
-- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
-- 「最初の 10 件」を押すと表示が絞り込まれる（ローカル state）
-- ブラウザを **リロードしても fetch は走らない**（TanStack Query のキャッシュ）→ DevTools の Network で 2 回目以降は出ない
+- 何も入れずに送信 → 全フィールドにエラーが赤字で出る
+- メールに `abc` を入れて送信 → メール形式エラー
+- 全部正しく入れて送信 → ボタンが「送信中...」になり、1 秒後に「送信しました！」表示 + 入力欄がクリア
+- DevTools の Console に送信値が出る
+
+`noValidate` を `<form>` に付けているのは、ブラウザ標準のバリデーション UI を抑制し、RHF + 自前のメッセージ表示に統一するためです。
 
 ### 変える
 
-- `useQuery` の `staleTime: 1000 * 60` を渡してみる。1 分間は再取得されないキャッシュ
-- Zustand の `theme` をブラウザリロード後も保持するために `zustand/middleware` の `persist` を使ってみる
-- `filter` を URL state に変更（`useSearchParams` で `?filter=...`）
+- `register` の `required: true`（メッセージなし）に変えてみる。エラーは出るが `errors.name.message` が `undefined` になり、デフォルトメッセージが表示されない
+- 入力欄を `{...register("phone")}` で 1 つ追加し、バリデーションなしで動かす
+- `defaultValues` を `useForm` に渡して、初期値「お名前: Anonymous」を入れてみる
 
 ### 自分で書く
 
-- TanStack Query の `useMutation` で「記事を作成」ボタンを足す（POST）。送信中の UI を表示
-- Jotai を入れて、`countAtom` でカウンターを実装し、Zustand 版と書き味を比較
+- 「住所」フィールド（郵便番号 / 都道府県 / 市区町村）を追加し、`watch` で郵便番号の入力を監視。7 桁入力したら（mock として）固定の都道府県・市区町村を `setValue` で埋める
+- `useFieldArray` で「複数の電話番号を追加できる」フォームに発展させる（公式ドキュメント参照: <https://react-hook-form.com/docs/usefieldarray>）
 
 ## まとめ
 
-- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
-- 2026 年は **役割ごとに使い分ける** のが定番
-- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
-- **Jotai** は atom ベース、散らばった派生状態に向く
-- **Redux** は新規では Zustand に押されている。既存プロジェクトでは続投
-- **SWR** は TanStack Query のシンプル代替
-- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ
+- 制御コンポーネント（useState）はキーストロークごとに再レンダリング → 大きいフォームで遅くなる
+- **React Hook Form**（RHF） は ref ベースの非制御で軽量。大規模フォームの定番
+- 基本: `useForm()` で取った `register` / `handleSubmit` / `formState`
+- バリデーションは `register` の第 2 引数で `required` / `minLength` / `maxLength` / `pattern` / `validate`
+- エラー表示は `formState.errors.field.message`、a11y 用の `aria-invalid` / `aria-describedby` と組み合わせる
+- `defaultValues` / `reset` / `watch` / `setValue` で実用的な操作
+- `isSubmitting` で送信中の UI 制御

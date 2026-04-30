@@ -1,486 +1,483 @@
-# lesson113: Zod でスキーマバリデーション
+# lesson111: CI/CD パイプラインの設計
 
 ## ゴール
 
-- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
-- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
-- `parse` / `safeParse` の違いと使いどころを知る
-- `z.infer<typeof schema>` で型を自動導出できる
-- React Hook Form と組み合わせて型安全なフォームを作れる
-- API レスポンスの検証や Server Actions の入力検証にも応用できる
-- Valibot / Arktype など代替ライブラリの存在を知る
+- 「CI」と「CD」を正しく区別して語れる
+- パイプラインを **段階**（lint → test → build → deploy） に分けて設計できる
+- GitHub Actions の **キャッシュ / マトリクス / 並列ジョブ** で速くする
+- Lighthouse CI で速度劣化を **PR 単位** で検知できる
+- Vercel の **Preview Deployment** とテストを連携できる
+
+::: tip 前提
+このレッスンは「GitHub Actions で CI」の発展編です。基本構文（`workflow_dispatch` / `on: push` / `actions/checkout`）は「GitHub Actions で CI」を参照してください。
+:::
 
 ## 解説
 
-### TypeScript の型だけでは足りない
+### CI と CD の違い
 
-TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
+| 略 | 正式名称 | やること |
+|---|---|---|
+| **CI** | Continuous Integration（継続的インテグレーション） | コードをこまめに統合し、**自動でテスト** |
+| **CD** | Continuous Delivery（継続的デリバリ）または Deployment（継続的デプロイ） | テストを通ったコードを **自動でリリース** |
 
-```ts
-type User = { id: number; name: string };
+「ボタン 1 つでデプロイ」が **Continuous Delivery**、「main にマージ → そのまま本番へ」が **Continuous Deployment**。両方とも略称が CD。
 
-async function getUser(): Promise<User> {
-  const res = await fetch("/api/user");
-  return res.json();   // 本当に User 型？
-}
+### パイプラインの基本構成
+
+```
+push / PR
+   ↓
+┌─────────┐  ┌─────────┐  ┌─────────┐
+│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
+└─────────┘  └─────────┘  └─────────┘
+        ↓        ↓        ↓
+        └────────┴────────┘
+                   ↓
+              ┌─────────┐
+              │  Build  │
+              └─────────┘
+                   ↓
+              ┌─────────┐
+              │ Deploy  │  ← main にマージされた時のみ
+              └─────────┘
 ```
 
-`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
+ポイント:
 
-実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
+- **lint / test / typecheck は並列**（独立しているので速い）
+- **build は依存** が解決した後（手戻りを早く検知）
+- **deploy は最後** にする
+- **PR では deploy しない**（preview deployment は別フロー）
 
-### Zod とは
+### GitHub Actions の最小パイプライン
 
-Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+`.github/workflows/ci.yml`:
 
-1. **実行時バリデーション**: 不正な値を弾く
-2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
+```yaml
+name: CI
 
-「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-### インストール
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+```
+
+`needs:` で **前のジョブが成功した時だけ** 次に進みます。
+
+### キャッシュで速くする
+
+毎回 `npm ci` するとパッケージダウンロードに 30 秒〜1 分かかります。`actions/setup-node@v4` の `cache: npm` で **`~/.npm` をキャッシュ** すれば数秒に短縮されます。
+
+#### `actions/cache` で任意のディレクトリ
+
+```yaml
+- uses: actions/cache@v4
+  with:
+    path: |
+      ~/.npm
+      .next/cache
+    key: ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-${{ hashFiles('**.[jt]s', '**.[jt]sx') }}
+    restore-keys: |
+      ${{ runner.os }}-nextjs-${{ hashFiles('**/package-lock.json') }}-
+```
+
+Next.js なら `.next/cache` を保存すると **増分ビルド** が効いて高速。
+
+::: warning キャッシュの落とし穴
+キャッシュ key の設計がずれると **古いキャッシュを掴んでバグる** ことがあります。`package-lock.json` のハッシュを必ず key に含める / 想定外の挙動が出たら手動で **caches を削除** する。
+:::
+
+### マトリクスビルド
+
+複数の Node.js バージョン / OS で同時にテストする時に便利。
+
+```yaml
+test:
+  runs-on: ${{ matrix.os }}
+  strategy:
+    matrix:
+      os: [ubuntu-latest, macos-latest, windows-latest]
+      node: [20, 22]
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: ${{ matrix.node }} }
+    - run: npm ci
+    - run: npm test
+```
+
+これだけで **OS 3 種 x Node 2 種 = 6 並列** のテストが走ります。OSS ライブラリなどで重宝。
+
+### 並列の使いどころ
+
+- **Lint / Typecheck / Test を並列に**
+- **Unit / E2E を分ける**（E2E は遅いので別ジョブ）
+- **Storybook ビルドを別ジョブに**
+- **Cypress / Playwright を shard** で分割
+
+シャーディング例（Playwright）:
+
+```yaml
+strategy:
+  fail-fast: false
+  matrix:
+    shard: [1, 2, 3, 4]
+steps:
+  - run: npx playwright test --shard=${{ matrix.shard }}/4
+```
+
+### CD（デプロイ）の戦略
+
+#### Vercel / Netlify / Cloudflare Pages を使うなら
+
+これらのサービスは **GitHub と連携するだけで自動デプロイ** されます。`.github/workflows/deploy.yml` を書く必要すらありません。**main = 本番、PR = Preview** が自動。
+
+#### 自前でデプロイする時の最小例
+
+```yaml
+deploy:
+  if: github.ref == 'refs/heads/main'
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npm run build
+    - run: npm run deploy
+      env:
+        DEPLOY_TOKEN: ${{ secrets.DEPLOY_TOKEN }}
+```
+
+`if: github.ref == 'refs/heads/main'` で **main 限定** にする。
+
+### Vercel の Preview Deployment と組み合わせる
+
+Vercel は PR ごとに **プレビュー URL**（`https://my-app-git-feature-x.vercel.app`）を作ります。これを使うと:
+
+- レビュアーが **動作確認しながら** レビューできる
+- E2E テストを **本番に近い環境** で走らせられる
+- Lighthouse CI を **プレビュー URL に対して** 実行できる
+
+#### プレビュー URL に E2E を回す
+
+```yaml
+e2e:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npx playwright install --with-deps
+    - name: Wait for Vercel preview
+      uses: patrickedqvist/wait-for-vercel-preview@v1
+      id: vercel
+      with:
+        token: ${{ secrets.GITHUB_TOKEN }}
+        max_timeout: 300
+    - run: npx playwright test
+      env:
+        BASE_URL: ${{ steps.vercel.outputs.url }}
+```
+
+### Lighthouse CI
+
+PR 単位で **Lighthouse スコアの劣化** を検知します。
 
 ```bash
-npm install zod
+npm install -D @lhci/cli
 ```
 
-### 基本のスキーマ
+`lighthouserc.json`:
 
-```ts
-import { z } from "zod";
-
-const UserSchema = z.object({
-  id: z.number(),
-  name: z.string(),
-  email: z.email(),
-  age: z.number().int().min(0).max(150),
-  isAdmin: z.boolean(),
-});
-
-type User = z.infer<typeof UserSchema>;
-// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
-```
-
-`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
-
-> **補足: `z.infer<typeof X>` の `typeof` は型レベルの取得**: ここでの `typeof UserSchema` は、JS の値レベル `typeof`（`typeof x === "string"` のような演算子）とは別物です。TypeScript には型を扱う専用の `typeof` があり、「**変数の型を取り出す**」役割を持ちます。`UserSchema` は値（オブジェクト）として存在しますが、その値の **型** を取り出して `z.infer<...>` に渡すことで「スキーマから型を自動導出」できます。`z.infer<typeof X>` という書き方をひとつのイディオムとして覚えてしまって構いません。
-
-### 組み込み修飾メソッド
-
-```ts
-z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
-z.email("メール形式で")                                 // メール（v4 から top-level）
-z.url("URL 形式で")                                    // URL（v4 から top-level）
-z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
-z.number().int("整数で").positive("正の数で")           // 整数 + 正
-z.number().min(0).max(100)                             // 範囲
-z.string().optional()                                   // string | undefined
-z.string().nullable()                                   // string | null
-z.string().default("デフォルト")                        // デフォルト値
-```
-
-> **Zod v4（2025 リリース）の変更点**: `z.string().email()` / `.url()` / `.uuid()` / `.datetime()` は v4 で **top-level の `z.email()` / `z.url()` / `z.uuid()` / `z.iso.datetime()` に再編** されました。v3 系の書き方も互換のため動きますが、新規コードは v4 形式が推奨です。
-
-### 配列とユニオン
-
-```ts
-const TodoSchema = z.object({
-  id: z.uuid(),
-  title: z.string().min(1),
-  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
-  tags: z.array(z.string()),
-  createdAt: z.iso.datetime(),                // ISO 8601
-});
-
-type Todo = z.infer<typeof TodoSchema>;
-```
-
-### `parse` と `safeParse`
-
-スキーマで値を検証する 2 つの方法:
-
-#### `parse`: 失敗時に例外を投げる
-
-```ts
-try {
-  const user = UserSchema.parse(data);
-  console.log(user.name);  // 型は User
-} catch (err) {
-  if (err instanceof z.ZodError) {
-    console.log(err.issues);  // どこで失敗したかの詳細
+```json
+{
+  "ci": {
+    "collect": {
+      "url": ["https://example.com/"],
+      "numberOfRuns": 3
+    },
+    "assert": {
+      "assertions": {
+        "categories:performance": ["error", { "minScore": 0.9 }],
+        "categories:accessibility": ["error", { "minScore": 0.95 }]
+      }
+    },
+    "upload": {
+      "target": "temporary-public-storage"
+    }
   }
 }
 ```
 
-#### `safeParse`: 失敗時にも値を返す
+GitHub Actions で:
 
-```ts
-const result = UserSchema.safeParse(data);
-if (result.success) {
-  console.log(result.data.name);
-} else {
-  console.log(result.error.issues);
-}
+```yaml
+lighthouse:
+  needs: build
+  runs-on: ubuntu-latest
+  steps:
+    - uses: actions/checkout@v4
+    - uses: actions/setup-node@v4
+      with: { node-version: 22, cache: npm }
+    - run: npm ci
+    - run: npx lhci autorun
 ```
 
-`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
+スコアが基準を下回ると **CI が fail** するので、性能劣化が main に入る前に止められます。
 
-### React Hook Form と統合
+### シークレットの取り扱い
 
-`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
+- API キー / トークンは **GitHub Settings → Secrets** に登録し、workflow から `secrets.NAME` の形（`$` と `{{ }}` の組み合わせ）で参照
+- workflow ファイルに **平文で書かない**
+- **fork からの Pull Request** に対する `pull_request` トリガーでは **secrets は読めません**（空文字列になります）。これは「fork してきた攻撃者が悪意ある workflow を入れて secrets を盗む」サプライチェーン攻撃を防ぐためです。CI で secrets が必要な処理は「自分のリポジトリ内のブランチからの PR」だけで動くように分けます
+- `pull_request_target` を使うと fork PR でも secrets が読めますが、**fork の悪意あるコードがそのまま走るため極めて危険** です。利用は「ラベル付けや welcome コメント等、コードを実行しない処理に限る」のが鉄則です
 
-```bash
-npm install @hookform/resolvers
+### 環境（Environment）の活用
+
+`environment: production` を指定すると:
+
+- Required reviewers（**承認が必要**）
+- Wait timer（**N 分待つ**）
+- Branch policy（**main 限定**）
+- 環境固有のシークレット（`PRODUCTION_DB_URL` など）
+
+を設定できます。**本番デプロイに人手の承認を入れる** のに便利。
+
+```yaml
+deploy-prod:
+  environment: production
+  runs-on: ubuntu-latest
+  steps: ...
 ```
 
-```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { z } from "zod";
+### 再利用可能な workflow
 
-const ContactSchema = z.object({
-  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
-  email: z.email("メールアドレスの形式が正しくありません"),
-  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
-  message: z.string().min(10, "10 文字以上で入力してください"),
-});
+組織内で **同じ workflow を複数リポジトリで使う** 場合、**reusable workflow** が便利。
 
-type ContactFormValues = z.infer<typeof ContactSchema>;
-
-export function ContactForm() {
-  const {
-    register,
-    handleSubmit,
-    formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
-
-  function onSubmit(data: ContactFormValues) {
-    console.log("検証済みデータ:", data);
-  }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <input {...register("name")} />
-      {errors.name && <p>{errors.name.message}</p>}
-
-      <input type="email" {...register("email")} />
-      {errors.email && <p>{errors.email.message}</p>}
-
-      <input type="number" {...register("age")} />
-      {errors.age && <p>{errors.age.message}</p>}
-
-      <textarea {...register("message")} />
-      {errors.message && <p>{errors.message.message}</p>}
-
-      <button type="submit" disabled={isSubmitting}>送信</button>
-    </form>
-  );
-}
+```yaml
+# .github/workflows/_node-ci.yml（呼ばれる側）
+on:
+  workflow_call:
+    inputs:
+      node-version: { type: string, default: "20" }
+jobs:
+  ci:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: ${{ inputs.node-version }}, cache: npm }
+      - run: npm ci
+      - run: npm run lint && npm run test
 ```
 
-利点:
-
-- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
-- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
-- **エラーメッセージ** が日本語で出せる
-
-### `z.coerce` で型変換
-
-`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
-
-```ts
-z.coerce.number()       // 文字列 → 数値
-z.coerce.boolean()      // 文字列 / 数値 → boolean
-z.coerce.date()         // 文字列 → Date
+```yaml
+# 呼び出す側
+jobs:
+  ci:
+    uses: my-org/.github/.github/workflows/_node-ci.yml@main
+    with:
+      node-version: "22"
 ```
 
-> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
->
-> ```ts
-> age: z.preprocess(
->   (v) => (v === "" || v === null ? undefined : v),
->   z.coerce.number().int("整数で").min(18, "18 歳以上")
-> )
-> ```
->
-> または `z.string().min(1, "必須です").transform(Number).pipe(z.number().int())` のように **string で受けてから変換** する書き方でも回避できます。
+### 失敗を早く検知するコツ
 
-### API レスポンスの検証
+- **fail-fast: false** にすると、1 つ失敗しても他のマトリクスが続行する。原因の切り分けに便利
+- **`continue-on-error: true`** を一時的に付けると、失敗しても次に進む（実験的なジョブで）
+- **`timeout-minutes`** を設定して暴走を止める
+- 失敗したジョブの **アーティファクト**（スクリーンショット / ログ）を `actions/upload-artifact` で保存
 
-サーバーから返ってきたデータが想定通りかを検証します。
+### コスト管理
 
-```ts
-async function fetchUser(id: number): Promise<User> {
-  const res = await fetch(`/api/users/${id}`);
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
-}
+GitHub Actions は **public リポジトリは無料**、private は **月 2,000 分** まで無料（有料プランで増える）。コストを抑えるコツ:
+
+- **キャッシュ** で `npm ci` の時間を削る
+- **早く失敗するジョブを先に**（lint で 10 秒で落ちれば後続が走らない）
+- **paths フィルタ** で対象を絞る（ドキュメント変更だけなら CI スキップ）
+
+```yaml
+on:
+  pull_request:
+    paths:
+      - "src/**"
+      - "package*.json"
 ```
-
-これで API 仕様変更による不正レスポンスを早期に検知できます。
-
-### Server Actions / Route Handlers の入力検証
-
-**「Server Actions の最小形」「Route Handlers」** で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
-
-```ts
-"use server";
-
-import { z } from "zod";
-
-const AddTodoSchema = z.object({
-  text: z.string().min(1).max(200),
-});
-
-export async function addTodo(formData: FormData) {
-  const result = AddTodoSchema.safeParse({
-    text: formData.get("text"),
-  });
-  if (!result.success) {
-    return { ok: false as const, error: result.error.issues[0].message };
-  }
-  // 検証済みの result.data.text を使う
-  await db.insertTodo(result.data.text);
-  return { ok: true as const };
-}
-```
-
-### よくあるパターン
-
-#### refine: 複数フィールド間のチェック
-
-```ts
-const SignupSchema = z.object({
-  password: z.string().min(8),
-  passwordConfirm: z.string(),
-}).refine((data) => data.password === data.passwordConfirm, {
-  message: "パスワードが一致しません",
-  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
-});
-```
-
-#### transform: 値を加工
-
-```ts
-const TrimmedString = z.string().transform((s) => s.trim());
-
-TrimmedString.parse("  hello  "); // "hello"
-```
-
-### 代替ライブラリ
-
-| ライブラリ | 特徴 |
-|---|---|
-| **Zod** | デファクト。エコシステム最大 |
-| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
-| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
-| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
-
-新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
 
 ## 演習
 
 ### ゴール
 
-- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
-- スキーマから型を自動導出する
-- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
+- 既存プロジェクトに **lint → typecheck → test → build** の並列パイプラインを構築する
+- キャッシュを効かせて 2 倍速にする
 
-### 手順 1: 依存追加
+### 手順 1: ベースのプロジェクト
 
 ```bash
-npm install zod @hookform/resolvers
+npm create vite@latest cicd-sample -- --template react-ts
+cd cicd-sample
+npm install
+git init && git add . && git commit -m "init"
 ```
 
-### 手順 2: スキーマ + 型を定義
+GitHub にリポジトリを作って push。
 
-`src/contact-schema.ts`:
+### 手順 2: scripts を整える
 
-```ts
-import { z } from "zod";
+`package.json`:
 
-export const ContactSchema = z.object({
-  name: z
-    .string()
-    .min(1, "お名前は必須です")
-    .max(50, "50 文字以内で入力してください"),
-  email: z
-    .string()
-    .min(1, "メールは必須です")
-    .email("メールアドレスの形式が正しくありません"),
-  message: z
-    .string()
-    .min(10, "10 文字以上で入力してください")
-    .max(1000, "1000 文字以内で入力してください"),
-});
-
-export type ContactFormValues = z.infer<typeof ContactSchema>;
-```
-
-### 手順 3: フォームを書き換え
-
-`src/ContactForm.tsx`:
-
-```tsx
-import { useForm } from "react-hook-form";
-import { zodResolver } from "@hookform/resolvers/zod";
-import { useState } from "react";
-import { ContactSchema, type ContactFormValues } from "./contact-schema";
-
-export function ContactForm() {
-  const [submitted, setSubmitted] = useState(false);
-
-  const {
-    register,
-    handleSubmit,
-    reset,
-    formState: { errors, isSubmitting },
-  } = useForm<ContactFormValues>({
-    resolver: zodResolver(ContactSchema),
-  });
-
-  async function onSubmit(data: ContactFormValues) {
-    await new Promise((r) => setTimeout(r, 500));
-    console.log("送信:", data);
-    setSubmitted(true);
-    reset();
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run"
   }
-
-  return (
-    <form onSubmit={handleSubmit(onSubmit)} noValidate>
-      <h1>お問い合わせ</h1>
-
-      <div>
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          aria-invalid={errors.name ? "true" : "false"}
-          {...register("name")}
-        />
-        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="email">メール</label>
-        <input
-          id="email"
-          type="email"
-          aria-invalid={errors.email ? "true" : "false"}
-          {...register("email")}
-        />
-        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
-      </div>
-
-      <div>
-        <label htmlFor="message">メッセージ</label>
-        <textarea
-          id="message"
-          rows={4}
-          aria-invalid={errors.message ? "true" : "false"}
-          {...register("message")}
-        />
-        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
-      </div>
-
-      <button type="submit" disabled={isSubmitting}>
-        {isSubmitting ? "送信中..." : "送信"}
-      </button>
-
-      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
-    </form>
-  );
 }
 ```
 
-### 手順 4: API レスポンス検証の例
+ESLint 設定 / 簡単な test は省略可。
 
-`src/api.ts`:
+### 手順 3: workflow
 
-```ts
-import { z } from "zod";
+`.github/workflows/ci.yml`:
 
-const PostSchema = z.object({
-  id: z.number().int(),
-  title: z.string(),
-  body: z.string(),
-  userId: z.number().int(),
-});
+```yaml
+name: CI
 
-export type Post = z.infer<typeof PostSchema>;
+on:
+  push:
+    branches: [main]
+  pull_request:
 
-const PostListSchema = z.array(PostSchema);
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run lint
 
-export async function fetchPosts(): Promise<Post[]> {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  if (!res.ok) throw new Error("取得失敗");
-  const data = await res.json();
-  return PostListSchema.parse(data);   // 不正な構造なら ZodError
-}
+  typecheck:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run typecheck
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm test
+
+  build:
+    needs: [lint, typecheck, test]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22, cache: npm }
+      - run: npm ci
+      - run: npm run build
 ```
 
-これで API レスポンスの構造が変わってもすぐ気付けます。
+### 手順 4: PR を作って動作確認
+
+```bash
+git checkout -b feature/test
+echo "// test" >> src/App.tsx
+git commit -am "test"
+git push -u origin feature/test
+```
+
+PR を開くと、GitHub の Actions タブで **lint / typecheck / test が並列で走り、終わったら build** が動くのを確認できます。
 
 ### 期待出力
 
-- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
-- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
-- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
-- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
+- 4 つのジョブが Actions のタブに並ぶ
+- 1 回目は `npm ci` が遅い（30 秒〜）、2 回目以降はキャッシュが効いて速い（数秒）
+- どれか fail すると build が走らない（`needs:` のおかげ）
 
 ### 変える
 
-- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
-- `z.email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
-- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
+- `paths:` フィルタを追加して、`docs/**` だけの変更で CI を走らせない
+- マトリクスを使って Node 20 と 22 の両方でテストする
+- `if: github.ref == 'refs/heads/main'` の deploy ジョブを追加する
 
-### 自分で書く
+### 自分で書く（任意）
 
-- `password` と `passwordConfirm` の一致チェックを `refine` で書く
-- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
-
-### 自分で書く（自分の Server Action に Zod を入れる）
-
-「Server Actions の最小形」「送信状態とエラー表示」で書いた自分の `actions.ts` に Zod を導入してみましょう。`if (!text) ...` のような自前検証を Zod の `safeParse` に置き換える演習です。
-
-1. `actions.ts` の冒頭に Zod スキーマを定義:
-
-   ```ts
-   import { z } from "zod";
-
-   const AddSchema = z.object({
-     text: z.string().min(1, "内容を入力してください").max(200, "200 文字以内"),
-   });
-   ```
-
-2. Server Action の中で `safeParse` する形に書き換える:
-
-   ```ts
-   export async function addItem(prev: AddResult, formData: FormData): Promise<AddResult> {
-     const result = AddSchema.safeParse({ text: formData.get("text") });
-     if (!result.success) {
-       return { ok: false, error: result.error.issues[0].message };
-     }
-     // result.data.text を使う
-     ...
-   }
-   ```
-
-3. `useActionState` で受けるエラー表示はそのまま動きます（戻り値の型を変えていないため）。
-
-4. 削除アクションがあれば同じ流れで Zod 化できます（`id: z.uuid()` などが書けます）。
-
-これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
+- Lighthouse CI を組み込み、Performance スコア 90 未満で fail させる
+- Vercel に連携して PR で Preview URL が作られる構成にする
+- Reusable workflow を別リポジトリに切り出して、複数プロジェクトから呼ぶ
+- `environment: production` で本番デプロイに承認ステップを入れる
 
 ## まとめ
 
-- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
-- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
-- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
-- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
-- `parse`（例外）/ `safeParse`（戻り値）の使い分け
-- **`z.infer<typeof schema>`** で型を自動導出
-- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
-- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）
+- **CI** はテスト統合、**CD** はデプロイ。**パイプライン** はその段階を並べたもの
+- **lint / typecheck / test を並列**、build は `needs:` で待たせるのが基本形
+- **キャッシュ**（`actions/setup-node@v4` の `cache: npm` / `actions/cache`）で大幅に高速化
+- **マトリクスビルド** で OS / Node のバージョン違いを同時にテスト
+- **Vercel / Netlify / Cloudflare Pages** を使えば CD は GitHub 連携だけで完結
+- **Preview Deployment** で E2E と Lighthouse CI を本番に近い環境で実行
+- **シークレット** は GitHub Secrets に置く。**`environment: production`** で承認ゲート
+- **paths フィルタ / 早く失敗するジョブ先頭** でコストを抑える

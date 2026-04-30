@@ -1,225 +1,428 @@
-# lesson96: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
+# lesson94: セマンティック HTML とアクセシビリティの基礎
 
 ## ゴール
 
-- Chrome DevTools 内蔵の **Lighthouse** で a11y スコアを計測できる
-- **axe DevTools** 拡張で詳細な違反をチェックできる
-- 自動チェックでは拾えない領域（文脈・操作感）を **スクリーンリーダー**（VoiceOver / NVDA）で確認できる
-- CI に **axe-core**（`@axe-core/playwright` など）を組み込む発想を理解する
-- 「自動チェック + 手動チェック + 実ユーザー」の 3 段構えが必要な理由を説明できる
+- なぜアクセシビリティ（a11y）に配慮するかを自分の言葉で説明できる
+- セマンティック HTML が a11y の土台になる理由を理解する
+- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）の役割を説明できる
+- 見出し階層（`<h1>`〜`<h6>`）を正しく並べられる
+- 画像の `alt` 属性とフォームの `<label>` の役割を説明できる
+- WCAG の **コントラスト比** の基準（AA / AAA）を知っている
 
 ## 解説
 
-### チェックの 3 段構え
+### なぜアクセシビリティ（a11y）に配慮するか
 
-a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は 3〜4 割で、残りは **文脈** に依存します。たとえば:
+アクセシビリティ（accessibility、略して **a11y**）は「**すべてのユーザーがウェブを使える状態** にする」取り組みです。対象は次のような利用者です。
 
-- `alt="画像"` と書いてあっても、画像の本当の内容を表していなければ機械は気づけない
-- ボタンラベルが `aria-label="保存"` でも、「何を保存するのか」が文脈に合ってなければ機械は気づけない
-- キーボードで Tab 順序が「技術的に通る」でも、論理的な順序として使いづらい場合がある
+- **視覚に関するもの**: 全盲 / 弱視 / 色覚特性のある人（スクリーンリーダーを使う、拡大表示する、コントラストが低いと読めない）
+- **聴覚に関するもの**: 聴覚を使いにくい人（動画の字幕が必要）
+- **運動に関するもの**: マウスを使いにくい人（キーボードや音声コマンドで操作する）
+- **認知に関するもの**: 複雑な UI や素早い動きが苦手な人
 
-実務では次の 3 段階でチェックします。
+さらに **誰にとっても役立つ** 場面も多くあります。
 
-1. **自動**: Lighthouse / axe DevTools → 開発中の基本ラインを自動検知
-2. **手動**: キーボードだけで操作してみる / スクリーンリーダーで読み上げる → 体験として正しいか
-3. **実ユーザー**: 可能ならアクセシビリティ利用者に触ってもらう → リアルなフィードバック
+- スマホを片手で操作する状況（大きなタップ領域が欲しい）
+- 日差しの強い屋外（高コントラストが欲しい）
+- 満員電車で音が出せない（字幕が欲しい）
+- キーボード派の開発者（Tab で操作したい）
 
-本レッスンでは 1 と 2 を一通り触ります。
+2026 年現在、**WCAG 2.2**（Web Content Accessibility Guidelines 2.2）が国際標準で、政府・公共機関や大企業のサイトでは AA 準拠が事実上の必須になっています。開発者の側でも「動くだけ」ではなく「みんなが使える」を最低ラインとして出荷するのが当たり前になってきました。
 
-### 1. Lighthouse: 基本ラインを自動で
+### セマンティック HTML が土台
 
-Chrome DevTools 内蔵の **Lighthouse** タブは、その場でページを監査して 4 つのカテゴリ（Performance / Accessibility / Best Practices / SEO）を 0〜100 の点数で返します。
+**セマンティック HTML** とは「見た目ではなく **意味** を表す HTML を書く」ことです。タイトルには `<h1>`、本文の段落には `<p>`、ナビゲーションには `<nav>` のように、タグに役割を持たせます。
 
-手順:
+見た目だけなら `<div>` と CSS だけでも作れますが、**機械（ブラウザ / スクリーンリーダー / 検索エンジン / AI エージェント）には意味が伝わりません**。
 
-1. Chrome でチェックしたいページを開く
-2. DevTools（`F12`）→ **Lighthouse** タブ
-3. Categories で **Accessibility** だけ選択（他もまとめて出しても良い）
-4. Device は Desktop / Mobile どちらかを選び、**Analyze page load** をクリック
-5. レポートが出る。Accessibility のスコアが 100 / 90 / 80 ... のように点数化される
+NG（見た目だけ）:
 
-典型的な違反の例:
-
-- Background and foreground colors do not have a sufficient contrast ratio（コントラスト不足）
-- Image elements do not have `[alt]` attributes（alt 欠落）
-- Form elements do not have associated labels（label 欠落）
-- Heading elements are not in a sequentially-descending order（見出し階層の飛び）
-- Buttons do not have an accessible name（アクセシブルネーム欠落）
-- `[aria-*]` attributes do not match their roles（ARIA の誤用）
-
-Lighthouse は **違反ごとに該当の DOM ノード** を示してくれるので、クリックすれば Elements タブにジャンプして直すだけです。
-
-**スコア 100 が目標ですが、それが a11y 完璧の意味ではない** 点に注意してください。Lighthouse が拾うのは機械的な項目だけです。
-
-### 2. axe DevTools: より細かく診断
-
-Lighthouse より **詳細な違反情報** が欲しいときは、Chrome 拡張の **axe DevTools**（<https://www.deque.com/axe/devtools/>）を使います。無料版でも十分に使えます。
-
-インストール後:
-
-1. Chrome 拡張からインストール
-2. DevTools に **axe DevTools** タブが追加される
-3. **Scan ALL of my page** を押す
-4. Critical / Serious / Moderate / Minor の優先度別に違反が一覧される
-5. 各違反に「なぜ違反か」「どう直すか」のガイドリンク付き
-
-Lighthouse との違い:
-
-- axe DevTools は **Deque**（a11y 専門会社）が提供。業界標準の axe-core エンジンを使う
-- 違反の説明が詳しく、**修正方法のコード例** まで載っている
-- Lighthouse は axe-core の一部を内蔵している。つまり **axe DevTools の方が厳しめ**
-
-両方回して、Lighthouse で基本を見て、axe で細部を詰めるのが定番です。
-
-### 3. キーボード手動チェック
-
-ここからは **人間の目と手でしか分からない** 領域です。次を試してください。
-
-1. マウスから手を離す
-2. Tab キーだけでページを最初から最後まで操作する
-3. 次を確認する:
-   - **フォーカスリングが常に見える** か（どこにフォーカスがあるか分かるか）
-   - **Tab の順序が論理的** か（画面上の自然な流れと一致しているか）
-   - すべての **操作可能な要素** に Tab で到達できるか（マウスでしかクリックできない部分はないか）
-   - **モーダル**が開いたとき、Tab がモーダル内で巡回し、Esc で閉じられるか
-   - **キーボードの罠** がないか（Tab を押してもフォーカスが進まない場所はないか）
-
-「フォーカスが見えない」は最頻発の違反です。CSS で `outline: none` を書いていないか、`:focus-visible` で代替を用意しているか、再確認しましょう。
-
-### 4. スクリーンリーダー手動チェック
-
-スクリーンリーダーは **OS 付属（VoiceOver）や無料**（NVDA） が使えます。自分で触ってみると、文章だけでは分からない体験が一気に分かります。
-
-#### macOS: VoiceOver
-
-- 起動: `Cmd + F5`（または `Touch ID` を 3 回連打）
-- 停止: もう一度 `Cmd + F5`
-- ページ読み上げ: `Ctrl + Option + A`
-- 次の見出しへ移動: `Ctrl + Option + Cmd + H`
-- ランドマーク一覧: `Ctrl + Option + U`（ローター）
-
-初めての場合、読み上げスピードが速すぎると感じます。システム設定 → アクセシビリティ → VoiceOver で速度を遅くできます。
-
-#### Windows: NVDA（無料）
-
-- <https://www.nvaccess.org/download/> からダウンロード
-- 起動後、Web ページを開くと自動で読み上げ開始
-- 次の見出しへ: `H`
-- 次のランドマークへ: `D`
-- 読み上げ停止: `Ctrl`
-
-#### 何を確認するか
-
-- **ページを開いた瞬間に何が読まれるか**（最初の見出しか、関係ないテキストか）
-- ナビゲーションで **「メインコンテンツにスキップ」** できるか（`<main>` ランドマークがあるか）
-- フォームで **ラベルと入力欄が正しく紐付いている** か
-- **アイコンボタンの名前** が読まれるか（`aria-label` 未設定だと「ボタン」としか読まれない）
-- **動的更新**（通知メッセージなど）が `aria-live` で自動通知されるか
-
-「セマンティック HTML とアクセシビリティの基礎」「ARIA 属性とキーボード操作」で作った演習ページで試してみると、これまで配置した属性が効いているのが体感できます。
-
-### 5. CI に組み込む: `@axe-core/playwright`
-
-手動チェックだけでは、**デグレ**（一度直した違反が再発すること）を防げません。E2E テストで axe を回して CI に組み込むと、PR の段階で自動検知できます。
-
-```ts
-// e2e/a11y.spec.ts
-import { test, expect } from "@playwright/test";
-import AxeBuilder from "@axe-core/playwright";
-
-test("トップページに a11y 違反がない", async ({ page }) => {
-  await page.goto("http://localhost:3000/");
-
-  const results = await new AxeBuilder({ page })
-    // 既知の現状割れているチェックは disable する（後で順次解消）
-    .disableRules(["color-contrast"])
-    // 最初は WCAG A / AA だけに絞ると現実的
-    .withTags(["wcag2a", "wcag2aa"])
-    .analyze();
-
-  expect(results.violations).toEqual([]);
-});
+```html
+<div class="big-text">記事タイトル</div>
+<div class="paragraph">本文...</div>
+<div class="link" onclick="go()">続きを読む</div>
 ```
 
-「テスト入門」で Playwright を導入するレッスンがあるので、そこと組み合わせて CI に足せます。E2E テストは書かれた通りに再現するので、`aria-label` や `alt` の欠落が PR で気付けるようになります。`expect(results.violations).toEqual([])` をいきなり全ルールで通すと、新しいルールが追加されたときに **無関係の PR が落ちる** ので、`withTags` でスコープを絞り、`disableRules` で既知の課題を一旦よけてから順次解消するのが定石です。
+OK（意味を持たせる）:
 
-> React のユニットテストレベルなら `jest-axe` や `vitest-axe` が使えます。コンポーネント単体の違反チェックに向きます。
+```html
+<h1>記事タイトル</h1>
+<p>本文...</p>
+<a href="/next">続きを読む</a>
+```
 
-### まとめの「チェックリスト」
+スクリーンリーダーは `<h1>` を「見出しレベル 1」と読み上げます。`<a>` を「リンク」と説明します。`<div>` ではそれが起きません。
 
-デプロイ前に以下を確認すれば、機械的には OK ラインに届きます（最低限）。
+**「a11y のために ARIA を足す」より前に、「セマンティック HTML を正しく書く」ことが 7〜8 割を占める** と覚えてください。
 
-- [ ] Lighthouse Accessibility スコアが 90 以上
-- [ ] axe DevTools の Critical / Serious が 0
-- [ ] マウスを使わず Tab だけで全機能を操作できる
-- [ ] Tab を押したときに常にフォーカスリングが見える
-- [ ] モーダルが Esc で閉じ、フォーカスが元に戻る
-- [ ] スクリーンリーダーでページを開いた最初の読み上げが自然
+### ランドマーク要素でページを 5 つの場所に分ける
+
+ページは大きく次の 5 つの **ランドマーク**（目印）に分けられます。スクリーンリーダーはこれらの要素を「ランドマーク一覧」で見せてくれるので、「ヘッダーに飛ぶ」「メイン本文に飛ぶ」が即座にできます。
+
+| タグ | 役割 |
+|---|---|
+| `<header>` | ページ上部。サイトロゴやナビが入る |
+| `<nav>` | ナビゲーション。主要リンクをまとめる場所 |
+| `<main>` | ページの **メインコンテンツ**。1 ページに 1 つだけ |
+| `<aside>` | 補足情報・サイドバー |
+| `<footer>` | ページ下部。コピーライト・連絡先など |
+
+典型的な構成:
+
+```html
+<body>
+  <header>
+    <h1>私のブログ</h1>
+    <nav>
+      <a href="/">ホーム</a>
+      <a href="/posts">記事一覧</a>
+      <a href="/about">自己紹介</a>
+    </nav>
+  </header>
+
+  <main>
+    <h2>今日の記事</h2>
+    <p>本文...</p>
+  </main>
+
+  <aside>
+    <h2>関連記事</h2>
+    <ul>
+      <li><a href="/posts/1">別の記事</a></li>
+    </ul>
+  </aside>
+
+  <footer>
+    <p>&copy; 2026 オザキ</p>
+  </footer>
+</body>
+```
+
+`<header>` と `<footer>` はページ全体のもの以外に、`<article>` や `<section>` の中にも置けます（そのブロックのヘッダー / フッターになる）。
+
+### 見出し階層は飛ばさない
+
+`<h1>`〜`<h6>` は **必ず 1 つずつ降りていく** のが原則です。`<h1>` の次に急に `<h3>` を使うと、スクリーンリーダーの読み上げで「2 段下がった！何か抜けた？」と混乱します。
+
+```html
+<!-- NG: h1 → h3 で h2 が飛んでいる -->
+<h1>記事タイトル</h1>
+<h3>サブセクション</h3>
+
+<!-- OK: h1 → h2 → h3 の順 -->
+<h1>記事タイトル</h1>
+<h2>章</h2>
+<h3>サブセクション</h3>
+```
+
+また `<h1>` は **1 ページに 1 つ** が基本です（HTML5 の `<section>` 内でも `<h1>` を使える仕様はありますが、対応のばらつきがあるので本コースでは 1 ページ 1 個に統一します）。
+
+### 画像には `alt`、フォーム入力には `<label>`
+
+スクリーンリーダーは画像の中身を「見る」ことはできません。代わりに **`alt` 属性** のテキストを読み上げます。
+
+```html
+<!-- 情報を持つ画像: 内容を説明 -->
+<img src="/graph.png" alt="2026 年の売上グラフ。4 月で前年比 20% 増" />
+
+<!-- 装飾だけの画像: 空文字で OK（読み飛ばされる） -->
+<img src="/decoration.png" alt="" />
+```
+
+`alt` を書かないと、スクリーンリーダーはファイル名（`graph.png`）を読み上げてしまい、意味を伝えられません。**飾りなら空文字、情報を持つなら説明文** が原則です。
+
+フォームも同じで、`<input>` には **`<label>`** を必ず紐付けます。
+
+```html
+<!-- NG: input 単独はラベルなし -->
+<p>お名前</p>
+<input type="text" />
+
+<!-- OK: label と for / id で紐付ける -->
+<label for="name">お名前</label>
+<input id="name" type="text" />
+
+<!-- OK: label で input を包む -->
+<label>
+  お名前
+  <input type="text" />
+</label>
+```
+
+`<label>` があると、スクリーンリーダーは「お名前、テキスト入力、空」のように読み上げます。ラベル部分をクリックすると入力欄にフォーカスが移るので、晴眼者にも扱いやすくなります。
+
+### コントラスト比: 見える色の組み合わせを選ぶ
+
+文字色と背景色のコントラストが低いと、弱視の人や日差しの強い環境では読めません。WCAG は **数値の基準** を定めています。
+
+| 対象 | AA（実用レベル） | AAA（高水準） |
+|---|---|---|
+| 通常のテキスト（〜18px） | 4.5:1 以上 | 7:1 以上 |
+| 大きなテキスト（18pt 太字 or 24px 以上） | 3:1 以上 | 4.5:1 以上 |
+| UI 部品の境界線・アイコン | 3:1 以上 | — |
+
+コントラスト比は **Chrome DevTools の Elements タブ** で確認できます。スタイルペインで色をクリックすると、自動で計算してくれます。Lighthouse の Accessibility スコアも 4.5:1 未満を警告してくれます。
+
+数字を自分で計算する必要はありません。実務では次のような定番ツールを使います。
+
+- Chrome DevTools（CSS の color プロパティをクリック）
+- WebAIM Contrast Checker（<https://webaim.org/resources/contrastchecker/>）
+- Figma のコントラストチェッカープラグイン
+
+ダークモードで `color: #808080` のような中間色を使うと、背景がダーク（`#1a1a1a`）でもライト（`#ffffff`）でもギリギリ読めない、という事故が起きがちです。ライト / ダーク双方でチェックする習慣をつけてください。
+
+### `lang` 属性で言語を明示する
+
+ページの言語を `<html lang="ja">` で指定します。スクリーンリーダーが適切な発音（日本語 / 英語）で読み上げるのに使われます。
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    ...
+```
+
+本コースのこれまでの演習でもすべて `lang="ja"` を付けてきました。**サイトごとに 1 回設定するだけで良い** 基本です。
 
 ## 演習
 
+::: tip この3レッスンについて
+「セマンティック HTML とアクセシビリティの基礎」（このレッスン）・「ARIA 属性とキーボード操作」・「アクセシビリティの自動チェック」は **3部構成**で設計されています。順番に進めると理解が積み上がります。
+:::
+
 ### ゴール
 
-- ローカル or 公開 Web サイト 1 ページに対して Lighthouse を実行する
-- axe DevTools をインストールして違反を眺める
-- キーボードだけで 1 つのサイトを操作する体験をする
-- （任意）スクリーンリーダーを起動してページを読み上げさせる
+- `<div>` だらけのページをセマンティック HTML に書き換える
+- 見出し階層を正しく並べ直す
+- 画像に適切な `alt` 属性を付ける
+- フォームに `<label>` を付ける
+- DevTools でコントラスト比を確認する
 
-### 手順 1: Lighthouse を回す
+### 途中から始める場合
 
-> **注意**: Lighthouse は StackBlitz では動作しない場合があります。**Chrome の DevTools → Lighthouse タブ**（ローカル環境の場合）、または **PageSpeed Insights** でデプロイ済み URL を計測してください。StackBlitz 環境では axe DevTools Chrome 拡張を使った確認に置き換えても構いません。
+このレッスンは独立しています。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開いて、下の出発点のコードを貼ってください。
 
-1. Chrome で本コースの教材サイト、または自分が作ったポートフォリオを開きます
-2. DevTools（`F12`）→ **Lighthouse** タブ
-3. Categories で **Accessibility** だけチェックを残し、**Analyze page load** をクリック
-4. スコアが出るまで 10〜30 秒待ちます
-5. スコアと、違反があれば内容をメモします
+<details>
+<summary>出発点のコード（<code>div</code> だらけの NG パターン）</summary>
 
-### 手順 2: axe DevTools を使う
+**`index.html`**
 
-1. Chrome Web Store で「axe DevTools」を検索してインストール
-2. DevTools に **axe DevTools** タブが出る
-3. **Scan ALL of my page** をクリック
-4. 結果ペインで違反一覧を眺めます。各違反をクリックすると詳細と該当 DOM が出ます
+```html
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="UTF-8" />
+    <title>a11y の練習</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <div class="top">
+      <div class="logo">私のブログ</div>
+      <div class="menu">
+        <div onclick="location.href='/'">ホーム</div>
+        <div onclick="location.href='/posts'">記事一覧</div>
+      </div>
+    </div>
 
-### 手順 3: キーボードだけで操作する
+    <div class="body">
+      <div class="title">今日の記事</div>
+      <div class="para">本文です。本文です。本文です。</div>
 
-1. マウスをデスクから**物理的に離して** みる（誘惑を断つため）
-2. Tab キーだけで全リンク・全ボタンを順に通過する
-3. 「ここに行きたいが Tab で辿り着けない」ポイントがないか確認
-4. 見つかったら、Tab 順序の修正候補をメモ（原因は `tabindex` 誤設定 / 非インタラクティブな `<div>` をボタン代わりにしている、など）
+      <div class="sub">サブセクション</div>
+      <div class="para">サブ本文です。</div>
 
-### 手順 4（任意）: スクリーンリーダー
+      <img src="https://placehold.co/300x200.png" />
 
-Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストールして起動し、同じページを読ませてみます。
+      <div class="form">
+        <div>お名前</div>
+        <input type="text" />
+        <div>メール</div>
+        <input type="email" />
+        <div onclick="submit()">送信</div>
+      </div>
+    </div>
 
-「何が読まれるか」より「何が読まれないか」に注目すると、見えてないラベルやランドマークが炙り出されます。
+    <div class="bottom">
+      <div>&copy; 2026 オザキ</div>
+    </div>
+  </body>
+</html>
+```
+
+**`style.css`**
+
+```css
+body {
+  font-family: sans-serif;
+  color: #cccccc;
+  background: #ffffff;
+  margin: 0;
+}
+.top, .bottom { background: #e0e0e0; padding: 16px; }
+.menu div { display: inline-block; margin-right: 12px; cursor: pointer; color: #4da6ff; }
+.title { font-size: 24px; font-weight: bold; }
+.sub { font-size: 18px; font-weight: bold; }
+.para { margin: 8px 0; }
+.body { padding: 16px; }
+.form div[onclick] { display: inline-block; background: #eeeeee; color: #aaaaaa; padding: 6px 12px; cursor: pointer; }
+```
+
+</details>
+
+### 手順
+
+1. `index.html` を **セマンティック HTML** に書き換えます（下の完成形を参照）。
+2. `style.css` の **コントラスト比** を上げて、文字が読みやすくなるよう修正します。
+3. DevTools で確認します。
+
+### `index.html` の完成形
+
+```html
+<!DOCTYPE html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>a11y の練習</title>
+    <link rel="stylesheet" href="./style.css" />
+  </head>
+  <body>
+    <header>
+      <h1>私のブログ</h1>
+      <nav>
+        <a href="/">ホーム</a>
+        <a href="/posts">記事一覧</a>
+      </nav>
+    </header>
+
+    <main>
+      <article>
+        <h2>今日の記事</h2>
+        <p>本文です。本文です。本文です。</p>
+
+        <h3>サブセクション</h3>
+        <p>サブ本文です。</p>
+
+        <img
+          src="https://placehold.co/300x200.png"
+          alt="記事の挿絵（プレースホルダ画像）"
+          width="300"
+          height="200"
+        />
+      </article>
+
+      <section aria-labelledby="contact-heading">
+        <h2 id="contact-heading">お問い合わせ</h2>
+        <form>
+          <p>
+            <label for="name">お名前</label>
+            <input id="name" type="text" />
+          </p>
+          <p>
+            <label for="email">メール</label>
+            <input id="email" type="email" />
+          </p>
+          <button type="submit">送信</button>
+        </form>
+      </section>
+    </main>
+
+    <footer>
+      <p>&copy; 2026 オザキ</p>
+    </footer>
+  </body>
+</html>
+```
+
+変更点の理由:
+
+- `<div class="top">` → `<header>`、`<div class="menu">` → `<nav>`、`<div class="body">` → `<main>`、`<div class="bottom">` → `<footer>` にしてランドマーク化
+- `<div class="title">` → `<h2>`、`<div class="sub">` → `<h3>` で見出し階層を明示（`<h1>` はサイトタイトルで使っている）
+- クリック可能な `<div>` を `<a>` / `<button type="submit">` に変更（キーボードで操作できるようになる）
+- `<img>` に `alt` / `width` / `height` を付与
+- `<input>` に `<label>` を紐付け
+- `<html lang="ja">` で言語を明示
+
+### `style.css` の完成形
+
+```css
+body {
+  font-family: sans-serif;
+  color: #1a1a1a;        /* #cccccc → #1a1a1a（コントラスト比を大幅に改善）*/
+  background: #ffffff;
+  margin: 0;
+}
+
+header, footer {
+  background: #1e3a8a;   /* #e0e0e0 → #1e3a8a */
+  color: #ffffff;
+  padding: 16px;
+}
+
+header h1 {
+  margin: 0 0 8px 0;
+}
+
+nav a {
+  color: #ffffff;        /* #4da6ff → #ffffff（青背景に白文字）*/
+  margin-right: 16px;
+}
+
+main {
+  max-width: 720px;
+  margin: 0 auto;
+  padding: 24px 16px;
+}
+
+button[type="submit"] {
+  background: #1e3a8a;   /* #eeeeee → 濃い青 */
+  color: #ffffff;        /* #aaaaaa → 白 */
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+button[type="submit"]:focus {
+  outline: 3px solid #60a5fa;  /* フォーカスリングを明示 */
+  outline-offset: 2px;
+}
+```
 
 ### 期待出力
 
-- Lighthouse の Accessibility スコアが数字で出る（教材サイトは 90+ のはず）
-- axe DevTools の違反リストが 0 件 or Critical が 0 件
-- Tab だけで迷子にならずに全操作ができる
-- スクリーンリーダー体験で「どう読まれるか」の感覚が掴める
+- ページ上部の見出しが大きく表示され、下のナビが横に並ぶ
+- 本文の見出しが 2 段階に階層化されて表示される
+- 画像が表示される（`alt` はマウスオーバーで一部のブラウザで表示される）
+- フォームの「お名前」「メール」をクリックすると入力欄にフォーカスが移る
+- Tab キーで「ホーム」リンク → 「記事一覧」リンク → お名前入力 → メール入力 → 送信ボタンと順に移動できる
+- 送信ボタンにフォーカスを移すと、太い青のフォーカスリングが見える
+
+### 確認ポイント（DevTools）
+
+Chrome の DevTools で以下を確認します。
+
+1. **Elements タブ**: `<h1>` `<h2>` `<h3>` が見出し階層として並んでいる。`<main>` `<header>` `<footer>` `<nav>` がランドマークとして使われている
+2. **Lighthouse タブ**: 「Accessibility」を単独で選んでレポートを生成。スコアが 90 以上になる
+3. **コントラスト比**: Elements で `body` の `color` をクリックすると、自動で計算された `Contrast ratio` が右側に出る。AA（4.5:1 以上）を満たしていることを確認
 
 ### 変える
 
-- 自分のポートフォリオやブログ（あれば）で同じ手順を試してみる。違反が出たら、「セマンティック HTML とアクセシビリティの基礎」と「ARIA 属性とキーボード操作」のレッスンに戻って該当 HTML を直す
-- Lighthouse の **Device** を Mobile に切り替えてみる。タップ領域の不足など、モバイル固有の違反が出る場合がある
-- `axe DevTools` の **Intelligent Guided Tests**（有料版機能）の存在を認識しておく。無料版の自動チェックで拾えないものを、人間をガイドしながら問診してくれる
+- `body` の `color` を `#808080` に変えてみる。Lighthouse で「Background and foreground colors do not have a sufficient contrast ratio」の警告が出ることを確認
+- `<h2>` を削って、いきなり `<h3>` から始めてみる。Lighthouse が「Heading elements are not in a sequentially-descending order」と警告する
+- `<img>` の `alt` を消してみる。Lighthouse が「Image elements do not have `[alt]` attributes」と警告する
 
 ### 自分で書く
 
-- `@axe-core/playwright` を使った E2E a11y テストのサンプルを読んで、雰囲気を掴む（実装は「テスト入門」で Playwright を導入するレッスンと合わせて）
-- `eslint-plugin-jsx-a11y` の存在を知っておく。React の JSX で書いた時点で a11y 違反を警告してくれるリンタープラグイン
+- `<main>` の下に「記事一覧」セクションを追加し、`<section>` でくるむ。各記事は `<article>` にして、`<h3>` のタイトル + `<p>` の要約を 3 件並べる
+- フォームの `<input>` に `required` を付け、送信ボタンにキーボードで Tab → Enter で送信できることを確認する
 
 ## まとめ
 
-- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは 3〜4 割しかカバーできない
-- **Lighthouse**: Chrome 内蔵。a11y スコアと違反一覧を即出せる
-- **axe DevTools**: Chrome 拡張。より詳細・厳しめ。Deque 提供の業界標準
-- 手動チェック: キーボードだけで操作 / スクリーンリーダーで読ませる
-- **VoiceOver**（macOS）/ **NVDA**（Windows 無料）でスクリーンリーダー体験
-- CI に `@axe-core/playwright` や `jest-axe` / `vitest-axe` を組み込むと、デグレ検知が自動化できる
-- `eslint-plugin-jsx-a11y` も併用すると書く段階で違反を捕まえられる
-- これで a11y の 3 レッスン（セマンティック HTML / ARIA とキーボード / 自動チェック）が完結。次のテーマに進んで、実務の周辺知識を積み上げる
+- アクセシビリティは「誰でも使える」状態を目指すこと。WCAG 2.2 が 2026 年の国際標準
+- **セマンティック HTML が a11y の土台**。`<div>` + `role=...` より `<nav>` / `<main>` / `<h1>` のような意味のあるタグを優先
+- ランドマーク要素（`<header>` / `<nav>` / `<main>` / `<aside>` / `<footer>`）でページを整理
+- 見出しは `<h1>` → `<h2>` → `<h3>` の順に飛ばさず降りる。`<h1>` はページに 1 つ
+- 画像には `alt`、フォームには `<label>` を必ず
+- コントラスト比は本文 **4.5:1** 以上が AA（実用レベル）
+- `<html lang="ja">` で言語を明示

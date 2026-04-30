@@ -1,341 +1,398 @@
-# lesson110: GitHub Actions で CI
+# lesson108: Git の基本操作
 
 ## ゴール
 
-- CI / CD の意味と価値を説明できる
-- GitHub Actions のワークフロー YAML の基本構造を読める
-- push / pull_request トリガーで Lint / Test / Build を自動実行できる
-- 失敗時の通知・ステータスバッジ・キャッシュの基本を知る
-- ブランチ保護ルールに **CI 必須** を組み合わせる
-- Vercel / Netlify の Preview Deployment が裏でやっていることを理解する
+- Git が「ファイルの履歴を残す」道具であることを説明できる
+- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
+- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
+- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
+- `.gitignore` でコミットしないファイルを除外できる
+- マージコンフリクトの解消手順を 1 度経験する
 
 ## 解説
 
-### CI / CD とは
+### Git とは
 
-- **CI**（Continuous Integration、継続的インテグレーション）: コードをリポジトリに統合する **そのたびに** 自動でビルド / テスト / Lint を回す仕組み
-- **CD**（Continuous Delivery / Deployment、継続的デリバリー / デプロイ）: 統合に成功したら自動でステージング / 本番にデプロイする仕組み
+**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
 
-CI が崩れたまま開発を続けると、**「どの変更で壊れたか分からない」** 状態になります。1 つの PR ごとに「壊れていない」を保証することで、main は常に動く状態を保てます。
+なぜ必要か:
 
-### GitHub Actions とは
+- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
+- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
+- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
+- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
 
-GitHub に組み込まれた CI / CD プラットフォームです。`.github/workflows/` 配下に YAML ファイルを置くだけで、push / PR / スケジュール / 手動実行などのトリガーで処理を実行できます。**Public リポジトリは無料・無制限** で実行できます。Private リポジトリは Free プランで月 2,000 分まで（執筆時点）、Pro / Team / Enterprise で枠が増えます。
+2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
 
-主要な競合: **CircleCI** / **GitLab CI** / **Travis CI**。GitHub を使っているなら Actions が一番自然です。
+### リポジトリ（repository）と作業ディレクトリ
 
-### 最小のワークフロー
+- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
+- **作業ディレクトリ**: あなたが今編集しているファイル群
 
-`.github/workflows/ci.yml`:
+### `git init` で履歴管理を開始
 
-```yaml
-name: CI
+新規プロジェクトを Git 管理下に置くには:
 
-on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run test:run
+```bash
+mkdir my-project
+cd my-project
+git init
 ```
 
-このファイルを **commit + push** すると、GitHub Actions タブに最初の実行が現れ、自動で:
+`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
 
-1. Ubuntu の仮想マシンを起動
-2. リポジトリを `checkout`
-3. Node.js 22 をセットアップ（npm キャッシュも有効化）
-4. `npm ci` で依存パッケージをインストール
-5. `npm run test:run` でテストを実行
+### 3 つのエリア（変更が辿る道）
 
-### 構造を読む
+Git では変更が次の 3 段階を辿ります。
 
-- **`name`**: ワークフローの表示名
-- **`on`**: トリガー条件
-  - `push.branches`: 指定ブランチへの push で実行
-  - `pull_request.branches`: 指定ブランチを **マージ先** にする PR で実行
-  - `schedule`: cron 式で定期実行
-  - `workflow_dispatch`: 手動実行
-- **`jobs`**: 並列実行できる仕事の単位
-- **`runs-on`**: 実行環境（`ubuntu-latest` / `macos-latest` / `windows-latest`）
-- **`steps`**: 順番に実行する処理
-  - `uses: actions/...@v4`: 既製のアクションを使う
-  - `run: ...`: シェルコマンドを実行
-
-### Lint / テスト / ビルドを並列で
-
-実用的には次のような構成です。
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run lint
-
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run test:run
-
-  build:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with: { node-version: 22, cache: npm }
-      - run: npm ci
-      - run: npm run build
+```
+作業ディレクトリ          ステージング         リポジトリ（履歴）
+（編集中のファイル）  →  （add した変更）  →  （commit した変更）
+       │                      │                      │
+       └─ git add ─────────────                       │
+       └─ git commit -m "..." ────────────────────────┘
 ```
 
-3 つの job が **並列で実行** されます。1 つでも fail すると全体が fail として扱われ、PR ページに赤い X が出ます。
+- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
+- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
+- **リポジトリ**: `git commit` で履歴に固定された状態
 
-### キャッシュで速くする
+### 基本コマンド
 
-`actions/setup-node@v4` の `cache: npm` を指定するだけで、`~/.npm` の中身がキャッシュされます。2 回目以降の `npm ci` が秒速で終わります。
+#### `git status`: 今の状態を確認
 
-`pnpm` / `yarn` の場合も同様にキャッシュキーを指定できます。
-
-### マトリクスで複数バージョンをテスト
-
-```yaml
-test:
-  runs-on: ubuntu-latest
-  strategy:
-    matrix:
-      node: [20, 22]
-  steps:
-    - uses: actions/checkout@v4
-    - uses: actions/setup-node@v4
-      with: { node-version: ${{ matrix.node }}, cache: npm }
-    - run: npm ci
-    - run: npm run test:run
+```bash
+git status
 ```
 
-これで Node 20 と 22 の両方で同じテストが走ります。複数 OS（`os: [ubuntu, macos, windows]`）も同様。
+未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
 
-### 環境変数とシークレット
+#### `git add`: ステージングに追加
 
-機密情報（API キー / Vercel トークン等）はリポジトリ設定の **Settings → Secrets and variables → Actions → New repository secret** に登録します。ワークフローからは:
-
-```yaml
-- run: deploy --token $VERCEL_TOKEN
-  env:
-    VERCEL_TOKEN: ${{ secrets.VERCEL_TOKEN }}
+```bash
+git add file.txt        # 1 ファイル
+git add src/            # ディレクトリ全部
+git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
 ```
 
-YAML やコードに **直接書くと公開されてしまう** ので絶対に避けます。
+#### `git commit`: 履歴に固定
 
-### ステータスバッジ
-
-`README.md` の冒頭に CI バッジを貼ると、ブランチが「動く状態か」が一目で分かります。
-
-```md
-[![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
+```bash
+git commit -m "ボタンの色を変更"
 ```
 
-緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
+`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
 
-### ブランチ保護と CI 必須
+#### `git log`: 履歴を見る
 
-「GitHub の PR とコードレビュー」で設定したブランチ保護に **「Require status checks to pass before merging」** を追加し、`lint` / `test` / `build` の各 job を必須に指定します。
-
-これで:
-
-- CI が通っていない PR は **マージ ボタンが押せない**
-- 「テスト書いてあるけど動かしたら fail してた」が起きなくなる
-- 安心して main を信じられる
-
-### Vercel / Netlify との関係
-
-Vercel / Netlify の **Preview Deployment** は、内部で GitHub Actions と似た仕組みを動かしています。PR を作るたびに **そのブランチの内容で本物のサイトを一時デプロイ** してくれて、URL が PR にコメントされます。
-
-CI（GitHub Actions）と Preview Deployment は **役割が違う** ので両方使うのが普通です:
-
-- **CI**（Actions）: テストや Lint で「壊れてないか」を機械的に検証
-- **Preview Deployment**: 「本物の動作を人間がブラウザで確認」する場所
-
-本コースの教材サイトでも、PR を作ると Vercel が自動でプレビュー URL を作ってくれています。
-
-### Lighthouse CI で a11y / パフォーマンスを CI に
-
-「アクセシビリティの自動チェック」と「Core Web Vitals」で扱った **Lighthouse** を CI に組み込めます。
-
-```yaml
-- name: Lighthouse CI
-  uses: treosh/lighthouse-ci-action@v12
-  with:
-    urls: |
-      https://your-preview-url.vercel.app/
-    uploadArtifacts: true
-    temporaryPublicStorage: true
+```bash
+git log              # 詳しく見る
+git log --oneline    # 1 行ずつ簡潔に
+git log --graph      # ブランチをグラフで
+git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
 ```
 
-PR ごとに自動で Lighthouse が走り、スコアが下がったら警告できます。
+#### `git diff`: 変更内容を見る
 
-### 通知
-
-CI 失敗時に Slack / Discord / Email に通知する Action も豊富です。
-
-- `slackapi/slack-github-action`
-- `act10ns/slack`
-- 失敗時のみ通知する条件: `if: failure()`
-
-```yaml
-- name: Slack 通知
-  if: failure()
-  uses: slackapi/slack-github-action@v2
-  with:
-    payload: '{"text": "CI failed!"}'
-  env:
-    SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+```bash
+git diff              # 作業ディレクトリ vs ステージング
+git diff --staged     # ステージング vs リポジトリ
+git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
 ```
 
-### よく使う公式アクション
+### `.gitignore` でコミット対象を絞る
 
-| アクション | 用途 |
-|---|---|
-| `actions/checkout@v4` | リポジトリを checkout |
-| `actions/setup-node@v4` | Node.js セットアップ |
-| `actions/cache@v4` | 任意のディレクトリをキャッシュ |
-| `actions/upload-artifact@v4` | テスト結果やビルド成果物を保存 |
-| `actions/download-artifact@v4` | 保存した成果物を取り出す |
-| `pnpm/action-setup` | pnpm セットアップ（Node とは別途） |
+`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
 
-`actions/checkout` のバージョンは年に数回更新されます。最新版は <https://github.com/marketplace?type=actions> で確認できます。
+`.gitignore`（プロジェクトルート）:
+
+```
+# 依存パッケージ（巨大、再生成可能）
+node_modules/
+
+# ビルド成果物
+dist/
+build/
+
+# 環境変数（秘匿）。.env* で派生形（.env.local, .env.production.local など）も含めて除外
+.env
+.env.*
+!.env.example
+
+# OS のメタファイル
+.DS_Store
+Thumbs.db
+
+# エディタ
+.vscode/
+.idea/
+```
+
+`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。`.env.example` はテンプレートとしてコミットしたいので `!.env.example` で除外を打ち消しています。
+
+> **補足: `.env` を間違えて push したら revert ではなく secret rotation が先**: `.env` を 1 度でも push してしまうと、`git revert` で履歴を取り消しても **過去のコミットには値が残ったまま**で、git history を遡れば誰でも読めます。**まずやるべきは** 「漏れた値を無効化（rotation）すること」です。API キーは新しいキーに発行し直す、DB のパスワードを変える、トークンを revoke する。GitHub には自動で漏洩を検出する **secret scanning** や、push の時点で止める **push protection** がありますが、自分の責任範囲で値を rotate することが最優先です。履歴自体を消すには `git filter-repo` / `BFG Repo-Cleaner` などのツールが必要で、共有リポジトリでは全員に強制 push の調整が要るため、**「キーは漏れたものとして扱い、すぐ rotate する」のが現実的な初手**です。
+
+### ブランチ: 並行作業の単位
+
+**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
+
+#### ブランチを作って切り替える
+
+```bash
+# 旧来の書き方
+git branch feature/login
+git checkout feature/login
+
+# 現代の書き方（Git 2.23 以降推奨）
+git switch -c feature/login   # -c は「create」
+```
+
+`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
+
+#### ブランチを切り替える
+
+```bash
+git switch main
+git switch feature/login
+```
+
+`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
+
+#### ブランチを一覧
+
+```bash
+git branch          # ローカルブランチ
+git branch -a       # リモート含む全部
+```
+
+### マージ: ブランチを統合
+
+`feature/login` での作業が終わったら、main に統合します。
+
+```bash
+git switch main
+git merge feature/login
+```
+
+これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
+
+### マージコンフリクト
+
+両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
+
+```
+<<<<<<< HEAD
+const message = "こんにちは";
+=======
+const message = "Hello";
+>>>>>>> feature/login
+```
+
+このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
+
+```js
+const message = "Hello, こんにちは";  // 例: 両方を統合
+```
+
+その後:
+
+```bash
+git add path/to/conflicted-file.js
+git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
+```
+
+### リモートリポジトリ（GitHub / GitLab）
+
+`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
+
+#### リモートを追加
+
+GitHub で空の repo を作って、ローカルから紐付け:
+
+```bash
+git remote add origin https://github.com/your-name/your-repo.git
+```
+
+`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
+
+#### push: ローカル → リモート
+
+```bash
+git push -u origin main
+```
+
+`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
+
+#### pull: リモート → ローカル
+
+```bash
+git pull origin main
+```
+
+これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
+
+#### fetch: リモートの内容だけ取得
+
+```bash
+git fetch origin
+```
+
+リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
+
+### よくある初学者のつまずき
+
+1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
+2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
+3. **main で直接作業**: ブランチを切る習慣を最初から
+4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
+
+### 設定の基本
+
+最初の 1 回だけ:
+
+```bash
+git config --global user.name "Your Name"
+git config --global user.email "you@example.com"
+git config --global init.defaultBranch main
+```
+
+これがないと commit で「誰が」が記録できません。
 
 ## 演習
 
 ### ゴール
 
-- 「GitHub の PR とコードレビュー」で作ったリポジトリに `.github/workflows/ci.yml` を追加する
-- PR を作って CI が走るのを確認する
-- ブランチ保護に CI 必須を追加する
+- ローカルで Git リポジトリを作って commit を 3 回打つ
+- ブランチを作って別の変更を入れ、main にマージする
+- わざとコンフリクトを起こして解消する
 
-### 手順 1: テストスクリプトを用意
+### 途中から始める場合
 
-リポジトリにテストが何もない場合、最小のものを足します。`package.json` の `scripts` に:
+ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
 
-```json
-{
-  "scripts": {
-    "test:run": "echo 'テスト実行（プレースホルダ）'",
-    "lint": "echo 'Lint 実行（プレースホルダ）'",
-    "build": "echo 'Build 実行（プレースホルダ）'"
-  }
-}
-```
-
-実プロジェクトでは Vitest / ESLint / Vite / Next.js のビルドコマンドを書きます。
-
-### 手順 2: ワークフローを書く
-
-`.github/workflows/ci.yml`（プロジェクトルートから見たパス）:
-
-```yaml
-name: CI
-
-on:
-  push:
-    branches: [main]
-  pull_request:
-
-jobs:
-  ci:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 22
-          cache: npm
-      - run: npm ci
-      - run: npm run lint
-      - run: npm run test:run
-      - run: npm run build
-```
-
-### 手順 3: ブランチで commit + push
+### 手順 1: リポジトリを初期化
 
 ```bash
-git switch -c chore/ci
-mkdir -p .github/workflows
-# 上記 ci.yml を保存
-git add .github package.json
-git commit -m "chore: GitHub Actions で CI を追加"
-git push -u origin chore/ci
+mkdir git-practice
+cd git-practice
+git init
 ```
 
-### 手順 4: PR を作って CI を観察
+### 手順 2: ファイルを作って 1 回目の commit
 
-GitHub のリポジトリ → PR を作成。
+`README.md`:
 
-PR ページに **「Some checks haven't completed yet」** が出て、しばらくすると **「All checks have passed」** に変わるはずです（プレースホルダなので即終わる）。**Details** リンクから個別の job ログを見られます。
+```md
+# Git 練習用リポジトリ
+```
 
-PR 内で右側の **Checks** タブを開くと、各 step ごとの所要時間とログが時系列で見られます。
+```bash
+git add README.md
+git commit -m "README を追加"
+```
 
-### 手順 5: ブランチ保護に CI 必須を追加
+### 手順 3: ファイルを増やして 2 回目の commit
 
-リポジトリの **Settings → Branches → main → Edit rule**:
+`hello.txt`:
 
-- **Require status checks to pass before merging** にチェック
-- 検索ボックスに `ci` と入力 → 表示されたチェックを **必須** に登録
-- 保存
+```
+Hello, Git!
+```
 
-これ以降、CI が成功していない PR はマージできなくなります。試しに `ci.yml` をわざと壊して push してみると、CI が fail して PR がマージできない状態になります（確認したら戻す）。
+```bash
+git status              # 変更が見える
+git add hello.txt
+git commit -m "hello.txt を追加"
+git log --oneline       # 2 件の履歴が見える
+```
+
+### 手順 4: ブランチで作業
+
+```bash
+git switch -c feature/greeting
+# hello.txt を編集 → 「Hello, Git! こんにちは。」に
+git add hello.txt
+git commit -m "挨拶を日本語追記"
+```
+
+### 手順 5: main に切り替えて、main 側でも変更
+
+```bash
+git switch main
+# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」に
+git add hello.txt
+git commit -m "ビックリマーク追加"
+```
+
+これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
+
+### 手順 6: マージ → コンフリクト発生
+
+```bash
+git merge feature/greeting
+```
+
+エラーが出ます:
+
+```
+Auto-merging hello.txt
+CONFLICT (content): Merge conflict in hello.txt
+Automatic merge failed; fix conflicts and then commit the result.
+```
+
+`hello.txt` を開くと:
+
+```
+<<<<<<< HEAD
+Hello, Git!! ビックリマーク追加
+=======
+Hello, Git! こんにちは。
+>>>>>>> feature/greeting
+```
+
+両方を取り込むよう手動で編集:
+
+```
+Hello, Git!! こんにちは。ビックリマーク追加
+```
+
+```bash
+git add hello.txt
+git commit               # エディタが開く → 自動メッセージのまま保存
+git log --oneline --graph
+```
+
+ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
 
 ### 期待出力
 
-- PR ページに緑のチェック「All checks have passed」が出る
-- Actions タブにワークフロー実行履歴が並ぶ
-- ブランチ保護でマージボタンが無効化される（CI 失敗時）
+```
+*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
+|\
+| * abcdef0 (feature/greeting) 挨拶を日本語追記
+* | fedcba9 ビックリマーク追加
+|/
+* 7654321 hello.txt を追加
+* 0987654 README を追加
+```
 
 ### 変える
 
-- ジョブを 3 つに分割（lint / test / build）して並列実行に変える。CI 全体の時間が短くなる
-- `runs-on` を `windows-latest` に変えて Windows でも動くか確認（Vite / Next なら通常 OK）
-- `if: github.event_name == 'pull_request'` を追加して、特定の job を PR 時だけ実行
-- `actions/cache@v4` で `~/.cache/Cypress` などをキャッシュして E2E を速くする
+- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
+- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
+- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
 
 ### 自分で書く
 
-- README に CI バッジを貼る
-- Vercel デプロイのプレビュー URL を Lighthouse CI で計測するワークフローを足す（`treosh/lighthouse-ci-action@v12`）
-- Slack 通知を `if: failure()` で組み込む
+- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
+- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
 
 ## まとめ
 
-- **CI** は push / PR のたびに自動でビルド / テスト / Lint を回す仕組み
-- GitHub Actions は **`.github/workflows/*.yml`** に書くだけで動く
-- 構造: `on`（トリガー）→ `jobs`（並列の仕事）→ `steps`（順次のコマンド / アクション）
-- `actions/checkout` + `actions/setup-node` が定番の出発点。`cache: npm` で 2 回目以降が爆速
-- マトリクスで複数 OS / 複数 Node バージョンを並列テストできる
-- シークレットは **Settings → Secrets** に登録し、ワークフロー内で `secrets.NAME` を参照（具体的な記法は本文の YAML 例を参照）
-- ブランチ保護で **CI 必須** に設定すると安全
-- Vercel / Netlify の Preview Deployment は CI とは別の役割（実機確認）
-- Lighthouse CI / Slack 通知 / Artifact 保存などの拡張が豊富
+- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
+- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
+- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
+- `.gitignore` で `node_modules` / `.env` 等を除外
+- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
+- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
+- リモート: `remote add origin URL` / `push` / `pull` / `fetch`

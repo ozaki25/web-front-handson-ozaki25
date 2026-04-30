@@ -1,191 +1,206 @@
-# lesson91: HTTP キャッシュ
+# lesson89: ブラウザと HTTP の基本
 
 ## ゴール
 
-- ブラウザがリソースをキャッシュしている場所（メモリ / ディスク）を説明できる
-- `Cache-Control` の主要ディレクティブ（`public` / `private` / `max-age` / `no-cache` / `no-store` / `immutable`）の違いを説明できる
-- 強キャッシュ（期限内はサーバーに聞かない）と 弱キャッシュ（サーバーに聞くが中身は省略）の違いを説明できる
-- `ETag` / `Last-Modified` と `304 Not Modified` の関係を説明できる
-- キャッシュ起因で「新しいデプロイが反映されない」古典的なハマりを避ける実務パターンを知る
+- Web ページが表示されるまでにブラウザとサーバーのあいだで何が起きているか、おおまかに説明できる
+- HTTP のリクエスト / レスポンスがそれぞれ「何行か文字列が連なったもの」であることを理解する
+- HTTP メソッド（GET / POST / PUT / DELETE など）の違いを 1 行で言える
+- ステータスコードの番台（2xx / 3xx / 4xx / 5xx）を使い分けの文脈で説明できる
+- 主要なリクエスト / レスポンスヘッダの役割を数個挙げられる
 
 ## 解説
 
-### そもそもキャッシュはなぜ要るか
+### ブラウザがページを表示するまでの流れ
 
-ブラウザがリソース（HTML / CSS / JS / 画像）を取りに行くのは、毎回遅くてトラフィックもかかります。一度取ったものを **同じなら再利用する** のがキャッシュです。効き方の強い順に、次の 3 段階があると覚えると整理しやすいです。
+アドレスバーに `https://example.com/` と入れて Enter を押したとき、ざっくり次の流れで動いています。
 
-1. **強キャッシュ**: サーバーに問い合わせもしない。ローカルのキャッシュから即配る
-2. **弱キャッシュ**（条件付きリクエスト）: サーバーに「変わってますか？」だけ聞く。変わってなければ `304 Not Modified` が返り、ボディは送られてこない
-3. **キャッシュなし**: 毎回フルで取りに行く
+1. DNS でホスト名（`example.com`）を IP アドレスに解決する
+2. その IP アドレスの **サーバーに TCP 接続 + TLS**（https なら） を張る
+3. `GET / HTTP/1.1` 的な **リクエスト** を送る
+4. サーバーから **レスポンス**（HTML 文字列）が返る
+5. HTML を読みながら、中に書かれている `<link>` / `<script>` / `<img>` の URL を **追加でリクエスト** する（CSS / JS / 画像）
+6. それらをすべて受け取って、ブラウザが DOM・CSSOM・レイアウト計算 → 画面に描画
 
-どのモードになるかは、レスポンスヘッダ `Cache-Control` / `ETag` / `Last-Modified` で決まります。
+本レッスンでは、このうち **3-5 の「HTTP 通信の中身」** を見ていきます。「DOM を操作する」で扱った DOM は 6 の段階（ブラウザの内部表現）の話でした。
 
-### `Cache-Control` の主要ディレクティブ
+### HTTP は「文字列のやり取り」
 
-サーバーがレスポンスヘッダに **`Cache-Control: ...`** を付けて「このリソースはどう扱っていいか」をブラウザに伝えます。代表的なものを並べます。
+HTTP は意外と素朴なプロトコルで、**人間が読める文字列** を TCP の上で送り合っているだけです。
 
-| ディレクティブ | 意味 |
-|---|---|
-| `public` | 誰でも（ブラウザ / 中間キャッシュ / CDN）キャッシュしてよい |
-| `private` | ブラウザ本体だけキャッシュしてよい。CDN には持たせない |
-| `max-age=N` | N 秒間は新鮮。その間はサーバーに聞かない（強キャッシュ） |
-| `s-maxage=N` | 中間キャッシュ（CDN 等）向けの max-age。ブラウザは無視 |
-| `no-cache` | 毎回サーバーに問い合わせ（弱キャッシュは効く）。ボディは返ってこないこともある |
-| `no-store` | 一切キャッシュしない。毎回フルで取り直し |
-| `must-revalidate` | 期限が切れたら **必ず** 再検証（古いキャッシュを出さない） |
-| `immutable` | 期限内は絶対に変わらない。リロードでも再検証しない |
-| `stale-while-revalidate=N` | 期限切れから N 秒はそのまま返して、裏で再検証 |
-
-混乱しやすいのは `no-cache` と `no-store` です:
-
-- **`no-cache`**: キャッシュ **は** する。ただし使う前に毎回サーバーに聞く
-- **`no-store`**: キャッシュ **しない**
-
-名前と挙動が逆に見えるので、都度仕様を見に行く癖を付けるのが安全です。
-
-### 強キャッシュ: `max-age` の世界
-
-レスポンスにこういうヘッダが付いていたとします。
+例えばクライアント（ブラウザ）がサーバーに送るリクエストは、次のような形をしています。
 
 ```
-Cache-Control: public, max-age=3600
-```
-
-これは「このリソースを **1 時間**（3600 秒）は新鮮とみなす」という意味です。この間はブラウザは **サーバーに一切問い合わせずに** ローカルのキャッシュを使います。
-
-DevTools の Network タブで見ると、`Size` 列が **`(memory cache)`** や **`(disk cache)`** になり、サーバーに行かなかったことが表示されます。
-
-```
-Size        Status
-(disk cache) 200
-```
-
-`max-age` が切れるまでは、コードをいじってデプロイし直しても **古いファイルが配られ続けます**。これがキャッシュ起因の「デプロイしたのに反映されない」問題の典型です。
-
-### 弱キャッシュ: `304 Not Modified` の世界
-
-`max-age` が切れた、または `no-cache` が付いているリソースは、ブラウザがサーバーに **「これ、まだ有効？」** と確認しに行きます。この確認のために使うのが `ETag` と `Last-Modified` です。
-
-レスポンスに `ETag` が付いていたら、ブラウザは次回のリクエストに `If-None-Match` ヘッダで同じ値を送ります。
+GET /articles/42 HTTP/1.1
+Host: example.com
+User-Agent: Mozilla/5.0 (...)
+Accept: text/html
+Accept-Language: ja,en
+Cookie: session=abc123
 
 ```
-# 初回レスポンス
+
+1 行目: **リクエストライン**。`HTTP メソッド パス HTTP バージョン` の 3 つ。2 行目以降: **ヘッダ**。キー: 値。空行が 1 つ入ったあと、必要ならリクエストボディが続きます（GET では普通は付けません）。
+
+それに対してサーバーからのレスポンスは次のような形です。
+
+```
 HTTP/1.1 200 OK
-Cache-Control: no-cache
-ETag: "abc123"
-Content-Type: image/png
-...（画像ボディ）
+Content-Type: text/html; charset=utf-8
+Content-Length: 1234
+Cache-Control: public, max-age=3600
+Set-Cookie: session=abc123; HttpOnly
 
-# 2 回目のリクエスト
-GET /logo.png HTTP/1.1
-If-None-Match: "abc123"
-
-# サーバーのレスポンス
-HTTP/1.1 304 Not Modified
-（ボディは空）
+<!doctype html>
+<html>
+...
+</html>
 ```
 
-サーバーは「変わってない」と分かれば **ボディを送らずに 304 だけ返す** ので、通信量はほぼゼロになります。ブラウザは手元のキャッシュを使います。
+1 行目: **ステータスライン**。`HTTP バージョン ステータスコード 理由フレーズ`。2 行目以降: **ヘッダ**。空行の後に **ボディ**（HTML / JSON / 画像バイナリなど）。
 
-`Last-Modified` の場合は `If-Modified-Since` ヘッダで日時を送り返します。考え方は同じです。`ETag` のほうが識別が厳密で、現代では主流です。
+この 2 つのかたまりがブラウザとサーバーのあいだを **1 往復する** のが HTTP 通信の基本単位です。HTTPS の場合も、TLS で暗号化されるだけで中身の形は同じです。
 
-### 実務での定番パターン: 「ハッシュ付きファイル名 + immutable」
+### HTTP メソッドの 4 つ
 
-Web アプリの CSS / JS は「ビルドのたびに中身が変わる可能性があるが、変わったときは URL も変えておく」という運用が主流です。
+大きく 4 つ覚えておけば、ほぼ現代のアプリは読めます。
 
-```
-/assets/main.CEDo5b9P.css
-/assets/main.8c29f6e4.js
-```
+| メソッド | 用途 | 冪等性 | ボディ |
+|---|---|---|---|
+| **`GET`** | 取得 | あり（何回呼んでも同じ） | 基本なし |
+| **`POST`** | 作成・任意の操作 | なし | あり |
+| **`PUT`** | 全体置換 | あり | あり |
+| **`DELETE`** | 削除 | あり | 基本なし |
 
-`CEDo5b9P` のようなハッシュ（コード内容から計算した識別子）をファイル名に入れておき、**中身が変われば URL も変わる** ようにします。すると、サーバーは次のヘッダを安全に付けられます。
+他にも `PATCH`（部分更新）/ `HEAD`（ヘッダだけ取得）/ `OPTIONS`（CORS の事前問い合わせ）がありますが、まずは上の 4 つです。
 
-```
-Cache-Control: public, max-age=31536000, immutable
-```
+**冪等性**（idempotent） とは「同じリクエストを何回送っても結果が同じ」という性質です。ネットワーク不良で再送されても安全な `GET` / `PUT` / `DELETE` と、再送で二重登録になる恐れがある `POST` は別物として扱われます。
 
-1 年間（31536000 秒）は絶対に変えないと宣言します。`immutable` は「リロードされても再検証しない」という追加の念押しです。
+### ステータスコードの 4 つの番台
 
-中身を更新したければ、ビルド時にハッシュが変わって **別の URL** になるので、HTML から参照される URL もそれに合わせて書き換わります。古いキャッシュは持ち続けてもらってよく、新しい URL は新規リクエストとして取りに行くだけです。
+先頭 1 桁でグループを表します。
 
-一方 **HTML 自体** は `no-cache` または短い `max-age` にしておきます。HTML が古いキャッシュを使うと、新しいハッシュ入りの `<link>` / `<script>` タグに切り替わらないためです。
+| 番台 | 意味 | 代表例 |
+|---|---|---|
+| **2xx 成功** | リクエストは正常に処理された | `200 OK` / `201 Created` / `204 No Content` |
+| **3xx リダイレクト / キャッシュ** | 別の URL へ / ブラウザのキャッシュを使って | `301 Moved Permanently` / `302 Found` / `304 Not Modified` |
+| **4xx クライアントエラー** | 送り方が悪い | `400 Bad Request` / `401 Unauthorized` / `403 Forbidden` / `404 Not Found` |
+| **5xx サーバーエラー** | サーバー側の問題 | `500 Internal Server Error` / `502 Bad Gateway` / `503 Service Unavailable` |
 
-### Vercel / VitePress など現代のホスティングは既定が賢い
+細かい違いの覚え方:
 
-Vercel を使うと、静的アセットには自動で `immutable` が付き、HTML には短いキャッシュが付く形になっています。VitePress のビルド出力もハッシュ付きファイル名です。本コースのような教材サイトでは **設定を触らなくてもキャッシュ運用は成立** しています。
+- `401` は「認証が要る / 認証情報が間違っている」
+- `403` は「認証は通ったが権限がない」
+- `404` は「リソースがない」
+- `500` は「サーバー側が想定外で落ちた」
+- `502 Bad Gateway` は、リバースプロキシやロードバランサが上流サーバーから不正な応答を受け取った時に返す
+- `503 Service Unavailable` は「一時的にサービス利用不可」。アプリ自身（メンテナンスモード / 過負荷）が返すこともあれば、ロードバランサが上流に到達できない時にも返される
 
-> **補足**: ブラウザキャッシュは「最も外側」のキャッシュです。1 つのリクエストには複数のキャッシュ層が関与しています。**ブラウザキャッシュ → CDN（Vercel Edge / Cloudflare 等）→ 中間プロキシ → オリジンサーバー** の順に問い合わせていき、どこかでヒットした時点で返ってきます。Next.js を使う場合はさらにアプリ内部にも **fetch のレスポンスキャッシュ**（`force-cache` / `revalidate`）と **Router Cache**（クライアント側のページ単位キャッシュ）があります。本レッスンで扱っているのは一番外側のブラウザキャッシュだけですが、「古い値が返ってくる」事故が起きたら **どの層で固まっているか** を切り分けるのが調査の入口です。
+### 主要なヘッダ
 
-とはいえ、仕組みを知らないと「トップだけ更新されて中ページが古い」「CSS だけ反映されない」といった症状に遭遇したときに原因が分からなくなるので、`Cache-Control` の値を読めるようになっておくことは重要です。
+全部は覚えなくて良いですが、以下は DevTools の Network タブでも頻出します。
 
-### デバッグのコツ
+**リクエストヘッダ（クライアント → サーバー）:**
 
-キャッシュまわりの調査では次を覚えておいてください。
+| ヘッダ | 意味 |
+|---|---|
+| `Host` | どのホストに向けたリクエストか |
+| `User-Agent` | ブラウザの種類・バージョン |
+| `Accept` | 受け取れる Content-Type |
+| `Accept-Language` | 希望言語（`ja,en` など） |
+| `Authorization` | 認証情報（`Bearer xxxx` など） |
+| `Cookie` | サーバーから受け取った Cookie |
+| `Referer` | どのページから来たか（綴り間違い通りに定義されている） |
 
-- **DevTools の Disable cache**: Network タブを開いているあいだ、キャッシュを無効化できる。開発中はオンにしておくと安心
-- **Hard reload**: `Ctrl+Shift+R` / `Cmd+Shift+R` で強制再読込（キャッシュを無視）
-- **Application → Clear storage**: 特定のサイトのキャッシュ・ストレージを一括削除
-- **Network タブの Size 列**: `(memory cache)` / `(disk cache)` / 実サイズ で、どこから来たか判断
-- **Network タブで行をクリック → Headers**: `Cache-Control` / `ETag` の実際の値を確認
+**レスポンスヘッダ（サーバー → クライアント）:**
+
+| ヘッダ | 意味 |
+|---|---|
+| `Content-Type` | ボディの種類（`text/html` / `application/json` 等） |
+| `Content-Length` | ボディのバイト数 |
+| `Cache-Control` | キャッシュ制御（次の「HTTP キャッシュ」で詳解） |
+| `ETag` | リソースのバージョン識別子（キャッシュ用） |
+| `Location` | リダイレクト先（3xx と一緒に使う） |
+| `Set-Cookie` | Cookie を発行 |
+
+### DevTools の Network タブで見る
+
+ここまでの話は、ブラウザの DevTools を使うと **実際にやり取りされているリクエスト / レスポンスの生の姿** として観察できます。
+
+Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページをリロード → 一覧から 1 行クリックすると、Headers / Payload / Preview / Response / Timing の各パネルで詳細が見られます。
+
+この「目で見て学ぶ」のが最も早いので、本レッスンの演習は主にここで手を動かします。
 
 ## 演習
 
 ### ゴール
 
-- 実際のサイトのレスポンスヘッダから `Cache-Control` / `ETag` を読み取る
-- 強キャッシュ・弱キャッシュ・キャッシュなしを切り替えたときの Network タブの見え方の違いを体感する
-- `curl` で条件付きリクエストを自分で送って `304` を取得する
+- 任意のページを開いて DevTools の Network タブで通信を観察する
+- 1 つのリクエスト / レスポンスを選び、ヘッダ・ステータス・メソッドを読み取れる
+- `curl` でも同じ内容が取れることを手元で確認する（任意）
 
-### 手順 1: DevTools で観察する
+### 手順
 
-1. 本教材サイト（または任意の Web サイト）を開きます
-2. DevTools の Network タブを開き、リロードします
-3. 1 行クリックして `Headers` → `Response Headers` を確認します
-4. `Cache-Control` と `ETag` の値をメモします
-5. もう一度リロードします。同じ行の `Status` が `304` になる（または `Size` が `(disk cache)` になる）ことを確認します
-6. `Disable cache` にチェックを入れてリロードします。全行が `200` に戻り、Size が実サイズになることを確認します
+1. 手元のブラウザで `https://jsonplaceholder.typicode.com/posts/1` を開きます（ブラウザが JSON をそのまま表示します）
+2. DevTools（F12）→ Network タブを開いた状態で、ページをリロードします
+3. 一番上に `posts/1` のような行が出ます。これをクリックします
+4. 右側に開くパネルで以下を確認します。
 
-### 手順 2: `curl` で条件付きリクエストを送る
+### 観察するポイント
 
-`ETag` の挙動を手で確かめます。ターミナルで次を実行してください。
+**Headers タブ:**
+
+- General: Request URL / Request Method（`GET`）/ Status Code（`200 OK`）
+- Response Headers: `content-type: application/json; charset=utf-8` / `cache-control: ...`
+- Request Headers: `Host` / `User-Agent` / `Accept` / `Accept-Language`
+
+**Response タブ（または Preview タブ）:**
+
+- レスポンスボディの JSON（`{ "userId": 1, "id": 1, "title": "...", ... }`）
+
+**Timing タブ:**
+
+- DNS Lookup / Initial connection / TLS / Waiting (TTFB) / Content Download の各段階にかかった時間
+
+### 任意課題: `curl` で同じことを体験する
+
+ターミナルから `curl` を叩くと、ブラウザ抜きで同じ通信を確認できます。
 
 ```bash
-# 1 回目: ETag を含むレスポンスヘッダを取る
-curl -I https://jsonplaceholder.typicode.com/posts/1
+curl -i https://jsonplaceholder.typicode.com/posts/1
 ```
 
-出力の中の `etag: "..."` の値をメモします。次にこの ETag を付けて 2 回目のリクエストを送ります。
+`-i` オプションでレスポンスヘッダも表示します。出力の先頭に `HTTP/2 200` のようなステータスライン、空行の後に JSON ボディが続くのが見えます。
+
+送信側を見たいときは `-v`（詳細）を使います。
 
 ```bash
-# 2 回目: 先ほどの ETag を If-None-Match で送り返す
-curl -I https://jsonplaceholder.typicode.com/posts/1 \
-  -H 'If-None-Match: "W/\"xxxxxxxxxxxx\""'
+curl -v https://jsonplaceholder.typicode.com/posts/1
 ```
 
-`-H` で送る値は、1 回目の `etag:` の値をそのまま入れてください（バックスラッシュのエスケープが必要な場合もあります）。成功すると **`HTTP/2 304`** が返り、ボディは送られてきません。
-
-手元の環境で面倒なら、DevTools の Network タブで同じリソースを 2 回リクエストすれば同じ 304 が観察できます。
+`>` で始まる行がリクエスト、`<` で始まる行がレスポンスです。最初の `> GET /posts/1 HTTP/2` と `> host: jsonplaceholder.typicode.com` を見比べると、本文で説明したリクエストの形と一致していることが分かります。
 
 ### 期待出力
 
-- 同じリソースを 2 回目にリクエストすると、Network タブの Status 欄に `304` または `(disk cache)` / `(memory cache)` が表示される
-- `Cache-Control: no-cache` のリソースは毎回サーバーに確認リクエストが飛ぶ
+- `curl -i https://jsonplaceholder.typicode.com/posts/1` を実行すると、先頭に `HTTP/2 200` などのステータス行が出る
+- レスポンスヘッダーに `content-type: application/json` が含まれる
+- ボディに JSON 文字列が表示される
 
 ### 変える
 
-- DevTools の `Disable cache` をオンにしてリロード。すべて `200` に戻る
-- `Hard reload`（`Ctrl+Shift+R` / `Cmd+Shift+R`）を試す。`Disable cache` と同様だが、開発者ツールが閉じていてもキャッシュを無視できる
-- Network タブで `Throttling` を `Slow 4G` に。キャッシュから取っているときはほぼ無影響だが、キャッシュを無効にして比較すると体感差が大きい
+- URL を `https://jsonplaceholder.typicode.com/does-not-exist` に変えて、ブラウザのアドレスバーで開く。Network タブで Status Code が **`404`** になっていることを確認
+- `https://httpstat.us/500` を開く。Status Code が **`500`** になる（HTTP のテスト用サービス。明示的に各ステータスを返す）
+- `https://httpstat.us/301` を開く。リダイレクト先があって、ブラウザが自動で追従する様子を Network タブで確認
 
 ### 自分で書く
 
-- 「`no-cache` と `no-store` の違いを 2 行で説明する」文章を書いてみる（本文を隠した状態で挑戦）
-- `Cache-Control: public, max-age=31536000, immutable` が付いたリソースをリロードしたとき、Network タブでどう見えるか予想し、実際に本サイトの `/assets/*.css` などで確認する
+- DevTools の Network タブで、最近よく見るサイト（自分のポートフォリオ・ブログ等）を開き、**1 つの HTML ページを開くときにいくつのリクエストが発生しているか** を数えてみる
+- その中で、Status が `304 Not Modified` になっているものを探す。これはブラウザキャッシュが効いたレスポンス
 
 ## まとめ
 
-- キャッシュは「強キャッシュ（聞かない）」「弱キャッシュ（聞くがボディ省略）」「無し」の 3 段階
-- `Cache-Control` でモードを指定。よく使うのは `max-age` / `no-cache` / `no-store` / `immutable`
-- `ETag` / `Last-Modified` と `If-None-Match` / `If-Modified-Since` の条件付きリクエストで `304 Not Modified`（ボディ省略）を引き出せる
-- 実務の定番: ハッシュ入りファイル名 + `max-age=31536000, immutable` の組み合わせ。HTML は短いキャッシュ or `no-cache`
-- DevTools の `Disable cache` / `Hard reload` / Size 列でキャッシュを見抜く
+- HTTP はリクエスト / レスポンスという文字列の塊を 1 往復やり取りする素朴なプロトコル
+- リクエストは「メソッド + パス + ヘッダ + ボディ（任意）」の形
+- レスポンスは「ステータス + ヘッダ + ボディ」の形
+- メソッドは `GET` / `POST` / `PUT` / `DELETE` を基本に、冪等性を意識して使う
+- ステータスコードは 2xx / 3xx / 4xx / 5xx で大分類。細かい違い（401 vs 403 など）は都度覚える
+- ヘッダには `Host` / `User-Agent` / `Accept` / `Content-Type` / `Cache-Control` / `Set-Cookie` などがあり、DevTools の Network タブで実物を観察できる

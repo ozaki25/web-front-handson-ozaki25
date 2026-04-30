@@ -1,487 +1,486 @@
-# lesson115: Web Components 入門
+# lesson113: Zod でスキーマバリデーション
 
 ## ゴール
 
-- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
-- Shadow DOM でスタイルと DOM を外から隔離できる
-- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
-- `<slot>` で外側から中身を差し込める
-- React との使い分けを判断できる
+- なぜ TS の型だけでは不十分かを説明できる（外部入力の検証）
+- Zod のスキーマ定義（`z.object` / `z.string` / `z.number` / `z.array`）が書ける
+- `parse` / `safeParse` の違いと使いどころを知る
+- `z.infer<typeof schema>` で型を自動導出できる
+- React Hook Form と組み合わせて型安全なフォームを作れる
+- API レスポンスの検証や Server Actions の入力検証にも応用できる
+- Valibot / Arktype など代替ライブラリの存在を知る
 
 ## 解説
 
-### Web Components とは
+### TypeScript の型だけでは足りない
 
-**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
-
-| 柱 | 役割 |
-|---|---|
-| Custom Elements | 自作の HTML タグを定義 |
-| Shadow DOM | スタイルと DOM を隔離 |
-| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
-
-作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
-
-### なぜ今 Web Components を知るか
-
-2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
-
-- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
-- 会社共通のデザインシステムを **React 依存にせず** 配布したい
-- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
-
-React コンポーネントは React の中でしか動きません。Web Components は **どこでも動く**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
-
-### Custom Elements の最小形
-
-```js
-class HelloWorld extends HTMLElement {
-  connectedCallback() {
-    this.innerHTML = "<p>Hello, Web Components!</p>";
-  }
-}
-
-customElements.define("hello-world", HelloWorld);
-```
-
-HTML で使う:
-
-```html
-<hello-world></hello-world>
-```
-
-ルール:
-
-- クラスは **`HTMLElement` を継承** する
-- `customElements.define(タグ名, クラス)` で登録
-- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
-
-### ライフサイクル
-
-Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
-
-```js
-class MyCounter extends HTMLElement {
-  connectedCallback() {
-    // DOM に追加された時
-    this.render();
-  }
-
-  disconnectedCallback() {
-    // DOM から外された時。リスナー解除などのクリーンアップ
-  }
-
-  static observedAttributes = ["count"];
-
-  attributeChangedCallback(name, oldValue, newValue) {
-    // 監視対象の属性が変わった時
-    if (name === "count") this.render();
-  }
-
-  render() {
-    const count = this.getAttribute("count") ?? "0";
-    this.innerHTML = `<strong>Count: ${count}</strong>`;
-  }
-}
-
-customElements.define("my-counter", MyCounter);
-```
-
-```html
-<my-counter count="3"></my-counter>
-```
-
-`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
-
-### Shadow DOM でスタイルを隔離
-
-普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
-
-```js
-class MyCard extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
-        :host {
-          display: block;
-          padding: 16px;
-          border: 1px solid #ccc;
-          border-radius: 8px;
-        }
-        h2 { color: #2563eb; margin: 0 0 8px; }
-      </style>
-      <h2>カードタイトル</h2>
-      <p>カードの中身</p>
-    `;
-  }
-}
-customElements.define("my-card", MyCard);
-```
-
-```html
-<my-card></my-card>
-```
-
-- `attachShadow({ mode: "open" })` で shadow tree を作る
-- `:host` は **このカスタム要素自身** を指すセレクタ
-- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
-
-`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
-
-### `<slot>` で外から中身を差し込む
-
-React の `children` に相当するのが `<slot>` です。
-
-```js
-class FancyBox extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
-        header { font-weight: bold; margin-bottom: 8px; }
-      </style>
-      <header><slot name="title">デフォルトタイトル</slot></header>
-      <div><slot>本文が入ります</slot></div>
-    `;
-  }
-}
-customElements.define("fancy-box", FancyBox);
-```
-
-使う側:
-
-```html
-<fancy-box>
-  <span slot="title">カスタムタイトル</span>
-  <p>ここが本文です。</p>
-</fancy-box>
-```
-
-- `<slot>` は **名前なし** のデフォルトスロット
-- `<slot name="title">` は **名前付き** スロット
-- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
-
-### プロパティ / イベント
-
-ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
-
-```js
-class MyToggle extends HTMLElement {
-  #checked = false;
-
-  connectedCallback() {
-    this.attachShadow({ mode: "open" });
-    this.render();
-  }
-
-  get checked() { return this.#checked; }
-  set checked(value) {
-    this.#checked = Boolean(value);
-    this.render();
-    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `
-      <button>${this.#checked ? "ON" : "OFF"}</button>
-    `;
-    // render() で innerHTML を書き換えるたびに古い button は消えるので、
-    // クリックリスナーは render() 内で「新しい button」に対してだけ付ける
-    this.shadowRoot.querySelector("button").addEventListener("click", () => {
-      this.checked = !this.checked;
-    });
-  }
-}
-customElements.define("my-toggle", MyToggle);
-```
-
-使う側:
-
-```html
-<my-toggle></my-toggle>
-
-<script>
-  const toggle = document.querySelector("my-toggle");
-  toggle.addEventListener("change", (e) => {
-    console.log("ON/OFF:", e.detail.checked);
-  });
-</script>
-```
-
-- プロパティは **クラスの getter / setter** として定義
-- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
-
-### `<template>` で DOM のクローン元を用意
-
-大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
-
-```html
-<template id="card-template">
-  <style>
-    :host { display: block; border: 1px solid #ccc; padding: 12px; }
-  </style>
-  <slot name="title"></slot>
-  <slot></slot>
-</template>
-
-<script>
-  const tpl = document.getElementById("card-template");
-  class MyCardTpl extends HTMLElement {
-    connectedCallback() {
-      const shadow = this.attachShadow({ mode: "open" });
-      shadow.appendChild(tpl.content.cloneNode(true));
-    }
-  }
-  customElements.define("my-card-tpl", MyCardTpl);
-</script>
-```
-
-`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
-
-### React との使い分け
-
-「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
-
-| | Web Components | React |
-|---|---|---|
-| 動く場所 | どの HTML ページでも | React アプリの中だけ |
-| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
-| 型 | TypeScript と相性が微妙 | 強い |
-| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
-| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
-
-**原則**:
-
-- **アプリ内部** の UI → React で書く（DX が圧倒的）
-- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
-- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
-
-React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
-
-ただし、Custom Element が `dispatchEvent` で投げる **CustomEvent**（例: `change` / `select`）を `onChange` のような JSX プロパティで受ける機能は **入っていません**。React のイベントシステムは標準 DOM イベントを合成イベントに繋ぐ仕組みで、Custom Element の独自 CustomEvent は対象外です。CustomEvent を購読したい場合は **`ref` + `addEventListener`** が現実解です。
-
-```tsx
-import { useEffect, useRef } from "react";
-
-function ToggleHost() {
-  const ref = useRef<HTMLElement>(null);
-
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ checked: boolean }>).detail;
-      console.log(detail);
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, []);
-
-  return <my-toggle ref={ref} />;
-}
-```
-
-::: warning TypeScript で使うときは型宣言が必要
-JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。React 19 では `react` モジュールの `JSX` 名前空間を拡張する形が公式の作法です。
+TypeScript の型は **コンパイル時** にしか効きません。**実行時には消えます**。
 
 ```ts
-import "react";
+type User = { id: number; name: string };
 
-declare module "react" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "my-toggle": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement>,
-        HTMLElement
-      >;
-    }
+async function getUser(): Promise<User> {
+  const res = await fetch("/api/user");
+  return res.json();   // 本当に User 型？
+}
+```
+
+`.json()` の戻り値は `any` で、サーバーが何を返してきたかは TS には分かりません。型を信じて使うと、想定外のレスポンスでアプリが落ちます。
+
+実行時に検証できる仕組みが要ります。これが **ランタイムバリデーション**。代表が **Zod** です。
+
+### Zod とは
+
+Zod は **TypeScript 第一** のスキーマ宣言・検証ライブラリです。スキーマを書くと:
+
+1. **実行時バリデーション**: 不正な値を弾く
+2. **TypeScript 型を自動生成**: `z.infer<typeof schema>` で取れる
+
+「型定義 + バリデーション」を 1 箇所に集約できるのが最大の強みです。
+
+### インストール
+
+```bash
+npm install zod
+```
+
+### 基本のスキーマ
+
+```ts
+import { z } from "zod";
+
+const UserSchema = z.object({
+  id: z.number(),
+  name: z.string(),
+  email: z.email(),
+  age: z.number().int().min(0).max(150),
+  isAdmin: z.boolean(),
+});
+
+type User = z.infer<typeof UserSchema>;
+// 上の type は { id: number; name: string; email: string; age: number; isAdmin: boolean } と等価
+```
+
+`z.string()` / `z.number()` / `z.boolean()` のような **プリミティブ** から始め、`z.object` でまとめます。
+
+> **補足: `z.infer<typeof X>` の `typeof` は型レベルの取得**: ここでの `typeof UserSchema` は、JS の値レベル `typeof`（`typeof x === "string"` のような演算子）とは別物です。TypeScript には型を扱う専用の `typeof` があり、「**変数の型を取り出す**」役割を持ちます。`UserSchema` は値（オブジェクト）として存在しますが、その値の **型** を取り出して `z.infer<...>` に渡すことで「スキーマから型を自動導出」できます。`z.infer<typeof X>` という書き方をひとつのイディオムとして覚えてしまって構いません。
+
+### 組み込み修飾メソッド
+
+```ts
+z.string().min(1, "必須です").max(100, "100 文字以内")  // 文字数制限
+z.email("メール形式で")                                 // メール（v4 から top-level）
+z.url("URL 形式で")                                    // URL（v4 から top-level）
+z.string().regex(/^\d{3}-\d{4}$/, "郵便番号の形式で")    // 正規表現
+z.number().int("整数で").positive("正の数で")           // 整数 + 正
+z.number().min(0).max(100)                             // 範囲
+z.string().optional()                                   // string | undefined
+z.string().nullable()                                   // string | null
+z.string().default("デフォルト")                        // デフォルト値
+```
+
+> **Zod v4（2025 リリース）の変更点**: `z.string().email()` / `.url()` / `.uuid()` / `.datetime()` は v4 で **top-level の `z.email()` / `z.url()` / `z.uuid()` / `z.iso.datetime()` に再編** されました。v3 系の書き方も互換のため動きますが、新規コードは v4 形式が推奨です。
+
+### 配列とユニオン
+
+```ts
+const TodoSchema = z.object({
+  id: z.uuid(),
+  title: z.string().min(1),
+  status: z.enum(["open", "doing", "done"]),  // 文字列リテラルのユニオン
+  tags: z.array(z.string()),
+  createdAt: z.iso.datetime(),                // ISO 8601
+});
+
+type Todo = z.infer<typeof TodoSchema>;
+```
+
+### `parse` と `safeParse`
+
+スキーマで値を検証する 2 つの方法:
+
+#### `parse`: 失敗時に例外を投げる
+
+```ts
+try {
+  const user = UserSchema.parse(data);
+  console.log(user.name);  // 型は User
+} catch (err) {
+  if (err instanceof z.ZodError) {
+    console.log(err.issues);  // どこで失敗したかの詳細
   }
 }
 ```
 
-`Lit` を使うとデコレータ経由で型が付くので、TypeScript と組み合わせるなら Lit が現実解です。
-:::
+#### `safeParse`: 失敗時にも値を返す
 
-### Lit の存在
-
-Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
-
-```js
-import { LitElement, html, css } from "lit";
-
-class MyCard extends LitElement {
-  static styles = css`
-    :host { display: block; padding: 16px; border: 1px solid #ccc; }
-  `;
-  render() {
-    return html`<h2>タイトル</h2><slot></slot>`;
-  }
+```ts
+const result = UserSchema.safeParse(data);
+if (result.success) {
+  console.log(result.data.name);
+} else {
+  console.log(result.error.issues);
 }
-customElements.define("my-card", MyCard);
 ```
 
-Web Components を本格的に書くなら Lit が現在のデファクト。Google / Adobe / Shopify も使っています。
+`safeParse` の方が `try / catch` を書かなくて済むので、フォームバリデーションには向いています。
+
+### React Hook Form と統合
+
+`@hookform/resolvers` を入れると、Zod スキーマがそのまま RHF のバリデーションに使えます。
+
+```bash
+npm install @hookform/resolvers
+```
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { z } from "zod";
+
+const ContactSchema = z.object({
+  name: z.string().min(1, "お名前は必須です").max(50, "50 文字以内"),
+  email: z.email("メールアドレスの形式が正しくありません"),
+  age: z.coerce.number().int("整数で").min(18, "18 歳以上"),
+  message: z.string().min(10, "10 文字以上で入力してください"),
+});
+
+type ContactFormValues = z.infer<typeof ContactSchema>;
+
+export function ContactForm() {
+  const {
+    register,
+    handleSubmit,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  function onSubmit(data: ContactFormValues) {
+    console.log("検証済みデータ:", data);
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <input {...register("name")} />
+      {errors.name && <p>{errors.name.message}</p>}
+
+      <input type="email" {...register("email")} />
+      {errors.email && <p>{errors.email.message}</p>}
+
+      <input type="number" {...register("age")} />
+      {errors.age && <p>{errors.age.message}</p>}
+
+      <textarea {...register("message")} />
+      {errors.message && <p>{errors.message.message}</p>}
+
+      <button type="submit" disabled={isSubmitting}>送信</button>
+    </form>
+  );
+}
+```
+
+利点:
+
+- **スキーマ 1 箇所で定義** すれば型もバリデーションも揃う
+- **`age` のような数値** も `z.coerce.number()` で `<input type="number">` の文字列を自動変換
+- **エラーメッセージ** が日本語で出せる
+
+### `z.coerce` で型変換
+
+`<input>` の値はすべて文字列です。数値や日付として扱うには変換が必要。
+
+```ts
+z.coerce.number()       // 文字列 → 数値
+z.coerce.boolean()      // 文字列 / 数値 → boolean
+z.coerce.date()         // 文字列 → Date
+```
+
+> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
+>
+> ```ts
+> age: z.preprocess(
+>   (v) => (v === "" || v === null ? undefined : v),
+>   z.coerce.number().int("整数で").min(18, "18 歳以上")
+> )
+> ```
+>
+> または `z.string().min(1, "必須です").transform(Number).pipe(z.number().int())` のように **string で受けてから変換** する書き方でも回避できます。
+
+### API レスポンスの検証
+
+サーバーから返ってきたデータが想定通りかを検証します。
+
+```ts
+async function fetchUser(id: number): Promise<User> {
+  const res = await fetch(`/api/users/${id}`);
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return UserSchema.parse(data);   // スキーマに合わなければ ZodError
+}
+```
+
+これで API 仕様変更による不正レスポンスを早期に検知できます。
+
+### Server Actions / Route Handlers の入力検証
+
+**「Server Actions の最小形」「Route Handlers」** で扱った Server Actions / Route Handlers の引数は外部入力なので、必ず検証すべきです。
+
+```ts
+"use server";
+
+import { z } from "zod";
+
+const AddTodoSchema = z.object({
+  text: z.string().min(1).max(200),
+});
+
+export async function addTodo(formData: FormData) {
+  const result = AddTodoSchema.safeParse({
+    text: formData.get("text"),
+  });
+  if (!result.success) {
+    return { ok: false as const, error: result.error.issues[0].message };
+  }
+  // 検証済みの result.data.text を使う
+  await db.insertTodo(result.data.text);
+  return { ok: true as const };
+}
+```
+
+### よくあるパターン
+
+#### refine: 複数フィールド間のチェック
+
+```ts
+const SignupSchema = z.object({
+  password: z.string().min(8),
+  passwordConfirm: z.string(),
+}).refine((data) => data.password === data.passwordConfirm, {
+  message: "パスワードが一致しません",
+  path: ["passwordConfirm"],  // エラーをこのフィールドに紐付け
+});
+```
+
+#### transform: 値を加工
+
+```ts
+const TrimmedString = z.string().transform((s) => s.trim());
+
+TrimmedString.parse("  hello  "); // "hello"
+```
+
+### 代替ライブラリ
+
+| ライブラリ | 特徴 |
+|---|---|
+| **Zod** | デファクト。エコシステム最大 |
+| **Valibot** | バンドルサイズが小さい（10x 軽量）。書き味も似ている |
+| **ArkType** | TypeScript 風の構文（`"string"` ではなく `string`）。型推論が強力 |
+| **Yup** | 古参。React Hook Form 公式の最初のサンプルが Yup だった |
+
+新規プロジェクトでは **Zod が第一候補**、バンドルサイズが厳しいなら **Valibot** を検討。
 
 ## 演習
 
 ### ゴール
 
-- Counter の Web Component を作る
-- Shadow DOM でスタイル隔離を確認する
-- `<slot>` で外から中身を差し込む
+- 「React Hook Form の基本」の演習で作った `ContactForm` を Zod ベースに書き換える
+- スキーマから型を自動導出する
+- フォーム外の利用例として、`fetch` のレスポンスを Zod で検証する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 依存追加
 
 ```bash
-npm create vite@latest web-components-sample -- --template vanilla-ts
-cd web-components-sample
-npm install
+npm install zod @hookform/resolvers
 ```
 
-### 手順 2: index.html
+### 手順 2: スキーマ + 型を定義
 
-```html
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Web Components Demo</title>
-    <style>
-      /* 外側の CSS（Shadow DOM で隔離されるはず） */
-      h2 { color: red; }
-      body { font-family: sans-serif; padding: 24px; }
-    </style>
-  </head>
-  <body>
-    <h2>外側の h2（赤いはず）</h2>
-
-    <my-card>
-      <span slot="title">内側のタイトル</span>
-      <p>スロットに入る本文</p>
-    </my-card>
-
-    <my-counter start="5"></my-counter>
-    <p id="log">イベントログ: -</p>
-
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
-```
-
-### 手順 3: src/main.ts
+`src/contact-schema.ts`:
 
 ```ts
-// my-card
-class MyCard extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-        h2 { color: #2563eb; margin: 0 0 8px; }
-      </style>
-      <h2><slot name="title">デフォルトタイトル</slot></h2>
-      <div><slot></slot></div>
-    `;
-  }
-}
-customElements.define("my-card", MyCard);
+import { z } from "zod";
 
-// my-counter
-class MyCounter extends HTMLElement {
-  #count = 0;
-
-  static observedAttributes = ["start"];
-
-  attributeChangedCallback(name: string, _old: string, value: string) {
-    if (name === "start") {
-      this.#count = Number(value);
-      this.render();
-    }
-  }
-
-  connectedCallback() {
-    this.attachShadow({ mode: "open" });
-    this.#count = Number(this.getAttribute("start") ?? "0");
-    this.render();
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
-        button { padding: 4px 12px; }
-        strong { min-width: 40px; text-align: center; }
-      </style>
-      <button id="dec">-</button>
-      <strong>${this.#count}</strong>
-      <button id="inc">+</button>
-    `;
-    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
-      this.#count++;
-      this.render();
-      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
-    });
-    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
-      this.#count--;
-      this.render();
-      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
-    });
-  }
-}
-customElements.define("my-counter", MyCounter);
-
-// ログ
-const log = document.getElementById("log")!;
-document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
-  const ce = e as CustomEvent<{ count: number }>;
-  log.textContent = `イベントログ: count = ${ce.detail.count}`;
+export const ContactSchema = z.object({
+  name: z
+    .string()
+    .min(1, "お名前は必須です")
+    .max(50, "50 文字以内で入力してください"),
+  email: z
+    .string()
+    .min(1, "メールは必須です")
+    .email("メールアドレスの形式が正しくありません"),
+  message: z
+    .string()
+    .min(10, "10 文字以上で入力してください")
+    .max(1000, "1000 文字以内で入力してください"),
 });
+
+export type ContactFormValues = z.infer<typeof ContactSchema>;
 ```
 
-### 手順 4: 起動して確認
+### 手順 3: フォームを書き換え
 
-```bash
-npm run dev
+`src/ContactForm.tsx`:
+
+```tsx
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useState } from "react";
+import { ContactSchema, type ContactFormValues } from "./contact-schema";
+
+export function ContactForm() {
+  const [submitted, setSubmitted] = useState(false);
+
+  const {
+    register,
+    handleSubmit,
+    reset,
+    formState: { errors, isSubmitting },
+  } = useForm<ContactFormValues>({
+    resolver: zodResolver(ContactSchema),
+  });
+
+  async function onSubmit(data: ContactFormValues) {
+    await new Promise((r) => setTimeout(r, 500));
+    console.log("送信:", data);
+    setSubmitted(true);
+    reset();
+  }
+
+  return (
+    <form onSubmit={handleSubmit(onSubmit)} noValidate>
+      <h1>お問い合わせ</h1>
+
+      <div>
+        <label htmlFor="name">お名前</label>
+        <input
+          id="name"
+          aria-invalid={errors.name ? "true" : "false"}
+          {...register("name")}
+        />
+        {errors.name && <p role="alert" style={{ color: "red" }}>{errors.name.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="email">メール</label>
+        <input
+          id="email"
+          type="email"
+          aria-invalid={errors.email ? "true" : "false"}
+          {...register("email")}
+        />
+        {errors.email && <p role="alert" style={{ color: "red" }}>{errors.email.message}</p>}
+      </div>
+
+      <div>
+        <label htmlFor="message">メッセージ</label>
+        <textarea
+          id="message"
+          rows={4}
+          aria-invalid={errors.message ? "true" : "false"}
+          {...register("message")}
+        />
+        {errors.message && <p role="alert" style={{ color: "red" }}>{errors.message.message}</p>}
+      </div>
+
+      <button type="submit" disabled={isSubmitting}>
+        {isSubmitting ? "送信中..." : "送信"}
+      </button>
+
+      {submitted && <p style={{ color: "green" }}>送信しました！</p>}
+    </form>
+  );
+}
 ```
 
-ブラウザで以下を確認します。
+### 手順 4: API レスポンス検証の例
 
-1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
-2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
-3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
-4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
+`src/api.ts`:
+
+```ts
+import { z } from "zod";
+
+const PostSchema = z.object({
+  id: z.number().int(),
+  title: z.string(),
+  body: z.string(),
+  userId: z.number().int(),
+});
+
+export type Post = z.infer<typeof PostSchema>;
+
+const PostListSchema = z.array(PostSchema);
+
+export async function fetchPosts(): Promise<Post[]> {
+  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+  if (!res.ok) throw new Error("取得失敗");
+  const data = await res.json();
+  return PostListSchema.parse(data);   // 不正な構造なら ZodError
+}
+```
+
+これで API レスポンスの構造が変わってもすぐ気付けます。
 
 ### 期待出力
 
-- Shadow DOM の中の h2 は青、外側の h2 は赤
-- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
+- フォームのバリデーションが Zod ベースで動く（手書きの `register("name", { required, ... })` を書かない）
+- 「メール形式エラー」「10 文字以上」「50 文字以内」が日本語で表示される
+- `ContactFormValues` 型は `z.infer<typeof ContactSchema>` から自動生成され、IDE の補完も効く
+- API 検証で `parse` が成功すれば型付きデータ、失敗すれば例外
 
 ### 変える
 
-- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認。**注意**: `closed` のままだと `this.shadowRoot!.getElementById(...)` が null 参照で実行時エラーになるため、観察できたら `open` に戻してから他の手順に進む
-- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
-- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
-- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
+- `ContactSchema` に `tel: z.string().regex(/^\d{2,4}-\d{2,4}-\d{3,4}$/, "電話番号の形式で")` を追加して、電話番号フィールドを足す
+- `z.email()` を `z.string().regex(/.../)` に書き換えて、独自パターンを使う
+- `safeParse` で書き換えてみる（fetchPosts を `try / catch` 不要にする）
 
-### 自分で書く（任意）
+### 自分で書く
 
-- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
-- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
-- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
+- `password` と `passwordConfirm` の一致チェックを `refine` で書く
+- 18 歳以上に限定する `birthday: z.coerce.date()` フィールドを追加し、`refine` で「今日から 18 年前以前」を検証
+
+### 自分で書く（自分の Server Action に Zod を入れる）
+
+「Server Actions の最小形」「送信状態とエラー表示」で書いた自分の `actions.ts` に Zod を導入してみましょう。`if (!text) ...` のような自前検証を Zod の `safeParse` に置き換える演習です。
+
+1. `actions.ts` の冒頭に Zod スキーマを定義:
+
+   ```ts
+   import { z } from "zod";
+
+   const AddSchema = z.object({
+     text: z.string().min(1, "内容を入力してください").max(200, "200 文字以内"),
+   });
+   ```
+
+2. Server Action の中で `safeParse` する形に書き換える:
+
+   ```ts
+   export async function addItem(prev: AddResult, formData: FormData): Promise<AddResult> {
+     const result = AddSchema.safeParse({ text: formData.get("text") });
+     if (!result.success) {
+       return { ok: false, error: result.error.issues[0].message };
+     }
+     // result.data.text を使う
+     ...
+   }
+   ```
+
+3. `useActionState` で受けるエラー表示はそのまま動きます（戻り値の型を変えていないため）。
+
+4. 削除アクションがあれば同じ流れで Zod 化できます（`id: z.uuid()` などが書けます）。
+
+これで「フォーム → Server Action → Zod 検証 → DB」の現代的なパイプラインが完成します。
 
 ## まとめ
 
-- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
-- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
-- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
-- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
-- プロパティは getter / setter、通知は `CustomEvent` で
-- 本格運用するなら **Lit** が今のデファクト
-- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
-- React 19 以降は Custom Elements の props / event 受け渡しが自然
+- TS の型は実行時に消える。外部入力（API / フォーム）には **ランタイムバリデーション** が必要
+- **Zod** はスキーマで型と検証を 1 箇所にまとめる現代の定番
+- 基本: `z.object` / `z.string` / `z.number` / `z.array` / `z.enum`
+- 修飾: `min` / `max` / `email` / `regex` / `optional` / `default`
+- `parse`（例外）/ `safeParse`（戻り値）の使い分け
+- **`z.infer<typeof schema>`** で型を自動導出
+- **`zodResolver`** で React Hook Form と統合し、スキーマ 1 つでフォーム + 型が完成
+- 代替: Valibot（軽量）/ ArkType（型推論強力）/ Yup（古参）

@@ -1,240 +1,421 @@
-# lesson101: Core Web Vitals の 3 つの指標と Lighthouse
+# lesson99: API モック — MSW（Mock Service Worker）
 
 ## ゴール
 
-- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
-- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
-- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
-- 75 パーセンタイル評価の意味を説明できる
-- DevTools の Performance パネルで CWV を計測できる
-- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
+- なぜテストで API モックが必要かを説明できる
+- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
+- `http.get` / `http.post` で HTTP ハンドラを書ける
+- `setupServer` で Vitest にモックを組み込める
+- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
+- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
 
 ## 解説
 
-### Core Web Vitals とは
+### なぜテストで API モックが必要か
 
-**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
+`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
 
-| 指標 | 何を測る | Good | Needs Improvement | Poor |
-|---|---|---|---|---|
-| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
-| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
-| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
+- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
+- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
+- 速度が遅い（数百 ms × テスト数だけ待たされる）
+- オフラインで CI が動かない
 
-「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
+これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
 
-### LCP: 最大コンテンツが見えるまで
+### MSW とは
 
-LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
+**Mock Service Worker**（MSW） は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
 
-LCP が遅くなる主な原因:
+特徴:
 
-1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
-2. **サーバーレスポンスが遅い**（TTFB が長い）
-3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
-4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
+- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
+- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
+- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
+- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
 
-主な対策:
+### 他のモック手法との比較
 
-- 画像最適化（`next/image` 系のレッスン参照）
-- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
-- JS のコード分割（バンドルサイズ最適化のレッスン参照）
-- 重要な画像 / フォントを `<link rel="preload">` で先読み
+- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
+- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
+- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
 
-### INP: 反応の遅さ
+複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
 
-INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
+### セットアップ
 
-INP が悪くなる主な原因:
-
-1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
-2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
-3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
-
-対策:
-
-- イベントハンドラ内の処理を軽くする
-- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
-- 重い処理を **Web Worker** に逃がす
-- リスト描画は **仮想スクロール**（`react-window` 等）
-- `requestIdleCallback` で空き時間に処理
-
-### CLS: レイアウトのガタつき
-
-CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
-
-CLS が悪くなる主な原因:
-
-1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
-2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
-3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
-
-対策:
-
-- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
-- 動的挿入は **下から** か、placeholder で確保したスペースに収める
-- フォントは `next/font` のようなツールで先読み・サブセット化
-- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
-
-### しきい値は「75 パーセンタイル」で評価する
-
-Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
-
-評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
-
-### Lighthouse vs Real User Monitoring（RUM）
-
-CWV を計測する方法は 2 系統あります。
-
-#### Lighthouse（ラボデータ）
-
-Chrome DevTools 内蔵の Lighthouse（7 章「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
-
-- 利点: その場ですぐ計測できる、デプロイ前に確認できる
-- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
-
-主に **開発時のデバッグ** に向きます。
-
-#### RUM（フィールドデータ / 実ユーザー測定）
-
-実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
-
-- 利点: 本物のユーザー体験を反映
-- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
-
-代表的なツール:
-
-- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
-- **Google Search Console** — Core Web Vitals レポート
-- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
-- **web-vitals ライブラリ** + 任意の解析サービスへ送信
-
-Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
-
-### web-vitals ライブラリで RUM を仕込む
-
-自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
+「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
 
 ```bash
-npm install web-vitals
+npm install -D msw
 ```
+
+`src/mocks/handlers.ts` を作成（ハンドラ定義）:
 
 ```ts
-// src/web-vitals.ts
-import { onLCP, onINP, onCLS } from "web-vitals";
+import { http, HttpResponse } from "msw";
 
-function sendToAnalytics(metric: { name: string; value: number; id: string }) {
-  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
-  console.log(metric);
-  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
-}
+export const handlers = [
+  // GET /api/posts
+  http.get("https://api.example.com/posts", () => {
+    return HttpResponse.json([
+      { id: 1, title: "1 件目" },
+      { id: 2, title: "2 件目" },
+    ]);
+  }),
 
-onLCP(sendToAnalytics);
-onINP(sendToAnalytics);
-onCLS(sendToAnalytics);
+  // POST /api/posts
+  http.post("https://api.example.com/posts", async ({ request }) => {
+    const body = await request.json();
+    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
+  }),
+];
 ```
 
-本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
+`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
 
-### DevTools の Performance パネルで計測
+```ts
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers";
 
-Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
+export const server = setupServer(...handlers);
+```
 
-1. F12 → **Performance** タブ
-2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
-3. レポートが表示される
-   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
-   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
-   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
+`vitest.setup.ts` に追記（テスト全体のフック）:
 
-DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./src/mocks/server";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+これで:
+
+- 全テストの前にモックサーバを起動
+- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
+- 全テスト後にサーバを停止
+- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
+
+### 簡単なコンポーネントテスト
+
+`src/PostsList.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+
+type Post = { id: number; title: string };
+
+export function PostsList() {
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.example.com/posts")
+      .then((res) => {
+        if (!res.ok) throw new Error("読み込み失敗");
+        return res.json();
+      })
+      .then(setPosts)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p>エラー: {error}</p>;
+  if (posts === null) return <p>読み込み中...</p>;
+
+  return (
+    <ul>
+      {posts.map((p) => (
+        <li key={p.id}>{p.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+`src/PostsList.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { PostsList } from "./PostsList";
+
+describe("PostsList", () => {
+  it("最初は読み込み中を表示する", () => {
+    render(<PostsList />);
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
+
+  it("読み込みが終わると一覧を表示する", async () => {
+    render(<PostsList />);
+    expect(await screen.findByText("1 件目")).toBeInTheDocument();
+    expect(screen.getByText("2 件目")).toBeInTheDocument();
+  });
+});
+```
+
+`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
+
+### 失敗ケースのテスト: `server.use` で一時上書き
+
+「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { server } from "./mocks/server";
+import { PostsList } from "./PostsList";
+
+describe("PostsList のエラー", () => {
+  it("API が 500 を返したらエラーを表示", async () => {
+    server.use(
+      http.get("https://api.example.com/posts", () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+
+    render(<PostsList />);
+
+    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
+  });
+
+  it("API が 404 を返したらエラーを表示", async () => {
+    server.use(
+      http.get("https://api.example.com/posts", () => {
+        return new HttpResponse(null, { status: 404 });
+      })
+    );
+
+    render(<PostsList />);
+
+    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
+  });
+});
+```
+
+`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
+
+### POST のテスト
+
+書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { CreatePostForm } from "./CreatePostForm";
+
+describe("CreatePostForm", () => {
+  it("送信すると新しい記事 ID が表示される", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostForm />);
+
+    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
+  });
+});
+```
+
+`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
+
+### 遅延を入れる: `delay`
+
+「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
+
+```ts
+import { http, HttpResponse, delay } from "msw";
+
+export const handlers = [
+  http.get("https://api.example.com/posts", async () => {
+    await delay(100);  // 100ms 遅らせる
+    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
+  }),
+];
+```
+
+これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
 
 ## 演習
 
 ### ゴール
 
-- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
-- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
-- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
+- MSW のセットアップを完了する
+- ハンドラ 3 種（成功 / エラー / 遅延）を書く
+- `useEffect` で fetch する小さなコンポーネントをテストする
+- `server.use` でテストごとにレスポンスを上書きできる
 
-### 手順 1: Lighthouse で CWV を計測
+### 途中から始める場合
 
-1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
-2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
-3. レポートを確認:
-   - 全体スコア
-   - **Largest Contentful Paint**（LCP の値）
-   - **Cumulative Layout Shift**（CLS の値）
-   - **Interaction to Next Paint**（条件次第で出る）
+「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
 
-### 手順 2: PageSpeed Insights で RUM を見る
+```bash
+npm install -D vitest @vitejs/plugin-react jsdom
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
+npm install -D msw
+```
 
-1. <https://pagespeed.web.dev/> にアクセス
-2. URL を入れて Analyze
-3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
-4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
+`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
 
-実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
+### 手順 1: モックサーバを構築
 
-### 手順 3: DevTools Performance で観察
+`src/mocks/handlers.ts`:
 
-1. Chrome で対象ページを開く
-2. F12 → **Performance** タブ
-3. 左上の **Record**（黒丸） を押す
-4. ページをリロード（`Ctrl + R`）
-5. ページが落ち着いたら **Stop**
-6. タイムラインで:
-   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
-   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
-   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
+```ts
+import { http, HttpResponse, delay } from "msw";
+
+export const handlers = [
+  http.get("https://api.example.com/users", async () => {
+    await delay(50);
+    return HttpResponse.json([
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" },
+    ]);
+  }),
+];
+```
+
+`src/mocks/server.ts`:
+
+```ts
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers";
+
+export const server = setupServer(...handlers);
+```
+
+`vitest.setup.ts` に追記:
+
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./src/mocks/server";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+### 手順 2: コンポーネントを作る
+
+`src/UsersList.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+
+type User = { id: number; name: string };
+
+export function UsersList() {
+  const [users, setUsers] = useState<User[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.example.com/users")
+      .then((res) => {
+        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
+        return res.json();
+      })
+      .then(setUsers)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p role="alert">{error}</p>;
+  if (users === null) return <p>読み込み中...</p>;
+
+  return (
+    <ul>
+      {users.map((u) => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+> **補足: `role="alert"` を後挿入で使うときの注意**: `role="alert"` を持つ要素は **live region** として扱われ、内容が更新されるとスクリーンリーダーが即座に読み上げます。ただし、エラー発生時に `<p role="alert">` を **新しく描画** する形（上のコードのように `{error && <p role="alert">...}` で出し入れする形）は、SR 実装によっては読み上げが発火しないことがあります。確実に通知したいときは「常設の `<div role="alert">` を空で置いておき、中身だけ差し替える」「`aria-live="assertive"` を併記する」形を検討します。
+
+### 手順 3: テストを書く
+
+`src/UsersList.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { server } from "./mocks/server";
+import { UsersList } from "./UsersList";
+
+describe("UsersList", () => {
+  it("最初は読み込み中を表示する", () => {
+    render(<UsersList />);
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
+
+  it("読み込みが終わるとユーザーを並べる", async () => {
+    render(<UsersList />);
+
+    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
+
+  it("エラー時はエラーメッセージを表示する", async () => {
+    server.use(
+      http.get("https://api.example.com/users", () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+
+    render(<UsersList />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
+  });
+});
+```
+
+### 手順 4: 実行
+
+```bash
+npm run test
+```
+
+3 件すべて緑になれば成功です。
 
 ### 期待出力
 
-Lighthouse:
+```
+ PASS  src/UsersList.test.tsx (3)
+   PASS  最初は読み込み中を表示する
+   PASS  読み込みが終わるとユーザーを並べる
+   PASS  エラー時はエラーメッセージを表示する
 
-- **Performance** スコアが 90 以上なら良好
-- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
-
-PageSpeed Insights:
-
-- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
+```
 
 ### 変える
 
-- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
-- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
-- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
+- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
+- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
+- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
 
-### 自分で書く（任意）
+### 自分で書く
 
-新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
-
-```bash
-npm create vite@latest cwv-sample -- --template vanilla-ts
-cd cwv-sample
-npm install web-vitals
-```
-
-`src/main.ts`:
-
-```ts
-import { onLCP, onINP, onCLS } from "web-vitals";
-
-onLCP(console.log);
-onINP(console.log);
-onCLS(console.log);
-
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
-```
-
-`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
+- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
+- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
+- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
 
 ## まとめ
 
-- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
-- 2024 年 3 月に **FID は INP に置き換わった**
-- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
-- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
-- **PageSpeed Insights** が両方を一覧表示してくれる
-- DevTools の **Performance パネル** で詳細を時系列に見る
-- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託
+- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
+- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
+- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
+- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
+- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
+- テストごとに `server.use(...)` でハンドラを上書きできる
+- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
+- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知

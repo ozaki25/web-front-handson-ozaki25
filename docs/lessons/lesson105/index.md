@@ -1,334 +1,327 @@
-# lesson105: Vite の仕組みを軽く
+# lesson103: 画像とフォントの最適化
 
 ## ゴール
 
-- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown を中核** に据えて esbuild が担っていた領域を順次置き換えていく方向に進んだ経緯が分かる
-- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
-- 本番ビルドでチャンク分割が起きる理由が言える
-- `import.meta.env` で環境変数を読み込める
-- Vite プラグインの位置付けを把握する
+- 画像が **LCP の最重要要因** であることを理解する
+- 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
+- `next/image` がやってくれる自動最適化の中身を説明できる
+- フォントが **CLS** と LCP にどう効くかを理解する
+- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
+- Self-hosted フォントと Google Fonts の使い分けを知る
 
 ## 解説
 
-### Vite の立ち位置
+### 画像が LCP の最重要要因
 
-Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
+ほとんどのページで **LCP（最大コンテンツ）はヒーロー画像** が選ばれます。だから「LCP を改善する」は事実上「画像を最適化する」とほぼ同義です。
 
-特徴:
+### 画像最適化 5 つの技
 
-- **開発サーバーが速い**（数百 ms で起動）
-- **HMR が一瞬**（保存と同時にブラウザが追随）
-- **本番ビルドはツリーシェイク + 最適化** までやる
-- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
+#### 1. フォーマット: WebP / AVIF を使う
 
-### 2 段構成の歴史と Rolldown 統一
+JPEG / PNG はもう古い選択肢です。現代は:
 
-Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
+- **WebP**: ブラウザ対応率 95% 超。JPEG より 25-35% 軽い
+- **AVIF**: 比較的新しい。WebP よりさらに 30% 軽い。ブラウザ対応率は約 95%
 
-| 局面 | 使うツール | 役割 |
+両者は **可逆 / 非可逆** 両方サポート。古いブラウザ用に JPEG をフォールバックで残すのが定番です。
+
+#### 2. サイズ: 表示サイズに合わせる
+
+3000×2000 の写真を `<img width="300" height="200">` で表示すると、**3000×2000 のファイルがそのまま転送** されます。これが LCP を遅らせる最大の原因です。
+
+対策:
+
+- **複数解像度** を用意して `srcset` で適切な一枚を選ばせる
+- ビルド時に **自動リサイズ** するツール（`next/image`、`vite-plugin-image-optimizer` 等）を使う
+
+```html
+<img
+  src="/photo-400.jpg"
+  srcset="/photo-400.jpg 400w, /photo-800.jpg 800w, /photo-1200.jpg 1200w"
+  sizes="(max-width: 600px) 100vw, 800px"
+  alt="海辺で撮影した記念写真"
+/>
+```
+
+`sizes` は CSS のメディアクエリと同じ書き方で「表示サイズの目安」を伝えます。ブラウザがそれを見て `srcset` から最適な 1 枚を選びます。
+
+> **`alt` は意味のある文を入れる**: `alt="..."` のような placeholder は本番のコードに残してはいけません。スクリーンリーダーがその文字列を読み上げる形で利用者に届きます。`alt` には **画像が伝えたい情報** を 1 文で書き、見出し近くの装飾画像のように **何の情報も足さない** 画像なら `alt=""`（空文字）を指定します。空文字を指定するとスクリーンリーダーはその要素を読み飛ばします。`alt` 属性自体を省略すると「ファイル名を読み上げる」最悪のフォールバックになるので、必ず `alt=""` を明示します。
+
+#### 3. 遅延読み込み: `loading="lazy"`
+
+画面外の画像は **読み込みを遅らせて** 後から取りに行きます。
+
+```html
+<!-- ページ最初に見える画像（first view）: eager -->
+<img src="/hero.jpg" loading="eager" fetchpriority="high" alt="サイトのトップビジュアル: 海辺の夕焼け" />
+
+<!-- 画面外の画像: lazy -->
+<img src="/below-fold.jpg" loading="lazy" alt="記事中の図表" />
+```
+
+- **`loading="lazy"`**: ブラウザがスクロール位置に応じて読み込み開始
+- **`loading="eager"`**: 即時読み込み（既定）
+- **`fetchpriority="high"`**: ヒーロー画像で優先度を上げる（LCP の最強の武器）
+
+`loading="lazy"` を **first view の画像に付けてはいけません**（LCP が悪化）。ページの最重要画像には `fetchpriority="high"` を付けるのが 2026 年の定番です。
+
+#### 4. プレースホルダ: ぼかし画像の先出し
+
+LQIP（Low Quality Image Placeholder）と呼ばれる手法です。本物が読み込まれるまで、極小サイズのぼかし画像を表示しておきます。
+
+```html
+<!-- placeholder-blur と 本物の差し替え -->
+<img
+  src="/placeholder-blur.jpg"  /* 数 KB の小さい画像 */
+  data-src="/full.jpg"          /* 本物 */
+  ...
+/>
+```
+
+`next/image` の `placeholder="blur"` がこれを自動でやってくれます。
+
+#### 5. `<picture>` でフォーマットを分岐
+
+WebP / AVIF をサポートしていないブラウザに JPEG をフォールバックで返すには `<picture>` を使います。
+
+```html
+<picture>
+  <source srcset="/photo.avif" type="image/avif" />
+  <source srcset="/photo.webp" type="image/webp" />
+  <img src="/photo.jpg" alt="海辺で撮影した記念写真" width="800" height="600" />
+</picture>
+```
+
+ブラウザは上から順に対応形式を探し、最初に対応している `<source>` を使います。すべて非対応なら最後の `<img>` を使います。
+
+### `next/image` は全部やってくれる
+
+5 章 で扱った `<Image>` コンポーネントは、上記 5 つの最適化を **設定なしで** 全部やります。
+
+- フォーマット自動変換（WebP / AVIF）
+- 表示サイズに応じた `srcset` 生成
+- `loading="lazy"`（first view を除く自動判定は手動が確実）
+- `placeholder="blur"` でぼかし
+- `<picture>` 相当のフォールバック
+
+Next.js 以外の環境では同等の自動化は手作業が必要なので、Next.js が選ばれる理由の 1 つになっています。
+
+### フォントが CLS と LCP に効く
+
+フォントの読み込み挙動が悪いと:
+
+- **CLS 悪化**: フォントが切り替わった瞬間にテキスト幅が変わってレイアウトがズレる
+- **LCP 悪化**: テキストが LCP 要素なら、フォント読み込み完了まで描画されない
+
+主な現象:
+
+- **FOIT**（Flash of Invisible Text）: フォント読み込み中、テキストが **見えない**
+- **FOUT**（Flash of Unstyled Text）: フォント読み込み中、フォールバックフォントで一瞬表示 → 切り替わり
+
+### `font-display: swap`
+
+CSS の `@font-face` で `font-display: swap` を指定すると、**FOUT** モードになります。フォールバックフォントで先に表示し、本物のフォントが届いたら差し替えます。
+
+```css
+@font-face {
+  font-family: "MyFont";
+  src: url("/fonts/myfont.woff2") format("woff2");
+  font-display: swap;
+}
+```
+
+`swap` は LCP に有利（テキストが先に表示される）ですが、CLS は出やすくなります。トレードオフです。`optional` を選ぶと「100ms 以内に読み込めなければ諦める」という慎重派の挙動になります。
+
+### `<link rel="preload">` で先読み
+
+クリティカルなフォント（first view で使う）は **`<link rel="preload">`** でブラウザに「優先して読んでね」と伝えます。
+
+```html
+<link
+  rel="preload"
+  href="/fonts/myfont.woff2"
+  as="font"
+  type="font/woff2"
+  crossorigin
+/>
+```
+
+これで HTML パース中に並行して読み込みが始まり、CSS で `@font-face` が見つかった時にはほぼ準備完了の状態になります。LCP / CLS 双方に効きます。
+
+### `next/font` は全部やってくれる
+
+Next.js では `next/font` が自動で:
+
+- フォントをビルド時にダウンロード（self-host 化、Google Fonts への外部リクエスト削減）
+- サブセット化（必要な文字だけ抽出）
+- preload リンクを HTML に自動挿入
+- `font-display: swap` を既定にする
+- フォールバックフォントの幅メトリクスを近づけて CLS を抑制
+
+```tsx
+import { Inter } from "next/font/google";
+
+const inter = Inter({ subsets: ["latin"], display: "swap" });
+
+export default function RootLayout({ children }: LayoutProps<"/">) {
+  return (
+    <html lang="ja" className={inter.className}>
+      <body>{children}</body>
+    </html>
+  );
+}
+```
+
+`next/font/google` は Google Fonts を自動 self-host 化、`next/font/local` は手元の `.woff2` をビルドに組み込みます。
+
+### Self-host vs Google Fonts CDN
+
+| 方式 | 利点 | 欠点 |
 |---|---|---|
-| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
-| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
+| Google Fonts CDN（`<link href="fonts.googleapis.com">`） | セットアップ簡単 | 外部ドメインへの追加 DNS / 接続 / プライバシー懸念 |
+| Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
+| `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
 
-開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
+2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
 
-#### Vite 8（2026 年 3 月）で Rolldown を中核に
+### サブセット化
 
-[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを **中核に据え**、Rollup ベースの本番ビルド経路を Rolldown ベース（`rolldown-vite`）に切り替える方向に進みました。esbuild が担当していた依存事前バンドルや TS/JSX 変換も段階的に Rolldown / Oxc に置き換わっていきますが、移行期では **既定として採用** されつつも esbuild が一部経路に残っており、将来の小バージョンで完全に 1 段化する見込みです。
+日本語フォント（`Noto Sans JP` 等）はファイルが MB 単位で巨大です。**実際に使う文字だけを抽出した「サブセット」** を配信しないと一気に LCP / CLS が悪化します。
 
-- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
-- **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
-- 結果として Vite はビルドが **最大 10〜30 倍速** になった
-- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
+- ラテン文字だけのページなら `subsets: ["latin"]` で 30KB 程度
+- 日本語ページは `Noto Sans JP` の **第一水準漢字 + 平仮名 + 片仮名 + 数字 + 記号** に絞ったサブセットを用意（数百 KB 程度）
 
-「esbuild + Rollup の 2 段構成」から「Rolldown 中心」へ移っていく流れ、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
-
-### 開発サーバーの仕組み
-
-Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
-
-#### 古典的 webpack の流れ
-
-1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
-2. ブラウザに 1 つの大きな JS を渡す
-3. 一部修正されると **再バンドル**
-
-→ ファイル数が増えると線形に遅くなる。
-
-#### Vite の流れ
-
-1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
-2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
-3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
-
-→ ファイル数が増えても初回の起動が速い。
-
-#### 例: 何が起きているか
-
-ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
-
-ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるから。**「自分のコードは個別配信、依存は固める」** がコツです。
-
-### HMR（Hot Module Replacement）
-
-開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
-
-普通のブラウザリロードと違って:
-
-- フォームに入力した値が **保持** される
-- スクロール位置が保たれる
-- 状態（state）も保たれる（フレームワーク側が対応していれば）
-
-#### 仕組みを大づかみに
-
-1. Vite はファイル変更を **fs.watch** で監視
-2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
-3. **影響モジュールだけ** ブラウザに WebSocket で送る
-4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
-
-React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。これが「保存と同時にコンポーネントだけ書き換わる」体験の正体。
-
-### 本番ビルドの仕組み
-
-`vite build` で行われること:
-
-1. **エントリポイント** から依存関係を辿る
-2. **ツリーシェイク** で使われない export を削除
-3. **チャンク分割** で複数ファイルに分ける
-4. **minify** でファイルサイズを削減
-5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
-
-#### チャンク分割（コード分割）
-
-すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
-
-- **ベンダー**（`node_modules`）を別チャンクに
-- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
-
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（「バンドルサイズの最適化とコード分割」のバンドルサイズ最適化と繋がる話）。
-
-```ts
-// クリック時に初めて読み込む
-const handleClick = async () => {
-  const { showModal } = await import("./modal");
-  showModal();
-};
-```
-
-#### ハッシュ付きファイル名
-
-`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
-
-### `import.meta.env` で環境変数
-
-Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
-
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_KEY=do_not_expose
-```
-
-```ts
-console.log(import.meta.env.VITE_API_URL); // OK
-console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
-```
-
-ルール:
-
-- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
-- それ以外は Vite が **読み捨てる**（漏洩対策）
-- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
-
-組み込みで使える環境情報:
-
-```ts
-import.meta.env.MODE        // "development" / "production"
-import.meta.env.DEV         // true / false
-import.meta.env.PROD        // true / false
-import.meta.env.BASE_URL    // "/" など
-```
-
-### プラグイン
-
-Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
-
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import svgr from "vite-plugin-svgr";
-import { VitePWA } from "vite-plugin-pwa";
-
-export default defineConfig({
-  plugins: [
-    react(),
-    svgr(),
-    VitePWA({ registerType: "autoUpdate" }),
-  ],
-});
-```
-
-代表的なプラグイン:
-
-- `@vitejs/plugin-react`: React の HMR + JSX 変換
-- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
-- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
-- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（「テスト入門 — Vitest でユニットテスト」）
-
-Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
-
-### Vite と他ツールの関係
-
-Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
-
-- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
-- **Remix v3 / React Router v7+**: 内部で Vite を採用
-- **Nuxt 3+**: 内部で Vite を採用
-- **Astro**: 内部で Vite を採用
-- **SvelteKit**: 内部で Vite を採用
-
-つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
-
-### 「ハマる」パターン
-
-#### `process.env` が `undefined`
-
-→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
-
-#### 環境変数がクライアントに出てこない
-
-→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
-
-#### CommonJS のパッケージで失敗
-
-→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
-
-#### `node:fs` を import してエラー
-
-→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
+ビルド時にサブセット化するツール（`subset-font` パッケージ等）や、`next/font/google` の `subsets` 指定で自動化できます。
 
 ## 演習
 
 ### ゴール
 
-- Vite の開発サーバーで **HMR を体感** する
-- ビルド出力のチャンク分割を眺める
-- `import.meta.env` で環境変数を読む
+- 既存の Next.js プロジェクト（または新規）に `<Image>` を入れる前後で Lighthouse の LCP を比較する
+- `next/font/google` で Google Fonts を self-host 化する
+- DevTools Network タブで画像 / フォントの読み込み順序を観察する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: 画像最適化の前後比較（Next.js）
 
-```bash
-npm create vite@latest vite-internals -- --template react-ts
-cd vite-internals
-npm install
-```
+1. 5 章 で作った Next.js プロジェクト or 新規 `create-next-app` で:
 
-### 手順 2: HMR を試す
+   ```bash
+   npx create-next-app@latest perf-image --typescript --tailwind=false --app
+   cd perf-image
+   ```
 
-```bash
-npm run dev
-```
+2. `app/page.tsx` に大きな画像を **素の `<img>` で** 配置（最初は最適化なし）:
 
-ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
+   ```tsx
+   export default function Page() {
+     return (
+       <main>
+         <h1>画像比較</h1>
+         <img
+           src="https://picsum.photos/2400/1600"
+           alt="サンプル"
+           style={{ width: 600, height: 400 }}
+         />
+       </main>
+     );
+   }
+   ```
 
-### 手順 3: ネットワークタブで個別配信を観察
+3. `npm run build && npm run start` でビルド済みを起動し、Lighthouse を Mobile で計測。LCP / 全体スコアをメモ
 
-DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
+4. `<img>` を `<Image>` に置き換え:
 
-### 手順 4: 環境変数
+   ```tsx
+   import Image from "next/image";
 
-`.env` を作成:
+   export default function Page() {
+     return (
+       <main>
+         <h1>画像比較</h1>
+         <Image
+           src="https://picsum.photos/2400/1600"
+           alt="サンプル"
+           width={600}
+           height={400}
+           priority
+         />
+       </main>
+     );
+   }
+   ```
 
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_TOKEN=xxxxx
-```
+   `next.config.ts` に `picsum.photos` を許可:
 
-`src/App.tsx` に追加:
+   ```ts
+   const nextConfig = {
+     images: {
+       remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
+     },
+   };
+   export default nextConfig;
+   ```
+
+5. もう一度ビルド + Lighthouse。LCP が大幅に改善するはず（数秒 → 1 秒以下）
+
+### 手順 2: `next/font` でフォント
+
+`app/layout.tsx`:
 
 ```tsx
-console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
-console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
-console.log("MODE:", import.meta.env.MODE);
-```
+import { Inter } from "next/font/google";
 
-ブラウザのコンソールで:
+const inter = Inter({
+  subsets: ["latin"],
+  display: "swap",
+});
 
-- `VITE_API_URL` は表示される
-- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
-- `MODE` は `"development"`
-
-### 手順 5: 本番ビルド
-
-```bash
-npm run build
-ls -la dist/assets
-npm run preview
-```
-
-`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
-
-### 手順 6: 動的 import でチャンクを分割
-
-`src/App.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [text, setText] = useState("");
-
-  const handleClick = async () => {
-    const mod = await import("./heavy");
-    setText(mod.heavyFunction());
-  };
-
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <div>
-      <button onClick={handleClick}>重い処理</button>
-      <p>{text}</p>
-    </div>
+    <html lang="ja" className={inter.className}>
+      <body>{children}</body>
+    </html>
   );
 }
 ```
 
-`src/heavy.ts`:
+ビルドして Network タブで:
 
-```ts
-export function heavyFunction() {
-  return "計算結果です";
-}
-```
+- 自分のドメイン（`localhost:3000`）から `.woff2` が配信される
+- `fonts.googleapis.com` への外部リクエストが消える
+- HTML の `<head>` に `<link rel="preload" as="font">` が自動挿入されている
 
-`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
+### 手順 3: 画像のフォーマット確認
+
+Network タブの **Type** 列で:
+
+- `<img>` 直書き: `jpeg` / `png`
+- `<Image>`: `webp` / `avif`（ブラウザ対応に応じて）
+
+「Response Headers」の `content-type` も確認できます。
 
 ### 期待出力
 
-- HMR でファイル保存と同時に画面が更新（リロードなし）
-- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
-- `VITE_` プレフィックスの環境変数のみクライアントから読める
-- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
+- 同じ画像でもファイルサイズが半分以下に縮む
+- LCP の数値が劇的に改善
+- フォントの FOIT / FOUT がほぼ気にならないレベル
 
 ### 変える
 
-- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
-- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
-- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
+- `<Image priority>` を外してみる。LCP がやや悪化する（`priority` は first view の画像に必須）
+- `next/font/google` の `display: "swap"` を `display: "block"` に変えると、FOIT になることを確認
+- `<Image>` の `placeholder="blur"` を試す（ローカル画像を使う場合のみ）。読み込み中にぼかしが見える
 
-### 自分で書く（任意）
+### 自分で書く
 
-- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
-- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
+- 普段使う画像を `<picture>` でラップして、AVIF / WebP / JPEG のフォールバック構造を手書きで作る
+- `<link rel="preload">` を `<head>` に追加して、特定の画像 / フォントを先読みさせる
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
-- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
-- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
-- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
-- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
-- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
-- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
+- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
+- 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
+- **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
+- フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
+- **`font-display: swap`** + **`<link rel="preload">`** が基本
+- **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化
