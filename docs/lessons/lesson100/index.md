@@ -1,4 +1,4 @@
-# lesson98: コンポーネントテスト — React Testing Library
+# lesson100: コンポーネントテスト — React Testing Library
 
 ## ゴール
 

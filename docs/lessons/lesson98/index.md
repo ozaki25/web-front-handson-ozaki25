@@ -1,4 +1,4 @@
-# lesson96: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
+# lesson98: アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）
 
 ## ゴール
 

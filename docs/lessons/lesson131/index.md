@@ -1,4 +1,4 @@
-# lesson127: Server Components の設計論
+# lesson131: Server Components の設計論
 
 ## ゴール
 

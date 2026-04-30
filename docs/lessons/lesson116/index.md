@@ -1,4 +1,4 @@
-# lesson114: 状態管理の地図（TanStack Query / Zustand / Jotai）
+# lesson116: 状態管理の地図（TanStack Query / Zustand / Jotai）
 
 ## ゴール
 

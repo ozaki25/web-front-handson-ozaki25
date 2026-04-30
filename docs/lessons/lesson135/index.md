@@ -1,4 +1,4 @@
-# lesson131: AI を前提にした開発（Copilot / Cursor / Claude Code）
+# lesson135: AI を前提にした開発（Copilot / Cursor / Claude Code）
 
 ## ゴール
 

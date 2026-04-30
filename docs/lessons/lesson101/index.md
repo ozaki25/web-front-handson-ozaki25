@@ -1,4 +1,4 @@
-# lesson99: API モック — MSW（Mock Service Worker）
+# lesson101: API モック — MSW（Mock Service Worker）
 
 ## ゴール
 

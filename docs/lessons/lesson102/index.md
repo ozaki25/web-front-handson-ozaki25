@@ -1,4 +1,4 @@
-# lesson100: E2E テスト — Playwright
+# lesson102: E2E テスト — Playwright
 
 ## ゴール
 

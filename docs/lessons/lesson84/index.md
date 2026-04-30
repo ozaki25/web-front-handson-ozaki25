@@ -1,4 +1,4 @@
-# lesson201: Route Handlers の入力検証と受信検証
+# lesson84: Route Handlers の入力検証と受信検証
 
 ## ゴール
 
@@ -10,7 +10,7 @@
 
 ### はじめに
 
-lesson82 で作った `/api/todos` に検証を追加します。GET / POST の基本は動いている前提で進めます。
+lesson83 で作った `/api/todos` に検証を追加します。GET / POST の基本は動いている前提で進めます。
 
 ### なぜ `unknown` で受けるのか
 
@@ -116,7 +116,7 @@ Edge ランタイムは起動が速く、世界中のエッジで分散実行さ
 
 #### 手順 1: `app/types.ts` に型ガードを追加する
 
-lesson82 で作った `app/types.ts` を次の内容に書き換えます。
+lesson83 で作った `app/types.ts` を次の内容に書き換えます。
 
 ```ts
 export type Todo = {

@@ -1,4 +1,4 @@
-# lesson92: 同時接続数と HTTP/2 / HTTP/3
+# lesson94: 同時接続数と HTTP/2 / HTTP/3
 
 ## ゴール
 

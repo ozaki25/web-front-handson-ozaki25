@@ -1,4 +1,4 @@
-# lesson118: Content-Security-Policy（CSP）実践
+# lesson120: Content-Security-Policy（CSP）実践
 
 ## ゴール
 

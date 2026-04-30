@@ -1,4 +1,4 @@
-# lesson203: PWA の通知・インストール・manifest
+# lesson128: PWA の通知・インストール・manifest
 
 ## ゴール
 
@@ -9,7 +9,7 @@
 
 ## 解説
 
-lesson124 で学んだ Service Worker を使って、ネイティブアプリに近い機能を追加します。
+lesson127 で学んだ Service Worker を使って、ネイティブアプリに近い機能を追加します。
 
 ### Web Push 通知の仕組み
 
@@ -219,7 +219,7 @@ Web Push は **iOS 16.4 以降のみ** 動作します。それより前の iOS 
 
 ### 手順 1: manifest.webmanifest を作成する
 
-lesson124 で作った `pwa-sample` プロジェクトを使います。`vite-plugin-pwa` がマニフェストを自動生成しますが、ここでは手動で置く方法も確認します。
+lesson127 で作った `pwa-sample` プロジェクトを使います。`vite-plugin-pwa` がマニフェストを自動生成しますが、ここでは手動で置く方法も確認します。
 
 `public/manifest.webmanifest`:
 

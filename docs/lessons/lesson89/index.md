@@ -1,4 +1,4 @@
-# lesson87: Loading UI と Streaming
+# lesson89: Loading UI と Streaming
 
 ## ゴール
 

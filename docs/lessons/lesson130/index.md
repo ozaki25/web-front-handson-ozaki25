@@ -1,4 +1,4 @@
-# lesson126: React Compiler
+# lesson130: React Compiler
 
 ## ゴール
 

@@ -1,4 +1,4 @@
-# lesson200: useFormStatus で送信中を無効化する
+# lesson82: useFormStatus で送信中を無効化する
 
 ## ゴール
 
