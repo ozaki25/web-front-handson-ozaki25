@@ -1,398 +1,353 @@
-# lesson110: Git の基本操作
+# lesson110: 次世代ツールチェイン（Biome / Oxc / Turbopack）
 
 ## ゴール
 
-- Git が「ファイルの履歴を残す」道具であることを説明できる
-- 基本コマンド（`init` / `add` / `commit` / `status` / `log` / `diff`）を使える
-- ブランチ（`branch` / `checkout` / `switch` / `merge`）の概念を理解する
-- リモート（`remote` / `push` / `pull` / `fetch`）の基本を使える
-- `.gitignore` でコミットしないファイルを除外できる
-- マージコンフリクトの解消手順を 1 度経験する
+- 「**Rust 製ツール群** に置き換わりつつある」フロントエンド界隈の構図を理解する
+- Biome / Oxc / Rolldown / Turbopack それぞれの **役割と立ち位置** を区別できる
+- **既存プロジェクトに今すぐ導入するか** を判断できる
+- 速さの数字を **誇張なく** 受け取れる
+- 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
+
+::: tip 前提
+このレッスンは「ESLint / Prettier / Biome」と「Vite の仕組み」の発展編です。基本概念はそれぞれのレッスンで確認してください。
+:::
 
 ## 解説
 
-### Git とは
+### なぜ Rust 移行が進むのか
 
-**Git** は **分散型のバージョン管理システム** です。「ファイルの状態をスナップショットとして保存し、いつでも過去に戻れる」道具と思ってください。
+JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トランスパイラ）は **JavaScript で書かれて** きました。それは「**自分自身でメタ的に開発できる**」という美点があった一方:
 
-なぜ必要か:
+- **シングルスレッド** 寄りで並列化が難しい
+- **GC のオーバーヘッド**
+- **JS 自体の起動コスト**
 
-- **元に戻せる**: 「あ、消したけどやっぱり要る」「3 日前の状態に戻したい」が秒でできる
-- **誰がいつ何を変えたか分かる**: バグの原因を「いつ入った？」で追跡できる
-- **複数人で並行開発**: 各自が **ブランチ** で作業し、最後に合体できる
-- **PR ベースの開発**: コードレビューを経てマージする現代的なフローの土台
+これがプロジェクトサイズの増加に追いついていません。**Rust** は次の特徴で対抗:
 
-2026 年現在、ほぼすべての開発現場で Git が使われています。「Git が分からない = 仕事ができない」と言って良いレベルの基本です。
+- **並列処理が得意**（fearless concurrency）
+- **GC なし** で予測可能なメモリ使用
+- **コンパイル時の最適化** で実行が速い
+- **WebAssembly に出せる**（CI / IDE 連携）
 
-### リポジトリ（repository）と作業ディレクトリ
+結果として 2024〜2026 年の間に主要ツールが **Rust ベースに置き換え** が進んでいます。
 
-- **リポジトリ**（repo）: Git が履歴を管理する単位。プロジェクトのルートディレクトリに `.git/` フォルダができ、ここにすべての履歴が入る
-- **作業ディレクトリ**: あなたが今編集しているファイル群
+### 次世代ツールチェインの全体像
 
-### `git init` で履歴管理を開始
+| 役割 | 旧（JS 製） | 新（Rust 製） |
+|---|---|---|
+| バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
+| パーサー / トランスパイラ | Babel | **SWC** / Oxc |
+| Lint | ESLint | **Biome** / Oxlint |
+| Format | Prettier | **Biome** / dprint |
+| 型チェック | tsc | **stc**（試行段階） |
 
-新規プロジェクトを Git 管理下に置くには:
+それぞれを順に見ていきます。
 
-```bash
-mkdir my-project
-cd my-project
-git init
-```
+### Biome
 
-`.git/` ディレクトリが作られ、Git の世界に入ります。既存のプロジェクトを Git 管理下に置きたい時も同じです。
+[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（「ESLint / Prettier / Biome」で扱い済み）。
 
-### 3 つのエリア（変更が辿る道）
+特徴:
 
-Git では変更が次の 3 段階を辿ります。
-
-```
-作業ディレクトリ          ステージング         リポジトリ（履歴）
-（編集中のファイル）  →  （add した変更）  →  （commit した変更）
-       │                      │                      │
-       └─ git add ─────────────                       │
-       └─ git commit -m "..." ────────────────────────┘
-```
-
-- **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
-- **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態
-- **リポジトリ**: `git commit` で履歴に固定された状態
-
-### 基本コマンド
-
-#### `git status`: 今の状態を確認
+- **設定 1 ファイル**（`biome.json`）
+- **ESLint + Prettier より圧倒的に速い**（35x ベンチマーク）
+- TypeScript / JSX / JSON / CSS をサポート
+- VS Code 拡張あり
 
 ```bash
-git status
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "formatter": { "enabled": true, "indentStyle": "space" }
+}
+```
 
-#### `git add`: ステージングに追加
+#### Biome の限界
+
+- **TypeScript の型情報を使う高度なルール** は未対応（ESLint の `no-floating-promises` など）
+- 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
+- **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
+
+→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
+
+### Oxc / Oxlint
+
+[Oxc](https://oxc-project.github.io/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
+
+#### 構成要素
+
+| 名前 | 役割 |
+|---|---|
+| **oxc_parser** | JavaScript / TypeScript パーサ |
+| **oxlint** | Lint（ESLint 互換ルール） |
+| **oxc_minifier** | minify（terser / esbuild の代替） |
+| **oxc_resolver** | モジュール解決 |
+| **oxc_transformer** | TS / JSX → JS の変換 |
+
+「**Rust で書かれたフロントエンドの基盤一式**」を狙うプロジェクト。
+
+#### Oxlint の最小例
 
 ```bash
-git add file.txt        # 1 ファイル
-git add src/            # ディレクトリ全部
-git add .               # 現在ディレクトリ以下全部（注意: 不要なファイルまで含めがち）
+npm install -D oxlint
+npx oxlint
 ```
 
-#### `git commit`: 履歴に固定
+ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。
+
+```json
+// .oxlintrc.json
+{
+  "rules": {
+    "no-unused-vars": "error",
+    "no-debugger": "error"
+  }
+}
+```
+
+#### Oxc が他に与える影響
+
+Vite 8（「Vite の仕組みを軽く」）が **Rolldown を採用**、Rolldown は **Oxc を内蔵** しています。つまり Oxc は **Vite / Rolldown / 多くの新ツール** の土台になりつつある。
+
+Oxc は **VoidZero**（Evan You が立ち上げた会社）が支援しており、Vite / Rolldown と **同じ会社の同じ方向性** で開発が進んでいます。
+
+### Rolldown
+
+Vite 8 から採用された **Rust 製バンドラ**（「Vite の仕組みを軽く」で扱い済み）。
+
+- **Rollup と同じプラグイン API**
+- **esbuild より速い**（Oxc を内部で使用）
+- **Vite / Rolldown / Oxc が 1 つのチームで開発**
+
+「esbuild と Rollup の両方の良さを Rust で 1 つに」が Rolldown の旗印。Vite 8 のリリースで実用フェーズに入りました。
+
+### SWC
+
+[SWC](https://swc.rs/)（Speedy Web Compiler）は **Rust 製の TypeScript / JSX トランスパイラ**。Babel の置き換え狙い。
+
+特徴:
+
+- Next.js / Parcel 内部で採用
+- Babel より **20〜70 倍速い**
+- プラグインは Rust または WebAssembly
+
+歴史的には Oxc より早く実用化されましたが、**Oxc が後発として** 機能で追いついています。Next.js は引き続き SWC ベース。
+
+### Turbopack
+
+[Turbopack](https://turbo.build/pack) は Vercel 製の **Rust 製バンドラ**。Next.js 専用に近い位置付け。
+
+- Next.js 16 で **`next dev` / `next build` のデフォルト**
+- webpack の **増分ビルド** を更に強化
+- Rolldown と並列に開発されている（**競合関係**）
+
+Vite 系（Vite + Rolldown + Oxc）と Vercel 系（Next.js + Turbopack + SWC）の 2 派が進む構図。
+
+### dprint
+
+[dprint](https://dprint.dev/) は **Rust 製のフォーマッタ**（Prettier 代替）。
 
 ```bash
-git commit -m "ボタンの色を変更"
+npm install -D dprint
 ```
 
-`-m` でコミットメッセージを指定。**過去の人 + 未来の自分** が読めるよう、何のための変更か簡潔に書きます。
-
-#### `git log`: 履歴を見る
-
-```bash
-git log              # 詳しく見る
-git log --oneline    # 1 行ずつ簡潔に
-git log --graph      # ブランチをグラフで
-git log --oneline --graph --all   # 全ブランチを 1 行 + グラフ
+```jsonc
+// dprint.json
+{
+  "typescript": { "lineWidth": 100, "indentWidth": 2, "semiColons": "always" },
+  "json": {},
+  "markdown": {},
+  "includes": ["**/*.{ts,tsx,js,json,md}"],
+  "excludes": ["dist", "node_modules"],
+  "plugins": [
+    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
+    "https://plugins.dprint.dev/json-0.19.0.wasm",
+    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
+  ]
+}
 ```
 
-#### `git diff`: 変更内容を見る
+特徴:
 
-```bash
-git diff              # 作業ディレクトリ vs ステージング
-git diff --staged     # ステージング vs リポジトリ
-git diff HEAD~1 HEAD  # 1 つ前のコミット vs 今のコミット
-```
+- 各言語のフォーマッタを **WebAssembly プラグイン** として持つ
+- Prettier より少し古めの設計だが速い
+- Deno / 一部 Rust エコシステムで採用
 
-### `.gitignore` でコミット対象を絞る
+「Biome に注目が集まる中、**Prettier の代替として地味に使える**」位置付け。
 
-`node_modules/` や `.env` のような **コミットしてはいけないファイル** をリストにします。
+### 「Rust 製で速い」の意味するもの
 
-`.gitignore`（プロジェクトルート）:
+「**ESLint より 50 倍速い**」のような数字は要 **慎重に**。
 
-```
-# 依存パッケージ（巨大、再生成可能）
-node_modules/
+- **大規模プロジェクト**（10,000+ ファイル）では **数分 → 数秒** の改善で大きな違い
+- **小規模プロジェクト**（100 ファイル以下）では **既に十分速い** ので体感差はわずか
+- **CI 時間** には大きな影響、**保存時 Lint** には微差
 
-# ビルド成果物
-dist/
-build/
+判断:
 
-# 環境変数（秘匿）。.env* で派生形（.env.local, .env.production.local など）も含めて除外
-.env
-.env.*
-!.env.example
+- **CI が長くなって困っている** → 移行価値あり
+- **そうでもない** → 既存ツールで困っていなければ慌てない
 
-# OS のメタファイル
-.DS_Store
-Thumbs.db
+### TypeScript の Rust 化
 
-# エディタ
-.vscode/
-.idea/
-```
+「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
 
-`.gitignore` 自体は **コミットする** 必要があります。これをチームで共有することで全員の環境が揃います。`.env.example` はテンプレートとしてコミットしたいので `!.env.example` で除外を打ち消しています。
+- [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
+- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、**2025 年に発表 + preview リリース**）: 公式の **Go ベース TypeScript**。型チェック / 言語サービスを Go で書き直し、`tsc` 比 10 倍級の高速化を目指す
 
-> **補足: `.env` を間違えて push したら revert ではなく secret rotation が先**: `.env` を 1 度でも push してしまうと、`git revert` で履歴を取り消しても **過去のコミットには値が残ったまま**で、git history を遡れば誰でも読めます。**まずやるべきは** 「漏れた値を無効化（rotation）すること」です。API キーは新しいキーに発行し直す、DB のパスワードを変える、トークンを revoke する。GitHub には自動で漏洩を検出する **secret scanning** や、push の時点で止める **push protection** がありますが、自分の責任範囲で値を rotate することが最優先です。履歴自体を消すには `git filter-repo` / `BFG Repo-Cleaner` などのツールが必要で、共有リポジトリでは全員に強制 push の調整が要るため、**「キーは漏れたものとして扱い、すぐ rotate する」のが現実的な初手**です。
+特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
 
-### ブランチ: 並行作業の単位
+::: warning
+2026 年現在、これらは **まだ完全互換ではない**。型チェックは tsc / IDE のままで、ビルドだけ SWC / esbuild という現状が続きます。
+:::
 
-**ブランチ**は「履歴の枝分かれ」です。デフォルトブランチは `main`（昔は `master`）。新機能やバグ修正は **別ブランチで作業 → 完成したら main にマージ** が現代の流儀です。
+### 既存プロジェクトへの導入判断
 
-#### ブランチを作って切り替える
+#### すぐ導入してもよい
 
-```bash
-# 旧来の書き方
-git branch feature/login
-git checkout feature/login
+- **新規プロジェクト** で Biome 単独
+- **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
+- **Oxlint を ESLint と並走** させて速度を体感
 
-# 現代の書き方（Git 2.23 以降推奨）
-git switch -c feature/login   # -c は「create」
-```
+#### 慎重に
 
-`feature/login` ブランチに切り替わり、ここでの commit は `main` には影響しません。
+- **ESLint プラグインに依存** している既存プロジェクト
+- **`@types/*` を多用** する大規模 TypeScript（型情報を使うルールが必要）
+- **チームの ESLint 知識** が分厚い場合（再学習コスト）
 
-#### ブランチを切り替える
+#### 数年待つ
 
-```bash
-git switch main
-git switch feature/login
-```
+- **TypeScript の Rust 化**（公式 Go 版を待つ）
+- **完全な ESLint プラグイン互換** が出るまで
 
-`switch` は新しい専用コマンド。`checkout` でも同じことができますが、`checkout` は他の用途（ファイル復元など）も兼ねるので役割が分かれた `switch` の方が明確です。
+### ツール選択のフレーム
 
-#### ブランチを一覧
-
-```bash
-git branch          # ローカルブランチ
-git branch -a       # リモート含む全部
-```
-
-### マージ: ブランチを統合
-
-`feature/login` での作業が終わったら、main に統合します。
-
-```bash
-git switch main
-git merge feature/login
-```
-
-これで `feature/login` の変更が `main` に取り込まれます。**競合がなければ 1 行で済む**、ある場合は次の節で説明します。
-
-### マージコンフリクト
-
-両方のブランチで **同じ行** を変更していると、Git は自動で統合できず **コンフリクト**（競合）として人間に判断を仰ぎます。
+新規プロジェクトでの 2026 年標準:
 
 ```
-<<<<<<< HEAD
-const message = "こんにちは";
-=======
-const message = "Hello";
->>>>>>> feature/login
+言語: TypeScript 5.9
+バンドラ: Vite 8（内部 Rolldown + Oxc）
+        または Next.js 16（内部 Turbopack + SWC）
+Lint:   Biome / Oxlint
+Format: Biome / Prettier
+テスト: Vitest（内部 Vite）/ Playwright
+パッケージ: pnpm / Bun
 ```
 
-このマーカーが入ったファイルを開き、**どちらを採用するか / 両方を組み合わせるか** を編集して保存します。マーカー（`<<<<<<<` / `=======` / `>>>>>>>`）も削除して、最終的に欲しい内容にします。
+「**速い + 設定少ない**」を全方位で享受できる構成。
 
-```js
-const message = "Hello, こんにちは";  // 例: 両方を統合
-```
+### 5 年後の展望
 
-その後:
+おそらく続くもの:
 
-```bash
-git add path/to/conflicted-file.js
-git commit                # メッセージは自動で生成されるので、エディタが開いたらそのまま保存
-```
+- **Rust ベースの拡大**（CI / dev サーバ全般）
+- **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
+- **TypeScript 公式の Go / Rust 化**（高速化）
 
-### リモートリポジトリ（GitHub / GitLab）
+まだ揺れているもの:
 
-`git init` したリポジトリは、自分の PC だけにしかありません。**リモート**（GitHub などのサーバー）に置くと、複数人で共有・バックアップできます。
+- **Biome vs ESLint** の決着（プラグイン互換次第）
+- **Vite 系 vs Vercel 系** のシェア
+- **WebAssembly 化したツール**（IDE / ブラウザでの実行）
 
-#### リモートを追加
-
-GitHub で空の repo を作って、ローカルから紐付け:
-
-```bash
-git remote add origin https://github.com/your-name/your-repo.git
-```
-
-`origin` は **リモートの名前**。慣習でリモートは `origin` と呼ばれます。
-
-#### push: ローカル → リモート
-
-```bash
-git push -u origin main
-```
-
-`-u` は upstream 設定で、初回のみ必要。次回以降は `git push` だけで OK。
-
-#### pull: リモート → ローカル
-
-```bash
-git pull origin main
-```
-
-これは内部で `fetch`（取得）+ `merge`（統合）の 2 段階を 1 つで実行します。
-
-#### fetch: リモートの内容だけ取得
-
-```bash
-git fetch origin
-```
-
-リモートの履歴をローカルに取り込むが、まだ自分のブランチには適用しません。中身を確認してから merge / rebase したい時に使います。
-
-### よくある初学者のつまずき
-
-1. **`git add .` で `node_modules/` までステージング**: `.gitignore` を最初に書いておく
-2. **コミットメッセージが「修正」「更新」だけ**: 後から検索しても分からない。「なぜ」を 1 行で
-3. **main で直接作業**: ブランチを切る習慣を最初から
-4. **`.env` を push してしまう**: `.gitignore` の最重要項目。secrets が漏れる
-
-### 設定の基本
-
-最初の 1 回だけ:
-
-```bash
-git config --global user.name "Your Name"
-git config --global user.email "you@example.com"
-git config --global init.defaultBranch main
-```
-
-これがないと commit で「誰が」が記録できません。
+「**まずは安定の ESLint + Prettier、心の準備として Biome / Oxc を試す**」が 2026 年の堅実なスタンス。
 
 ## 演習
 
 ### ゴール
 
-- ローカルで Git リポジトリを作って commit を 3 回打つ
-- ブランチを作って別の変更を入れ、main にマージする
-- わざとコンフリクトを起こして解消する
+- Biome と Oxlint をそれぞれ既存プロジェクトに **共存** させる
+- 速度を **同じプロジェクト** で比較する
 
-### 途中から始める場合
+### 手順 1: ベースのプロジェクト
 
-ローカル環境（StackBlitz の WebContainer 上でも可）で Git が使えれば OK。
-
-### 手順 1: リポジトリを初期化
+既存の Vite + React + TS プロジェクトを使うか、新規作成。
 
 ```bash
-mkdir git-practice
-cd git-practice
-git init
+npm create vite@latest tooling-bench -- --template react-ts
+cd tooling-bench
+npm install
 ```
 
-### 手順 2: ファイルを作って 1 回目の commit
-
-`README.md`:
-
-```md
-# Git 練習用リポジトリ
-```
+### 手順 2: ESLint で計測
 
 ```bash
-git add README.md
-git commit -m "README を追加"
+# Vite テンプレートには ESLint が入っている
+time npm run lint
 ```
 
-### 手順 3: ファイルを増やして 2 回目の commit
+時間を記録。
 
-`hello.txt`:
-
-```
-Hello, Git!
-```
+### 手順 3: Biome を導入
 
 ```bash
-git status              # 変更が見える
-git add hello.txt
-git commit -m "hello.txt を追加"
-git log --oneline       # 2 件の履歴が見える
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-### 手順 4: ブランチで作業
-
-```bash
-git switch -c feature/greeting
-# hello.txt を編集 → 「Hello, Git! こんにちは。」に
-git add hello.txt
-git commit -m "挨拶を日本語追記"
-```
-
-### 手順 5: main に切り替えて、main 側でも変更
-
-```bash
-git switch main
-# hello.txt を編集 → 「Hello, Git!! ビックリマーク追加」に
-git add hello.txt
-git commit -m "ビックリマーク追加"
-```
-
-これで `main` と `feature/greeting` で **同じ行を別々に変更** した状態になりました。
-
-### 手順 6: マージ → コンフリクト発生
-
-```bash
-git merge feature/greeting
-```
-
-エラーが出ます:
-
-```
-Auto-merging hello.txt
-CONFLICT (content): Merge conflict in hello.txt
-Automatic merge failed; fix conflicts and then commit the result.
-```
-
-`hello.txt` を開くと:
-
-```
-<<<<<<< HEAD
-Hello, Git!! ビックリマーク追加
-=======
-Hello, Git! こんにちは。
->>>>>>> feature/greeting
-```
-
-両方を取り込むよう手動で編集:
-
-```
-Hello, Git!! こんにちは。ビックリマーク追加
+```json
+// biome.json
+{
+  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "linter": { "enabled": true, "rules": { "recommended": true } },
+  "formatter": { "enabled": true, "indentStyle": "space" }
+}
 ```
 
 ```bash
-git add hello.txt
-git commit               # エディタが開く → 自動メッセージのまま保存
-git log --oneline --graph
+time npx biome check .
 ```
 
-ログを見ると、ブランチが分かれて再合流するグラフが描かれます。
+### 手順 4: Oxlint を試す
+
+```bash
+npm install -D oxlint
+time npx oxlint .
+```
+
+### 手順 5: 結果を比較
+
+実測値の例（小規模プロジェクト）:
+
+| ツール | 時間 | 検出数 |
+|---|---|---|
+| ESLint | 2.5s | 5 |
+| Biome | 0.3s | 4 |
+| Oxlint | 0.1s | 3 |
+
+「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
 
 ### 期待出力
 
-```
-*   1234567 (HEAD -> main) Merge branch 'feature/greeting'
-|\
-| * abcdef0 (feature/greeting) 挨拶を日本語追記
-* | fedcba9 ビックリマーク追加
-|/
-* 7654321 hello.txt を追加
-* 0987654 README を追加
-```
+- 3 つのツールがそれぞれ動き、速度差が見える
+- 検出ルール / 重複が違うので、**ノイズの少ないツール** を選ぶ判断の材料になる
 
 ### 変える
 
-- `git log --oneline --graph` の出力を眺める。マージしないでブランチを残しておくと、`feature/greeting` ブランチの履歴も別レーンで見える
-- `git diff HEAD~1 HEAD` で「直前の commit との差分」を見る
-- `.gitignore` に `*.tmp` を書き、`a.tmp` を作って `git status` で除外されることを確認
+- 1000 ファイル規模のプロジェクトで再測定
+- CI でそれぞれを実行し、月のビルド時間を試算
+- IDE 拡張（Biome / Oxlint）を入れて、保存時のレイテンシを比較
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 新しいブランチ `feature/colors` を作り、`README.md` に「色を変えた」内容を加える。main にマージする
-- `git revert HEAD` で **直前のコミットを打ち消す** コミットを作る（履歴は残しつつ変更を取り消す）
+- 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
+- dprint を入れて Prettier と比較
+- TypeScript Go 版（`tsgo`）の preview を試す
 
 ## まとめ
 
-- Git はファイル履歴を残す道具。「元に戻せる」「誰が何を変えたか」「並行開発」を可能にする
-- 3 つのエリア: 作業ディレクトリ → ステージング（`add`）→ リポジトリ（`commit`）
-- 基本コマンド: `init` / `status` / `add` / `commit` / `log` / `diff`
-- `.gitignore` で `node_modules` / `.env` 等を除外
-- ブランチ（`switch -c name` で作成）→ コミット → main に `merge`
-- コンフリクトは `<<<<<<<` / `=======` / `>>>>>>>` を消して解消
-- リモート: `remote add origin URL` / `push` / `pull` / `fetch`
+- フロントエンドツールが **Rust 製** に置き換わりつつある
+- **Biome**: Lint + Format 1 ツール、設定 1 ファイル、35x 高速
+- **Oxc / Oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
+- **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
+- **SWC / Turbopack**: Next.js / Vercel が独自路線
+- **dprint**: Prettier 代替の Rust 製フォーマッタ
+- **TypeScript 公式の Go 版**（tsgo）が 2025 年に preview リリース、2026 年現在も成熟中
+- 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
+- 既存プロジェクトは「**速度に困ってから**」で良い
+- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想

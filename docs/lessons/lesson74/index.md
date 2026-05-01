@@ -1,142 +1,348 @@
-# lesson74: Server Component でデータを取得する
+# lesson74: Server Component と Client Component
 
 ## ゴール
 
-- `async` な Server Component を書ける
-- 外部 API から `fetch` でデータを取って、結果を JSX で表示できる
-- `loading.tsx` でローディング UI を挟める
+- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できる
+- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子に Client 扱いが伝播することを理解する
+- Client Component から Server Component を `import` できないが、`children` や props として受け取れることを知る
+- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを目で確認する
 
 ## 解説
 
-### Server Component は `async` にできる
+### 2 種類のコンポーネントの違い
 
-4 章 までの React コンポーネントは同期関数でした。App Router の Server Component は **`async` 関数にできる** のが大きな違いです。
+「Next.js ってなに？」で触れた通り、App Router にはコンポーネントが 2 種類あります。本レッスンではこの違いをコードで体感していきます。
+
+| | Server Component | Client Component |
+|---|---|---|
+| 動く場所 | サーバー側 | ブラウザ側 |
+| デフォルトか | **既定**（何もしなければこちら） | `"use client"` を明示する必要がある |
+| `useState` / `useEffect` / `onClick` | 使えない | 使える |
+| DB 接続 / API キー | 使える | 使えない（ブラウザに漏れるため） |
+| ブラウザに送られる JS | 送られない（結果だけが届く） | 送られる |
+
+基本の使い分けは次の通りです。
+
+- 静的に描画するだけ・データ取得をしたいだけ → **Server Component**
+- ボタンクリック・state 管理・ブラウザ API（`localStorage` など）が必要 → **Client Component**
+
+### `"use client"` のルール
+
+Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
 
 ```tsx
-export default async function Page() {
-  const data = await fetch("https://...").then((r) => r.json());
-  return <div>{data.title}</div>;
+"use client";
+
+import { useState } from "react";
+
+export function Counter() {
+  // ...
 }
 ```
 
-- 関数の頭に `async` を付けられるのは Server Component のみです。Client Component では使えません（`"use client"` のファイルに `async` を付けるとエラーになります）。
-- `await` で取得が終わるまで待てます。ブラウザ側の `useState` + `useEffect` で組む必要が一切ありません。
+- 必ず **ファイル先頭 1 行目**（`import` より上）です。
+- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
 
-ブラウザ側 `fetch` + `useEffect` で起きていた典型的な問題（4 章 の「useEffect の基本」末尾で予告した「競合状態 / ローディング / エラー管理の罠」）が、サーバー側に寄せることでそもそも発生しなくなります。
+つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
 
-### `loading.tsx` でローディング UI
+### 境界のイメージ
 
-`fetch` が終わるまでの間、ユーザーには空白のページが見えます。これを防ぐには `loading.tsx` を同じディレクトリに置きます。
+ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
+
+<img src="/diagrams/server-client-tree.svg" alt="RootLayout(Server) → page.tsx(Server) → Nav(Server) / Counter(Client) / TodoForm(Client) のツリー。Server Component が外側を占め、Client Component が必要な葉のみ" class="diagram" />
+
+- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
+- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
+- Client の部分は「葉」に配置します。ページ全体を Client にしません。
+
+### Client → Server の呼び出しルール
+
+ここがよく詰まるポイントです。
+
+- Client Component から Server Component を **`import` できません**。
+- ただし、`children` や props として **受け取ること** は可能です。
+
+つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
+
+```tsx
+// Server Component（親）
+import { ClientWrapper } from "./ClientWrapper";
+import { ServerInfo } from "./ServerInfo";
+
+export default function Page() {
+  return (
+    <ClientWrapper>
+      <ServerInfo />
+    </ClientWrapper>
+  );
+}
+```
+
+```tsx
+// ClientWrapper.tsx
+"use client";
+
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export function ClientWrapper({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>開閉</button>
+      {open && children}
+    </div>
+  );
+}
+```
+
+`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
+
+### Server → Client へ渡せる props は JSON で表せる値だけ
+
+Server Component から Client Component へ props を渡すとき、**JSON で表せる値**（= シリアライズ可能な値）しか渡せません。これは Server で計算した結果を **ネットワーク越しに JSON にして Client へ送る** ためです。
+
+> **シリアライズ** は「メモリ上のオブジェクトを、ネットワークやファイルで送れる文字列／バイト列に変換すること」。JSON 化はその代表例です。
+
+- **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
+- **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
+
+`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーになります。実務での回避パターン:
+
+- **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
+- **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
+- **コールバック関数**: 普通の関数は渡せない。**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せる
+
+### `"use client"` を忘れたときのエラー
+
+`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
 
 ```
-app/
-└── posts/
-    ├── page.tsx       ← データ取得込みのページ
-    └── loading.tsx    ← 取得中に表示される
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
 ```
 
-`loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。`<Suspense>` を自分で書く必要はありません。
+このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
 
-::: tip fetch のキャッシュについて
-lesson74 の演習では素の `fetch(url)` を使います。Next.js 15 以降のデフォルトはキャッシュしない動作です。キャッシュを使いたいときの書き方（`force-cache` / `revalidate` / `tags` など）は lesson75 で詳しく扱います。
-:::
+### `client-only` でブラウザ専用コードを守る
+
+`server-only` の逆バージョンが `client-only` です。`navigator` や `window` などブラウザ API を使うモジュールをサーバーから import すると、サーバー実行時に `ReferenceError: window is not defined` のようなランタイムエラーになります。`client-only` を入れておくとビルド時に検出できます。
+
+```ts
+// lib/clipboard.ts
+import "client-only";
+
+export function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
+}
+```
+
+インストールは `npm install client-only`。`server-only` / `client-only` はどちらも「意図した境界を仕組みで守る」ためのパッケージです。
+
+### ページが表示されるまでの流れ
+
+Server Component と Client Component がどのように協力してページを作るのか、時系列で見ておきます。
+
+#### 初回表示（ブラウザで URL を入力 or リロード）
+
+```
+① ブラウザ → サーバーに GET リクエスト
+
+② サーバー
+   └─ Server Component を実行（DB 取得・fetch など）
+   └─ Client Component のタグ位置はプレースホルダとして保持
+   └─ HTML と RSC ペイロードを生成
+
+③ ブラウザ
+   └─ HTML を受け取る → すぐに画面が表示（文字や構造が見える）
+   └─ JS バンドルをダウンロード
+   └─ Client Component に js を「アタッチ」する（ハイドレーション）
+      → ボタンクリックなどインタラクションが動くようになる
+```
+
+**ハイドレーション（hydration）** は「すでに表示された HTML に、Client Component の JS を後から取り付ける」作業です。HTML を出力するだけでは onClick などの動作は働かないので、JS がロードされた後にそれを紐付けます。
+
+ユーザーの体験としては「すぐに文字は見えるが、クリックが効くまで少し遅れる」感覚です。
+
+#### ページ遷移（`<Link>` クリック）
+
+```
+① ブラウザが /posts/1 の RSC ペイロードをサーバーに要求
+
+② サーバー
+   └─ 新しいページの Server Component を実行
+   └─ RSC ペイロードだけを返す（HTML の丸ごと再生成はしない）
+
+③ ブラウザ
+   └─ React が差分だけをツリーに適用 → 画面が更新される
+   └─ JS の再ロード不要、スクロール位置も維持されやすい
+```
+
+`<Link>` での遷移は通常の `<a>` タグと違い、**ページ全体を読み直さずに差分だけ更新** するため速いです。
+
+> **RSC ペイロード**は Next.js が作る React 専用の中間形式で、通常の JSON や HTML とは別物です。`/posts/1` を `<Link>` で開くと、Network タブに `_rsc=...` のようなリクエストが見えることがあります。これが RSC ペイロードの取得です。詳細な構造は本コースでは扱いませんが、「Server Component の結果がこういう形で届く」とだけ覚えておけば十分です。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンの記事一覧演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート(<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>)を開けば、本文の手順だけで完結します。中心となるのは `app/posts/page.tsx` と `app/posts/loading.tsx` の新規作成です。手順 3 のヘッダーリンク追加は `app/layout.tsx` にナビがあれば足せますが、無ければスキップして構いません。
+このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
 
-### 前回のプロジェクトを開く
+### 既存のプロジェクトを使う
 
-これまでのレッスンで作ったプロジェクトを開き直しましょう。
+「共通レイアウトを作る」のレッスンで作ったプロジェクトを開き直しましょう。
 
-### 手順 1: `/posts` ページを作る
+### 手順 1: Client Component の `Counter` を作る
 
-`app/posts/page.tsx` を新規作成します。
+`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
+
+`app/components/Counter.tsx`:
 
 ```tsx
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
+"use client";
 
-export default async function PostsPage() {
-  const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-  const posts: Post[] = await res.json();
+import { useState } from "react";
 
+export function Counter() {
+  const [count, setCount] = useState(0);
+  console.log("client render");
+  return (
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
+  );
+}
+```
+
+- 1 行目に `"use client"` を書きます。
+- `useState` と `onClick` を使っています。
+- `console.log("client render")` をレンダリング中に仕掛けます。
+
+### 手順 2: Server Component の `page.tsx` に埋め込む
+
+`app/page.tsx` を次のように書き換えます。
+
+```tsx
+import { Counter } from "./components/Counter";
+
+export default function Page() {
+  console.log("server render");
   return (
     <>
-      <h1>記事一覧</h1>
-      <ul>
-        {posts.slice(0, 10).map((post) => (
-          <li key={post.id}>
-            <strong>#{post.id}</strong> {post.title}
-          </li>
-        ))}
-      </ul>
+      <h1>ようこそ</h1>
+      <p>Counter は Client Component として動く。</p>
+      <Counter />
     </>
   );
 }
 ```
 
-- `async function` で書いています（Server Component だから許されます）。
-- `fetch` も `response.json()` も `await` が必要です（2 章 で学んだ fetch と同じです）。
-- `Post` 型を自前で `type` で定義しています。3 章 で学んだ `type` エイリアスそのままです。
-- `slice(0, 10)` で先頭 10 件だけにします。JSONPlaceholder は 100 件返すので絞ります。
+- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
+- `console.log("server render")` を仕掛けます。
 
-> **補足: `Post[]` の型注釈は実行時にチェックされない**: `await res.json()` の戻り値は実際には `unknown` で、`: Post[]` は TypeScript に「この形だと信じてください」と伝えているだけで実行時の検証はしません。本番では API が想定外のレスポンスを返すこともあるため、実務では **Zod** などのスキーマライブラリで `PostSchema.parse(json)` のように実行時に形をチェックします。
+### 手順 3: 境界を確認する
 
-### 手順 2: `loading.tsx` を置く
+1. ブラウザで `/` を開きます。
+2. ブラウザの DevTools → Console を開きます。
+3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
+4. ページを再読み込みします。
 
-`app/posts/loading.tsx` を新規作成します。
+#### 期待出力
+
+- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
+- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
+- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
+
+これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
+
+### 手順 4: `"use client"` を消してみる
+
+`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
+
+ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
+
+```
+You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+```
+
+このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
+
+### 手順 5: Server を Client の children として渡す
+
+以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
+
+`app/components/ClientBox.tsx`:
 
 ```tsx
-export default function Loading() {
-  return <p>読み込み中...</p>;
+"use client";
+
+import type { ReactNode } from "react";
+import { useState } from "react";
+
+export function ClientBox({ children }: { children: ReactNode }) {
+  const [open, setOpen] = useState(true);
+  return (
+    <div>
+      <button onClick={() => setOpen((o) => !o)}>
+        {open ? "閉じる" : "開く"}
+      </button>
+      {open && <div>{children}</div>}
+    </div>
+  );
 }
 ```
 
-- 名前は `Loading` でなくても構いません（`export default` の関数名は自由です）。
-- ファイル名は `loading.tsx` 固定です。
-
-### 手順 3: ヘッダーにリンクを追加
-
-`app/layout.tsx` のナビに `/posts` のリンクを 1 つ足します。
+`app/components/ServerInfo.tsx`:
 
 ```tsx
-<li>
-  <Link href="/posts">Posts</Link>
-</li>
+export function ServerInfo() {
+  // Server Component なので、ここでサーバー時刻が取れる
+  const now = new Date().toISOString();
+  return <p>サーバー時刻: {now}</p>;
+}
 ```
 
-### 期待出力
+`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
 
-1. ブラウザで `/posts` を開きます。
-2. 一瞬だけ「読み込み中...」が出て、その後に記事 10 件が並びます。
-3. ネットワークが速すぎて「読み込み中...」が見えないときは、Chrome DevTools の Network タブで Throttling を「Slow 3G」にして再読み込みします。今度ははっきり見えます。
-4. StackBlitz ターミナル側に fetch のログは出ませんが、サーバー側で HTTP 通信が走っています。ブラウザ Console には fetch の形跡は出ません（サーバーで取ってきたからです）。
+```tsx
+import { Counter } from "./components/Counter";
+import { ClientBox } from "./components/ClientBox";
+import { ServerInfo } from "./components/ServerInfo";
+
+export default function Page() {
+  console.log("server render");
+  return (
+    <>
+      <h1>ようこそ</h1>
+      <Counter />
+      <ClientBox>
+        <ServerInfo />
+      </ClientBox>
+    </>
+  );
+}
+```
+
+#### 期待出力
+
+- 最初は `サーバー時刻: 2026-...` が見えています。
+- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
+- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
+
+もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
 
 ### 変えてみる
 
-1. `slice(0, 10)` を `slice(0, 3)` にして 3 件だけにしましょう。
-2. `<li>` の中に `<p>{post.body}</p>` を追加して本文も表示しましょう。
-3. URL を `https://jsonplaceholder.typicode.com/users` に変え、`Post` の代わりに `{ id: number; name: string; email: string }` 型の `User` 型を定義して表示しましょう（型を書き直す練習です）。
+1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
+2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
 
 ### 自分で書く
 
-`app/users/page.tsx` を新規で作り、`https://jsonplaceholder.typicode.com/users` を fetch して、`<ul>` に `name` と `email` を並べるページを自力で組んでみましょう。型は `type User = { id: number; name: string; email: string }` で構いません。完了したらヘッダーに `/users` のリンクも足しましょう。
+「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
 
 ## まとめ
 
-- Server Component は `async` にできる。`await fetch(...)` でデータを直接取得できる
-- `loading.tsx` を同ディレクトリに置くだけで、準備中の表示を自動で挟める
-- ブラウザ側 `fetch` + `useEffect` で起きていた競合・ローディング管理の罠が、サーバー側に寄せることで回避できる
-- fetch のキャッシュ制御（`force-cache` / `revalidate` / `tags`）と `revalidatePath` / `revalidateTag` は lesson75 で詳しく扱う
-
-### コラム: `loading.tsx` の裏で動く Suspense
-
-`loading.tsx` の仕組みは React の **`<Suspense>`** によるストリーミング描画で動いています。`<Suspense fallback={...}>` で「非同期な部分が準備できるまでフォールバック UI を出す」ことができ、Next.js はこれを `loading.tsx` というファイル規約に包んで、自分で `<Suspense>` を書かなくても済むようにしています。
-
-詳しい使い方は「Loading UI と Streaming」のレッスンで扱います。「`loading.tsx` の裏では Suspense が動いている」とだけ頭の片隅に入れておけば十分です。
+- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
+- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
+- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
+- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。

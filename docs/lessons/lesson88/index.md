@@ -1,430 +1,220 @@
-# lesson88: Metadata API で SEO を整える
+# lesson88: Tailwind CSS の紹介
 
 ## ゴール
 
-- ページの `<title>` や `<meta>` が検索結果・SNS シェア表示に直結することを理解する
-- Next.js App Router の **Metadata API** を使い、静的 `metadata` export を書ける
-- `generateMetadata` で動的にタイトルや説明文を組み立てられる
-- `title.template` を使ってサイト全体の「タイトル装飾」を揃えられる
-- favicon / apple-touch-icon を `app/` 配下のファイル配置だけで反映できる
+- Tailwind CSS v4 の存在と基本的な使い方を知る
+- 本コースの「素の CSS で書く」方式との違いを説明できる
+- Next.js プロジェクトに Tailwind v4 を導入する手順を観察できる
+- 本コースを終えた後の「次のステップ」として判断できる
 
 ## 解説
 
-### 「SEO を整える」とは
+### 本コースのスタンス
 
-SEO（Search Engine Optimization）は、検索エンジンに正しく理解されて、検索結果やシェア時の見栄えを良くする取り組みです。本コースで扱うのはその入り口、**HTML の `<head>` を適切に書く** ことです。
+ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
 
-- `<title>`: ブラウザタブの文字、検索結果の見出し
-- `<meta name="description">`: 検索結果の説明文
-- `<meta property="og:..." />`（Open Graph）: Twitter / Facebook / Slack などでシェアしたときのカード表示
-- `<link rel="icon">`: タブの左に出る favicon
+一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
 
-これらを 1 ページずつ手書きするのはつらいので、Next.js は **Metadata API** という仕組みを用意しています。
+**本コースの結論**: 「Tailwind は **次のステップ** として学ぶ選択肢」。本コースの自己紹介 / TODO プロジェクトには **持ち込みません**。
 
-### Metadata API の 2 系統
+### Tailwind CSS とは
 
-書き方は 2 つ。どちらを使うかは「ページの内容に応じて変わるか」で決めます。
+Tailwind は **ユーティリティファースト** の CSS フレームワークです。`margin: 16px` のような個別のスタイルをコード上に書かず、`m-4` のような短いクラス名を HTML に重ねて見た目を作ります。
 
-1. **静的 metadata**: ページの内容が決まっている（ホーム / About / 利用規約）
-2. **動的 `generateMetadata`**: ページの内容が URL パラメータや fetch で変わる（記事ページ / ユーザーページ）
+素の CSS で書いたコード:
 
-### 静的 `metadata` export
+```html
+<div class="card">
+  <h2 class="card-title">タイトル</h2>
+  <p class="card-body">本文</p>
+</div>
+```
 
-`page.tsx` / `layout.tsx` の中で `metadata` という名前で export します。`Metadata` という型が `next` から import できます。
-
-```tsx
-// app/about/page.tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function AboutPage() {
-  return <h1>About</h1>;
+```css
+.card {
+  padding: 16px;
+  background: white;
+  border-radius: 8px;
+}
+.card-title {
+  font-size: 1.25rem;
+  font-weight: bold;
+}
+.card-body {
+  color: #666;
 }
 ```
 
-Next.js が自動で `<head>` に差し込んでくれます。ビルド時にチェックされるので、型が違えばすぐ気付けます。
+Tailwind で書くと:
 
-### 動的 `generateMetadata`
-
-URL から情報を取ってタイトルを作るときに使います。
-
-```tsx
-// app/posts/[id]/page.tsx
-import type { Metadata } from "next";
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  const post = await res.json();
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
+```html
+<div class="p-4 bg-white rounded-lg">
+  <h2 class="text-lg font-bold">タイトル</h2>
+  <p class="text-gray-600">本文</p>
+</div>
 ```
 
-- `generateMetadata` は非同期関数にできます
-- 引数の型は Next.js 16 のグローバル型 `PageProps<"/posts/[id]">` で受けます（`import` 不要。`next dev` / `next build` で `.next/types/` に自動生成）
-- `params` は Next.js 15 以降 `Promise` なので `await` してから読む（「動的ルート」で扱った形と同じ）
-- 戻り値は `Metadata` 型のオブジェクト
+CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た目を組み立てます。
 
-`page.tsx` の中で **`metadata` と `generateMetadata` の両方を書くことはできません**。どちらか一方を選びます。
+長所:
 
-### `title.template` でサイト全体を揃える
+- クラス名の衝突がない（`.card` の名前を考えなくてよい）
+- 小さな変更が HTML 内で完結する
+- VS Code 拡張で補完が強い
 
-記事ごとのタイトルを「記事タイトル | サイト名」の形に揃えたい、というのはよくあります。これは `layout.tsx` で `title.template` を書くだけで実現できます。
+短所:
 
-```tsx
-// app/layout.tsx
-import type { Metadata } from "next";
+- クラス名が長くなる
+- 「なぜこのプロパティなのか」が CSS の知識無しだと理解しづらい（だから本コースでは素の CSS から学んだ）
 
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-};
-```
+### Tailwind v4 の特徴（2025 年 GA）
 
-- `default`: ページ側でタイトルを書いていないときに使う既定値
-- `template`: ページ側が `title: "記事タイトル"` を返したとき、`%s` に代入されて `記事タイトル | My Next Site` になる
+本レッスンは **Tailwind v4** 準拠で紹介します。v3 から **設定方法が大きく変わった** ため、古い記事のコピペは通用しません。
 
-ページ側で `title` を書かなかった場合は `default` がそのまま使われます。サイト全体のトーンを 1 箇所で管理できる仕組みです。
+主な変更点:
 
-### Open Graph を足す
+- **CSS ファイル 1 行で導入**:
+  ```css
+  @import "tailwindcss";
+  ```
+  v3 の `@tailwind base; @tailwind components; @tailwind utilities;` の 3 行は廃止
+- **`init` コマンド廃止**: v3 の `npx tailwindcss init -p` で `tailwind.config.ts` を生成する手順は不要
+- **PostCSS プラグイン名の変更**: `postcss.config.mjs` に `@tailwindcss/postcss` を指定する
+- **Vite 用プラグイン**: Vite プロジェクトでは `@tailwindcss/vite`（PostCSS 経由ではない）
+- **パフォーマンス大幅改善**: ビルドが高速、開発時のホットリロードも速い
 
-SNS でシェアしたときの見え方は `openGraph` プロパティで整えます。
-
-```tsx
-export const metadata: Metadata = {
-  title: "My Next Site",
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
-  },
-};
-```
-
-最低限 `title` / `description` / `url` / `type` があれば見られる形になります。画像（`openGraph.images`）はあると嬉しいですが、本レッスンでは省きます。
-
-### OG 画像 / canonical / robots（実務 SEO 三点セット）
-
-公開サイトでは次の 3 つを揃えるのがほぼ必須です。
-
-```ts
-export const metadata: Metadata = {
-  metadataBase: new URL("https://example.com"),
-  title: "My Site",
-  description: "...",
-
-  // (1) OG 画像（SNS シェア時の見栄え）
-  openGraph: {
-    images: [
-      { url: "/og-image.png", width: 1200, height: 630 },
-    ],
-  },
-
-  // (2) canonical URL（重複コンテンツ対策）
-  alternates: {
-    canonical: "/",
-  },
-
-  // (3) robots（インデックス制御）: 既定は本番だけ index、それ以外は noindex
-  robots: {
-    index: process.env.VERCEL_ENV === "production",
-    follow: true,
-  },
-};
-```
-
-それぞれの「いつ使うか」:
-
-- **`openGraph.images`**: Twitter / Slack / LINE などにリンクを貼ったとき、サムネイルが表示されるかが体感を大きく左右する
-- **`canonical`**: 同じ内容に複数の URL がある場合（`?utm_*` 付き / モバイル / AMP 等）、どれが正規 URL か検索エンジンに伝える
-- **`robots`**: ステージング環境やプレビュー URL（Vercel の preview デプロイ等）で `noindex` にして、間違って Google に拾われないようにする。実務で最頻出の事故は「プレビュー URL が本番より上位にインデックスされる」なので、`process.env.VERCEL_ENV === "production"` のように **環境変数で本番だけ index する** イディオムを覚えておく
-
-実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
-
-### favicon / apple-touch-icon は **ファイル配置だけで OK**
-
-Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
-
-- `app/favicon.ico` → `<link rel="icon">`
-- `app/icon.png` / `app/icon.svg` → 同上
-- `app/apple-icon.png` → `<link rel="apple-touch-icon">`
-
-`<head>` を手で書く必要はありません。画像ファイルを置くだけです。
-
-### `generateMetadata` と `page.tsx` が同じデータを使うとき
-
-`app/posts/[id]/page.tsx` のように、`generateMetadata` でも `page.tsx` でも同じ記事データを fetch するケースがよくあります。そのまま書くと、1 回のリクエストで同じ URL への fetch が 2 回発生します。
-
-これを防ぐのが React 組み込みの **`cache()`** 関数です。
-
-```tsx
-import { cache } from "react";
-
-const getPost = cache(async (id: string) => {
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  return res.json();
-});
-
-// generateMetadata でも PostPage でも getPost(id) を呼ぶが、
-// 同一リクエスト内では 1 回しか fetch しない
-```
-
-`cache()` で包んだ関数は、**同一リクエスト内での重複呼び出しを自動でメモ化**します。`generateMetadata(id)` が先に呼ばれてキャッシュされた値が、`PostPage(id)` の呼び出しでそのまま使われます。
-
-これは lesson75 で扱った Data Cache（`fetch` オプションで制御する永続キャッシュ）とは別物です。`cache()` は「同じリクエストの中での重複排除」に特化した React の仕組みです。
-
-### Server Component の前提
-
-`metadata` / `generateMetadata` は **Server Component 側** で書きます。`"use client"` を付けたファイルには書けません。動的にしたい値がクライアント state から来る、というケースはほぼ無いので、自然と Server Component 側にまとまります。
+`create-next-app --tailwind` で新規プロジェクトを作ると、デフォルトで Tailwind v4 の設定が入ります。古いチュートリアルを見る前に、まずは `create-next-app` 生成物を観察するのが確実です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは「ページを増やしてリンクで移動する」で作った `/` と `/about`、「動的ルート」で作った `/posts/[id]` を想定しています。無ければ新規に作ってから始めてください。
-
-<details>
-<summary>出発点のファイル</summary>
-
-**`app/layout.tsx`**
-
-```tsx
-import type { ReactNode } from "react";
-import Link from "next/link";
-
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
-  return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
-  );
-}
-```
-
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-**`app/about/page.tsx`**
-
-```tsx
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  return <h1>記事 ID: {id}</h1>;
-}
-```
-
-</details>
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
 
 ### ゴール
 
-- `app/layout.tsx` に `title.template` 付きの metadata を置いて、サイト全体のタイトル装飾を揃える
-- `app/about/page.tsx` に静的 metadata を追加する
-- `app/posts/[id]/page.tsx` に `generateMetadata` を追加し、記事タイトルを `<title>` に反映する
-- ブラウザタブの文字が各ページで変わることを確認する
+- `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
+- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
+
+**本コースのプロジェクトには持ち込まない**（素の CSS 資産を壊さないため）。別プロジェクトで観察するだけで十分。
 
 ### 手順
 
-1. `app/layout.tsx` に `metadata` export を追加（`title.template` + `description` + `openGraph`）
-2. `app/about/page.tsx` に静的 `metadata` export を追加
-3. `app/posts/[id]/page.tsx` に `generateMetadata` を追加（`jsonplaceholder.typicode.com` から記事を取得）
-4. `app/icon.svg` を置いて favicon が反映されるか確認（任意）
+1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
+2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
+3. プロジェクト内の以下のファイルを観察する
+   - `app/globals.css`
+   - `postcss.config.mjs`（または `.js`）
+   - `package.json` の `devDependencies`
+4. 任意で、`app/page.tsx` にユーティリティクラスを 1〜2 個書いてみる（`@theme` などカスタマイズは扱わない）
 
-### 主要ファイルの完成形
+### `app/globals.css`（観察対象）
 
-**`app/layout.tsx`**
+Tailwind v4 の導入は、CSS ファイル冒頭に **この 1 行だけ**:
 
-```tsx
-import type { Metadata } from "next";
-import type { ReactNode } from "react";
-import Link from "next/link";
+```css
+@import "tailwindcss";
+```
 
-export const metadata: Metadata = {
-  title: {
-    default: "My Next Site",
-    template: "%s | My Next Site",
-  },
-  description: "Next.js App Router の学習用サイト",
-  openGraph: {
-    title: "My Next Site",
-    description: "Next.js App Router の学習用サイト",
-    url: "https://example.com",
-    siteName: "My Next Site",
-    locale: "ja_JP",
-    type: "website",
+v3 の時代は 3 行書いていました:
+
+```css
+/* v3（古い、書かない） */
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+```
+
+v4 では `@import "tailwindcss";` に統合されています。
+
+### `postcss.config.mjs`（観察対象）
+
+```js
+const config = {
+  plugins: {
+    "@tailwindcss/postcss": {},
   },
 };
+export default config;
+```
 
-export default function RootLayout({
-  children,
-}: {
-  children: ReactNode;
-}) {
+v3 で必要だった `autoprefixer` は **v4 ではプラグイン内に内蔵** されたため、別途書かなくて済むようになりました。
+
+### `package.json` の `devDependencies`（観察対象）
+
+```json
+{
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.0.0",
+    "tailwindcss": "^4.0.0"
+  }
+}
+```
+
+`tailwind.config.ts` は **v4 では原則不要**（デフォルト設定で十分）。カスタマイズしたい場合は CSS 内で `@theme { ... }` を書く方式に変わりました。本レッスンでは `@theme` の深掘りはしません。
+
+### 小さく試す（参考 — 任意）
+
+本コースのプロジェクトには持ち込まないため、この演習は完全に任意です。
+
+生成されたプロジェクトの `app/page.tsx` を次のように書き換えて、Tailwind v4 のデフォルトパレットを試せます。
+
+```tsx
+export default function Page() {
   return (
-    <html lang="ja">
-      <body>
-        <nav>
-          <Link href="/">Home</Link>
-          {" | "}
-          <Link href="/about">About</Link>
-          {" | "}
-          <Link href="/posts/1">Post #1</Link>
-        </nav>
-        {children}
-      </body>
-    </html>
+    <main className="p-8 max-w-xl mx-auto">
+      <h1 className="text-3xl font-bold text-slate-800">Tailwind v4 の練習</h1>
+      <p className="mt-4 text-slate-600">
+        素の CSS なしで、クラス名だけで見た目を組み立てている。
+      </p>
+      <button className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
+        ボタン
+      </button>
+    </main>
   );
 }
 ```
 
-注: **`ReactNode` は `next` の公開型ではなく `react` から import します**。`Metadata` は `next` から、`ReactNode` は `react` から、と use 元が違う点に注意します。
+- `p-8`（padding 2rem）、`max-w-xl`（max-width）、`mx-auto`（水平中央寄せ）
+- `text-3xl`（フォントサイズ）、`font-bold`（太字）
+- `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
 
-**`app/page.tsx`**
-
-```tsx
-export default function Home() {
-  return <h1>Home</h1>;
-}
-```
-
-この `page.tsx` は `metadata` を書いていないので、`<title>` は layout の `default` である `My Next Site` がそのまま使われます。
-
-**`app/about/page.tsx`**
-
-```tsx
-import type { Metadata } from "next";
-
-export const metadata: Metadata = {
-  title: "About",
-  description: "このサイトについて",
-};
-
-export default function About() {
-  return <h1>About</h1>;
-}
-```
-
-**`app/posts/[id]/page.tsx`**
-
-```tsx
-import { cache } from "react";
-import type { Metadata } from "next";
-
-type Post = {
-  id: number;
-  title: string;
-  body: string;
-};
-
-// 同一リクエスト内での重複 fetch を 1 回にまとめる
-const getPost = cache(async (id: string): Promise<Post | null> => {
-  const res = await fetch(`https://jsonplaceholder.typicode.com/posts/${id}`);
-  if (!res.ok) return null;
-  return res.json();
-});
-
-export async function generateMetadata({
-  params,
-}: PageProps<"/posts/[id]">): Promise<Metadata> {
-  const { id } = await params;
-  const post = await getPost(id);
-  if (!post) {
-    return { title: "記事が見つかりません" };
-  }
-  return {
-    title: post.title,
-    description: post.body.slice(0, 120),
-  };
-}
-
-export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
-  const { id } = await params;
-  const post = await getPost(id);
-  if (!post) {
-    return <h1>記事が見つかりません</h1>;
-  }
-
-  return (
-    <>
-      <h1>#{post.id} {post.title}</h1>
-      <p>{post.body}</p>
-    </>
-  );
-}
-```
-
+1 章で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが分かります。本コースで CSS の仕組みを先に押さえたのが効いてきます。
 
 ### 期待出力
 
-ブラウザで次のように動きます。
+- 生成されたプロジェクトで、`@import "tailwindcss";` 1 行で Tailwind が動いていることを確認
+- `app/page.tsx` にユーティリティクラスを書くと、即座にスタイルが適用される
+- `tailwind.config.ts` が無いことを確認（デフォルトで動く）
 
-1. `/` を開く → タブのタイトルが `My Next Site`
-2. `/about` を開く → タブのタイトルが `About | My Next Site`（template が効いている）
-3. `/posts/1` を開く → タブのタイトルが `sunt aut facere ... | My Next Site` のように、記事タイトルが入る
-4. DevTools の Elements タブで `<head>` を開くと、`<title>` / `<meta name="description">` / `<meta property="og:title">` などが入っていることが確認できる
+### 本コースのプロジェクトに入れない理由
 
-### 変える
+本コースの自己紹介 / TODO プロジェクトには **Tailwind を持ち込みません**。理由:
 
-- `layout.tsx` の `title.template` を `"%s - My Next Site"` に変える → 区切り文字が `|` から `-` になる
-- `about/page.tsx` の `description` を変える → `/about` を開いた状態で `<head>` の `<meta name="description">` が変わる
-- `posts/[id]/page.tsx` の `generateMetadata` で `description` を `body.slice(0, 40)` に短く変えて、切り詰めを確かめる
+- これまで素の CSS で書いた資産（`.site-header`、`.cards`、`.card` など）が多い
+- Tailwind に置き換えるには全 JSX を書き直す必要がある
+- 「学ぶ手段」として Tailwind を見るだけなら、別プロジェクトで十分
 
-### 自分で書く
+本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
 
-- `/about` の metadata に `openGraph` を追加し、「About ページ」専用の OG タイトルと説明を書く
-- `generateMetadata` を **try / catch で囲む**（fetch が失敗したときに `title: "エラー"` を返す）
-- 新しいページ `app/privacy/page.tsx` を追加し、静的 metadata で `title: "プライバシーポリシー"` を設定する
+### 変える（任意）
+
+任意。本コースのプロジェクトへの適用は不要です。
+
+- 生成した Tailwind プロジェクトで `bg-blue-500` を `bg-green-500` / `bg-red-500` に変えて色の組を観察
+- `hover:` や `md:` などのプレフィックス（状態・ブレークポイント）を使ってみる
+
+### 自分で書く（挑戦）
+
+任意。本コースのプロジェクトへの適用は不要です。
+
+- Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
+- 書き終えたら、1 章 の「Flexbox とレスポンシブ」で書いた素の CSS 版と見比べて **同じ見た目をどう表現しているか** 対比する
 
 ## まとめ
 
-- `<title>` / `<meta>` / Open Graph が SEO とシェア表示を左右する
-- 静的には `export const metadata: Metadata = { ... }`、動的には `export async function generateMetadata(...)` を書く
-- `layout.tsx` に `title.template` を置くと、サイト全体のタイトル装飾を 1 箇所で決められる
-- favicon / apple-touch-icon は `app/` 配下に特定のファイル名で置くだけ
-- `metadata` / `generateMetadata` は Server Component 側でだけ書く
+- Tailwind は「ユーティリティファースト」の CSS、クラス名だけで見た目を作る
+- v4（2025 GA）は `@import "tailwindcss";` 1 行で導入、`init` コマンドや `tailwind.config.ts` は原則不要
+- `create-next-app --tailwind` でデフォルトで v4 がセットアップされる
+- 本コースの自己紹介 / TODO プロジェクトには持ち込まない（素の CSS 資産を壊さないため）
+- 学ぶ意義を感じたら、本コース完走後に次のステップとして挑戦する

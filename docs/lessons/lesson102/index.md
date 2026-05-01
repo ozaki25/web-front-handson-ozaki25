@@ -1,439 +1,421 @@
-# lesson102: E2E テスト — Playwright
+# lesson102: API モック — MSW（Mock Service Worker）
 
 ## ゴール
 
-- E2E テストとユニット / コンポーネントテストの違いを説明できる
-- Playwright をプロジェクトにセットアップできる
-- `page.goto` / `page.getByRole` / `page.click` でブラウザ操作を書ける
-- Playwright の **`expect`** で UI の状態を検証できる
-- ヘッドレスモードと UI モード（`--ui`）の使い分けを知る
-- 失敗時のスクリーンショット / トレース / ビデオの仕組みを理解する
-- E2E は「ビジネスクリティカルな経路」だけに絞る判断軸を持てる
+- なぜテストで API モックが必要かを説明できる
+- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
+- `http.get` / `http.post` で HTTP ハンドラを書ける
+- `setupServer` で Vitest にモックを組み込める
+- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
+- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
 
 ## 解説
 
-### E2E テストの位置付け
+### なぜテストで API モックが必要か
 
-これまでに学んだテストの違いを再確認します。
+`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
 
-| 種類 | 範囲 | 速度 | 頻度 |
-|---|---|---|---|
-| ユニット (Vitest) | 関数 1 つ | 速い（ms） | 多い（70%） |
-| コンポーネント (RTL) | コンポーネント | 中間（数十 ms） | 中間（20%） |
-| E2E (Playwright) | アプリ全体 | 遅い（秒） | 少ない（10%） |
+- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
+- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
+- 速度が遅い（数百 ms × テスト数だけ待たされる）
+- オフラインで CI が動かない
 
-E2E は **本物のブラウザを起動して、ユーザーが実際にやる操作の流れ全体を再現** します。「フォームに入力 → 送信 → 別ページに遷移 → 一覧に表示される」のような **複数画面にまたがる経路** を 1 つのテストで検証できます。
+これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
 
-代償は速度と安定性です。E2E は本物のブラウザを起動するぶん遅く、ネットワーク事情で fail することもあります。だから「最重要パスだけ」に絞るのが鉄則です。
+### MSW とは
 
-### Playwright とは
-
-**Playwright** は Microsoft 製の E2E テストフレームワークです。2026 年現在、Cypress と並ぶ二大選択肢で、新規プロジェクトでは Playwright が選ばれることが増えています。
+**Mock Service Worker**（MSW） は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
 
 特徴:
 
-- Chromium / Firefox / WebKit（Safari エンジン）の **3 ブラウザを 1 つの API で** 操作できる
-- **自動待機**: 要素が現れるまで自動で待つので、`waitFor(...)` を書かなくてよい
-- **トレース・ビデオ・スクリーンショット** が失敗時に自動保存される
-- **codegen** で操作を録画してテストコードを生成できる
-- **UI モード**（`npx playwright test --ui`）で対話的にデバッグできる
+- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
+- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
+- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
+- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
+
+### 他のモック手法との比較
+
+- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
+- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
+- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
+
+複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
 
 ### セットアップ
 
-Vite + React プロジェクトに Playwright を追加します。
+「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
 
 ```bash
-npm install -D @playwright/test
-npx playwright install   # ブラウザ本体（Chromium / Firefox / WebKit）をダウンロード
+npm install -D msw
 ```
 
-> StackBlitz のブラウザ環境では `npx playwright install` でブラウザ本体を取れない場合があります。Playwright はローカル環境で動かすのが基本です。本レッスンは「読みながら手元で試す」前提で進めてください。
-
-`playwright.config.ts` を作成（最小形）:
+`src/mocks/handlers.ts` を作成（ハンドラ定義）:
 
 ```ts
-import { defineConfig, devices } from "@playwright/test";
+import { http, HttpResponse } from "msw";
 
-const isCI = !!process.env.CI;
+export const handlers = [
+  // GET /api/posts
+  http.get("https://api.example.com/posts", () => {
+    return HttpResponse.json([
+      { id: 1, title: "1 件目" },
+      { id: 2, title: "2 件目" },
+    ]);
+  }),
 
-export default defineConfig({
-  testDir: "./e2e",
-  retries: isCI ? 2 : 0,                 // CI では失敗時に 2 回まで再実行
-  reporter: isCI ? "github" : "list",    // CI では GitHub Actions 連携形式
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",             // 失敗時にトレースを保存
-  },
-  projects: [
-    { name: "chromium", use: { ...devices["Desktop Chrome"] } },
-    // 必要に応じて WebKit / Firefox を足す
-  ],
-  webServer: {
-    // CI では prod build を preview 配信して E2E（dev サーバーは HMR で揺れやすい）
-    command: isCI ? "npm run build && npm run preview" : "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !isCI,
-  },
-});
+  // POST /api/posts
+  http.post("https://api.example.com/posts", async ({ request }) => {
+    const body = await request.json();
+    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
+  }),
+];
 ```
 
-`webServer` を書いておくと、テスト実行時に **自動でアプリを起動** してから E2E を回してくれます。`retries` / `projects` / 環境別の `command` を最初から入れておくと、後で CI に乗せるときに迷いません。
+`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
 
-`package.json` に scripts を追加:
+```ts
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers";
 
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
+export const server = setupServer(...handlers);
+```
+
+`vitest.setup.ts` に追記（テスト全体のフック）:
+
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./src/mocks/server";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+これで:
+
+- 全テストの前にモックサーバを起動
+- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
+- 全テスト後にサーバを停止
+- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
+
+### 簡単なコンポーネントテスト
+
+`src/PostsList.tsx`:
+
+```tsx
+import { useEffect, useState } from "react";
+
+type Post = { id: number; title: string };
+
+export function PostsList() {
+  const [posts, setPosts] = useState<Post[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    fetch("https://api.example.com/posts")
+      .then((res) => {
+        if (!res.ok) throw new Error("読み込み失敗");
+        return res.json();
+      })
+      .then(setPosts)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p>エラー: {error}</p>;
+  if (posts === null) return <p>読み込み中...</p>;
+
+  return (
+    <ul>
+      {posts.map((p) => (
+        <li key={p.id}>{p.title}</li>
+      ))}
+    </ul>
+  );
 }
 ```
 
-### 最小の E2E テスト
+`src/PostsList.test.tsx`:
 
-`e2e/home.spec.ts`:
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { PostsList } from "./PostsList";
 
-```ts
-import { test, expect } from "@playwright/test";
+describe("PostsList", () => {
+  it("最初は読み込み中を表示する", () => {
+    render(<PostsList />);
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
 
-test("トップページに見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { level: 1 })).toBeVisible();
+  it("読み込みが終わると一覧を表示する", async () => {
+    render(<PostsList />);
+    expect(await screen.findByText("1 件目")).toBeInTheDocument();
+    expect(screen.getByText("2 件目")).toBeInTheDocument();
+  });
 });
+```
 
-test("About リンクをクリックすると /about に移動する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
+`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
+
+### 失敗ケースのテスト: `server.use` で一時上書き
+
+「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { server } from "./mocks/server";
+import { PostsList } from "./PostsList";
+
+describe("PostsList のエラー", () => {
+  it("API が 500 を返したらエラーを表示", async () => {
+    server.use(
+      http.get("https://api.example.com/posts", () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+
+    render(<PostsList />);
+
+    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
+  });
+
+  it("API が 404 を返したらエラーを表示", async () => {
+    server.use(
+      http.get("https://api.example.com/posts", () => {
+        return new HttpResponse(null, { status: 404 });
+      })
+    );
+
+    render(<PostsList />);
+
+    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
+  });
 });
 ```
 
-ポイント:
+`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
 
-- `page.goto("/")` で baseURL（`http://localhost:5173`）に対して相対パスで遷移
-- `page.getByRole(...)` は React Testing Library と **同じセレクタ思想**（アクセシビリティロール優先）
-- `expect(...).toBeVisible()` 等は **自動で待ってくれる**（要素が出るまで最大 5 秒待つ）
-- すべて `await` を付けて呼ぶ（非同期）
+### POST のテスト
 
-Playwright と Testing Library のクエリ API はほぼ同じ書き味です。両方を使うチームでは認知コストが下がる利点があります。
+書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
 
-### よく使う操作
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { userEvent } from "@testing-library/user-event";
+import { CreatePostForm } from "./CreatePostForm";
+
+describe("CreatePostForm", () => {
+  it("送信すると新しい記事 ID が表示される", async () => {
+    const user = userEvent.setup();
+    render(<CreatePostForm />);
+
+    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
+  });
+});
+```
+
+`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
+
+### 遅延を入れる: `delay`
+
+「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
 
 ```ts
-// 遷移
-await page.goto("/login");
+import { http, HttpResponse, delay } from "msw";
 
-// クリック
-await page.getByRole("button", { name: "送信" }).click();
-
-// 入力
-await page.getByLabel("お名前").fill("Alice");
-await page.getByPlaceholder("検索").fill("React");
-
-// セレクト
-await page.getByLabel("地域").selectOption("Tokyo");
-
-// チェックボックス
-await page.getByLabel("同意する").check();
-
-// キーボード
-await page.keyboard.press("Enter");
-await page.getByLabel("検索").press("Enter");
+export const handlers = [
+  http.get("https://api.example.com/posts", async () => {
+    await delay(100);  // 100ms 遅らせる
+    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
+  }),
+];
 ```
 
-### よく使うアサーション
-
-```ts
-// 要素が見える / 見えない
-await expect(page.getByText("ようこそ")).toBeVisible();
-await expect(page.getByText("エラー")).not.toBeVisible();
-
-// テキストを含む
-await expect(page.locator("h1")).toHaveText("こんにちは、Alice さん");
-
-// URL の確認
-await expect(page).toHaveURL("/dashboard");
-await expect(page).toHaveURL(/\/posts\/\d+/);
-
-// 値が入っている
-await expect(page.getByLabel("名前")).toHaveValue("Alice");
-
-// 件数
-await expect(page.getByRole("listitem")).toHaveCount(3);
-```
-
-すべて **自動リトライ付き**。「fetch が終わってから出る要素」を待たなくても、`expect(...).toBeVisible()` 自体が最大 5 秒間繰り返しチェックします。
-
-### UI モードで開発する
-
-`npm run e2e:ui` を起動すると、Playwright の UI モードが立ち上がります。
-
-- テスト一覧から個別に実行できる
-- 各ステップの **ブラウザの状態をタイムライン** で確認できる
-- 失敗時の **DOM スナップショット** をクリックで遡れる
-- 「locator picker」で画面要素を選ぶと、推奨セレクタが自動生成される
-
-最初に E2E を書く時は **UI モード必須** です。「どこでクリックすればいいか」「次の状態は何か」を見ながら書けるので、習得が一気に楽になります。
-
-### Codegen で操作を録画
-
-ゼロからテストを書くのは大変です。Playwright には **画面操作を録画してコードを生成する** 機能があります。
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、人間が普通にサイトを操作します。クリック・入力・遷移のたびに、対応する Playwright コードが横のパネルに自動で出てきます。それをコピペして整形すれば、テストの叩き台が一気にできます。
-
-複雑な経路でも、まずは codegen で粗い形を作ってから手で詰めるワークフローが定番です。
-
-### 失敗時の証拠保存
-
-`playwright.config.ts` に `trace: "on-first-retry"` を書いておくと、失敗時に **トレース** が自動保存されます。トレースには:
-
-- 各ステップで送信されたリクエスト
-- DOM スナップショット
-- スクリーンショット
-- ビデオ
-
-が入っており、`npx playwright show-trace trace.zip` で UI モードと同じインターフェースで再生できます。**CI で起きた fail を後から再現できる** のが強みです。
-
-### MSW を E2E でも使う（軽く紹介）
-
-MSW のハンドラは E2E でも流用できます。Playwright の `page.route(...)` でブラウザ側の fetch を MSW Service Worker 経由で横取りする構成にすれば、ユニット / コンポーネント / E2E の **3 層で同じモックレスポンス** を使い回せます。
-
-設定はやや複雑なので本コースでは触れませんが、本格運用ではこのパターンを取ると「ハンドラ定義の二重管理」が無くせる点だけ覚えておいてください。
-
-### E2E はどこに書くか
-
-E2E は遅いので、**書くべき経路** を絞ります。実務でよく投資されるのは:
-
-1. **ログイン → サインイン関連**
-2. **メイン購入 / 課金フロー**
-3. **新規登録 → 重要な初回操作**
-4. **データを書き換える系（CRUD）の代表的な 1 経路**
-
-「すべての画面を網羅する」ような E2E は壊れまくり、メンテコストで死にます。**ビジネスが止まる経路だけ** を 20〜30 ケースくらい用意して守るのが現実解です。
+これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
 
 ## 演習
 
 ### ゴール
 
-- 簡単な Vite + React アプリを起動状態にする
-- Playwright をセットアップする
-- 「トップから About ページに遷移」「フォーム入力 → 送信」の 2 経路を E2E でテストする
-- UI モードで動きを観察する
+- MSW のセットアップを完了する
+- ハンドラ 3 種（成功 / エラー / 遅延）を書く
+- `useEffect` で fetch する小さなコンポーネントをテストする
+- `server.use` でテストごとにレスポンスを上書きできる
 
 ### 途中から始める場合
 
-ローカル環境で `create-vite` で React + TS テンプレートを作ります（StackBlitz では Playwright のブラウザ本体を取得できないため、ローカル前提）。
+「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
 
 ```bash
-npm create vite@latest my-e2e-sample -- --template react-ts
-cd my-e2e-sample
-npm install
+npm install -D vitest @vitejs/plugin-react jsdom
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
+npm install -D msw
 ```
 
-### 手順 1: アプリにページを 2 つ追加（ライブラリなしの最小ルーティング）
+`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
 
-`src/App.tsx` をシンプルに書き換え。`location.pathname` で表示を切り替えるだけの自家製ルーティングを使います（学習用に最小化）。
+### 手順 1: モックサーバを構築
 
-> **補足: この `<a onClick={preventDefault}>` は学習用の最小例**: 自家製ルーティングは `Cmd + クリック`（新タブ）/ `中クリック` / 右クリックメニューの「リンクを開く」のようなブラウザ標準操作を全て壊します。実プロダクトでは **React Router**（Vite 用）や **Next.js の `<Link>`** を使い、自前の `preventDefault` 実装は避けます。本レッスンは Playwright の挙動確認に集中するためにあえて最小化しています。
+`src/mocks/handlers.ts`:
+
+```ts
+import { http, HttpResponse, delay } from "msw";
+
+export const handlers = [
+  http.get("https://api.example.com/users", async () => {
+    await delay(50);
+    return HttpResponse.json([
+      { id: 1, name: "Alice" },
+      { id: 2, name: "Bob" },
+    ]);
+  }),
+];
+```
+
+`src/mocks/server.ts`:
+
+```ts
+import { setupServer } from "msw/node";
+import { handlers } from "./handlers";
+
+export const server = setupServer(...handlers);
+```
+
+`vitest.setup.ts` に追記:
+
+```ts
+import "@testing-library/jest-dom/vitest";
+import { afterAll, afterEach, beforeAll } from "vitest";
+import { server } from "./src/mocks/server";
+
+beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
+afterEach(() => server.resetHandlers());
+afterAll(() => server.close());
+```
+
+### 手順 2: コンポーネントを作る
+
+`src/UsersList.tsx`:
 
 ```tsx
-import { useState } from "react";
+import { useEffect, useState } from "react";
 
-export default function App() {
-  const [path, setPath] = useState(window.location.pathname);
-  const [name, setName] = useState("");
-  const [submitted, setSubmitted] = useState("");
+type User = { id: number; name: string };
 
-  function go(to: string) {
-    window.history.pushState({}, "", to);
-    setPath(to);
-  }
+export function UsersList() {
+  const [users, setUsers] = useState<User[] | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  if (path === "/about") {
-    return (
-      <main>
-        <h1>About</h1>
-        <p>このページは about です。</p>
-        <a
-          href="/"
-          onClick={(e) => {
-            e.preventDefault();
-            go("/");
-          }}
-        >
-          Home に戻る
-        </a>
-      </main>
-    );
-  }
+  useEffect(() => {
+    fetch("https://api.example.com/users")
+      .then((res) => {
+        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
+        return res.json();
+      })
+      .then(setUsers)
+      .catch((e) => setError(e.message));
+  }, []);
+
+  if (error) return <p role="alert">{error}</p>;
+  if (users === null) return <p>読み込み中...</p>;
 
   return (
-    <main>
-      <h1>Home</h1>
-      <p>Playwright のサンプル。</p>
-      <a
-        href="/about"
-        onClick={(e) => {
-          e.preventDefault();
-          go("/about");
-        }}
-      >
-        About
-      </a>
-
-      <hr />
-
-      <form
-        onSubmit={(e) => {
-          e.preventDefault();
-          if (name.trim()) setSubmitted(name);
-        }}
-      >
-        <label htmlFor="name">お名前</label>
-        <input
-          id="name"
-          value={name}
-          onChange={(e) => setName(e.target.value)}
-        />
-        <button type="submit">送信</button>
-      </form>
-
-      {submitted && <p>こんにちは、{submitted} さん</p>}
-    </main>
+    <ul>
+      {users.map((u) => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
   );
 }
 ```
 
-### 手順 2: Playwright をインストール
+> **補足: `role="alert"` を後挿入で使うときの注意**: `role="alert"` を持つ要素は **live region** として扱われ、内容が更新されるとスクリーンリーダーが即座に読み上げます。ただし、エラー発生時に `<p role="alert">` を **新しく描画** する形（上のコードのように `{error && <p role="alert">...}` で出し入れする形）は、SR 実装によっては読み上げが発火しないことがあります。確実に通知したいときは「常設の `<div role="alert">` を空で置いておき、中身だけ差し替える」「`aria-live="assertive"` を併記する」形を検討します。
+
+### 手順 3: テストを書く
+
+`src/UsersList.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { http, HttpResponse } from "msw";
+import { server } from "./mocks/server";
+import { UsersList } from "./UsersList";
+
+describe("UsersList", () => {
+  it("最初は読み込み中を表示する", () => {
+    render(<UsersList />);
+    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+  });
+
+  it("読み込みが終わるとユーザーを並べる", async () => {
+    render(<UsersList />);
+
+    expect(await screen.findByText("Alice")).toBeInTheDocument();
+    expect(screen.getByText("Bob")).toBeInTheDocument();
+  });
+
+  it("エラー時はエラーメッセージを表示する", async () => {
+    server.use(
+      http.get("https://api.example.com/users", () => {
+        return new HttpResponse(null, { status: 500 });
+      })
+    );
+
+    render(<UsersList />);
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
+  });
+});
+```
+
+### 手順 4: 実行
 
 ```bash
-npm install -D @playwright/test
-npx playwright install
+npm run test
 ```
 
-### 手順 3: 設定ファイル
-
-`playwright.config.ts`:
-
-```ts
-import { defineConfig } from "@playwright/test";
-
-export default defineConfig({
-  testDir: "./e2e",
-  use: {
-    baseURL: "http://localhost:5173",
-    trace: "on-first-retry",
-  },
-  webServer: {
-    command: "npm run dev",
-    url: "http://localhost:5173",
-    reuseExistingServer: !process.env.CI,
-  },
-});
-```
-
-`package.json` の scripts に追加:
-
-```json
-{
-  "scripts": {
-    "e2e": "playwright test",
-    "e2e:ui": "playwright test --ui"
-  }
-}
-```
-
-### 手順 4: テストを書く
-
-`e2e/sample.spec.ts`:
-
-```ts
-import { test, expect } from "@playwright/test";
-
-test("トップに Home の見出しが表示される", async ({ page }) => {
-  await page.goto("/");
-  await expect(page.getByRole("heading", { name: "Home" })).toBeVisible();
-});
-
-test("About リンクで /about に遷移する", async ({ page }) => {
-  await page.goto("/");
-  await page.getByRole("link", { name: "About" }).click();
-  await expect(page).toHaveURL("/about");
-  await expect(page.getByRole("heading", { name: "About" })).toBeVisible();
-});
-
-test("フォーム送信で挨拶が表示される", async ({ page }) => {
-  await page.goto("/");
-  await page.getByLabel("お名前").fill("Alice");
-  await page.getByRole("button", { name: "送信" }).click();
-  await expect(page.getByText("こんにちは、Alice さん")).toBeVisible();
-});
-```
-
-### 手順 5: 実行
-
-UI モードで動きを見ながら:
-
-```bash
-npm run e2e:ui
-```
-
-CI / 自動実行用（ヘッドレス）:
-
-```bash
-npm run e2e
-```
+3 件すべて緑になれば成功です。
 
 ### 期待出力
 
-UI モードでは画面右側にテスト一覧、中央にブラウザのプレビューが出ます。各テストをクリックすると、各ステップごとの DOM スナップショットが時系列で見られます。
-
-ヘッドレスでは:
-
 ```
-Running 3 tests using 1 worker
+ PASS  src/UsersList.test.tsx (3)
+   PASS  最初は読み込み中を表示する
+   PASS  読み込みが終わるとユーザーを並べる
+   PASS  エラー時はエラーメッセージを表示する
 
-  ok 1 [chromium] › sample.spec.ts:4:1 › トップに Home の見出しが表示される
-  ok 2 [chromium] › sample.spec.ts:9:1 › About リンクで /about に遷移する
-  ok 3 [chromium] › sample.spec.ts:16:1 › フォーム送信で挨拶が表示される
-
-3 passed (3.5s)
+ Test Files  1 passed (1)
+      Tests  3 passed (3)
 ```
 
 ### 変える
 
-- `<button>送信</button>` の `<button>` を `<div onclick="...">` に変えてみる。テストの `getByRole("button", ...)` が要素を見つけられず fail する。a11y 的に正しいタグ選びがテストにも効くと体感
-- `playwright.config.ts` の `webServer.command` を `npm run preview` に変えてみる（本番ビルド済みを配信するモード）。本番ビルドで E2E を回せる
-- 失敗するテストを 1 つ作って、`trace.zip` が生成されることを確認。`npx playwright show-trace trace.zip` で再生
+- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
+- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
+- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
 
 ### 自分で書く
 
-- 「フォームを空のまま送信しても挨拶が出ない」テストを足す
-- `page.getByLabel("お名前")` を `page.locator("input")` のような **実装に依存したセレクタ** に変えてみる。動くが、`<input>` が複数あったら壊れる、という弱さを体感
-
-### codegen を試す（任意）
-
-サーバーを `npm run dev` で別ターミナルから起動した状態で:
-
-```bash
-npx playwright codegen http://localhost:5173
-```
-
-ブラウザが立ち上がるので、リンクをクリックしたりフォームに入力したりすると、横のパネルにテストコードが自動生成されます。コピペして `e2e/auto.spec.ts` を作ってみると、自分で書いたものとの違いが見られます。
+- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
+- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
+- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
 
 ## まとめ
 
-- E2E は本物のブラウザでアプリ全体を動かすテスト。**最重要パスだけ** に絞る
-- **Playwright** は 3 ブラウザを 1 API で扱える、自動待機 / トレース / codegen 完備
-- 設定は `playwright.config.ts` の `webServer` で `npm run dev` の自動起動が定番
-- API は Testing Library と似た書き味（`getByRole` / `getByLabel`）
-- アサーションも `expect(...).toBeVisible()` 等が自動リトライ
-- **UI モード** で対話的にデバッグ、**codegen** で操作を録画してテストコード生成
-- 失敗時の **トレース** で CI のエラーをローカル再現
-- MSW のハンドラは E2E でも流用可（本格運用での節約パターン）
-- ローディング表示には `role="status"` または `aria-busy="true"` を付け、`getByRole('status')` で待ち合わせると、見た目が変わってもテストが安定する
+- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
+- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
+- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
+- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
+- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
+- テストごとに `server.use(...)` でハンドラを上書きできる
+- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
+- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知

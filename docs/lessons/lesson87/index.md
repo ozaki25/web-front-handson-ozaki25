@@ -1,220 +1,225 @@
-# lesson87: Tailwind CSS の紹介
+# lesson87: 環境変数の基本
 
 ## ゴール
 
-- Tailwind CSS v4 の存在と基本的な使い方を知る
-- 本コースの「素の CSS で書く」方式との違いを説明できる
-- Next.js プロジェクトに Tailwind v4 を導入する手順を観察できる
-- 本コースを終えた後の「次のステップ」として判断できる
+- `.env.local` に環境変数を書いて `process.env` から読める
+- `NEXT_PUBLIC_` プレフィックスの意味を理解する
+- Server Component と Client Component で **読める変数が違う** ことを体感する
+- `.env.local` が `.gitignore` に入っている前提を知る
 
 ## 解説
 
-### 本コースのスタンス
+### なぜ環境変数か
 
-ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
+アプリには「環境ごとに変えたい値」があります。
 
-一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
+- ローカル開発では `http://localhost:3000` の API、本番では `https://api.example.com` の API を叩きたい
+- 開発用のテスト API キー、本番用のリリース API キー
+- 機能フラグ（開発では有効、本番では無効）
 
-**本コースの結論**: 「Tailwind は **次のステップ** として学ぶ選択肢」。本コースの自己紹介 / TODO プロジェクトには **持ち込みません**。
+これをコード本体に直接書くと、環境を変えるたびにコード修正 → デプロイが必要になり、シークレット（秘密鍵）の場合はリポジトリに漏れる危険もあります。
 
-### Tailwind CSS とは
+そこで、**環境変数**（Environment Variables）として外に出します。Next.js では `.env.local` というファイルに書く形が標準です。
 
-Tailwind は **ユーティリティファースト** の CSS フレームワークです。`margin: 16px` のような個別のスタイルをコード上に書かず、`m-4` のような短いクラス名を HTML に重ねて見た目を作ります。
+### `.env.local` の書き方
 
-素の CSS で書いたコード:
+プロジェクトルート直下に `.env.local` を作り、`KEY=VALUE` の形で書きます。
 
-```html
-<div class="card">
-  <h2 class="card-title">タイトル</h2>
-  <p class="card-body">本文</p>
-</div>
+```
+NEXT_PUBLIC_APP_NAME=My Todo App
+APP_SECRET=super-secret-value
 ```
 
-```css
-.card {
-  padding: 16px;
-  background: white;
-  border-radius: 8px;
-}
-.card-title {
-  font-size: 1.25rem;
-  font-weight: bold;
-}
-.card-body {
-  color: #666;
-}
+- 1 行 1 変数、`=` の左右にスペース不要
+- クォートは不要（ただし空白を含むならクォートも可）
+- ファイル末尾に改行を入れておく
+
+**`.env.local` は `.gitignore` に入っている** のがデフォルト（`create-next-app` で作ったプロジェクトはこうなっています）。シークレットがリポジトリに入らない仕組みです。
+
+### 読み方は `process.env.XXX`
+
+コード側から読むときは、`process.env` オブジェクトを使います。
+
+```ts
+const name = process.env.NEXT_PUBLIC_APP_NAME; // "My Todo App"
+const secret = process.env.APP_SECRET;          // "super-secret-value"（サーバー側のみ）
 ```
 
-Tailwind で書くと:
+戻り値は常に `string | undefined`（TS の型）。値が無ければ `undefined` です。
 
-```html
-<div class="p-4 bg-white rounded-lg">
-  <h2 class="text-lg font-bold">タイトル</h2>
-  <p class="text-gray-600">本文</p>
-</div>
+### `NEXT_PUBLIC_` プレフィックスの意味
+
+Next.js には重要なルールがあります。
+
+> **`NEXT_PUBLIC_` で始まる変数だけが、Client Component からも読める。**
+> **それ以外の変数は、Server Component・Route Handlers・Server Actions からしか読めない。**
+
+なぜか:
+
+- **サーバー側のみ** = ブラウザに配信される JS に値が入らない。シークレットを隠せる
+- **`NEXT_PUBLIC_` 付き** = ビルド時にクライアント JS に値が埋め込まれる。公開しても構わない値だけ付ける
+
+逆に言うと、`NEXT_PUBLIC_` で始まる変数は **ブラウザのソースを開けば全員が見える** ので、シークレットには絶対に付けません。
+
+### `NEXT_PUBLIC_` の値は「一度公開したら取り消せない」
+
+`NEXT_PUBLIC_` で始まる値は **ビルド時に JS バンドルへ焼き込まれて配信されます**。これが意味するのは:
+
+- **CDN / ブラウザキャッシュ / Service Worker** に値が残り、デプロイをロールバックしても回収できない
+- **Git の履歴に `.env.local` を誤って commit してしまった場合**、後から削除しても commit ハッシュをたどれば閲覧可能（force push と git history 削除も完全ではない）
+- **リファラ / アクセスログ / 第三者の Web Archive** に URL ごと値が残ることもある
+
+そのため、誤って `NEXT_PUBLIC_API_SECRET=...` のようにシークレットを付けてしまったら、**まずそのキーを発行元でローテート（無効化＋再発行）するのが優先**です。コード修正 / デプロイで取り消すことはできません。
+
+### 命名の指針
+
+- 公開しても困らない（URL、アプリ名、GA トラッキング ID など）: `NEXT_PUBLIC_` を付ける
+- 公開すると困る（API キー、DB 接続文字列、JWT の秘密鍵など）: プレフィックスなし
+
+### `server-only` でシークレットの漏洩を防ぐ
+
+`NEXT_PUBLIC_` を付けない変数はサーバー専用ですが、そのモジュールを誤って Client Component から import してしまってもビルド時にはエラーが出ません。`server-only` パッケージはこの穴を塞ぎます。
+
+```ts
+// lib/db.ts
+import "server-only";
+
+export const db = /* DB クライアント（環境変数で接続文字列を読む）*/;
 ```
 
-CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た目を組み立てます。
+これを Client Component から import しようとすると、**ビルド時にエラー** になります。`import "server-only"` の 1 行が「このモジュールはサーバーでしか使えない」という宣言になります。DB クライアントや、シークレットを読む関数を書くファイルの先頭に入れておくと、誤 import を仕組みで防げます。
 
-長所:
-
-- クラス名の衝突がない（`.card` の名前を考えなくてよい）
-- 小さな変更が HTML 内で完結する
-- VS Code 拡張で補完が強い
-
-短所:
-
-- クラス名が長くなる
-- 「なぜこのプロパティなのか」が CSS の知識無しだと理解しづらい（だから本コースでは素の CSS から学んだ）
-
-### Tailwind v4 の特徴（2025 年 GA）
-
-本レッスンは **Tailwind v4** 準拠で紹介します。v3 から **設定方法が大きく変わった** ため、古い記事のコピペは通用しません。
-
-主な変更点:
-
-- **CSS ファイル 1 行で導入**:
-  ```css
-  @import "tailwindcss";
-  ```
-  v3 の `@tailwind base; @tailwind components; @tailwind utilities;` の 3 行は廃止
-- **`init` コマンド廃止**: v3 の `npx tailwindcss init -p` で `tailwind.config.ts` を生成する手順は不要
-- **PostCSS プラグイン名の変更**: `postcss.config.mjs` に `@tailwindcss/postcss` を指定する
-- **Vite 用プラグイン**: Vite プロジェクトでは `@tailwindcss/vite`（PostCSS 経由ではない）
-- **パフォーマンス大幅改善**: ビルドが高速、開発時のホットリロードも速い
-
-`create-next-app --tailwind` で新規プロジェクトを作ると、デフォルトで Tailwind v4 の設定が入ります。古いチュートリアルを見る前に、まずは `create-next-app` 生成物を観察するのが確実です。
+インストールは `npm install server-only`。
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
+このレッスンは比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。`.env.local` と `app/env-test/` 配下の 2 ファイルを新規作成するだけです。
 
 ### ゴール
 
-- `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
-- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
-
-**本コースのプロジェクトには持ち込まない**（素の CSS 資産を壊さないため）。別プロジェクトで観察するだけで十分。
+- `.env.local` に 2 種類の変数を書く
+- Server Component と Client Component からそれぞれ読み、**プレフィックスなしの変数は Client では `undefined` になる** ことを体感する
+- 本番（Vercel）での設定は「Vercel にデプロイする」でまとめて扱う
 
 ### 手順
 
-1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
-2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
-3. プロジェクト内の以下のファイルを観察する
-   - `app/globals.css`
-   - `postcss.config.mjs`（または `.js`）
-   - `package.json` の `devDependencies`
-4. 任意で、`app/page.tsx` にユーティリティクラスを 1〜2 個書いてみる（`@theme` などカスタマイズは扱わない）
+1. 5 章 の既存プロジェクトを開く（どれでも可）
+2. プロジェクトルートに `.env.local` を新規作成
+3. 新しいページ `app/env-test/page.tsx`（Server Component）と `app/env-test/ClientView.tsx`（Client Component）を作る
+4. プレビューで両方を比較
 
-### `app/globals.css`（観察対象）
+### `.env.local`（プロジェクトルート直下）
 
-Tailwind v4 の導入は、CSS ファイル冒頭に **この 1 行だけ**:
-
-```css
-@import "tailwindcss";
+```
+NEXT_PUBLIC_APP_NAME=私の TODO アプリ
+APP_SECRET=super-secret-value
 ```
 
-v3 の時代は 3 行書いていました:
+`.env.local` を編集した後は **開発サーバーを再起動** する必要があります（StackBlitz なら自動再起動、ローカルなら `Ctrl+C` → `npm run dev`）。
 
-```css
-/* v3（古い、書かない） */
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
-```
-
-v4 では `@import "tailwindcss";` に統合されています。
-
-### `postcss.config.mjs`（観察対象）
-
-```js
-const config = {
-  plugins: {
-    "@tailwindcss/postcss": {},
-  },
-};
-export default config;
-```
-
-v3 で必要だった `autoprefixer` は **v4 ではプラグイン内に内蔵** されたため、別途書かなくて済むようになりました。
-
-### `package.json` の `devDependencies`（観察対象）
-
-```json
-{
-  "devDependencies": {
-    "@tailwindcss/postcss": "^4.0.0",
-    "tailwindcss": "^4.0.0"
-  }
-}
-```
-
-`tailwind.config.ts` は **v4 では原則不要**（デフォルト設定で十分）。カスタマイズしたい場合は CSS 内で `@theme { ... }` を書く方式に変わりました。本レッスンでは `@theme` の深掘りはしません。
-
-### 小さく試す（参考 — 任意）
-
-本コースのプロジェクトには持ち込まないため、この演習は完全に任意です。
-
-生成されたプロジェクトの `app/page.tsx` を次のように書き換えて、Tailwind v4 のデフォルトパレットを試せます。
+### `app/env-test/page.tsx`（Server Component）
 
 ```tsx
-export default function Page() {
+import { ClientView } from "./ClientView";
+
+export default function EnvTestPage() {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME;
+  const secret = process.env.APP_SECRET;
+
   return (
-    <main className="p-8 max-w-xl mx-auto">
-      <h1 className="text-3xl font-bold text-slate-800">Tailwind v4 の練習</h1>
-      <p className="mt-4 text-slate-600">
-        素の CSS なしで、クラス名だけで見た目を組み立てている。
-      </p>
-      <button className="mt-6 px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 transition">
-        ボタン
-      </button>
+    <main>
+      <h1>環境変数のテスト</h1>
+
+      <section>
+        <h2>Server Component から読む</h2>
+        <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
+        <p>APP_SECRET = {secret ?? "(undefined)"}</p>
+      </section>
+
+      <ClientView />
     </main>
   );
 }
 ```
 
-- `p-8`（padding 2rem）、`max-w-xl`（max-width）、`mx-auto`（水平中央寄せ）
-- `text-3xl`（フォントサイズ）、`font-bold`（太字）
-- `bg-blue-500`（背景色）、`hover:bg-blue-600`（hover 状態）、`transition`（遷移アニメ）
+### `app/env-test/ClientView.tsx`（Client Component）
 
-1 章で学んだ CSS の概念（margin、padding、font-size、color、transition）が、**Tailwind のクラス名に対応している** ことが分かります。本コースで CSS の仕組みを先に押さえたのが効いてきます。
+```tsx
+"use client";
+
+export function ClientView() {
+  const appName = process.env.NEXT_PUBLIC_APP_NAME;
+  const secret = process.env.APP_SECRET;
+
+  return (
+    <section>
+      <h2>Client Component から読む</h2>
+      <p>NEXT_PUBLIC_APP_NAME = {appName ?? "(undefined)"}</p>
+      <p>APP_SECRET = {secret ?? "(undefined)"}</p>
+    </section>
+  );
+}
+```
 
 ### 期待出力
 
-- 生成されたプロジェクトで、`@import "tailwindcss";` 1 行で Tailwind が動いていることを確認
-- `app/page.tsx` にユーティリティクラスを書くと、即座にスタイルが適用される
-- `tailwind.config.ts` が無いことを確認（デフォルトで動く）
+`/env-test` にアクセスすると、次のような表示になります。
 
-### 本コースのプロジェクトに入れない理由
+- **Server Component から読む**
+  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
+  - `APP_SECRET = super-secret-value`
+- **Client Component から読む**
+  - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
+  - `APP_SECRET = (undefined)` ← **ここが重要**
 
-本コースの自己紹介 / TODO プロジェクトには **Tailwind を持ち込みません**。理由:
+`APP_SECRET` は Client 側では読めません。これが「サーバー専用の変数」と「クライアントに公開される変数」の違いを体感する瞬間です。
 
-- これまで素の CSS で書いた資産（`.site-header`、`.cards`、`.card` など）が多い
-- Tailwind に置き換えるには全 JSX を書き直す必要がある
-- 「学ぶ手段」として Tailwind を見るだけなら、別プロジェクトで十分
+### さらに確認: ブラウザのソースを見る
 
-本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
+1. `/env-test` を開いた状態で、ブラウザで「ページのソースを表示」
+2. HTML ソース内で `super-secret-value` を検索 → **見つからない**（Client Component のバンドル JS にも含まれない）
+3. `私の TODO アプリ` を検索 → 見つかる（`NEXT_PUBLIC_` なのでクライアントに配信されている）
 
-### 変える（任意）
+シークレットが本当に漏れない仕組みになっていることを確認できます。
 
-任意。本コースのプロジェクトへの適用は不要です。
+### 変える
 
-- 生成した Tailwind プロジェクトで `bg-blue-500` を `bg-green-500` / `bg-red-500` に変えて色の組を観察
-- `hover:` や `md:` などのプレフィックス（状態・ブレークポイント）を使ってみる
+- `APP_SECRET` の名前を `NEXT_PUBLIC_APP_SECRET` に変えると、Client 側でも読めるようになる（が、シークレットを付けるのは NG）
+- 新しい変数 `NEXT_PUBLIC_API_URL=https://jsonplaceholder.typicode.com` を追加し、Client 側で `fetch(process.env.NEXT_PUBLIC_API_URL + "/posts")` して動作確認
 
-### 自分で書く（挑戦）
+### 自分で書く
 
-任意。本コースのプロジェクトへの適用は不要です。
+- `NEXT_PUBLIC_GA_ID`（Google Analytics の ID 仮置き、`G-XXXXXX` のような値）を追加し、Server Component のレイアウトに表示する
+- `DB_URL=postgres://user:pass@localhost/mydb` を追加し、Server Component でだけ表示する（Client に漏れないことを確認）
 
-- Tailwind のドキュメントを少し読み、カードのレイアウトを Tailwind で書き直す
-- 書き終えたら、1 章 の「Flexbox とレスポンシブ」で書いた素の CSS 版と見比べて **同じ見た目をどう表現しているか** 対比する
+### 本番対比の予告
+
+ローカルの `.env.local` は開発マシン上にしかありません。本番環境（Vercel）では、**Vercel ダッシュボードで同名の環境変数を設定** してデプロイします。その手順は **「Vercel にデプロイする」** でまとめて扱います。
+
+本番でも `process.env.NEXT_PUBLIC_APP_NAME` で同じように読める、という点だけ先に知っておいてください。
+
+### 環境ごとに値を分ける（Production / Preview / Development）
+
+Vercel など主要なホスティングでは、環境変数を **Production / Preview / Development の 3 つ** に分けて設定できます。実務ではこの 3 つに **別々の値** を入れるのが定石です。
+
+- **Production**: 本番ドメイン（`https://my-app.com`）で読み込まれる値
+- **Preview**: PR ごとに作られるプレビュー URL（`https://my-app-pr-42.vercel.app` のような）で読み込まれる値
+- **Development**: ローカルの `.env.development.local` で読み込まれる値（個人開発機向け）
+
+たとえば DB やアナリティクス、フィーチャーフラグの SDK key は **Preview と Production で別の環境** を指すように設定します。同じ値を使い回すと、
+
+- Preview の動作確認が **本番 DB のデータを書き換える事故** を起こす
+- A/B テスト・アナリティクスの計測値に **開発者の挙動が混ざる**
+- 本番フラグを **誤って Preview から ON にしてしまう**
+
+といった事故になります。Vercel なら `Settings → Environment Variables` で各変数に対して **適用環境にチェックを入れる** UI があるので、新規追加時は「3 つ全部にチェック」ではなく **環境ごとに必要な値を分ける** ことを意識してください。
 
 ## まとめ
 
-- Tailwind は「ユーティリティファースト」の CSS、クラス名だけで見た目を作る
-- v4（2025 GA）は `@import "tailwindcss";` 1 行で導入、`init` コマンドや `tailwind.config.ts` は原則不要
-- `create-next-app --tailwind` でデフォルトで v4 がセットアップされる
-- 本コースの自己紹介 / TODO プロジェクトには持ち込まない（素の CSS 資産を壊さないため）
-- 学ぶ意義を感じたら、本コース完走後に次のステップとして挑戦する
+- 環境変数は `.env.local` に `KEY=VALUE` で書く
+- `process.env.XXX` で読む。戻り値は `string | undefined`
+- **`NEXT_PUBLIC_` 付きはクライアントに配信される**、それ以外はサーバー専用
+- シークレットには絶対に `NEXT_PUBLIC_` を付けない
+- `.env.local` はデフォルトで `.gitignore`。リポジトリに入らない

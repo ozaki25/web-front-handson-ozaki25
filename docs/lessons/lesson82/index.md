@@ -1,117 +1,207 @@
-# lesson82: useFormStatus で送信中を無効化する
+# lesson82: useActionState でフォームエラーを返す
 
 ## ゴール
 
-- `useFormStatus` を `react-dom` から import し、送信中に `pending: true` になることを確認できる
-- `<form>` の子孫コンポーネントの中からのみ呼べる制約を説明できる
-- `useActionState`（`react`）と `useFormStatus`（`react-dom`）の import 元の違いを覚えられる
+- `useActionState` のシグネチャ `[state, formAction] = useActionState(action, initialState)` を理解する
+- `addTodo` の戻り値を判別共用体（`{ ok: true } | { ok: false; error: string }`）で返し、`state.error` を画面に表示できる
+- `useActionState` は `react` から import することを理解する
 
 ## 解説
 
-### なぜ送信中に `disabled` にするか
+### なぜエラー用のフックが必要か
 
-フォームを送信してサーバーが応答を返すまでの間、ユーザーが「追加」ボタンを連打できます。ネットワーク遅延があるときほど起きやすく、同じ TODO が重複して登録される原因になります。
+「Server Actions の最小形」の `addTodo` は、空入力のとき「何もしない」で終わりでした。これではユーザーに「空だから弾いた」ことが伝わりません。
 
-送信中にボタンを `disabled` にしておけば、ユーザーは物理的に連打できなくなります。これが **二重送信防止** の基本的な UI 側の対策です。
+エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
-> **補足**: UI 側の対策だけでは完全ではありません。ネットワーク断後の手動再送など、UI をバイパスした経路もあります。本番では Server 側でも冪等性（べきとうせい: 同じ操作を何回送っても結果が変わらない性質）を担保するのが作法です。このレッスンでは UI 側の対策を実装します。
+### `useActionState` のシグネチャ
 
-### `useFormStatus` は `<form>` の子孫で呼ぶ
-
-React DOM が提供するフック `useFormStatus` は、「自分が属している `<form>` の送信状態」を返します。
-
-**重要な制約**: `<form>` を return しているコンポーネント自身の中では呼べません。その `<form>` の**子孫コンポーネント**の中で呼ぶ必要があります。
-
-```tsx
-// これは動かない: <form> を返しているコンポーネント自身で呼んでいる
-export function TodoForm() {
-  const [state, formAction] = useActionState(addTodo, initialState);
-  const { pending } = useFormStatus(); // 常に pending: false になる
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" />
-      <button type="submit" disabled={pending}>追加</button>
-    </form>
-  );
-}
-```
-
-```tsx
-// これが正しい: <form> の子コンポーネントの中で呼ぶ
-function SubmitButton() {
-  const { pending } = useFormStatus(); // 正しく pending が取れる
-  return <button type="submit" disabled={pending}>追加</button>;
-}
-
-export function TodoForm() {
-  const [state, formAction] = useActionState(addTodo, initialState);
-  return (
-    <form action={formAction}>
-      <input type="text" name="text" />
-      <SubmitButton />
-    </form>
-  );
-}
-```
-
-### なぜ `SubmitButton` を分けるのか
-
-本質は「**`<form>` の子孫コンポーネントであること**」だけで、別ファイルである必要はありません。同じファイル内に `function SubmitButton() {...}` として置いても、`<form>` の中で `<SubmitButton />` として呼べば子孫として扱われ、`useFormStatus` は正しく動きます。
-
-このレッスンでは見通しと再利用性のために `app/todos/SubmitButton.tsx` という別ファイルに切り出します。「別ファイルにしないと動かない」と誤解しないように。
-
-### import 元の違い
-
-| フック | import 元 | 用途 |
-|---|---|---|
-| `useActionState` | `react` | フォームの状態管理 |
-| `useFormStatus` | `react-dom` | 送信中の状態取得 |
-
-見た目が似ていますが import 元が違います。間違えると「そんな export はない」というエラーが出ます。
-
-## 演習
-
-lesson81 で作った `TodoForm.tsx` を起点に進めます。lesson81 の演習が完了していることを前提にします。
-
-### 手順の進め方
-
-このレッスンは **2 つのファイル**（`app/todos/SubmitButton.tsx` の新規作成 / `app/todos/TodoForm.tsx` の書き換え）で完結します。`app/todos/page.tsx` と `app/actions.ts` は変更不要です。
-
-### 手順 1: `SubmitButton.tsx` を新規作成する
-
-`app/todos/SubmitButton.tsx` を新規作成します。
+**import 元に注意**: `useActionState` は **`react`** から import します。`react-dom` ではありません。逆にすると「そんな export はない」というエラーになります。
 
 ```tsx
 "use client";
 
-import { useFormStatus } from "react-dom";
+import { useActionState } from "react";
+import { addTodo } from "./actions";
 
-export function SubmitButton() {
-  const { pending } = useFormStatus();
+type AddTodoState = { error?: string };
+
+const initialState: AddTodoState = {};
+
+const [state, formAction] = useActionState(addTodo, initialState);
+```
+
+- 第 1 引数: **action**（Server Action の関数）
+- 第 2 引数: **初期状態**
+- 戻り値: `[state, formAction]` の 2 要素タプル（第 3 要素として `isPending` も返りますが、このレッスンでは使いません）
+
+引数の順に注意してください。**action が第 1 引数**、初期状態が第 2 引数です。逆にしないでください。
+
+戻り値の中身:
+
+- `state`: 現在のアクション戻り値（`action` が最後に `return` したもの）。初回は `initialState` です。
+- `formAction`: **`<form action={formAction}>` に渡す**、ラップ済みの関数です。元の action ではなくこちらを渡します。
+
+### Server Action のシグネチャを変える
+
+`useActionState` を使う場合、Server Action は **`(prevState, formData) => newState`** の形に変える必要があります。
+
+```ts
+"use server";
+
+export async function addTodo(
+  prevState: AddTodoState,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return {};
+}
+```
+
+- 第 1 引数が `prevState`（前回のアクションの戻り値）です。使わなくても受け取る必要があります。
+- 第 2 引数が `FormData` です。
+- 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
+
+「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
+
+### 判別共用体で返す
+
+戻り値を `{ ok: true } | { ok: false; error: string }` の型にすることで、成功・失敗を TypeScript が区別して扱えます。
+
+```ts
+export type AddTodoState =
+  | { ok: true }
+  | { ok: false; error: string };
+```
+
+この設計では `state.ok` で分岐し、`state.ok === false` のときだけ `state.error` にアクセスできます。TypeScript が型を絞り込んでくれるので、`state.error` の存在チェックが不要になります。
+
+## 演習
+
+### 途中から始める場合
+
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
+
+<details>
+<summary>出発点のファイル</summary>
+
+**`app/types.ts`**
+
+```ts
+export type Todo = {
+  id: string;
+  text: string;
+};
+```
+
+**`app/actions.ts`**
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export async function addTodo(formData: FormData): Promise<void> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) return;
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+}
+```
+
+**`app/todos/page.tsx`**
+
+```tsx
+import { addTodo, listTodos } from "../actions";
+
+export default async function TodosPage() {
+  const todos = await listTodos();
+
   return (
-    <button type="submit" disabled={pending}>
-      {pending ? "送信中..." : "追加"}
-    </button>
+    <>
+      <h1>TODO 一覧</h1>
+      <form action={addTodo}>
+        <input type="text" name="text" placeholder="やることを入力" />
+        <button type="submit">追加</button>
+      </form>
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
   );
 }
 ```
 
-ポイント:
+</details>
 
-- **`useFormStatus` は `react-dom` から import** します（`react` ではありません）。
-- `disabled={pending}` で送信中にボタンを操作不能にします。
-- `{pending ? "送信中..." : "追加"}` でラベルも変えます。
+### 手順の進め方（重要）
 
-### 手順 2: `TodoForm.tsx` の `<button>` を差し替える
+本レッスンは **2 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 をすべて終わらせてから、はじめてプレビューを確認する** のが安全です。
 
-`app/todos/TodoForm.tsx` を書き換えます。
+途中で保存すると HMR が走り、エラー画面が出ることがあります。これは中間状態のため正常です。**エラーが出ても慌てず、手順 2 まで一気に進めてください**。
+
+### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
+
+`app/actions.ts` を書き換えます。
+
+```ts
+"use server";
+
+import { revalidatePath } from "next/cache";
+import type { Todo } from "./types";
+
+const todos: Todo[] = [];
+
+export async function listTodos(): Promise<Todo[]> {
+  return todos;
+}
+
+export type AddTodoState =
+  | { ok: true }
+  | { ok: false; error: string };
+
+export async function addTodo(
+  prevState: AddTodoState | undefined,
+  formData: FormData,
+): Promise<AddTodoState> {
+  const text = String(formData.get("text") ?? "").trim();
+  if (text.length === 0) {
+    return { ok: false, error: "空のままでは追加できません" };
+  }
+  todos.push({ id: crypto.randomUUID(), text });
+  revalidatePath("/todos");
+  return { ok: true };
+}
+```
+
+- 戻り値を `AddTodoState` 型にし、成功時は `{ ok: true }`、失敗時は `{ ok: false, error: "..." }` を返します。
+- `prevState` は受け取りますが今回は使いません（それで OK です）。
+
+### 手順 2: フォームを Client Component に切り出す
+
+`useActionState` は Client Component のフックなので、フォーム部分だけを別ファイルに分離します。
+
+`app/todos/TodoForm.tsx` を新規作成します。
 
 ```tsx
 "use client";
 
 import { useActionState } from "react";
 import { addTodo, type AddTodoState } from "../actions";
-import { SubmitButton } from "./SubmitButton";
 
 const initialState: AddTodoState = { ok: true };
 
@@ -121,62 +211,93 @@ export function TodoForm() {
   return (
     <form action={formAction}>
       <input type="text" name="text" placeholder="やることを入力" />
-      <SubmitButton />
+      <button type="submit">追加</button>
       {state.ok === false && <p className="error">{state.error}</p>}
     </form>
   );
 }
 ```
 
-変更点は `<button type="submit">追加</button>` を `<SubmitButton />` に差し替えただけです。`useActionState` の使い方は lesson81 と同じです。
+ポイント:
 
-### 期待出力
+- 1 行目 `"use client"` です。
+- **`useActionState` は `react` から import** します（`react-dom` ではありません）。
+- `<form action={formAction}>` に渡すのは **`formAction`** です（`addTodo` ではありません）。
+- `state.ok === false` のときだけ `<p>` にエラーを表示します。判別共用体のおかげで TypeScript が `state.error` の存在を保証します。
 
-- **成功時**: 「追加」ボタンを押すと、一瞬ボタンがグレーアウトしてラベルが「送信中...」に変わり、応答後にボタンが復帰し、入力した文字が一覧に追加される。
-- **空のまま送信**: 一瞬「送信中...」になった後、ボタンが復帰し `<p className="error">` のエラーメッセージが表示される。
-- ネットワークが速い環境では変化が一瞬すぎて見えないこともあります。確認のしかた:
-  1. StackBlitz の場合はプレビュー右上の「Open in New Tab」でプレビューを別タブに開く（埋め込みでは DevTools が開けない）
-  2. 別タブで `F12`（macOS は `Cmd + Option + I`）で DevTools を開く
-  3. **Network** タブを開き、上部の「No throttling」ドロップダウンから **Slow 3G** を選ぶ
-  4. フォームを送信。「送信中...」が数秒間表示されるのを目視できるはず
+### 手順 3: `/todos` ページで差し替える
 
-### よくある間違い
+`app/todos/page.tsx` の `<form>` を `<TodoForm />` に差し替えます。
 
-- `useFormStatus` を `react` から import して「export がない」エラーになる → `react-dom` から import します。
-- `TodoForm` コンポーネント自身の中で `useFormStatus()` を呼んで `pending` が常に `false` になる → `<form>` の子孫コンポーネントに切り出して呼びます。
-- `<SubmitButton>` に `"use client"` を付け忘れる → フックを使うコンポーネントには `"use client"` が必要です。
+```tsx
+import { listTodos } from "../actions";
+import { TodoForm } from "./TodoForm";
 
-### 変えてみる
+export default async function TodosPage() {
+  const todos = await listTodos();
 
-1. `SubmitButton` の「送信中...」の文言を自分の好きな表現に変えましょう（「追加中です」「お待ちください」など）。
-2. `pending` のとき `aria-busy={true}` を button に付けてみましょう。これは画面上の見た目は変わらず、スクリーンリーダー（VoiceOver / NVDA など）が「処理中」と読み上げるようになる属性です。視覚での確認は不要なので、属性が付くことだけ DevTools の Elements タブで確認できれば OK。
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <TodoForm />
+      <ul>
+        {todos.map((todo) => (
+          <li key={todo.id}>{todo.text}</li>
+        ))}
+      </ul>
+    </>
+  );
+}
+```
 
-### 自分で書く
+`page.tsx` は Server Component のままです。Client の `TodoForm` を呼ぶだけなので `"use client"` は不要です。
 
-`SubmitButton` に CSS を追加して、`disabled` 状態のときに視覚的に「押せない」ことが分かるようにしましょう。
+### 手順 4: エラー用の CSS
+
+`app/globals.css` にエラー表示のスタイルを追加します。
 
 ```css
-button:disabled {
-  cursor: not-allowed;
-  background-color: #9ca3af; /* gray-400 */
-  color: #ffffff;
+.error {
+  color: #c00;
+  background: #ffe8e8;
+  padding: 0.5rem;
+  border-radius: 4px;
 }
 
 @media (prefers-color-scheme: dark) {
-  button:disabled {
-    background-color: #4b5563; /* gray-600 */
-    color: #d1d5db; /* gray-300 */
+  .error {
+    color: #ffb0b0;
+    background: #4a1d1d;
   }
 }
 ```
 
-これを `app/globals.css` に追記して、ライト / ダーク両方で文字が読めることを確認してください。`opacity: 0.5` で薄くする方法もありますが、ダークモードの背景色によっては文字が読めなくなるため、背景・文字色を明示的に指定するほうが安全です。
+### 期待出力
+
+- `/todos` を開いて、何も入力せずに「追加」を押す → 下に赤文字で「空のままでは追加できません」が表示されます（薄い赤背景）。
+- 「買い物」と入力して「追加」を押す → エラー表示が消え、一覧に「買い物」が追加されます。
+
+### よくある間違い
+
+- `useActionState` を `react-dom` から import しようとして「export がない」エラーになる → `react` から import します。
+- `useActionState(initialState, addTodo)` のように引数を逆にする → 型エラーです。**action が第 1 引数**、初期状態が第 2 引数です。
+- `<form action={addTodo}>` と元の関数を渡す → エラー状態がうまく繋がりません。`<form action={formAction}>` と **ラップ済み** の関数を渡しましょう。
+
+### 変えてみる
+
+1. エラーの種類を増やしましょう: 10 文字以上は「長すぎます」のように、`addTodo` 側の判定を足してみましょう。
+2. `useActionState` の初期状態を `{ ok: false, error: "まずは何か入力してください" }` にして、初期表示でエラーが出る挙動を確認しましょう（確認したら `{ ok: true }` に戻します）。
+3. 成功時に「追加しました」のメッセージを一時的に表示するには、`state.ok === true` かつ 初期状態でない条件を追加してみましょう（ヒント: `AddTodoState` に `justAdded?: boolean` を足す）。
+
+### 自分で書く
+
+「Server Actions の最小形」の「自分で書く」で作った `/memo` ページがあれば、同じ要領で「空入力エラー」に対応させましょう。`addMemo` の引数を `(prevState, formData)` に書き直し、`<MemoForm />` を Client Component として切り出します。
 
 ## まとめ
 
-- `useFormStatus` は `react-dom` から import する
-- `<form>` の子孫コンポーネント内でのみ呼べる（フォーム本体で呼んでも `pending` が取れない）
-- `useActionState`（`react`）は状態管理、`useFormStatus`（`react-dom`）は送信中ステータスの取得と、役割が異なる
-- `SubmitButton` を切り出すことで `useFormStatus` が正しく動き、再利用もしやすくなる
+- `useActionState(action, initialState)` の順番と戻り値 `[state, formAction]` を覚える
+- Server Action は `(prevState, formData) => newState` の形にすると `useActionState` と繋がる
+- 判別共用体（`{ ok: true } | { ok: false; error: string }`）を戻り値の型にすると TypeScript が `state.error` の存在を保証してくれる
+- **`useActionState` は `react` から** import する（`react-dom` ではない）
 
-ここまでで Server Actions（`<form action={...}>` でフォーム送信を Server Component に直結する仕組み）は一区切り。次は同じバックエンド処理を **外部から `fetch` で叩く形** にした「Route Handlers の基本」のレッスンに進みます。
+送信中の UI 無効化は「useFormStatus で送信中を無効化する」で扱います。

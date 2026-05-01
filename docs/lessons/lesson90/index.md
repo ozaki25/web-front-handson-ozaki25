@@ -1,142 +1,297 @@
-# lesson90: Vercel にデプロイする
-
-これまでに作った Next.js プロジェクトを、SNS で共有できる本番 URL として公開します。本レッスンは「自分が StackBlitz で動かしている Next.js アプリを Vercel に乗せる」という **公開フロー** を体験するのが目的で、特定のアプリ内容は前提にしません（過去レッスンの完成品でも、シンプルな Hello World でも構いません）。
+# lesson90: Loading UI と Streaming
 
 ## ゴール
 
-- StackBlitz で作ったプロジェクトを GitHub リポジトリに保存できる
-- そのリポジトリを Vercel に接続して、数十秒でデプロイできる
-- 発行された `https://<project>.vercel.app` の URL をブラウザで開いて動作確認できる
-- 本番の永続化には DB が必要であることを理解し、本コース範囲の割り切りを押さえる
+- `loading.tsx` がどのルートを覆うかを説明でき、配置するだけでローディング UI を挟める
+- 部分的に遅いコンポーネントを `<Suspense fallback={...}>` で囲み、残りを先に表示する Streaming を書ける
+- `loading.tsx` と `error.tsx` の棲み分け（待ち vs 失敗）を区別できる
+- React 19.2 + Next.js 16 の Server Component で Streaming がどう動くかを理解する
 
 ## 解説
 
-### 今までは「自分のブラウザでしか見えない」状態
+### `loading.tsx` の役割
 
-StackBlitz のプレビュー URL は、自分が開いているブラウザ内で動いているものです。他の人に送っても見られません（厳密には StackBlitz の共有 URL で見せることもできますが、ログインやプロジェクトのセットアップが要ります）。
-
-Web アプリを他人に見せるには、**サーバーに置いて公開する** 必要があります。このサーバーを用意するサービスとして、Next.js を最もスムーズに扱えるのが **Vercel** です。Next.js を作っている会社でもあるので、設定項目はほぼゼロで済みます。
-
-### 3 ステップの全体像
-
-以下の 3 つのサービスを繋ぎます。
-
-1. **StackBlitz**: コードを書いている場所です。
-2. **GitHub**: コードを保存する「倉庫」です。バージョン管理と共有のハブです。
-3. **Vercel**: GitHub の倉庫を見張って、変更があると自動でビルド・公開してくれます。
-
-流れはこうです。
+Server Component でデータを取得すると、`await fetch(...)` が終わるまでブラウザには前の画面が残ったり、空白の時間が発生したりします。**`loading.tsx`** を同じディレクトリに置くと、その間に自動で差し込まれるローディング UI になります。
 
 ```
-StackBlitz → GitHub → Vercel → https://<project>.vercel.app
+app/
+└── posts/
+    ├── page.tsx       ← データ取得込みのページ
+    └── loading.tsx    ← 取得中に表示される
 ```
 
-一度繋いでしまえば、以後はコードを更新するたびに自動で反映されます。
+- `loading.tsx` は **ルート全体** のローディングです。`page.tsx` が準備できるまで表示されます
+- Next.js が裏で `<Suspense>` をラップしてくれているので、自分で書く必要はありません
 
-### アカウントが 2 つ必要
+これは「Error Boundary と Suspense」で見た React の `<Suspense>` を、Next.js がルート単位で自動配線したものだと考えると理解しやすいです。
 
-- **GitHub アカウント**: 無料です。既に持っていれば再利用します。
-- **Vercel アカウント**: GitHub でログインできるので、実質 GitHub アカウントだけあれば OK です。
+### ルート単位のローディングだけだと粗い
+
+`loading.tsx` はルート全体に効きます。ページの中に **速く出せる部分** と **遅い部分** が混ざっている場合、全体を待つことになってしまいます。
+
+例: 記事ページに
+
+- 記事本文（速い、キャッシュ済み）
+- 関連記事（遅い、外部 API から取得）
+
+があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
+
+### 部分的 Streaming: `<Suspense>` で囲む
+
+遅い部分だけ `<Suspense>` で個別に囲むと、Next.js は **先に出せるものから順に送信** してくれます。これが Streaming です。
+
+```tsx
+// app/posts/[id]/page.tsx
+import { Suspense } from "react";
+import RelatedPosts from "./RelatedPosts";
+
+export default async function PostPage() {
+  return (
+    <>
+      <h1>記事本文（すぐ出る）</h1>
+      <p>...本文...</p>
+
+      <Suspense fallback={<p>関連記事を読み込み中...</p>}>
+        <RelatedPosts />
+      </Suspense>
+    </>
+  );
+}
+```
+
+- `<h1>` と `<p>` は先にブラウザに届く
+- `<RelatedPosts />` はサーバー側で待ちが残っているので、その場所には `fallback` が入る
+- 待ちが終わった瞬間、`<RelatedPosts />` の結果が追加で送信され、`fallback` が置き換わる
+
+これによって「先に出せるもの」はすぐ見られるようになり、体感速度が上がります。React 19.2 と Next.js 16 ではこの Streaming が標準の挙動です。
+
+### `loading.tsx` と `<Suspense>` の棲み分け
+
+ルートの切り替わり全体のローディングは `loading.tsx`、ページ内部で部分的に遅い部分は `<Suspense>`、と使い分けます。
+
+- **`loading.tsx`**（ルート単位）: ページ遷移直後、`page.tsx` 全体が描き終わるまでの表示
+- **`<Suspense>`**（コンポーネント単位）: ページの中で遅い領域だけを個別に待たせる
+
+両方を組み合わせると、「遷移した瞬間に `loading.tsx` → 骨格が出た後、遅い部分だけ `<Suspense>` の fallback」という自然な流れになります。
+
+### `error.tsx` との関係
+
+「エラーと見つからないページ」で触れた `error.tsx` は **例外の受け皿** です。待ちの受け皿である `loading.tsx` とは担当が違います。
+
+| 何が起きた？ | 担当ファイル |
+|---|---|
+| データ取得中（まだ待ち） | `loading.tsx` / `<Suspense>` |
+| 取得に失敗・例外が飛んだ | `error.tsx` |
+
+両方置いておくのが実用的な構成です。
+
+```
+app/
+└── posts/
+    ├── page.tsx
+    ├── loading.tsx
+    └── error.tsx
+```
+
+### スケルトン UI を返すコツ
+
+`loading.tsx` や `<Suspense fallback={...}>` に返す UI は、「読み込み中...」というテキストでも動きますが、**実際のレイアウトに近い骨組み** を返すと体感がぐっと上がります。
+
+- 見出しの位置にグレーのバー
+- 本文の位置に複数の細いバー
+- 画像の位置に正方形のプレースホルダ
+
+これを **スケルトン UI** と呼びます。本レッスンでは CSS で簡単な灰色ブロックを置きます。
+
+### 実行順のイメージ
+
+`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+
+1. ブラウザが `/posts/1` にアクセス
+2. Server が `page.tsx` を評価し始める
+3. `<h1>` と `<p>` の部分は即座に生成される
+4. `<RelatedPosts />` の中で `await fetch(...)` に入る → Next.js は「待ちが発生した」と判断
+5. ここまでの HTML を送信。`<Suspense>` の位置には `fallback` が入っている
+6. Server 側で fetch が終わると、`<RelatedPosts />` の中身を追加で送信
+7. ブラウザが追加分を受け取り、`fallback` を置き換える
+
+「HTML を 1 回で返す」のではなく、「**少しずつ流す**」動きです。これが Streaming です。
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った Next.js プロジェクトがあれば、それをそのまま使えます。手元に無くても問題ありません。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、Hello World レベルのプロジェクトでも公開フロー自体は同じように体験できます。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `app/streaming/` という新しいルートを切って、そこで `loading.tsx` + `<Suspense>` を両方試します。
 
-Vercel デプロイの手順（GitHub 連携・Import・Deploy ボタン）はプロジェクトの中身に依存しません。本レッスンの目的は **「自分の Next.js プロジェクトを Vercel に乗せる流れ」を一度通すこと** なので、画面の中身は何でも構いません。
+<details>
+<summary>出発点のファイル</summary>
 
-### 自分の Next.js プロジェクトを開く
+**`app/layout.tsx`**
 
-公開したい Next.js プロジェクトを StackBlitz で開きます。これまでのレッスンで作った成果物でも、新規の Hello World テンプレートでも構いません。
+```tsx
+import type { ReactNode } from "react";
+import Link from "next/link";
 
-### 手順 1: GitHub アカウントを用意
+export default function RootLayout({
+  children,
+}: {
+  children: ReactNode;
+}) {
+  return (
+    <html lang="ja">
+      <body>
+        <nav>
+          <Link href="/">Home</Link>
+          {" | "}
+          <Link href="/streaming">Streaming</Link>
+        </nav>
+        {children}
+      </body>
+    </html>
+  );
+}
+```
 
-1. <https://github.com/> にアクセスします。
-2. 既にアカウントがあればログインします。なければ右上「Sign up」から作成します。メール認証まで済ませましょう。
+**`app/page.tsx`**
 
-### 手順 2: StackBlitz から GitHub に保存
+```tsx
+export default function Home() {
+  return <h1>Home</h1>;
+}
+```
 
-1. StackBlitz 画面の上部（プロジェクト名の右あたり）にある **「Connect Repository」** または **「Fork to GitHub」** というボタンを探します（UI は時期によって少し変わります）。見つからない場合は左サイドバーの「Share」や「...」メニュー内を確認しましょう。
-2. 初回は GitHub との接続許可を求められます。「Authorize StackBlitz」で許可します。
-3. 保存先のリポジトリ名を指定します。例: `my-next-app`。
-4. 「Create Repository」または「Push」で確定すると、GitHub に新しいリポジトリが作られ、現在のコードがコミット・プッシュされます。
-5. <https://github.com/> の自分のダッシュボードに戻ると、`my-next-app` が出ているはずです。
+</details>
 
-::: tip うまく行かないとき
-StackBlitz の Fork 機能が使えない場合は、ローカルにダウンロード（「Download」ボタン）→ ローカルで `git init` & `git push` する手動ルートもあります。本コース想定は前者です。
-:::
+### ゴール
 
-### 手順 3: Vercel アカウントを作る
+- `/streaming` を開いた直後に `loading.tsx` のローディング UI が出る
+- 本文は先に描画され、遅い「関連記事」セクションだけが `<Suspense>` の fallback で待たされる
+- fetch が終わると fallback が実データに置き換わる
 
-1. <https://vercel.com/> にアクセスします。
-2. 「Sign Up」→ **「Continue with GitHub」** を選びます。GitHub アカウントで Vercel にログインします。
-3. 必要なら Vercel にメール認証を済ませましょう。
+### 手順
 
-### 手順 4: Vercel で新しいプロジェクトを作る
+1. `app/streaming/page.tsx` を作り、`<Suspense>` で遅いコンポーネントを囲む
+2. `app/streaming/loading.tsx` を置く
+3. 遅いコンポーネント `app/streaming/RelatedPosts.tsx` を作り、わざと 2 秒遅延を入れる
+4. `app/streaming/skeleton.tsx` に灰色のスケルトン UI を用意して fallback に渡す
+5. ブラウザで `/streaming` を開いてナビゲーションから遷移、挙動を観察する
 
-1. Vercel のダッシュボードで **「Add New...」→「Project」** をクリックします。
-2. GitHub リポジトリの一覧が出ます。手順 2 で作った `my-next-app` を **「Import」** します。
-   - 初回は Vercel が GitHub のどのリポジトリにアクセスして良いか聞いてきます。対象リポジトリだけを許可すれば十分です（「Only select repositories」で `my-next-app` のみ選択）。
-3. 設定画面が出ます。
-   - **Framework Preset**: 自動で `Next.js` と判定されているはずです。そのままにします。
-   - **Root Directory**: デフォルトのままにします。
-   - **Build and Output Settings**: デフォルトのままにします（`next build` で動きます）。
-   - **Environment Variables**: 本コースでは使いません。空で OK です。
-4. 画面下の **「Deploy」** をクリックします。
-5. 数十秒〜1 分ほど、ビルドログが流れます。成功すると「Congratulations!」画面が表示されます。
+### 主要ファイルの完成形
 
-### 手順 5: 公開 URL を確認
+**`app/streaming/page.tsx`**
 
-1. Vercel の「Dashboard」→ プロジェクト名（`my-next-app`）をクリックします。
-2. 画面上部に **`https://my-next-app-xxxx.vercel.app`** のような URL が出ています。
-3. クリックして開きます。
+```tsx
+import { Suspense } from "react";
+import RelatedPosts from "./RelatedPosts";
+import { PostsSkeleton } from "./skeleton";
+
+export default function StreamingPage() {
+  return (
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <h1>Streaming デモ</h1>
+      <p>
+        このテキストと見出しは <strong>すぐに</strong> 表示されます。
+        下の関連記事は 2 秒遅れで取得するので、先にスケルトンが出ます。
+      </p>
+
+      <h2>関連記事</h2>
+      <Suspense fallback={<PostsSkeleton />}>
+        <RelatedPosts />
+      </Suspense>
+
+      <p>フッター（これも先に出ます）</p>
+    </div>
+  );
+}
+```
+
+**`app/streaming/RelatedPosts.tsx`**
+
+```tsx
+type Post = {
+  id: number;
+  title: string;
+};
+
+export default async function RelatedPosts() {
+  // わざと 2 秒待つ
+  await new Promise((r) => setTimeout(r, 2000));
+
+  // Next.js 16 のデフォルトは no-store（キャッシュしない）なのでオプション不要
+  const res = await fetch(
+    "https://jsonplaceholder.typicode.com/posts?_limit=3"
+  );
+  const posts: Post[] = await res.json();
+
+  return (
+    <ul>
+      {posts.map((post) => (
+        <li key={post.id}>{post.title}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+**`app/streaming/skeleton.tsx`**
+
+```tsx
+export function PostsSkeleton() {
+  return (
+    <ul style={{ listStyle: "none", padding: 0 }}>
+      {[0, 1, 2].map((i) => (
+        <li
+          key={i}
+          style={{
+            height: 16,
+            margin: "8px 0",
+            background: "#e5e5e5",
+            borderRadius: 4,
+          }}
+        />
+      ))}
+    </ul>
+  );
+}
+```
+
+**`app/streaming/loading.tsx`**
+
+```tsx
+export default function Loading() {
+  return (
+    <div style={{ padding: 16, fontFamily: "system-ui" }}>
+      <h1 style={{ opacity: 0.3 }}>読み込み中...</h1>
+    </div>
+  );
+}
+```
 
 ### 期待出力
 
-- `https://<project>.vercel.app` にアクセスすると、StackBlitz で見ていたのと同じ画面が表示されます。
-- 自分のプロジェクトに含まれる機能（ページ遷移、フォーム、データ表示など）がそのまま動きます。
-- URL を別のブラウザや友人に送っても、同じアプリが見えます。
+1. ナビゲーションから `/streaming` に移動すると、**最初の一瞬** `loading.tsx` の「読み込み中...」が見える（ルート単位のローディング）
+2. 続いて `page.tsx` の見出しと本文が描画され、関連記事の位置には **灰色のスケルトン** が 3 本並ぶ
+3. 2 秒経つと、スケルトンが実際の関連記事リストに置き換わる
+4. フッターの `<p>フッター...</p>` は関連記事を待たずに表示されている（= Streaming で先に送信されている）
 
-### 更新を反映する
+DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
 
-GitHub にプッシュするだけで、Vercel が自動で検知して再デプロイしてくれます。
+### 変える
 
-1. StackBlitz でコードを少し変えます（例: トップページの `<h1>` の文言を変える）。
-2. StackBlitz の「Commit & Push」または「Sync」ボタンで GitHub に反映します。
-3. 数十秒待ちます。
-4. Vercel のダッシュボードで「Deployments」タブを見ると、新しいビルドが走っています。
-5. 完了するとブラウザで公開 URL を再読み込み → 変更が反映されています。
-
-### よくある躓き
-
-- ビルドが `Error: Module not found` で落ちる → StackBlitz 上で見えていないファイル（大文字小文字の違いなど）が原因のことが多いです。ローカルのファイル名と import 文の大文字小文字を揃えましょう。
-- 「Authorization required」と出る → GitHub 連携で「Only select repositories」で該当リポジトリを許可します。
-- デプロイは成功するがページが真っ白 → ブラウザの DevTools Console にエラーが出ていないか確認しましょう。本コース範囲なら `"use client"` の付け忘れが多いです。
-- 投稿系の機能でデータがリロード後に消える → 次項の通り、サーバーレス環境ではモジュールトップレベルの配列が保持されません。
-
-### 注意: 本番ではメモリ上のデータが保持されない
-
-学習中のコードで「Server Actions の最小形」のように `const items: Item[] = []` のような **モジュール先頭の配列** でデータを持っていた場合、Vercel に乗せると挙動が変わります。
-
-- **StackBlitz**: 開発サーバーがプロセスを継続するので、リロードしても保持されます。プロジェクトを閉じ直したら消えます。
-- **Vercel**: Vercel の Next.js は **サーバーレス関数** として実行されます。リクエストが来るたびに別のプロセスで動く可能性があり、**配列の中身は呼び出しをまたいで保持されない** ことが多いです。インスタンスが複数並行で動くと、ユーザー A が追加したデータがユーザー B のインスタンスには見えません。コールドスタートでインスタンスが落ちると配列ごと消えます。
-
-本物のアプリでは **データベース** を使って永続化します。例: Vercel Postgres、Supabase、PlanetScale、Neon など。ユーザー単位なら `cookies()` 経由のセッションに永続化する手もあります。本コースでは扱いませんが、次のステップとして「サーバー側のメモリ配列を DB 呼び出しに置き換えていけば本物のアプリになる」と覚えておきましょう。
+- `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
+- `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）
+- `<Suspense>` を取り除いて、`<RelatedPosts />` をそのまま書く → 関連記事が揃うまでページ全体が見えなくなる（= Streaming が効かなくなる）
 
 ### 自分で書く
 
-1. トップページ `app/page.tsx` を、現在のアプリの簡単な説明ページに書き換えましょう。
-2. StackBlitz で変更 → GitHub へ Push → Vercel の自動デプロイ、の一連の流れをもう 1 回踏んで、URL 先の変化を確認しましょう。
-3. 公開 URL を自分の別端末（スマホなど）で開いてみましょう。
+- `app/streaming/error.tsx` を追加し、`RelatedPosts` の中で `throw new Error("取得失敗")` を返すようにして、エラー時の挙動を観察する
+- スケルトン UI をもう少し作り込む（タイトル用の太いバー + 本文用の細いバー 2 本の組み合わせ）
+- `app/streaming/` の中に **2 つの遅いコンポーネント** を並べて、それぞれ別の `<Suspense>` で囲む → 片方が終わったらそこだけ先に描画されることを確認する
 
 ## まとめ
 
-- StackBlitz → GitHub → Vercel の 3 ステップで、作った Next.js アプリを世界に公開できる
-- 初回の接続だけ手数がかかるが、以後は Git に push すれば自動デプロイ
-- サーバー側のモジュールトップレベル配列など、メモリで保持していたデータは Vercel では保持されない。本番の永続化には DB が必要（本コースでは扱わない）
-- 次に進みたいときのおすすめ:
-  - データベース連携（Vercel Postgres、Supabase など）で永続化を本物にする
-  - 認証（NextAuth、Clerk など）を足してログインできるアプリにする
-  - スタイリングを Tailwind CSS や CSS Modules に寄せる
-  - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る
+- `loading.tsx` はルート全体のローディング UI。ファイルを置くだけで `<Suspense>` が自動でラップされる
+- 部分的に遅いところは、ページ内で個別に `<Suspense fallback={...}>` で囲む。先に出せるものから送信される（Streaming）
+- `loading.tsx` / `<Suspense>` は「待ち」、`error.tsx` は「失敗」。担当が違う
+- fallback には「読み込み中...」のテキストより、**スケルトン UI** を返すと体感が良くなる
+- React 19.2 + Next.js 16 ではこの仕組みが標準化され、Server Component と組み合わせて自然に書ける

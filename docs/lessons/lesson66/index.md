@@ -1,435 +1,493 @@
-# lesson66: カスタムフック（`useTodos` に抽出）
-
-2 章 の「スコープとクロージャ」で `makeCounter()` / `makeFilter(status)` という関数を書きました。「関数が state を閉じ込める（クロージャ）」という形です。React のカスタムフックは **同じ仕組みを React の文脈で使う** 形と思ってください。2 章 の「スコープとクロージャ」の延長線上にあります。
+# lesson66: React Compiler
 
 ## ゴール
 
-- 複数のフックを組み合わせたロジックを、再利用可能なカスタムフックに切り出せる
-- `use` プレフィックスの命名規則を守れる
-- フックのルール（トップレベルで呼ぶ、他のフックの中でだけ呼ぶ）を理解する
+- React Compiler が **何を自動化** するかを言える
+- 「手動メモ化（`useMemo` / `useCallback` / `React.memo`）が要らなくなる」境界を理解する
+- React Compiler 1.0（2025 年 10 月安定版）の **現在地** を知る
+- Next.js / Vite で React Compiler を **有効化** できる
+- 既存コードでハマらないための注意点（Rules of React）を押さえる
+
+::: tip 前提
+このレッスンは「`useMemo` で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は「`useMemo` で計算のメモ化」「配列を描画する」を確認してください。
+:::
 
 ## 解説
 
-### カスタムフックとは
+### 「手動メモ化」の苦しみ
 
-カスタムフックは **「フックを使う関数」** を切り出したものです。`useState` / `useEffect` / 他のフックを組み合わせて、自前の「新しいフック」を作れます。
+React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなる。そのために導入されたのが:
 
-命名規則は 1 つだけ。**`use` で始まる関数名** にします。
-
-```tsx
-function useTodos() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  const addTodo = (text: string) => {
-    setTodos((prev) => [...prev, { id: crypto.randomUUID(), text, done: false }]);
-  };
-
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  return { todos, addTodo, deleteTodo };
-}
-```
-
-これを使う側は、単に呼ぶだけ。
+- `useMemo`: 値の **再計算を抑える**
+- `useCallback`: 関数の **再生成を抑える**
+- `React.memo`: コンポーネントの **再レンダリングを抑える**
 
 ```tsx
-function App() {
-  const { todos, addTodo, deleteTodo } = useTodos();
-  // あとは好きに使う
+const filtered = useMemo(
+  () => items.filter((i) => i.active),
+  [items],
+);
+
+const onClick = useCallback(
+  () => handler(value),
+  [value],
+);
+
+const Memoed = React.memo(Child);
+```
+
+3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
+
+- **書き忘れ**でパフォーマンス劣化
+- **依存配列のミス**でバグ
+- **過度なメモ化**で逆に遅くなる
+- 読みづらいコード
+
+これを **コンパイラが自動でやる** のが React Compiler の役割です。
+
+### React Compiler とは
+
+[React Compiler](https://react.dev/learn/react-compiler/introduction) は、**Babel ベースのコンパイラ** で、ソースコードを **解析してメモ化を自動挿入** します。
+
+```tsx
+// あなたが書くコード
+function Cart({ items }: { items: Item[] }) {
+  const total = items.reduce((sum, i) => sum + i.price, 0);
+  return <p>合計: {total}</p>;
+}
+
+// Compiler が変換した結果（イメージ）
+function Cart({ items }: { items: Item[] }) {
+  const $ = useMemoCache(2);
+  let total;
+  if ($[0] !== items) {
+    total = items.reduce((sum, i) => sum + i.price, 0);
+    $[0] = items;
+    $[1] = total;
+  } else {
+    total = $[1];
+  }
+  return <p>合計: {total}</p>;
 }
 ```
 
-使う側のコンポーネントからは **state の管理が見えなくなり**、`useTodos` の戻り値だけを触る形になります。似た処理を 2 つのコンポーネントで使いたいときも、フック 1 つ書けば共有できます。
+実際の出力は人間が読まなくて良い形式ですが、要は **手動の useMemo を全部書いた状態** に近づけてくれます。
 
-### 2 章 の「スコープとクロージャ」との対応
+### 1.0 安定版（2025 年 10 月）
 
-2 章 の「スコープとクロージャ」で書いた `makeCounter()` を思い出してください。
+[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、**プロダクション ready** 扱い。
 
-```js
-function makeCounter() {
-  let count = 0;
-  return () => {
-    count = count + 1;
-    return count;
-  };
-}
+主な仕様:
 
-const counterA = makeCounter();
-const counterB = makeCounter();
-```
+- React 17 / 18 / 19 と互換（19 推奨）
+- TypeScript 完全対応
+- Next.js / Remix / Expo / Vite すべてでサポート
+- ビルド時間は **やや増える**（軽量化が継続中）
 
-`counterA` と `counterB` はそれぞれ **独立した `count` を閉じ込めた関数** でした。
+### Next.js 16 で有効化
 
-カスタムフックも発想は同じです。`useTodos()` を呼び出した **コンポーネントごとに、独立した `todos` state を持つ**。クロージャで変数を閉じ込める代わりに、React の state が閉じ込められる、という違いだけです。
-
-### フックのルール
-
-フックには **2 つのルール** があります。これは `useState` / `useEffect` / カスタムフック、すべてに共通です。
-
-1. **コンポーネントや他のフックの「トップレベル」でのみ呼ぶ**
-   - `if` の中、`for` の中、コールバックの中では呼ばない
-   - 理由: React はフックを呼ぶ順番で state を識別している。順番が変わると壊れる
-2. **React 関数（コンポーネントまたはカスタムフック）の中でだけ呼ぶ**
-   - 普通の JS 関数の中では呼べない
-
-カスタムフックは「フックを呼ぶ関数」なので、命名を `use` で始めると ESLint プラグインがこのルールを自動でチェックしてくれます。
-
-### なぜフックを切り出すのか
-
-単にコンポーネントを分けるのと違い、**state のロジックだけ** を切り出せます。UI は各コンポーネントが自由に書いて、state の振る舞いだけ共通化する、という分け方ができます。
-
-- `useTodos` は state 管理だけ
-- `TodoList` / `TodoInput` などの UI コンポーネントは表示だけ
-- 「TODO の件数を表示するバッジ」など別の UI を追加したくなっても、`useTodos` をもう 1 回呼ぶだけで state が手に入る
-
-### いつフックに切り出すか
-
-「state ロジックは全部カスタムフックに切り出す」と覚えると、**1 箇所でしか使わないフック** が量産されてコード全体の見通しが落ちます。実務でフックに切り出すかどうかの判断は、ざっくり次のいずれかが当てはまるときに限るのが扱いやすいです。
-
-- **2 箇所以上で同じロジックを書きたくなったとき**（重複の解消）
-- **テストしたいロジックがある**（コンポーネントから切り離すとテストが書きやすい）
-- **3 つ以上の `useState` / `useEffect` が絡み合ってきて、コンポーネントの本体が読みづらいとき**
-
-逆に、
-
-- 1 箇所でしか使わない
-- 5 行未満の小さな state ロジック
-- UI と密に連動していて切り出すと逆に読みづらくなる
-
-このようなケースは **コンポーネントの中に置いたままで OK** です。「再利用できそうだから切り出す」より「**重複が起きてから切り出す**」方が結果として良い設計になります。
-
-## 演習
-
-### 途中から始める場合
-
-「親子コンポーネントの連携」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンでは `types.ts` に `done` を追加し、`src/useTodos.ts` を新規作成してロジックを抽出します。
-
-<details>
-<summary>出発点のファイル（本レッスンで <code>done</code> を追加）</summary>
-
-**`src/types.ts`**
+[Next.js 16](https://nextjs.org/blog/next-16)（2025 年 10 月）以降、React Compiler は **stable** な設定オプションになりました（experimental から昇格）。
 
 ```ts
-export type Todo = {
-  id: string;
-  text: string;
-};
-```
+// next.config.ts
+import type { NextConfig } from "next";
 
-**`src/TodoInput.tsx`**
-
-```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
+const nextConfig: NextConfig = {
+  reactCompiler: true,
 };
 
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    onAdd(trimmed);
-    setText("");
-  }
-
-  return (
-    <form onSubmit={handleSubmit} className="todo-input">
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="やることを入力"
-      />
-      <button type="submit">追加</button>
-    </form>
-  );
-}
+export default nextConfig;
 ```
 
-**`src/TodoList.tsx`**
+これだけで OK。デフォルトでは ON ではないので、**明示的に有効化** します。
 
-```tsx
-import type { Todo } from "./types";
-
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-};
-
-export function TodoList({ todos, onDelete }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p className="empty">まだタスクがありません</p>;
-  }
-
-  return (
-    <ul className="todo-list">
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          {todo.text}
-          <button onClick={() => onDelete(todo.id)}>削除</button>
-        </li>
-      ))}
-    </ul>
-  );
-}
-```
-
-**`src/App.tsx`**
-
-```tsx
-import { useState } from "react";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-import type { Todo } from "./types";
-
-function App() {
-  const [todos, setTodos] = useState<Todo[]>([]);
-
-  function handleAdd(text: string) {
-    const newTodo: Todo = { id: crypto.randomUUID(), text };
-    setTodos((prev) => [...prev, newTodo]);
-  }
-
-  function handleDelete(id: string) {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  }
-
-  return (
-    <>
-      <h1>TODO（親子連携版）</h1>
-      <TodoInput onAdd={handleAdd} />
-      <TodoList todos={todos} onDelete={handleDelete} />
-    </>
-  );
-}
-
-export default App;
-```
-
-本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props に `onToggle` を追加します。演習本体のコードがそのまま上書きになります。
-
-</details>
-
-### ゴール
-
-- ここまでの React レッスンで作った TODO のロジックを `useTodos()` カスタムフックに **抽出** する
-- 戻り値は `{ todos, addTodo, deleteTodo, toggleTodo }` の 4 つ
-- `App` から `useTodos()` を呼び出して使う
-- **localStorage 連携は今回は扱わない**
-
-### 手順
-
-1. 「親子コンポーネントの連携」か「useEffect の基本」の React プロジェクトをコピーして新規に開く（別プロジェクトでも可）
-2. `src/types.ts` は3 章 で作った `Todo` 型をそのまま使う
-3. `src/useTodos.ts` を新規作成（カスタムフック）
-4. `src/TodoInput.tsx`、`src/TodoList.tsx` は既存のままでよい
-5. `src/App.tsx` で `useTodos()` を呼び出す形に書き換える
-
-### `src/types.ts`
+#### 細かい設定
 
 ```ts
-export type Todo = {
-  id: string;
-  text: string;
-  done: boolean;
+const nextConfig: NextConfig = {
+  reactCompiler: {
+    compilationMode: "annotation",  // "all" | "annotation" | "infer"
+  },
 };
 ```
 
-### `src/useTodos.ts`
+| `compilationMode` | 説明 |
+|---|---|
+| `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ変換。まず試したいときはここから |
+| `"infer"` | Rules of React の前提を満たす関数のみ自動判定して変換 |
+| `"all"`（デフォルト） | すべてのコンポーネントを変換 |
+
+`"annotation"` から段階的に始めて動作を確認し、問題がなければ `"all"` に切り替えるのが安全な導入順序です。
+
+### Vite で有効化
+
+```bash
+npm install -D babel-plugin-react-compiler
+```
 
 ```ts
-import { useState } from "react";
-import type { Todo } from "./types";
+// vite.config.ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
 
-export function useTodos() {
-  const [todos, setTodos] = useState<Todo[]>([]);
+const ReactCompilerConfig = {};
 
-  const addTodo = (text: string) => {
-    const trimmed = text.trim();
-    if (trimmed.length === 0) return;
-    setTodos((prev) => [
-      ...prev,
-      { id: crypto.randomUUID(), text: trimmed, done: false },
-    ]);
-  };
-
-  const deleteTodo = (id: string) => {
-    setTodos((prev) => prev.filter((t) => t.id !== id));
-  };
-
-  const toggleTodo = (id: string) => {
-    setTodos((prev) =>
-      prev.map((t) => (t.id === id ? { ...t, done: !t.done } : t)),
-    );
-  };
-
-  return { todos, addTodo, deleteTodo, toggleTodo };
-}
+export default defineConfig({
+  plugins: [
+    react({
+      babel: {
+        plugins: [
+          ["babel-plugin-react-compiler", ReactCompilerConfig],
+        ],
+      },
+    }),
+  ],
+});
 ```
 
-ポイント:
+### 「メモ化が要らなくなる」とは
 
-- ファイル名は `useTodos.ts`（拡張子は `.ts` で OK、JSX を書かないので `.tsx` 不要）
-- `use` で始まる関数名
-- 戻り値はオブジェクトで 4 要素を返す
-- `addTodo` の中で `trim` して空文字を弾く
-
-### `src/TodoInput.tsx`
+#### Before
 
 ```tsx
-import { useState } from "react";
-import type { FormEvent } from "react";
-
-type TodoInputProps = {
-  onAdd: (text: string) => void;
-};
-
-export function TodoInput({ onAdd }: TodoInputProps) {
-  const [text, setText] = useState("");
-
-  function handleSubmit(e: FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    onAdd(text);
-    setText("");
-  }
-
-  return (
-    <form onSubmit={handleSubmit}>
-      <input
-        value={text}
-        onChange={(e) => setText(e.target.value)}
-        placeholder="やることを入力"
-      />
-      <button type="submit">追加</button>
-    </form>
+function ProductList({ products, query }: Props) {
+  const filtered = useMemo(
+    () => products.filter((p) => p.name.includes(query)),
+    [products, query],
   );
-}
-```
 
-### `src/TodoList.tsx`
-
-```tsx
-import type { Todo } from "./types";
-
-type TodoListProps = {
-  todos: Todo[];
-  onDelete: (id: string) => void;
-  onToggle: (id: string) => void;
-};
-
-export function TodoList({ todos, onDelete, onToggle }: TodoListProps) {
-  if (todos.length === 0) {
-    return <p>TODO はまだありません。</p>;
-  }
+  const handleClick = useCallback(
+    (id: string) => navigate(`/product/${id}`),
+    [navigate],
+  );
 
   return (
     <ul>
-      {todos.map((todo) => (
-        <li key={todo.id}>
-          <label>
-            <input
-              type="checkbox"
-              checked={todo.done}
-              onChange={() => onToggle(todo.id)}
-            />
-            <span style={{ textDecoration: todo.done ? "line-through" : "none" }}>
-              {todo.text}
-            </span>
-          </label>
-          <button type="button" onClick={() => onDelete(todo.id)}>
-            削除
-          </button>
-        </li>
+      {filtered.map((p) => (
+        <ProductCard key={p.id} product={p} onClick={handleClick} />
       ))}
     </ul>
   );
 }
+
+const ProductCard = React.memo(({ product, onClick }: CardProps) => (
+  <li onClick={() => onClick(product.id)}>{product.name}</li>
+));
 ```
 
-### `src/App.tsx`
+#### After（Compiler 有効）
 
 ```tsx
-import { useTodos } from "./useTodos";
-import { TodoInput } from "./TodoInput";
-import { TodoList } from "./TodoList";
-
-export default function App() {
-  const { todos, addTodo, deleteTodo, toggleTodo } = useTodos();
+function ProductList({ products, query }: Props) {
+  const filtered = products.filter((p) => p.name.includes(query));
+  const handleClick = (id: string) => navigate(`/product/${id}`);
 
   return (
-    <main style={{ maxWidth: 480, margin: "0 auto", padding: 16 }}>
-      <h1>私の TODO（useTodos 版）</h1>
-      <TodoInput onAdd={addTodo} />
-      <TodoList todos={todos} onDelete={deleteTodo} onToggle={toggleTodo} />
+    <ul>
+      {filtered.map((p) => (
+        <ProductCard key={p.id} product={p} onClick={handleClick} />
+      ))}
+    </ul>
+  );
+}
+
+function ProductCard({ product, onClick }: CardProps) {
+  return <li onClick={() => onClick(product.id)}>{product.name}</li>;
+}
+```
+
+「**普通に書いた JSX** が、コンパイル後は **十分にメモ化された** コードに変換される」のが Compiler の価値。
+
+### 何が変わるか / 変わらないか
+
+#### 変わるもの
+
+- **`useMemo` / `useCallback` の手動記述が不要** に
+- **`React.memo` で囲う必要がない**（依存があれば自動でメモ化される）
+- 依存配列の書き間違いミスが消える
+
+#### 変わらないもの
+
+- `useEffect` / `useState` / `useRef` などの Hook は **そのまま** 使う
+- **データ取得** や **副作用** の責務は変わらない
+- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題
+
+### Rules of React
+
+Compiler が動くには **コードが React のルールに従っている** ことが前提です。
+
+#### Components / Hooks は **純粋**
+
+- レンダリング中に副作用を起こさない（DOM 直接操作 / API 呼び出し / setState）
+- 同じ入力からは同じ出力を返す（**ピュア**）
+
+```tsx
+// NG: レンダリング中に外部状態を変更
+function Bad() {
+  globalCounter++;        // 副作用
+  return <p>{globalCounter}</p>;
+}
+
+// OK: 副作用は useEffect 内で
+function Good() {
+  useEffect(() => { globalCounter++; }, []);
+  return <p>{globalCounter}</p>;
+}
+```
+
+#### イベントハンドラは外部状態を変えても OK
+
+```tsx
+function Counter() {
+  const [n, setN] = useState(0);
+  return <button onClick={() => setN(n + 1)}>{n}</button>;
+}
+```
+
+イベントハンドラはレンダリング中ではないので **副作用 OK**。Compiler はこれを区別します。
+
+#### `eslint-plugin-react-compiler` で違反を検出
+
+```bash
+npm install -D eslint-plugin-react-compiler
+```
+
+```js
+// eslint.config.js
+import reactCompiler from "eslint-plugin-react-compiler";
+
+export default [
+  {
+    plugins: { "react-compiler": reactCompiler },
+    rules: {
+      "react-compiler/react-compiler": "error",
+    },
+  },
+];
+```
+
+このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint でコードの問題を修正しておくのが安全。
+
+### 「Compile されない」コードへの対処
+
+Compiler が「危険」と判断したコンポーネントは **そのまま** にします（壊れない）。
+
+警告メッセージ:
+
+```
+[ReactCompiler] Function `MyComponent` could not be compiled.
+Reason: Mutation of value passed as argument
+```
+
+対応:
+
+1. ESLint の指摘を素直に直す（**ピュア化**）
+2. 直せない事情があれば **`"use no memo"`** ディレクティブで対象外に
+3. **`"use memo"`** で「変換して欲しい」と明示
+
+```tsx
+"use no memo";
+
+function LegacyComponent() {
+  // Compiler 対象外
+}
+```
+
+### 既存プロジェクトに導入する流れ
+
+1. **`eslint-plugin-react-compiler` を入れて警告を見る**
+2. 警告を直せる範囲で直す
+3. **`compilationMode: "annotation"`** で **限定的に試す**
+4. 動作確認 → 問題なければ **`"all"`** に切り替え
+5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
+
+「全部一気に」ではなく **段階導入** が事故を減らします。
+
+### パフォーマンス効果は？
+
+[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などで:
+
+- **手動メモ化が完璧でないコードベース** には大きな改善
+- **既に十分メモ化済みのコード** にはほぼ同等
+- **小規模アプリ** には変化なし
+
+「**すべての React アプリが速くなる魔法** ではない」けれど、コードの **保守性** は確実に上がります。
+
+### `useMemo` を残すべき場面
+
+- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替え。Compiler が判断しても明示する方が読みやすい
+- **deep compare** が必要な場合: lodash の `isEqual` で比較したい時など
+- **API 互換**: 公開ライブラリ（コンパイラ前提に強制できない）
+
+### React 19 / Next.js 16 / React Compiler の関係
+
+整理すると:
+
+- **React 19**: Hooks 中心の API（`useEffectEvent` / `cacheSignal` / `<Activity />`）
+- **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
+- **Next.js 16**: Turbopack 標準、Cache Components、`reactCompiler` 設定が stable
+
+3 つは **独立に進化** していて、組み合わせは選択可能。
+
+### よくある誤解
+
+- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけ。本質的なボトルネックは別
+- 「**全 useMemo を消すべき**」→ Compiler 任せでも動くが、**読みやすさのために残す** のはアリ
+- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要
+
+## 演習
+
+> **このレッスンはローカル前提**: React Compiler の Babel プラグインを Next.js のビルドパイプラインに統合する都合上、**ローカルでの Node.js 実行を前提** にしています。StackBlitz の Next.js テンプレでも同じ手順は走りますが、ビルド時間が長くなり Compiler の確認が分かりにくいので、ローカル環境での実行を推奨します。
+
+### ゴール
+
+- Next.js 16 で React Compiler を有効化する
+- `useMemo` / `useCallback` を消しても動くことを確認
+- ESLint プラグインで違反を検出する
+
+### 手順 1: 新規プロジェクト
+
+```bash
+npx create-next-app@latest compiler-sample --ts --app
+cd compiler-sample
+```
+
+### 手順 2: React Compiler を有効化
+
+`next.config.ts`:
+
+```ts
+import type { NextConfig } from "next";
+
+const nextConfig: NextConfig = {
+  reactCompiler: true,
+};
+
+export default nextConfig;
+```
+
+### 手順 3: ESLint プラグインを導入
+
+```bash
+npm install -D eslint-plugin-react-compiler
+```
+
+`eslint.config.mjs`（Next.js 16 デフォルト）に追加:
+
+```js
+import reactCompiler from "eslint-plugin-react-compiler";
+
+const config = [
+  // ...既存
+  {
+    plugins: { "react-compiler": reactCompiler },
+    rules: { "react-compiler/react-compiler": "error" },
+  },
+];
+
+export default config;
+```
+
+### 手順 4: メモ化なしのコンポーネント
+
+`app/page.tsx`:
+
+```tsx
+"use client";
+import { useState } from "react";
+
+export default function Page() {
+  const [items, setItems] = useState([1, 2, 3, 4, 5]);
+  const [filter, setFilter] = useState("");
+
+  // useMemo を書かない
+  const filtered = items.filter((n) => String(n).includes(filter));
+
+  return (
+    <main style={{ padding: 24 }}>
+      <input value={filter} onChange={(e) => setFilter(e.target.value)} />
+      <ul>
+        {filtered.map((n) => (
+          <li key={n}>{n}</li>
+        ))}
+      </ul>
+      <button onClick={() => setItems((x) => [...x, x.length + 1])}>追加</button>
     </main>
   );
 }
 ```
 
-- `App` は state を直接持っていません
-- `useTodos()` を呼ぶだけで、state と操作関数が手に入る
-- `App` は「UI を組み立てるだけ」に役割が絞られた
+`npm run dev` で動作。filter 入力 / 追加ボタンが快適に動くことを確認。
 
-### 期待出力
+### 手順 5: わざとルール違反
 
-- 画面に入力欄 + 追加ボタン + 一覧
-- 追加すると一覧に増え、チェックボックスで完了状態切り替え、削除ボタンで消える
-- 機能は以前と変わらない。**コード構造が整理された** ことが今回のポイント
+```tsx
+let counter = 0;
 
-### 変える
-
-- `useTodos()` を **2 回呼び出す** とどうなるか試す:
-  ```tsx
-  const { todos } = useTodos();
-  const { todos: todos2 } = useTodos();
-  ```
-  それぞれ独立した state になる。2 章 の「スコープとクロージャ」の `counterA` / `counterB` と同じ形
-- `useTodos` の戻り値にカスタムな派生値を加える: `const doneCount = todos.filter((t) => t.done).length;` を計算して返す
-
-### 自分で書く
-
-`useCounter(initial: number)` カスタムフックを作ります。戻り値は `{ count, increment, decrement, reset }` です。
-
-まずは何も見ずに自分で書いてみてください。詰まったら段階的にヒントを開きます。
-
-::: details ヒント A: 設計（最初に詰まったらここ）
-
-- `useTodos` と同じ「**フックを使う関数 = カスタムフック**」のパターン
-- フック内部で `useState` を 1 つ使い、戻り値のオブジェクトに 4 つのキーを並べる
-- 4 つのキーのうち 1 つは `count`、残り 3 つは「カウントを変える関数」
-
-:::
-
-::: details ヒント B: シグネチャ（さらに詰まったら）
-
-```ts
-function useCounter(initial: number): {
-  count: number;
-  increment: () => void;
-  decrement: () => void;
-  reset: () => void;
-} {
-  // ここに useState と 3 つの関数を書く
+export default function BadCounter() {
+  counter++;  // レンダリング中の副作用
+  return <p>{counter}</p>;
 }
 ```
 
-:::
+ESLint がエラーを出します。**修正方法**: state に置き換える / `useEffect` に移す。
 
-::: details ヒント C: 実装イメージ（最終手段）
+### 手順 6: 段階導入を試す
 
-`const [count, setCount] = useState(initial)` を作り、`setCount((c) => c + 1)` のように **関数形式の setter** で 3 つの操作関数を書きます。`reset` は `setCount(initial)` です。
+`next.config.ts`:
 
-:::
+```ts
+const nextConfig: NextConfig = {
+  reactCompiler: { compilationMode: "annotation" },
+};
+```
+
+このモードで `"use memo"` を書いたコンポーネントだけ変換されます:
+
+```tsx
+"use memo";
+
+export default function CompiledComponent() { /* ... */ }
+```
+
+### 期待出力
+
+- React Compiler が有効化されたメッセージがビルド時に出る
+- ESLint プラグインがルール違反を **エラー / warning** で出す
+- 動作は手動メモ化版と同じか **わずかに速い**
+
+### 変える
+
+- 手元の React + Vite プロジェクトに Compiler を入れる
+- React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
+- 大量レンダリング（1000 行のリスト）で差を観察
+
+### 自分で書く（4 章 の成果物に適用）
+
+このコースの **4 章「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト、または手元の React + Vite プロジェクトに React Compiler を入れて **before / after を比較** します。
+
+1. 該当プロジェクトを開く
+2. **React DevTools の Profiler** で、何かアクション（追加・削除など）を 1 回計測 → 「再レンダリング回数」「総時間」をメモ
+3. `babel-plugin-react-compiler` を追加 + `vite.config.ts` に組み込む
+4. **同じアクション** を再度 Profiler で計測
+5. 「再レンダリングが減ったか」「総時間が短くなったか」を観察
+6. 続けて、コード上の `useMemo` / `useCallback` を **1 つずつ削除** して、Profiler の値が変わらないことを確認
+
+これが「Compiler が効いている」直接的な証拠になります。手元に成果物がない場合は、`useMemo` を多用した小さいリスト + フィルタの例を新規に作って試します。
+
+### 単独の任意課題
+
+- `"use no memo"` で意図的に Compiler を外して、再レンダリング数の差を観察
+- ベンチマーク（「Core Web Vitals の 3 つの指標と Lighthouse」の Lighthouse / Speed Insights）で **INP** がどう変わるか測る
 
 ## まとめ
 
-- カスタムフックは `use` で始まる関数。内部で他のフックを呼べる
-- state のロジックだけを切り出して、UI 側を身軽にできる
-- 2 章 の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
-- フックのルールは 2 つ: トップレベルで呼ぶ / React 関数（コンポーネントまたはフック）の中でだけ呼ぶ
+- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラ
+- **2025 年 10 月に 1.0 安定版** がリリース、Meta 大規模で実戦投入済み
+- **Next.js 16** で `reactCompiler: true` の設定が stable に
+- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加
+- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提
+- **`eslint-plugin-react-compiler`** で違反を検出 → 直すか `"use no memo"` で対象外に
+- 段階導入は **`compilationMode: "annotation"`** から
+- 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
+- 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい

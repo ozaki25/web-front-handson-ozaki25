@@ -1,348 +1,457 @@
-# lesson73: Server Component と Client Component
+# lesson73: Route Groups で整理する
 
 ## ゴール
 
-- Server Component と Client Component の違いを、動く場所と使える機能の観点で説明できる
-- `"use client"` を **ファイル先頭 1 行目** に書くルールを覚え、`import` された子に Client 扱いが伝播することを理解する
-- Client Component から Server Component を `import` できないが、`children` や props として受け取れることを知る
-- `console.log` をブラウザ / サーバーの両方で仕掛け、境界の違いを目で確認する
+- `(group)/` という括弧付きディレクトリ名の意味を理解し、URL を変えずにファイル側だけを意味のある単位で整理できる
+- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用されることを確認できる
+- 「公開側」と「アプリ側」で共通レイアウトを分けたい、という典型的な使いどころを体験できる
 
 ## 解説
 
-### 2 種類のコンポーネントの違い
+### ページの種類ごとに違うレイアウトを使い分けたい
 
-「Next.js ってなに？」で触れた通り、App Router にはコンポーネントが 2 種類あります。本レッスンではこの違いをコードで体感していきます。
+「共通レイアウトを作る」で、全ページ共通のヘッダー・フッターを `app/layout.tsx` にまとめました。`/`、`/about`、`/todos` のどのページにアクセスしても、上にナビ・下にフッターが出る状態です。
 
-| | Server Component | Client Component |
-|---|---|---|
-| 動く場所 | サーバー側 | ブラウザ側 |
-| デフォルトか | **既定**（何もしなければこちら） | `"use client"` を明示する必要がある |
-| `useState` / `useEffect` / `onClick` | 使えない | 使える |
-| DB 接続 / API キー | 使える | 使えない（ブラウザに漏れるため） |
-| ブラウザに送られる JS | 送られない（結果だけが届く） | 送られる |
+一方で、アプリが大きくなるとこんな悩みが出てきます。
 
-基本の使い分けは次の通りです。
+- `/about` は公開ページなのでサイドバーは不要
+- `/todos` はアプリ内ページなので、左にサイドメニューがあると便利
 
-- 静的に描画するだけ・データ取得をしたいだけ → **Server Component**
-- ボタンクリック・state 管理・ブラウザ API（`localStorage` など）が必要 → **Client Component**
+つまり「ページごとに追加するレイアウトを変えたい」のですが、URL 体系は `/`、`/about`、`/todos` のままにしたい。このときに使うのが **Route Groups** です。
 
-### `"use client"` のルール
+### `(group)/` の意味
 
-Client Component にしたいファイルは、**1 行目に** 次の 1 行を書きます。
-
-```tsx
-"use client";
-
-import { useState } from "react";
-
-export function Counter() {
-  // ...
-}
-```
-
-- 必ず **ファイル先頭 1 行目**（`import` より上）です。
-- このファイルから `import` される子コンポーネントも、Server Component として書いてあっても **実質 Client 扱い** になります（Client 境界は import グラフに沿って伝播します）。
-
-つまり「あるファイルに `"use client"` を書く」＝「そこから先はすべてブラウザ側で動く」と覚えれば良いです。
-
-### 境界のイメージ
-
-ページ全体を木に例えると、外側は Server Component（緑）、必要な葉だけが Client Component（青）というイメージになります。
-
-<img src="/diagrams/server-client-tree.svg" alt="RootLayout(Server) → page.tsx(Server) → Nav(Server) / Counter(Client) / TodoForm(Client) のツリー。Server Component が外側を占め、Client Component が必要な葉のみ" class="diagram" />
-
-- 図の緑（Server）は、アクセスごとにサーバー側で React が走って結果を送る部分です。
-- 図の青（Client）は、ブラウザに JS が届いて動く部分です。
-- Client の部分は「葉」に配置します。ページ全体を Client にしません。
-
-### Client → Server の呼び出しルール
-
-ここがよく詰まるポイントです。
-
-- Client Component から Server Component を **`import` できません**。
-- ただし、`children` や props として **受け取ること** は可能です。
-
-つまり、「Client の中に Server を入れたい」なら、**親 Server Component の側で組み立てて、Client の `children` に渡す** 形にすれば良いです。
-
-```tsx
-// Server Component（親）
-import { ClientWrapper } from "./ClientWrapper";
-import { ServerInfo } from "./ServerInfo";
-
-export default function Page() {
-  return (
-    <ClientWrapper>
-      <ServerInfo />
-    </ClientWrapper>
-  );
-}
-```
-
-```tsx
-// ClientWrapper.tsx
-"use client";
-
-import type { ReactNode } from "react";
-import { useState } from "react";
-
-export function ClientWrapper({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(false);
-  return (
-    <div>
-      <button onClick={() => setOpen((o) => !o)}>開閉</button>
-      {open && children}
-    </div>
-  );
-}
-```
-
-`ClientWrapper` は自分では `ServerInfo` を `import` していませんが、`children` として渡ってきた内容は Server Component として動けます。
-
-### Server → Client へ渡せる props は JSON で表せる値だけ
-
-Server Component から Client Component へ props を渡すとき、**JSON で表せる値**（= シリアライズ可能な値）しか渡せません。これは Server で計算した結果を **ネットワーク越しに JSON にして Client へ送る** ためです。
-
-> **シリアライズ** は「メモリ上のオブジェクトを、ネットワークやファイルで送れる文字列／バイト列に変換すること」。JSON 化はその代表例です。
-
-- **OK**: 文字列 / 数値 / 真偽値 / `null` / 配列 / プレーンオブジェクト / Server Action として宣言された関数
-- **NG**: `Date` オブジェクト / `Map` / `Set` / 普通の関数（コールバック）/ クラスのインスタンス / Symbol
-
-`Date` を渡すと `Error: Only plain objects can be passed to Client Components` のようなエラーになります。実務での回避パターン:
-
-- **`Date` → 文字列**: Server で `date.toISOString()` してから渡し、Client 側で必要なら `new Date(str)` に戻す
-- **`Map` / `Set` → 配列 / オブジェクト**: `Array.from(map)` で配列化してから渡す
-- **コールバック関数**: 普通の関数は渡せない。**Server Action**（`"use server"` を付けた関数）として定義したものだけ渡せる
-
-### `"use client"` を忘れたときのエラー
-
-`useState` を使うファイルで `"use client"` を書き忘れると、Next.js はビルド時にエラーを出します。実際に出るメッセージの一部は以下のような文言です。
+App Router では、ディレクトリ名を `( )` で囲むと **URL には登場しない** 仕組みがあります。これが Route Groups です。
 
 ```
-You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
+app/
+├── (public)/
+│   ├── page.tsx          → /
+│   └── about/
+│       └── page.tsx      → /about
+└── (app)/
+    ├── layout.tsx        → (app) 配下だけに適用
+    └── todos/
+        └── page.tsx      → /todos
 ```
 
-このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
+- `(public)` というディレクトリ名は URL に出ません。`app/(public)/page.tsx` の URL は `/` です
+- 同じく `(app)` も URL に出ません。`app/(app)/todos/page.tsx` の URL は `/todos` です
+- 結果として、**URL は `/`、`/about`、`/todos` のまま変わりません**。ファイルの置き場所だけが整理されます
 
-### `client-only` でブラウザ専用コードを守る
+### グループ内の `layout.tsx`
 
-`server-only` の逆バージョンが `client-only` です。`navigator` や `window` などブラウザ API を使うモジュールをサーバーから import すると、サーバー実行時に `ReferenceError: window is not defined` のようなランタイムエラーになります。`client-only` を入れておくとビルド時に検出できます。
+Route Groups の嬉しさは、グループ直下に `layout.tsx` を置けることです。この `layout.tsx` は、**そのグループ配下のページだけ** に適用されます。
 
-```ts
-// lib/clipboard.ts
-import "client-only";
+- `app/(app)/layout.tsx` を置くと、`/todos` には適用されるが `/` や `/about` には適用されない
+- 逆に `app/(public)/layout.tsx` を置くと、`/` と `/about` には適用されるが `/todos` には適用されない
+- `app/layout.tsx`（ルートレイアウト）は引き続き全ページに適用される
 
-export function copyToClipboard(text: string) {
-  navigator.clipboard.writeText(text);
-}
-```
+つまり、レイアウトの構造は **「ルートレイアウト → グループレイアウト → page」** のように入れ子になります。
 
-インストールは `npm install client-only`。`server-only` / `client-only` はどちらも「意図した境界を仕組みで守る」ためのパッケージです。
+<img src="/diagrams/route-groups-layout.svg" alt="ルートの app/layout.tsx の下に (public) と (app) の 2 つのルートグループがあり、(public) は layout.tsx を持たず / と /about を直接含み、(app) は別の layout.tsx (サイドバー) を持って /todos を含むツリー" class="diagram" />
 
-### ページが表示されるまでの流れ
-
-Server Component と Client Component がどのように協力してページを作るのか、時系列で見ておきます。
-
-#### 初回表示（ブラウザで URL を入力 or リロード）
-
-```
-① ブラウザ → サーバーに GET リクエスト
-
-② サーバー
-   └─ Server Component を実行（DB 取得・fetch など）
-   └─ Client Component のタグ位置はプレースホルダとして保持
-   └─ HTML と RSC ペイロードを生成
-
-③ ブラウザ
-   └─ HTML を受け取る → すぐに画面が表示（文字や構造が見える）
-   └─ JS バンドルをダウンロード
-   └─ Client Component に js を「アタッチ」する（ハイドレーション）
-      → ボタンクリックなどインタラクションが動くようになる
-```
-
-**ハイドレーション（hydration）** は「すでに表示された HTML に、Client Component の JS を後から取り付ける」作業です。HTML を出力するだけでは onClick などの動作は働かないので、JS がロードされた後にそれを紐付けます。
-
-ユーザーの体験としては「すぐに文字は見えるが、クリックが効くまで少し遅れる」感覚です。
-
-#### ページ遷移（`<Link>` クリック）
-
-```
-① ブラウザが /posts/1 の RSC ペイロードをサーバーに要求
-
-② サーバー
-   └─ 新しいページの Server Component を実行
-   └─ RSC ペイロードだけを返す（HTML の丸ごと再生成はしない）
-
-③ ブラウザ
-   └─ React が差分だけをツリーに適用 → 画面が更新される
-   └─ JS の再ロード不要、スクロール位置も維持されやすい
-```
-
-`<Link>` での遷移は通常の `<a>` タグと違い、**ページ全体を読み直さずに差分だけ更新** するため速いです。
-
-> **RSC ペイロード**は Next.js が作る React 専用の中間形式で、通常の JSON や HTML とは別物です。`/posts/1` を `<Link>` で開くと、Network タブに `_rsc=...` のようなリクエストが見えることがあります。これが RSC ペイロードの取得です。詳細な構造は本コースでは扱いませんが、「Server Component の結果がこういう形で届く」とだけ覚えておけば十分です。
+::: tip 並列ルート / インターセプトルートは扱わない
+App Router には `@slot/page.tsx`（並列ルート）や `(.)path`（インターセプトルート）といったさらに発展的な機能もありますが、本コースでは **Route Groups まで** にとどめます。
+:::
 
 ## 演習
 
 ### 途中から始める場合
 
-このレッスンのカウンター演習は比較的独立しています。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します（`app/page.tsx` と `app/components/` 配下の新規作成のみで進められます）。
+これまでのレッスンで作った Next.js プロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
-### 既存のプロジェクトを使う
+<details>
+<summary>出発点のファイル</summary>
 
-「共通レイアウトを作る」のレッスンで作ったプロジェクトを開き直しましょう。
-
-### 手順 1: Client Component の `Counter` を作る
-
-`app/` と同じ階層（または `app/` 内どこでも）に `components/` ディレクトリを新しく作って、そこに `Counter.tsx` を置きます（本コースでは `app/components/` に置くことにします）。
-
-`app/components/Counter.tsx`:
+**`app/layout.tsx`**
 
 ```tsx
-"use client";
+import Link from "next/link";
+import "./globals.css";
 
-import { useState } from "react";
+export const metadata = {
+  title: "My Next App",
+};
 
-export function Counter() {
-  const [count, setCount] = useState(0);
-  console.log("client render");
+export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <div>
-      <p>カウント: {count}</p>
-      <button onClick={() => setCount((c) => c + 1)}>+1</button>
-    </div>
+    <html lang="ja">
+      <body>
+        <header className="site-header">
+          <nav>
+            <ul>
+              <li>
+                <Link href="/">Home</Link>
+              </li>
+              <li>
+                <Link href="/about">About</Link>
+              </li>
+              <li>
+                <Link href="/todos">Todos</Link>
+              </li>
+            </ul>
+          </nav>
+        </header>
+        <main>{children}</main>
+        <footer className="site-footer">
+          <p>&copy; 2026 My Next App</p>
+        </footer>
+      </body>
+    </html>
   );
 }
 ```
 
-- 1 行目に `"use client"` を書きます。
-- `useState` と `onClick` を使っています。
-- `console.log("client render")` をレンダリング中に仕掛けます。
-
-### 手順 2: Server Component の `page.tsx` に埋め込む
-
-`app/page.tsx` を次のように書き換えます。
+**`app/page.tsx`**
 
 ```tsx
-import { Counter } from "./components/Counter";
-
 export default function Page() {
-  console.log("server render");
   return (
     <>
       <h1>ようこそ</h1>
-      <p>Counter は Client Component として動く。</p>
-      <Counter />
+      <p>このアプリについてはヘッダーのリンクから。</p>
     </>
   );
 }
 ```
 
-- `app/page.tsx` には `"use client"` を書かないので、これは Server Component です。
-- `console.log("server render")` を仕掛けます。
-
-### 手順 3: 境界を確認する
-
-1. ブラウザで `/` を開きます。
-2. ブラウザの DevTools → Console を開きます。
-3. StackBlitz 画面下部の **ターミナル** も見える状態にします（サーバー側ログが流れる場所です）。
-4. ページを再読み込みします。
-
-#### 期待出力
-
-- StackBlitz ターミナル側: `server render` が出ます。ブラウザ Console には出ません。
-- ブラウザ Console: `client render` が出ます。ターミナル側にも 1 回だけ出る場合がありますが、それはサーバー側で初回描画したときのログです（Client Component でも最初の HTML を出すために一度サーバー側でも走ります）。
-- カウンターの「+1」ボタンを押すと、ブラウザ Console にだけ `client render` が追加で出続けます。ターミナル側には一切出ません（ボタン操作はサーバーに届かないからです）。
-
-これで、**Server Component はサーバーで 1 回、Client Component は操作のたびにブラウザで** 動く、という境界の違いを目で確認できます。
-
-### 手順 4: `"use client"` を消してみる
-
-`app/components/Counter.tsx` の 1 行目 `"use client";` をコメントアウト、または削除して保存します。
-
-ビルドが失敗し、ターミナルに次のようなエラーが出ます（抜粋）。
-
-```
-You're importing a component that needs useState. This React Hook only works in a Client Component. To fix, mark the file (or its parent) with the "use client" directive.
-```
-
-このエラーが出たら、`"use client"` を書き戻して直しましょう。Next.js は `useState` などを検知して「これは Client Component じゃないと動かないよ」と教えてくれます。
-
-### 手順 5: Server を Client の children として渡す
-
-以下の 2 ファイルを新しく作って、「Client の中に Server」の組み立てを体験しましょう。
-
-`app/components/ClientBox.tsx`:
+**`app/about/page.tsx`**
 
 ```tsx
-"use client";
+import "./about.css";
 
-import type { ReactNode } from "react";
-import { useState } from "react";
-
-export function ClientBox({ children }: { children: ReactNode }) {
-  const [open, setOpen] = useState(true);
-  return (
-    <div>
-      <button onClick={() => setOpen((o) => !o)}>
-        {open ? "閉じる" : "開く"}
-      </button>
-      {open && <div>{children}</div>}
-    </div>
-  );
-}
-```
-
-`app/components/ServerInfo.tsx`:
-
-```tsx
-export function ServerInfo() {
-  // Server Component なので、ここでサーバー時刻が取れる
-  const now = new Date().toISOString();
-  return <p>サーバー時刻: {now}</p>;
-}
-```
-
-`app/page.tsx` を書き換え、Server の `ServerInfo` を Client の `ClientBox` の `children` として渡します。
-
-```tsx
-import { Counter } from "./components/Counter";
-import { ClientBox } from "./components/ClientBox";
-import { ServerInfo } from "./components/ServerInfo";
-
-export default function Page() {
-  console.log("server render");
+export default function AboutPage() {
   return (
     <>
-      <h1>ようこそ</h1>
-      <Counter />
-      <ClientBox>
-        <ServerInfo />
-      </ClientBox>
+      <section id="about">
+        <h2>自己紹介</h2>
+        <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に手を動かして進めています。</p>
+      </section>
+
+      <section id="likes">
+        <h2>好きなもの</h2>
+        <div className="cards">
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="コーヒーのプレースホルダ画像" />
+            <h3>コーヒー</h3>
+            <p>朝の 1 杯が欠かせない。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="本のプレースホルダ画像" />
+            <h3>本</h3>
+            <p>技術書からエッセイまで。</p>
+          </article>
+          <article className="card">
+            <img src="https://placehold.co/300x200.png" alt="散歩のプレースホルダ画像" />
+            <h3>散歩</h3>
+            <p>行き先を決めずに歩く。</p>
+          </article>
+        </div>
+      </section>
+
+      <section id="contact">
+        <h2>問い合わせ</h2>
+        <form>
+          <div>
+            <label htmlFor="name">お名前</label>
+            <input id="name" name="name" type="text" required />
+          </div>
+          <div>
+            <label htmlFor="email">メール</label>
+            <input id="email" name="email" type="email" required />
+          </div>
+          <div>
+            <label htmlFor="message">メッセージ</label>
+            <textarea id="message" name="message" rows={4} required></textarea>
+          </div>
+          <button type="submit">送信</button>
+        </form>
+      </section>
     </>
   );
 }
 ```
 
-#### 期待出力
+**`app/about/about.css`**（「ページを増やしてリンクで移動する」と同じ。`.cards` / `.card` のスタイル中心に必要なものを貼ってください）
 
-- 最初は `サーバー時刻: 2026-...` が見えています。
-- 「閉じる」ボタンで `ServerInfo` の表示が消えます。「開く」で戻ります。
-- `ClientBox` は Client Component、中身の `ServerInfo` は Server Component、という組み合わせが成立しています。
+**`app/todos/page.tsx`**
 
-もし `ClientBox.tsx` の中で直接 `import { ServerInfo } from "./ServerInfo";` しようとすると、Server Component 側の機能（将来的に DB 呼び出しなど）は動かなくなります。**渡す** 形を使うのがコツです。
+```tsx
+export default function TodosPage() {
+  return (
+    <>
+      <h1>TODO 一覧</h1>
+      <p>TODO 一覧はここに実装する。</p>
+    </>
+  );
+}
+```
+
+**`app/globals.css`**
+
+```css
+.site-header ul {
+  display: flex;
+  gap: 1rem;
+  list-style: none;
+  padding: 1rem;
+  background: #f5f5f5;
+}
+
+.site-header a {
+  text-decoration: none;
+  color: #0070f3;
+}
+
+.site-footer {
+  padding: 1rem;
+  border-top: 1px solid #ddd;
+  color: #555;
+}
+
+@media (prefers-color-scheme: dark) {
+  .site-header ul {
+    background: #1f1f1f;
+  }
+  .site-header a {
+    color: #4ea2ff;
+  }
+  .site-footer {
+    border-top-color: #333;
+    color: #bbb;
+  }
+}
+```
+
+</details>
+
+### 前回のプロジェクトを開く
+
+これまでのレッスンで作った StackBlitz プロジェクトを開き直しましょう。
+
+### 現状の確認
+
+現在のファイル構成は次のようになっているはずです。
+
+```
+app/
+├── layout.tsx       ← 全ページ共通のヘッダー・フッター
+├── page.tsx         → /
+├── about/
+│   ├── page.tsx     → /about
+│   └── about.css
+└── todos/
+    └── page.tsx     → /todos
+```
+
+この構成を、次の形に変えます。
+
+```
+app/
+├── layout.tsx
+├── (public)/
+│   ├── page.tsx
+│   └── about/
+│       ├── page.tsx
+│       └── about.css
+└── (app)/
+    ├── layout.tsx   ← 新規。サイドバーを置く
+    └── todos/
+        └── page.tsx
+```
+
+### 手順 1: `(public)` グループを作る
+
+StackBlitz のファイルツリーで、`app/` の直下に新しいフォルダを作ります。名前は `(public)` です（括弧も含めてそのまま入力します）。
+
+作れたら、次のファイル・フォルダを `(public)/` の中に **移動** します。
+
+- `app/page.tsx` → `app/(public)/page.tsx`
+- `app/about/` フォルダごと → `app/(public)/about/`
+
+移動は StackBlitz の UI 上でドラッグするか、右クリックメニューの「Move」で行います。
+
+### 手順 2: `(app)` グループを作る
+
+同じ要領で、`app/` 直下に `(app)` というフォルダを新規作成します。
+
+- `app/todos/` フォルダごと → `app/(app)/todos/`
+
+これで `(public)` と `(app)` の 2 つのグループに分かれました。
+
+### 手順 3: 動作確認（`layout.tsx` 追加前）
+
+この時点で、ブラウザから `/`、`/about`、`/todos` の 3 つの URL を確認しましょう。
+
+- URL は **変わりません**（Route Groups なので `( )` は URL に出ません）
+- 見た目も **変わりません**（`app/layout.tsx` のヘッダー・フッターは全ページに適用されたままです）
+
+「ファイルを動かしても URL が壊れない」ことが Route Groups の第一印象です。
+
+### 手順 4: `(app)/layout.tsx` を作る
+
+`app/(app)/layout.tsx` を新規作成します。ここに「アプリ用のサイドバー」を置きます。
+
+```tsx
+import Link from "next/link";
+
+export default function AppLayout({ children }: LayoutProps<"/todos">) {
+  return (
+    <div className="app-shell">
+      <aside className="app-sidebar">
+        <h2>アプリメニュー</h2>
+        <nav>
+          <ul>
+            <li>
+              <Link href="/todos">TODO 一覧</Link>
+            </li>
+            <li>
+              <Link href="/">ホームに戻る</Link>
+            </li>
+          </ul>
+        </nav>
+      </aside>
+      <section className="app-main">{children}</section>
+    </div>
+  );
+}
+```
+
+ポイント:
+
+- このファイルは `(app)` グループ配下の `layout.tsx` なので、`(app)` 配下のページにだけ適用されます。今は `/todos` だけが該当するので、`/` や `/about` には影響しません
+- `children` には `(app)` 配下の各 `page.tsx` が差し込まれます（今回は `/todos` だけ）
+- 型引数 `LayoutProps<"/todos">` の `"/todos"` は、このレイアウトが覆う **代表的なルートのパス** を指します。`LayoutProps` 自体は Next.js が自動生成するグローバル型なので import は不要です（lesson72 で扱いました）。`(app)` 配下にページを増やしたら、IDE の警告に従って修正してください
+- `"use client"` は不要です。`<Link>` を並べるだけでクリックで動く JS は書いていません（Server Component のままで OK）
+
+### 手順 5: サイドバーの CSS
+
+`app/globals.css` の末尾に次を追加します。
+
+```css
+.app-shell {
+  display: flex;
+  gap: 1rem;
+  align-items: flex-start;
+}
+
+.app-sidebar {
+  flex: 0 0 200px;
+  padding: 1rem;
+  background: #f5f5f5;
+  border-right: 1px solid #ddd;
+}
+
+.app-sidebar h2 {
+  margin-top: 0;
+  font-size: 1rem;
+}
+
+.app-sidebar ul {
+  list-style: none;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.app-sidebar a {
+  color: #0070f3;
+  text-decoration: none;
+}
+
+.app-main {
+  flex: 1;
+}
+
+/* ダークモード配慮 */
+@media (prefers-color-scheme: dark) {
+  .app-sidebar {
+    background: #1f1f1f;
+    border-right-color: #333;
+    color: #e5e7eb;
+  }
+  .app-sidebar a {
+    color: #4ea2ff;
+  }
+}
+
+/* 画面が狭いときは縦積み */
+@media (max-width: 640px) {
+  .app-shell {
+    flex-direction: column;
+  }
+  .app-sidebar {
+    flex: 0 0 auto;
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid #ddd;
+  }
+}
+```
+
+### 期待出力
+
+ブラウザで `/about` と `/todos` を開き比べます。
+
+**`/about`（サイドバーなし）:**
+
+```
++-----------------------------------------+
+| Home | About | Todos   ← ルートレイアウト |
++-----------------------------------------+
+|                                         |
+| 自己紹介                                |
+| ...                                     |
+|                                         |
++-----------------------------------------+
+| © 2026 My Next App                      |
++-----------------------------------------+
+```
+
+**`/todos`（サイドバーあり）:**
+
+```
++-----------------------------------------+
+| Home | About | Todos   ← ルートレイアウト |
++-----------------------------------------+
+| アプリメニュー |                        |
+| - TODO 一覧   |  TODO 一覧              |
+| - ホームに戻る|  (ページ固有の内容)     |
+|               |                         |
++-----------------------------------------+
+| © 2026 My Next App                      |
++-----------------------------------------+
+```
+
+確認したいポイント:
+
+- **URL は `/`、`/about`、`/todos` のまま変わらない**（`(public)` や `(app)` はどちらも URL に出ない）
+- **`/about` にはサイドバーが出ない**（`(app)/layout.tsx` の適用範囲外）
+- **`/todos` にはサイドバーが出る**（`(app)/layout.tsx` の適用範囲内）
+- ルートレイアウト（ヘッダー・フッター）は 3 ページすべてに出る
+
+この「同じ URL 体系のまま、一部のページだけに追加レイアウトを付けられる」のが Route Groups の狙いです。
 
 ### 変えてみる
 
-1. `ClientBox` の初期値を `useState(false)` に変えて、最初は閉じているようにしましょう。
-2. `ServerInfo` で取得する時刻を `new Date().toLocaleString("ja-JP")` に変えましょう。
+1. `(app)/layout.tsx` のサイドバーに「新規作成」のリンク（仮に `/todos/new`）を足してみましょう（リンク先のページはまだ作らなくて構いません）。
+2. `(public)/layout.tsx` を新規作成して、`/` と `/about` にだけ「Welcome!」と書かれた小さなバナーを上に出してみましょう。`/todos` には出ないことを確認します。
+3. 試しに `(app)` を一時的に `app2`（括弧なし）にリネームしてみると、`/todos` が `/app2/todos` に変わる（= ディレクトリ名が URL に反映されてしまう）ことが確認できます。確認したら `(app)` に戻します。括弧で囲むことで URL から消える、というのが Route Groups の核心です。
 
 ### 自分で書く
 
-「ダークモード切り替えトグル」を Client Component で書いてみましょう。`useState<boolean>(false)` でオン／オフを持って、ボタンで切り替え、`<p>` に現在の状態を描画するだけで構いません。それをトップページに足してみましょう。
+何も見ずに、次の構造を組めるか挑戦しましょう。
+
+- `(marketing)` グループの中に `/pricing` ページを作り、`(marketing)/layout.tsx` で「製品ページ共通の帯」を上に出す
+- `/pricing` ではその帯が出るが、`/about` では出ないことを確認する
+
+必要なファイルは `app/(marketing)/layout.tsx` と `app/(marketing)/pricing/page.tsx` の 2 つだけです。
 
 ## まとめ
 
-- Server Component がデフォルトです。Client Component にしたいファイルは 1 行目に `"use client"` と書きます。
-- `"use client"` のファイルから `import` された子は、書いた本人が気付かなくても Client 扱いに伝播します。
-- Client Component は Server Component を `import` できませんが、`children` や props として **受け取る** ことはできます。
-- `console.log` の出方の違い（ターミナル vs ブラウザ Console）で境界を体感できます。
+- ディレクトリ名を `( )` で囲むと URL に出ない「グループ」になる。URL 体系を変えずにファイル配置だけを整理できる
+- グループ内に `layout.tsx` を置くと、そのグループ配下のページだけに追加レイアウトが適用される
+- 典型的な使いどころは「公開ページ / アプリ側ページ」のような大きな 2 分割
+- 本コースで扱うのはここまで。並列ルート（`@slot`）やインターセプトルート（`(.)path`）は扱わない

@@ -1,364 +1,212 @@
-# lesson68: Error Boundary と Suspense
+# lesson68: React DevTools（Components / Profiler）
 
 ## ゴール
 
-- コンポーネントツリーの中で起きた例外が、親の境界で受け止められる仕組みを説明できる
-- `ErrorBoundary` をクラスコンポーネントで最小実装できる（React 19 でも現状クラスが必要）
-- `<Suspense fallback={...}>` の役割を説明でき、最小の使い方を書ける
-- `<ErrorBoundary>` と `<Suspense>` を組み合わせるパターンを書ける
-- Next.js App Router の `error.tsx` / `loading.tsx` がこれを Route レベルで統合したものだと理解する
+- React Developer Tools ブラウザ拡張をインストールできる
+- Components パネルでツリーと state / props を観察できる
+- Profiler パネルで再レンダリングの回数と所要時間を測定できる
+- 「useMemo で計算のメモ化」で書いた `useMemo` が本当にスキップしているかを確認できる
 
 ## 解説
 
-### なぜ必要か: 1 箇所のエラーで全画面真っ白
+### React DevTools とは
 
-React は、レンダリング中にどこかで例外が飛ぶと **そのコンポーネントのツリー全体をアンマウント** します。本来関係ないヘッダーやフッターまで消えて、画面が真っ白になってしまいます。
+React 公式の **ブラウザ拡張機能** です。Chrome / Firefox / Edge で使えます。インストールすると、ブラウザ標準の DevTools に **2 つのパネル** が追加されます。
 
-たとえば「記事一覧」「記事本文」「関連記事」の 3 つを並べていて、本文取得に失敗しただけで全部消える、という状況は避けたいわけです。
+- **Components**: React のコンポーネントツリーを可視化。各コンポーネントの state / props を見られる。値の書き換えもできる
+- **Profiler**: 再レンダリングを記録して、どのコンポーネントが何回再描画され、何 ms かかったかを測定
 
-ここで登場するのが **ErrorBoundary**。境界より内側で起きた例外を受け止めて、フォールバック UI（エラー表示）に差し替えます。境界の外側は無事なままです。
+素の JS のときは DevTools の Elements パネルで DOM を見れば十分でした。React では **JSX → DOM の間に「コンポーネントツリー」** があり、そのツリーを直接観察できるのが DevTools の強みです。
 
-### `ErrorBoundary` は現状クラスコンポーネントが必要
+### インストール
 
-React 19 でも、ErrorBoundary を **自分で書く** ときはクラスコンポーネントを使います。関数コンポーネントのフックだけでは用意できません。
+1. Chrome ウェブストアで [React Developer Tools](https://chromewebstore.google.com/detail/fmkadmapgofadopljbjfkapdkoienihi) を検索してインストール（Firefox は Add-ons）
+2. React を使うサイトを開くと、拡張アイコンが有効（青）になる
+3. DevTools を開くと「Components」「Profiler」の 2 つのタブが現れる
 
-ただし日常的にクラスを書く必要はなく、「この 1 ファイルだけクラスで書いて、以後は `<ErrorBoundary>` として JSX で使う」という運用でほぼ間に合います。
+### StackBlitz での制約（重要）
 
-最小の実装は次のとおりです。
+StackBlitz のプレビュー画面は **iframe の中で動いている** ため、DevTools が親ページ側を見てしまい、React ツリーが拾えないことがあります。
 
-```tsx
-import { Component, type ReactNode } from "react";
+回避策:
 
-type Props = {
-  fallback: ReactNode;
-  children: ReactNode;
-};
+- プレビュー右上の **「Open in New Tab」ボタン** をクリックしてプレビューを **別タブ** で開く
+- 別タブで開いた画面で DevTools を起動すれば、React ツリーが正しく表示される
 
-type State = {
-  hasError: boolean;
-};
+それでも拾えない場合の代替動線:
 
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
+- **CodeSandbox** で同じコードを開く（こちらはプレビューが同一オリジンで動くことが多い）
+- **ローカルで `npm run dev`** を走らせる（StackBlitz に HMR / DevTools が噛み合わない時の最終手段）
 
-  static getDerivedStateFromError(_error: Error): State {
-    // レンダリング中に例外が飛んだら、この戻り値で state を差し替える
-    return { hasError: true };
-  }
+本コースはブラウザ完結を建前にしていますが、DevTools の挙動は環境差が出やすい領域です。うまく動かなければ本レッスンの演習はスキップしてもらって構いません（機能理解だけ押さえて先に進めます）。
 
-  componentDidCatch(error: Error, info: React.ErrorInfo) {
-    // ログ送信など副作用を行いたい場合に使う
-    console.log("ErrorBoundary がキャッチ:", error.message, info);
-  }
+### Components パネルの使い方
 
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-```
+- 左に **コンポーネントツリー** が表示される（`<App>` → `<TodoInput>`、`<TodoList>` → ...）
+- コンポーネントをクリックすると、右側に **props / hooks**（state） が展開される
+- **state の値をその場で書き換え** もできる（デバッグに便利）
+- ツールバーの歯車 → General で「Highlight updates when components render.」を有効にすると、**再レンダリングした要素の周囲が一瞬光る** ようになる。これが最初の観察ツール
 
-- **`getDerivedStateFromError`**: 例外を受け取って、エラー状態に切り替えるための **純粋な** メソッドです。ここで state を `{ hasError: true }` に差し替えます。
-- **`componentDidCatch`**: 副作用（ロギング / 通報）を走らせる場所です。ログ送信が要らなければ省略できます。
-- `fallback` と `children` は props で受け取る、シンプルなコンテナです。
+### Profiler パネルの使い方
 
-::: details コラム: React コンポーネントの書き方の歴史
+1. Profiler タブを開く
+2. 左上の丸い **Record** ボタン（●）を押して記録開始
+3. 画面で操作（ボタンクリック、入力など）を何回か行う
+4. もう一度 Record ボタン（■）を押して記録停止
+5. 記録された **Commit** が一覧で表示される。各 Commit をクリックすると、その瞬間に再レンダリングされたコンポーネントとそれぞれの所要時間が見える
 
-React のコンポーネントは、登場以来 3 段階の変遷をたどっています。
+Profiler のキーポイント:
 
-**1. `React.createClass`（2013 〜 React 15）**
-
-React が最初に提供した API です。ES6 以前の時代に JavaScript でクラスのような構造を表現するための独自メソッドでした。
-
-```js
-var Greeting = React.createClass({
-  render: function () {
-    return React.createElement("p", null, "こんにちは");
-  },
-});
-```
-
-React 16 で削除され、現在は使えません。
-
-**2. クラスコンポーネント（2015 〜 現在も存続）**
-
-ES6 の `class` 構文が広まると、`React.Component` を継承する形に移行しました。`state` の管理、ライフサイクルメソッド（`componentDidMount` / `componentDidUpdate` など）を持つことができ、長い間 React の主流でした。
-
-```tsx
-class Counter extends React.Component {
-  state = { count: 0 };
-  render() {
-    return (
-      <button onClick={() => this.setState({ count: this.state.count + 1 })}>
-        {this.state.count}
-      </button>
-    );
-  }
-}
-```
-
-**3. 関数コンポーネント + Hooks（React 16.8 / 2019 〜 現在の標準）**
-
-2019 年に `useState` / `useEffect` などの Hooks が追加され、関数コンポーネントでも state やライフサイクルに相当する処理が書けるようになりました。クラスよりコードが短く、ロジックを分離・再利用しやすいことから、現在は **関数コンポーネントが唯一の標準** です。
-
-```tsx
-function Counter() {
-  const [count, setCount] = useState(0);
-  return <button onClick={() => setCount(c => c + 1)}>{count}</button>;
-}
-```
-
-クラスコンポーネント自体は React から削除されておらず、今回の `ErrorBoundary` のように **フックで代替できない一部の機能** には今でも必要です。新規コードで意図的にクラスを選ぶことはほぼありませんが、古いコードベースでは見かけることがあります。
-:::
-
-### 使い方
-
-守りたい範囲を囲むだけです。
-
-```tsx
-<ErrorBoundary fallback={<p>関連記事の読み込みに失敗しました</p>}>
-  <RelatedPosts />
-</ErrorBoundary>
-```
-
-`<RelatedPosts />` でどれだけ例外が飛んでも、境界の外にあるヘッダー / ナビ / 他セクションは生きたままです。
-
-### 拾える例外と拾えない例外
-
-ErrorBoundary が捕まえるのは「**レンダリング中** の例外」です。次は拾えません。
-
-- イベントハンドラの中で投げた例外（`onClick={() => { throw ... }}`）
-- 非同期処理（`setTimeout` / `Promise` の `.then` の中）
-- サーバーサイドで起きる例外（Next.js の Server Component は別の仕組みで拾う）
-
-イベントハンドラの例外は、普通の `try` / `catch`（「try / catch でエラー処理」）か、state を使って自分でフォールバックを出すのが基本です。
-
-### `<Suspense>`: ローディングの境界
-
-`<Suspense>` はエラーの兄弟です。**非同期なデータ / コンポーネントを待つ間、フォールバック UI を見せる** 仕組みです。
-
-```tsx
-<Suspense fallback={<p>読み込み中...</p>}>
-  <SlowComponent />
-</Suspense>
-```
-
-- 中のコンポーネントが読み込み待ち状態（Promise を投げている / lazy ロードの途中）になると、`fallback` が代わりに表示される
-- 待ちが終わると中身に切り替わる
-- `<Suspense>` は React 本体の機能で、ライブラリ（Next.js / Remix / lazy など）と組み合わせて使う
-
-日常的には、Next.js の App Router で Server Component と組み合わせて使うのが主戦場です。
-
-### 組み合わせパターン
-
-エラーとローディングは同時に起こりえます。両方を囲むのが基本形です。
-
-```tsx
-<ErrorBoundary fallback={<p>読み込みに失敗しました</p>}>
-  <Suspense fallback={<p>読み込み中...</p>}>
-    <RemoteContent />
-  </Suspense>
-</ErrorBoundary>
-```
-
-- **外側** が ErrorBoundary、**内側** が Suspense の順が定番です
-- 途中で Promise が投げられれば Suspense が受け取り、途中で例外が投げられれば ErrorBoundary が受け取ります
-
-### Next.js App Router での発展
-
-Next.js App Router では、**ルートごと** にこの 2 つを書けるようになっています。
-
-- `app/posts/[id]/error.tsx` → そのルート配下の ErrorBoundary
-- `app/posts/[id]/loading.tsx` → そのルート配下の Suspense
-
-ファイルを置くだけで境界が自動で入るので、毎回コンポーネントを囲む必要がなくなります。今回学ぶ「境界で区切って、フォールバックに差し替える」発想は、Next.js でそのまま生きます。
+- **灰色** のコンポーネント: 再レンダリングをスキップした
+- **色付き**（黄色〜赤）: 再レンダリングした（濃いほど時間がかかった）
+- 各コンポーネントにホバーすると「なぜ再レンダリングされたか」（props が変わった / state が変わった / 親が再レンダリングした など）も見える
 
 ## 演習
 
 ### 途中から始める場合
 
-これまでのレッスンで作った React + Vite プロジェクトを使い回しても構いませんし、新しいプロジェクトで始めても構いません。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。本レッスンは **新規の小さな演習** として分離して進めるのが楽です。
+「useMemo で計算のメモ化」までで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開き、下の「出発点のファイル」を貼って揃えてください。
 
 <details>
 <summary>出発点のファイル</summary>
 
-**`src/main.tsx`**
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import App from "./App";
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <App />
-  </StrictMode>
-);
-```
-
 **`src/App.tsx`**
 
 ```tsx
-export default function App() {
+import { useMemo, useState } from "react";
+import "./App.css";
+
+const BIG_NUMBERS = Array.from({ length: 10000 }, (_, i) => i + 1);
+
+function App() {
+  const [multiplier, setMultiplier] = useState(1);
+  const [color, setColor] = useState<"red" | "blue">("blue");
+
+  const total = useMemo(() => {
+    console.log("computing total...");
+    return BIG_NUMBERS.reduce((a, b) => a + b, 0) * multiplier;
+  }, [multiplier]);
+
   return (
-    <div>
-      <h1>練習</h1>
-    </div>
+    <>
+      <h1>useMemo のデモ</h1>
+
+      <section className="box">
+        <h2>合計</h2>
+        <p style={{ color }}>total = {total.toLocaleString()}</p>
+        <button onClick={() => setMultiplier((m) => m + 1)}>
+          multiplier +1（合計が再計算される）
+        </button>
+      </section>
+
+      <section className="box">
+        <h2>無関係な state</h2>
+        <p>現在の色: {color}</p>
+        <button onClick={() => setColor((c) => (c === "blue" ? "red" : "blue"))}>
+          色を切り替え（合計は再計算されないはず）
+        </button>
+      </section>
+    </>
   );
 }
+
+export default App;
 ```
+
+**`src/App.css`**
+
+```css
+.box {
+  border: 1px solid #ccc;
+  padding: 12px;
+  margin: 12px 0;
+  border-radius: 4px;
+  color: #222;
+  background-color: #fff;
+}
+
+.box button {
+  padding: 6px 10px;
+  cursor: pointer;
+}
+
+@media (prefers-color-scheme: dark) {
+  .box {
+    color: #eee;
+    background-color: #202020;
+    border-color: #555;
+  }
+}
+```
+
+このコードをそのまま使って、Profiler で再計算スキップを観察します。
 
 </details>
 
 ### ゴール
 
-- わざと例外を投げる子コンポーネント `Bomb` を `ErrorBoundary` で囲み、画面全体が死なずにフォールバックに切り替わる
-- `Suspense` で `lazy` 読み込みのコンポーネントを囲み、ロード中のフォールバックを確認する
-- 「爆発するボタンを押す前」は通常表示、「押した後」は ErrorBoundary のフォールバックが出ることを確認する
+- 「useMemo で計算のメモ化」の `useMemo` を使った「1 万件の合計」アプリで、Profiler を使って再計算スキップを確認する
 
 ### 手順
 
-1. `src/ErrorBoundary.tsx` を新規作成して、クラスコンポーネントの ErrorBoundary を用意する
-2. `src/Bomb.tsx` を新規作成する。props で `shouldExplode` を受け取り、`true` のときは `throw new Error(...)` する
-3. `src/LazyGreeting.tsx` を作り、`App.tsx` から `lazy(() => import("./LazyGreeting"))` で読み込む
-4. `App.tsx` に 2 つのセクションを並べる。それぞれ境界で囲む
+1. 「useMemo で計算のメモ化」の StackBlitz プロジェクトを開く（もしくは新規に作って「useMemo で計算のメモ化」のコードを貼る）
+2. プレビューを「Open in New Tab」で別タブに開く
+3. 別タブで DevTools を開き、Components と Profiler のタブが表示されていることを確認
 
-### 主要ファイルの完成形
+### ステップ 1: Components パネルで観察
 
-**`src/ErrorBoundary.tsx`**
+1. Components タブを選ぶ
+2. 左に `<App>` のツリーが出る。クリックしてみる
+3. 右に `State` 欄で `multiplier: 1` / `color: "blue"` のような値が見える
+4. ツールバー歯車 → General → 「Highlight updates when components render.」を有効化
+5. 画面の「multiplier +1」ボタンを押す → 該当エリアが一瞬枠で囲まれるのが見える
+6. 「色を切り替え」を押す → これも枠で囲まれる。ただし実際には内部の計算は走っていない（次のステップで確認）
 
-```tsx
-import { Component, type ReactNode, type ErrorInfo } from "react";
+### ステップ 2: Profiler でスキップ確認
 
-type Props = {
-  fallback: ReactNode;
-  children: ReactNode;
-};
+1. Profiler タブを選ぶ
+2. 左上の Record ボタン（●）を押す（赤に変わる）
+3. 画面で以下を 1 回ずつ押す:
+   - 「multiplier +1」
+   - 「色を切り替え」
+   - 「色を切り替え」
+4. 停止ボタン（■）を押す
+5. Commit タブに 3 件の Commit が記録されているはず
 
-type State = {
-  hasError: boolean;
-};
+各 Commit を見ると:
 
-export class ErrorBoundary extends Component<Props, State> {
-  state: State = { hasError: false };
-
-  static getDerivedStateFromError(_error: Error): State {
-    return { hasError: true };
-  }
-
-  componentDidCatch(error: Error, info: ErrorInfo) {
-    console.log("ErrorBoundary がキャッチ:", error.message);
-    console.log("発生場所:", info.componentStack);
-  }
-
-  render() {
-    if (this.state.hasError) {
-      return this.props.fallback;
-    }
-    return this.props.children;
-  }
-}
-```
-
-**`src/Bomb.tsx`**
-
-```tsx
-type Props = {
-  shouldExplode: boolean;
-};
-
-export function Bomb({ shouldExplode }: Props) {
-  if (shouldExplode) {
-    throw new Error("Bomb が爆発しました");
-  }
-  return <p>Bomb はまだ安全です</p>;
-}
-```
-
-**`src/LazyGreeting.tsx`**
-
-```tsx
-export default function LazyGreeting() {
-  return <p>こんにちは！（遅れて読み込まれたコンポーネント）</p>;
-}
-```
-
-**`src/App.tsx`**
-
-```tsx
-import { lazy, Suspense, useState } from "react";
-import { ErrorBoundary } from "./ErrorBoundary";
-import { Bomb } from "./Bomb";
-
-const LazyGreeting = lazy(() => import("./LazyGreeting"));
-
-export default function App() {
-  const [exploded, setExploded] = useState(false);
-
-  return (
-    <div style={{ fontFamily: "system-ui", padding: 16 }}>
-      <h1>ErrorBoundary と Suspense</h1>
-
-      <section>
-        <h2>1. ErrorBoundary</h2>
-        <button onClick={() => setExploded(true)}>爆発させる</button>
-        <ErrorBoundary
-          fallback={
-            <div style={{ color: "red" }}>
-              ここだけエラーになりました（他のセクションは生きています）
-            </div>
-          }
-        >
-          <Bomb shouldExplode={exploded} />
-        </ErrorBoundary>
-      </section>
-
-      <section>
-        <h2>2. Suspense</h2>
-        <Suspense fallback={<p>読み込み中...</p>}>
-          <LazyGreeting />
-        </Suspense>
-      </section>
-
-      <section>
-        <h2>3. 組み合わせ</h2>
-        <ErrorBoundary fallback={<p>組み合わせでも守られています</p>}>
-          <Suspense fallback={<p>読み込み中 (組み合わせ)...</p>}>
-            <LazyGreeting />
-          </Suspense>
-        </ErrorBoundary>
-      </section>
-    </div>
-  );
-}
-```
+- 1 件目（multiplier +1）: `useMemo` の中身が再計算される
+- 2 件目・3 件目（色切り替え）: `useMemo` は再計算されない（灰色表示になる / `total` の値が前回と同じ参照のまま）
 
 ### 期待出力
 
-1. 最初の画面には 3 つのセクションが並び、Suspense セクションは一瞬「読み込み中...」が見えた後、グリーティングに置き換わる
-2. 「爆発させる」ボタンを押す → 1 番目のセクションだけ赤字のフォールバックに切り替わる。ページ全体は生きたまま、ヘッダー（`h1`）も他のセクションも残っている
-3. Console に `ErrorBoundary がキャッチ: Bomb が爆発しました` のログが出る
-4. **StrictMode の開発ビルドでは、キャッチされた後もブラウザ Console に赤字のエラーが表示されます**。これは開発時の二重警告で、本番ビルドでは出ません（ErrorBoundary のキャッチ自体は機能しています）。気にせず進めて大丈夫です。
+- Console に `computing total...` が **1 回目（multiplier +1）だけ** 出る
+- Profiler で「色を切り替え」に対応する Commit では、`App` 全体の再レンダリング時間が小さい
+- Components の state 欄で `multiplier` と `color` の値が変わっていくのが見える
+
+これで「`useMemo` が本当に効いている」ことを視覚的に確認できます。
 
 ### 変える
 
-- `fallback` の中身を絵文字なしの自由な HTML に差し替えて、見た目を変える（例: `<div><h3>読み込みエラー</h3><p>あとで試してください</p></div>`）
-- `Bomb` を 2 つ並べ、それぞれ別の ErrorBoundary で囲む → 片方だけ爆発させたときに、もう片方は生きたままになる
-- ErrorBoundary の外側に `Bomb` を置くと画面全体が落ちることを確認する（確認後、内側に戻す）
+- 「useMemo で計算のメモ化」の `useMemo` を外してみる → Profiler の同じ操作で、色切り替え時にも Console に `computing total...` が出るようになる
+- 「色切り替え」を連打して Profiler で記録 → `useMemo` なしと `useMemo` あり で合計時間を比べる
 
-### 自分で書く
+### 自分で書く（挑戦）
 
-- ErrorBoundary に **「再試行」ボタン** を付ける。`state` に `hasError` を持っているので、押したら `setState({ hasError: false })` 相当の処理でリセットできる（クラスの `this.setState({ hasError: false })` を使う）
-- `LazyGreeting` の読み込みをわざと遅らせる。トップに `await new Promise(r => setTimeout(r, 2000))` 相当の処理を入れるダミーを作り、Suspense のフォールバックが長く見えることを確認する
-- 複数の ErrorBoundary を入れ子にする。内側でキャッチしたエラーは外側に届かないことを確認する
+- 自分の React + Vite プロジェクトに Profiler をかけ、リスト要素を 50 件ほど並べた状態で操作（追加・削除など）したときに、どの子コンポーネントがどれだけ時間を使うかを観察する
+- 必要なら頻繁に再レンダリングされる子コンポーネントを `React.memo` で包み、`useCallback` でハンドラを安定化して、Profiler で再度計測する
+
+### 環境トラブル時
+
+- DevTools に Components / Profiler が出ない → 拡張が無効、または別タブで開いていない
+- Profiler が「No profiling data...」と出続ける → Record ボタンを押した **後** に操作しているか確認
+- StackBlitz で動かない → CodeSandbox / ローカル実行に切り替え、または本レッスンをスキップ
 
 ## まとめ
 
-- ErrorBoundary は「レンダリング中の例外」を境界で受け止め、画面全体の崩壊を防ぐ
-- React 19 でも、ErrorBoundary を書くにはクラスコンポーネントが必要。ただし 1 回書いたら以降は JSX で使うだけ
-- `getDerivedStateFromError` で state を切り替え、`componentDidCatch` でログを残す
-- `<Suspense fallback={...}>` は非同期な待ちの間にフォールバック UI を出す
-- 外側に ErrorBoundary、内側に Suspense、が定番の組み合わせ
-- Next.js App Router では、この 2 つが `error.tsx` / `loading.tsx` としてルート単位で使えるようになる
+- React DevTools はブラウザ拡張としてインストールする必要がある
+- Components パネル: ツリー / state / props を直接観察できる
+- Profiler パネル: 再レンダリングの回数・時間を測定できる
+- `useMemo` が本当に効いているかは Profiler で確認するのが確実
+- StackBlitz の iframe では動作が不安定。別タブ / CodeSandbox / ローカル実行で回避
+- 他のレッスンで「DevTools で確認する」指示が出てきたときに、迷わず動かせるようになる

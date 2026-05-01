@@ -1,421 +1,490 @@
-# lesson101: API モック — MSW（Mock Service Worker）
+# lesson101: コンポーネントテスト — React Testing Library
 
 ## ゴール
 
-- なぜテストで API モックが必要かを説明できる
-- MSW（Mock Service Worker）の **思想** と他のモック手法との違いを理解する
-- `http.get` / `http.post` で HTTP ハンドラを書ける
-- `setupServer` で Vitest にモックを組み込める
-- 成功 / 失敗 / 遅延の各レスポンスを書き分けてテストできる
-- 1 つのテスト内で `server.use(...)` でハンドラを上書きできる
+- React Testing Library の **思想**「ユーザーの見え方をテストする」を理解する
+- `render` / `screen` で React コンポーネントを描画し、要素を取得できる
+- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分けられる
+- `userEvent` でクリック / 入力をシミュレートできる
+- 状態変化（`useState`）を含むコンポーネントのテストが書ける
+- アクセシブルクエリ（`getByRole` / `getByLabelText`）を優先する理由を説明できる
 
 ## 解説
 
-### なぜテストで API モックが必要か
+### React Testing Library の思想
 
-`fetch` で外部 API を呼ぶコードを **そのまま** テストすると、次の問題が起きます。
+React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
 
-- ネットワーク不調・API 仕様変更・レート制限でテストが落ちる（不安定）
-- 実 API なので **書き換えテスト**（POST / DELETE）が本番データを壊す
-- 速度が遅い（数百 ms × テスト数だけ待たされる）
-- オフラインで CI が動かない
+1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
+2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
 
-これを避けるには、テスト内で **実 API を叩かず偽のレスポンスを返す** 仕組みが必要です。これが API モックです。
+これは Enzyme（古い React テストライブラリ）と対照的です。Enzyme は state や props を直接覗きますが、RTL は **DOM 経由** でしか触りません。結果として、
 
-### MSW とは
-
-**Mock Service Worker**（MSW） は、ネットワーク層で `fetch` を **横取り** して偽のレスポンスを返すライブラリです。
-
-特徴:
-
-- アプリ側のコードは `fetch("https://api.example.com/posts")` のままでよい（モックを意識しない）
-- 開発時 / Vitest テスト / Playwright E2E のすべてで **同じハンドラ定義** を共有できる
-- ブラウザでは Service Worker が、Node.js では request interceptor がそれぞれ HTTP を横取り
-- 2026 年現在 **v2 が安定版**。`http.get(...)` / `HttpResponse.json(...)` の API になった（v1 とは少し違う）
-
-### 他のモック手法との比較
-
-- `vi.mock("axios", ...)` のような **モジュールモック**: ライブラリ全体を差し替える。実装に密結合
-- `global.fetch = vi.fn(...)` の **グローバル差し替え**: `fetch` を関数モックで上書き。簡単だが書きづらい
-- **MSW**: ネットワーク層で横取り。アプリのコードは無改変、宣言的なハンドラを書くだけ
-
-複雑なテストや、複数の API を扱うアプリでは MSW が圧倒的に楽です。
+- 内部実装をリファクタしてもテストは壊れない
+- スクリーンリーダー利用者と同じクエリでテストするので、**a11y の実地チェック** にもなる
 
 ### セットアップ
 
-「コンポーネントテスト」で React Testing Library を入れたプロジェクトに MSW を追加します。
+「テスト入門」で Vitest を入れたプロジェクトに、React + RTL を追加します。
 
 ```bash
-npm install -D msw
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom @vitejs/plugin-react
 ```
 
-`src/mocks/handlers.ts` を作成（ハンドラ定義）:
+`vitest.config.ts` を更新:
 
 ```ts
-import { http, HttpResponse } from "msw";
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-export const handlers = [
-  // GET /api/posts
-  http.get("https://api.example.com/posts", () => {
-    return HttpResponse.json([
-      { id: 1, title: "1 件目" },
-      { id: 2, title: "2 件目" },
-    ]);
-  }),
-
-  // POST /api/posts
-  http.post("https://api.example.com/posts", async ({ request }) => {
-    const body = await request.json();
-    return HttpResponse.json({ id: 99, ...body }, { status: 201 });
-  }),
-];
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",  // ブラウザ風 DOM を提供
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
+  },
+});
 ```
 
-`src/mocks/server.ts` を作成（Node.js / Vitest 用のサーバ）:
-
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
-
-export const server = setupServer(...handlers);
-```
-
-`vitest.setup.ts` に追記（テスト全体のフック）:
+`vitest.setup.ts` を作成（`@testing-library/jest-dom` の追加マッチャを有効化）:
 
 ```ts
 import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
 ```
 
-これで:
+これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
 
-- 全テストの前にモックサーバを起動
-- 各テスト後にハンドラをリセット（`server.use(...)` で上書きしたものを巻き戻す）
-- 全テスト後にサーバを停止
-- ハンドラに登録されてない URL を fetch するとテストが fail（`onUnhandledRequest: "error"`）
+### 最小のコンポーネントテスト
 
-### 簡単なコンポーネントテスト
-
-`src/PostsList.tsx`:
+テスト対象:
 
 ```tsx
-import { useEffect, useState } from "react";
+// src/Greeting.tsx
+type Props = { name: string };
 
-type Post = { id: number; title: string };
+export function Greeting({ name }: Props) {
+  return <h1>こんにちは、{name} さん</h1>;
+}
+```
 
-export function PostsList() {
-  const [posts, setPosts] = useState<Post[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
+テスト:
 
-  useEffect(() => {
-    fetch("https://api.example.com/posts")
-      .then((res) => {
-        if (!res.ok) throw new Error("読み込み失敗");
-        return res.json();
-      })
-      .then(setPosts)
-      .catch((e) => setError(e.message));
-  }, []);
+```tsx
+// src/Greeting.test.tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { Greeting } from "./Greeting";
 
-  if (error) return <p>エラー: {error}</p>;
-  if (posts === null) return <p>読み込み中...</p>;
+describe("Greeting", () => {
+  it("名前を含む挨拶を表示する", () => {
+    render(<Greeting name="Alice" />);
+    expect(screen.getByRole("heading")).toHaveTextContent("こんにちは、Alice さん");
+  });
+});
+```
+
+3 つの基本要素:
+
+- **`render(<Component />)`**: コンポーネントを仮想 DOM に描画
+- **`screen`**: 描画された DOM から要素を取得するためのユーティリティ
+- **`getByRole(...)`**: 「見出し」というロールを持つ要素を取得（`<h1>`〜`<h6>` がマッチ）
+
+### 要素を探す 3 系統: `getBy*` / `queryBy*` / `findBy*`
+
+要素を探す関数は **接頭辞** で挙動が変わります。
+
+| 接頭辞 | 見つからない時 | 用途 |
+|---|---|---|
+| `getBy*` | **エラーを投げる** | 「あるはず」を確認する |
+| `queryBy*` | `null` を返す | 「無いはず」を確認する |
+| `findBy*` | Promise を返し、現れるまで待つ | 非同期で後から現れる要素 |
+
+例:
+
+```tsx
+// 「保存」ボタンが必ずある
+const button = screen.getByRole("button", { name: "保存" });
+
+// エラーメッセージは「無いはず」（成功時）
+expect(screen.queryByText("エラーが発生しました")).not.toBeInTheDocument();
+
+// fetch が終わった後に現れるユーザー名
+const userName = await screen.findByText("Alice");
+```
+
+### クエリの優先順位
+
+Testing Library は **アクセシブルなクエリを優先** することを推奨しています。
+
+| 優先度 | クエリ | 何を見るか |
+|---|---|---|
+| 1 | `getByRole` | アクセシビリティロール（`button` / `heading` / `link` / `textbox` 等） |
+| 2 | `getByLabelText` | フォームの `<label>` テキスト |
+| 3 | `getByPlaceholderText` | input の placeholder |
+| 4 | `getByText` | 表示テキスト |
+| 5 | `getByDisplayValue` | input の現在値 |
+| 6 | `getByAltText` | img の alt |
+| 7 | `getByTitle` | title 属性 |
+| 8 | `getByTestId` | `data-testid` 属性（最後の手段） |
+
+**`getByTestId` は最後の手段** です。`data-testid="submit"` のようなテスト専用属性に頼ると、a11y の問題に気付けなくなります（スクリーンリーダーは testid を読まない）。
+
+### `userEvent` でユーザー操作をシミュレート
+
+ボタンクリックや入力は `userEvent` を使います。`fireEvent`（古い API）より人間の操作に忠実です。
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { Counter } from "./Counter";
+
+describe("Counter", () => {
+  it("ボタンを押すと数が増える", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+
+    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
+  });
+
+  it("複数回押すと累積する", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    const button = screen.getByRole("button", { name: "+1" });
+    await user.click(button);
+    await user.click(button);
+    await user.click(button);
+
+    expect(screen.getByText("カウント: 3")).toBeInTheDocument();
+  });
+});
+```
+
+`userEvent.setup()` を **各テストの最初** に呼んで `user` オブジェクトを作ります。`user.click(...)` / `user.type(input, "hello")` / `user.keyboard("{Enter}")` 等のメソッドが使えます。すべて `await` を付けて呼びます。
+
+### フォーム入力のテスト
+
+`<input>` への入力は `user.type` でシミュレートします。
+
+```tsx
+import { useState } from "react";
+
+export function NameForm() {
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
 
   return (
-    <ul>
-      {posts.map((p) => (
-        <li key={p.id}>{p.title}</li>
-      ))}
-    </ul>
+    <form
+      onSubmit={(e) => {
+        e.preventDefault();
+        setSubmitted(name);
+      }}
+    >
+      <label htmlFor="name">お名前</label>
+      <input id="name" value={name} onChange={(e) => setName(e.target.value)} />
+      <button type="submit">送信</button>
+      {submitted && <p>こんにちは、{submitted} さん</p>}
+    </form>
   );
 }
 ```
 
-`src/PostsList.test.tsx`:
-
 ```tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { PostsList } from "./PostsList";
+import userEvent from "@testing-library/user-event";
+import { NameForm } from "./NameForm";
 
-describe("PostsList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<PostsList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
-  });
-
-  it("読み込みが終わると一覧を表示する", async () => {
-    render(<PostsList />);
-    expect(await screen.findByText("1 件目")).toBeInTheDocument();
-    expect(screen.getByText("2 件目")).toBeInTheDocument();
-  });
-});
-```
-
-`findByText` は **要素が現れるまで待つ** クエリです。`useEffect` での fetch 結果を待ち受けるのにぴったりです。
-
-### 失敗ケースのテスト: `server.use` で一時上書き
-
-「読み込みが失敗したらエラー表示が出る」をテストするには、テストごとに **そのテストだけのハンドラ** を登録します。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { PostsList } from "./PostsList";
-
-describe("PostsList のエラー", () => {
-  it("API が 500 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText("エラー: 読み込み失敗")).toBeInTheDocument();
-  });
-
-  it("API が 404 を返したらエラーを表示", async () => {
-    server.use(
-      http.get("https://api.example.com/posts", () => {
-        return new HttpResponse(null, { status: 404 });
-      })
-    );
-
-    render(<PostsList />);
-
-    expect(await screen.findByText(/エラー/)).toBeInTheDocument();
-  });
-});
-```
-
-`server.use(...)` は **そのテスト中だけ** のハンドラ上書きです。`afterEach` で `server.resetHandlers()` を呼んでいるので、次のテストでは元の成功レスポンスに戻ります。
-
-### POST のテスト
-
-書き込みリクエストもモックできます。送信内容を `request.json()` で取り出して、それに応じたレスポンスを返せます。
-
-```tsx
-import { describe, it, expect } from "vitest";
-import { render, screen } from "@testing-library/react";
-import { userEvent } from "@testing-library/user-event";
-import { CreatePostForm } from "./CreatePostForm";
-
-describe("CreatePostForm", () => {
-  it("送信すると新しい記事 ID が表示される", async () => {
+describe("NameForm", () => {
+  it("名前を入力して送信すると挨拶が出る", async () => {
     const user = userEvent.setup();
-    render(<CreatePostForm />);
+    render(<NameForm />);
 
-    await user.type(screen.getByLabelText("タイトル"), "テスト投稿");
+    const input = screen.getByLabelText("お名前");
+    const button = screen.getByRole("button", { name: "送信" });
+
+    await user.type(input, "Alice");
+    await user.click(button);
+
+    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+  });
+
+  it("入力が空のままだと挨拶は出ない", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
     await user.click(screen.getByRole("button", { name: "送信" }));
 
-    expect(await screen.findByText("作成しました: ID 99")).toBeInTheDocument();
+    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
   });
 });
 ```
 
-`handlers.ts` の `http.post(...)` ハンドラが `id: 99` を返すように書いてあれば、テストはこれだけで通ります。
+`getByLabelText("お名前")` は `<label>` で紐付けられた `<input>` を取れます。アクセシブルなクエリの典型例です。
 
-### 遅延を入れる: `delay`
+### よく使う追加マッチャ（jest-dom）
 
-「読み込み中...」の表示を確実に検証したい場合、レスポンスを遅らせます。
+`@testing-library/jest-dom` を入れると、DOM 専用の便利マッチャが使えます。
 
-```ts
-import { http, HttpResponse, delay } from "msw";
-
-export const handlers = [
-  http.get("https://api.example.com/posts", async () => {
-    await delay(100);  // 100ms 遅らせる
-    return HttpResponse.json([{ id: 1, title: "1 件目" }]);
-  }),
-];
+```tsx
+expect(element).toBeInTheDocument();        // DOM に存在する
+expect(element).toHaveTextContent("hello"); // テキストを含む
+expect(element).toBeVisible();              // 見える状態
+expect(input).toHaveValue("Alice");         // input の値
+expect(checkbox).toBeChecked();             // チェック済み
+expect(button).toBeDisabled();              // disabled 属性付き
+expect(element).toHaveClass("active");      // CSS クラス付き
+expect(element).toHaveAttribute("href", "/about");
 ```
 
-これで「最初は読み込み中」のテストが、ミリ秒単位の競合に振り回されずに通ります。
+これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
+
+### テスト間で DOM / タイマーが漏れる落とし穴
+
+RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
+
+- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。この自動 cleanup は、Vitest の `globals: true`（`vitest.config.ts` 設定）が有効な環境でのみ動作します。`globals: false` の場合は各テストファイルで `afterEach(() => cleanup())` を手動で追加してください。
+- **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
+
+```ts
+import { afterEach, vi } from "vitest";
+afterEach(() => {
+  vi.useRealTimers();
+});
+```
 
 ## 演習
 
 ### ゴール
 
-- MSW のセットアップを完了する
-- ハンドラ 3 種（成功 / エラー / 遅延）を書く
-- `useEffect` で fetch する小さなコンポーネントをテストする
-- `server.use` でテストごとにレスポンスを上書きできる
+- React + RTL のセットアップを `vitest.config.ts` に反映する
+- カウンターコンポーネントのテストを書ける
+- 簡単なフォームのテストを書ける
+- `getByRole` / `getByLabelText` を優先して使える
 
 ### 途中から始める場合
 
-「コンポーネントテスト」で RTL + Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 Vite + React + TypeScript テンプレートに以下を順に入れます。
+「テスト入門」で Vitest をセットアップしたプロジェクトを継ぎます。手元になければ、新規 StackBlitz の Vite + React + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いてください。
+
+### 手順 1: 依存パッケージをインストール
 
 ```bash
-npm install -D vitest @vitejs/plugin-react jsdom
-npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom
-npm install -D msw
+npm install -D @testing-library/react @testing-library/user-event @testing-library/jest-dom jsdom
 ```
 
-`vitest.config.ts` と `vitest.setup.ts` は「コンポーネントテスト」の設定をベースにします。
+### 手順 2: 設定ファイルを更新
 
-### 手順 1: モックサーバを構築
-
-`src/mocks/handlers.ts`:
+`vitest.config.ts`:
 
 ```ts
-import { http, HttpResponse, delay } from "msw";
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
 
-export const handlers = [
-  http.get("https://api.example.com/users", async () => {
-    await delay(50);
-    return HttpResponse.json([
-      { id: 1, name: "Alice" },
-      { id: 2, name: "Bob" },
-    ]);
-  }),
-];
+export default defineConfig({
+  plugins: [react()],
+  test: {
+    environment: "jsdom",
+    globals: true,
+    setupFiles: ["./vitest.setup.ts"],
+  },
+});
 ```
 
-`src/mocks/server.ts`:
-
-```ts
-import { setupServer } from "msw/node";
-import { handlers } from "./handlers";
-
-export const server = setupServer(...handlers);
-```
-
-`vitest.setup.ts` に追記:
+`vitest.setup.ts` を新規作成:
 
 ```ts
 import "@testing-library/jest-dom/vitest";
-import { afterAll, afterEach, beforeAll } from "vitest";
-import { server } from "./src/mocks/server";
-
-beforeAll(() => server.listen({ onUnhandledRequest: "error" }));
-afterEach(() => server.resetHandlers());
-afterAll(() => server.close());
 ```
 
-### 手順 2: コンポーネントを作る
+### 手順 3: テスト対象のコンポーネントを書く
 
-`src/UsersList.tsx`:
+`src/Counter.tsx`:
 
 ```tsx
-import { useEffect, useState } from "react";
+import { useState } from "react";
 
-type User = { id: number; name: string };
-
-export function UsersList() {
-  const [users, setUsers] = useState<User[] | null>(null);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    fetch("https://api.example.com/users")
-      .then((res) => {
-        if (!res.ok) throw new Error("ユーザーの読み込みに失敗しました");
-        return res.json();
-      })
-      .then(setUsers)
-      .catch((e) => setError(e.message));
-  }, []);
-
-  if (error) return <p role="alert">{error}</p>;
-  if (users === null) return <p>読み込み中...</p>;
+export function Counter() {
+  const [count, setCount] = useState(0);
 
   return (
-    <ul>
-      {users.map((u) => (
-        <li key={u.id}>{u.name}</li>
-      ))}
-    </ul>
+    <div>
+      <p>カウント: {count}</p>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+      <button onClick={() => setCount((c) => c - 1)}>-1</button>
+      <button onClick={() => setCount(0)}>リセット</button>
+    </div>
   );
 }
 ```
 
-> **補足: `role="alert"` を後挿入で使うときの注意**: `role="alert"` を持つ要素は **live region** として扱われ、内容が更新されるとスクリーンリーダーが即座に読み上げます。ただし、エラー発生時に `<p role="alert">` を **新しく描画** する形（上のコードのように `{error && <p role="alert">...}` で出し入れする形）は、SR 実装によっては読み上げが発火しないことがあります。確実に通知したいときは「常設の `<div role="alert">` を空で置いておき、中身だけ差し替える」「`aria-live="assertive"` を併記する」形を検討します。
+`src/NameForm.tsx`:
 
-### 手順 3: テストを書く
+```tsx
+import { useState } from "react";
+import type { FormEvent } from "react";
 
-`src/UsersList.test.tsx`:
+export function NameForm() {
+  const [name, setName] = useState("");
+  const [submitted, setSubmitted] = useState("");
+
+  function handleSubmit(e: FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (name.trim()) {
+      setSubmitted(name);
+    }
+  }
+
+  return (
+    <form onSubmit={handleSubmit}>
+      <label htmlFor="name">お名前</label>
+      <input
+        id="name"
+        value={name}
+        onChange={(e) => setName(e.target.value)}
+      />
+      <button type="submit">送信</button>
+      {submitted && <p>こんにちは、{submitted} さん</p>}
+    </form>
+  );
+}
+```
+
+### 手順 4: テストを書く
+
+`src/Counter.test.tsx`:
 
 ```tsx
 import { describe, it, expect } from "vitest";
 import { render, screen } from "@testing-library/react";
-import { http, HttpResponse } from "msw";
-import { server } from "./mocks/server";
-import { UsersList } from "./UsersList";
+import userEvent from "@testing-library/user-event";
+import { Counter } from "./Counter";
 
-describe("UsersList", () => {
-  it("最初は読み込み中を表示する", () => {
-    render(<UsersList />);
-    expect(screen.getByText("読み込み中...")).toBeInTheDocument();
+describe("Counter", () => {
+  it("初期値は 0", () => {
+    render(<Counter />);
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
   });
 
-  it("読み込みが終わるとユーザーを並べる", async () => {
-    render(<UsersList />);
+  it("+1 ボタンで増える", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
 
-    expect(await screen.findByText("Alice")).toBeInTheDocument();
-    expect(screen.getByText("Bob")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "+1" }));
+
+    expect(screen.getByText("カウント: 1")).toBeInTheDocument();
   });
 
-  it("エラー時はエラーメッセージを表示する", async () => {
-    server.use(
-      http.get("https://api.example.com/users", () => {
-        return new HttpResponse(null, { status: 500 });
-      })
-    );
+  it("-1 ボタンで減る", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
 
-    render(<UsersList />);
+    await user.click(screen.getByRole("button", { name: "-1" }));
 
-    const alert = await screen.findByRole("alert");
-    expect(alert).toHaveTextContent("ユーザーの読み込みに失敗しました");
+    expect(screen.getByText("カウント: -1")).toBeInTheDocument();
+  });
+
+  it("リセットボタンで 0 に戻る", async () => {
+    const user = userEvent.setup();
+    render(<Counter />);
+
+    await user.click(screen.getByRole("button", { name: "+1" }));
+    await user.click(screen.getByRole("button", { name: "+1" }));
+    await user.click(screen.getByRole("button", { name: "リセット" }));
+
+    expect(screen.getByText("カウント: 0")).toBeInTheDocument();
   });
 });
 ```
 
-### 手順 4: 実行
+`src/NameForm.test.tsx`:
+
+```tsx
+import { describe, it, expect } from "vitest";
+import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { NameForm } from "./NameForm";
+
+describe("NameForm", () => {
+  it("名前を入力して送信すると挨拶が出る", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.type(screen.getByLabelText("お名前"), "Alice");
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.getByText("こんにちは、Alice さん")).toBeInTheDocument();
+  });
+
+  it("空のまま送信しても挨拶は出ない", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    await user.click(screen.getByRole("button", { name: "送信" }));
+
+    expect(screen.queryByText(/こんにちは、/)).not.toBeInTheDocument();
+  });
+
+  it("入力中の値が input に反映される", async () => {
+    const user = userEvent.setup();
+    render(<NameForm />);
+
+    const input = screen.getByLabelText("お名前");
+    await user.type(input, "Bob");
+
+    expect(input).toHaveValue("Bob");
+  });
+});
+```
+
+### 手順 5: 実行
 
 ```bash
 npm run test
 ```
 
-3 件すべて緑になれば成功です。
+すべてのテストが緑になれば成功。watch モードのまま、コンポーネントを編集して挙動を変えると即時 fail / pass の切り替わりが見えます。
 
 ### 期待出力
 
 ```
- PASS  src/UsersList.test.tsx (3)
-   PASS  最初は読み込み中を表示する
-   PASS  読み込みが終わるとユーザーを並べる
-   PASS  エラー時はエラーメッセージを表示する
+ PASS  src/Counter.test.tsx (4)
+ PASS  src/NameForm.test.tsx (3)
 
- Test Files  1 passed (1)
-      Tests  3 passed (3)
+ Test Files  2 passed (2)
+      Tests  7 passed (7)
 ```
 
 ### 変える
 
-- ハンドラの `delay(50)` を `delay(500)` に増やしてみる。テストはまだ通るが、読み込み完了を待つ時間が伸びる
-- 「エラー時」テストで `server.use(...)` を消してみる。エラーが起きないので fail することを確認 → 元に戻す
-- `onUnhandledRequest: "error"` を `"warn"` に変えて、ハンドラ未定義の URL を fetch しても fail しなくなることを確認
+- `Counter` の `+1` ボタンの実装を `setCount(c => c + 2)` に変えてみる。「+1 ボタンで増える」テストが fail することを確認 → 元に戻す
+- `getByText("カウント: 0")` を `getByTestId("counter-value")` に変えるには、コンポーネントに `data-testid` を足す必要があるが、**やらない**。`getByText` の方が a11y を兼ねた検証になる
+- `NameForm` の `<label htmlFor="name">` を消してみる。`getByLabelText("お名前")` が fail することを確認 → label 連携が a11y にもテストにも重要、と体感
 
 ### 自分で書く
 
-- POST ハンドラを足す: `POST https://api.example.com/users` を `{ id: 99, name: 受信した値 }` で返す
-- 「ユーザー追加フォーム」コンポーネントを作り、送信したら `<p>追加しました: ID 99</p>` を出す
-- 上記コンポーネントのテストを書く（フォーム入力 → 送信 → メッセージ確認）
+- 「TODO 追加フォーム」コンポーネント `<TodoForm />` を作る:
+  - 入力欄 + 「追加」ボタン
+  - 追加されたら入力欄が空になる
+  - 親に `onAdd(text)` で通知（テストでは `vi.fn()` で受け取る）
+- テストで以下を検証:
+  - 入力 → 送信 → `onAdd` が `"買い物"` で呼ばれる
+  - 送信後に input が空になる
+  - 空のまま送信しても `onAdd` は呼ばれない（`expect(onAdd).not.toHaveBeenCalled()`）
+
+`vi.fn()` は Vitest のモック関数。引数が来たかを `toHaveBeenCalledWith(...)` で検証できます。
 
 ## まとめ
 
-- API モックは「不安定 / 本番破壊 / 遅い / オフライン」の 4 問題を解消する
-- **MSW v2** はネットワーク層で `fetch` を横取りする宣言的なライブラリ
-- ハンドラは `http.get(URL, handler)` / `http.post(URL, handler)` で書く
-- `HttpResponse.json(data)` で JSON レスポンス、`new HttpResponse(null, { status: 500 })` でエラーレスポンス
-- Vitest 統合は `setupServer` + `server.listen` / `resetHandlers` / `close` の 3 フック
-- テストごとに `server.use(...)` でハンドラを上書きできる
-- `delay(ms)` で意図的にレスポンスを遅らせると、ローディング状態のテストが書きやすい
-- `onUnhandledRequest: "error"` で「未定義 API への fetch」を即検知
+- React Testing Library は「ユーザーの見え方」をテストする思想
+- `render` / `screen` でコンポーネントを描画して DOM クエリ
+- `getBy*` / `queryBy*` / `findBy*` の 3 系統を使い分け
+- アクセシブルなクエリ（`getByRole` / `getByLabelText`）を優先する。`getByTestId` は最後の手段
+- ユーザー操作は `userEvent.setup()` で作った `user` で `await user.click(...)` / `user.type(...)`
+- `@testing-library/jest-dom` で `toBeInTheDocument` 等の便利マッチャ
+- 状態変化を含むコンポーネントは「初期状態 → 操作 → 結果」の流れでテスト
