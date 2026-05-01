@@ -55,6 +55,8 @@ import "@testing-library/jest-dom/vitest";
 
 これで `expect(element).toBeInTheDocument()` のような追加マッチャが使えるようになります。
 
+> **`jest-dom` という名前について**: `@testing-library/jest-dom` は名前に "jest" が入っていますが、Jest 専用ではありません。`toBeInTheDocument()` / `toHaveAttribute()` のような DOM 用カスタムマッチャを提供するライブラリで、Vitest でも動作します。`/vitest` のサブパス（`import "@testing-library/jest-dom/vitest"`）は Vitest 向けに型を正しく合わせるエントリポイントです。命名は Jest が先にデファクトだった頃の歴史的な名残です。
+
 ### 最小のコンポーネントテスト
 
 テスト対象:
