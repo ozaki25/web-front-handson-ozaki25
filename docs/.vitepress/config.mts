@@ -246,7 +246,6 @@ export default withPwa(
             { text: 'lesson128: PWA の通知・インストール・manifest', link: '/lessons/lesson128/' },
             { text: 'lesson129: IndexedDB 入門', link: '/lessons/lesson129/' },
             { text: 'lesson130: React Compiler', link: '/lessons/lesson130/' },
-            { text: 'lesson131: Server Components の設計論', link: '/lessons/lesson131/' },
             { text: 'lesson132: エラートラッキング（Sentry）', link: '/lessons/lesson132/' },
             { text: 'lesson133: Web Analytics（Vercel Analytics / GA4）', link: '/lessons/lesson133/' },
             { text: 'lesson134: OGP と SEO 実践', link: '/lessons/lesson134/' },
