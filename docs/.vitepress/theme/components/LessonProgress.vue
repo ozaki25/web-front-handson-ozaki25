@@ -112,14 +112,14 @@ onUnmounted(() => {
 }
 
 .lesson-progress-list .mark {
-  color: var(--vp-c-text-3);
+  color: var(--vp-c-text-2);
   width: 1em;
   display: inline-block;
   text-align: center;
 }
 
 .lesson-progress-list .group {
-  color: var(--vp-c-text-3);
+  color: var(--vp-c-text-2);
   font-size: 0.9em;
 }
 
