@@ -86,7 +86,7 @@ Set-Cookie: session=abc123; HttpOnly
 |---|---|---|
 | **2xx 成功** | リクエストは正常に処理された | `200 OK` / `201 Created` / `204 No Content` |
 | **3xx リダイレクト / キャッシュ** | 別の URL へ / ブラウザのキャッシュを使って | `301 Moved Permanently` / `302 Found` / `304 Not Modified` |
-| **4xx クライアントエラー** | 送り方が悪い | `400 Bad Request` / `401 Unauthorized` / `403 Forbidden` / `404 Not Found` |
+| **4xx クライアントエラー** | 送り方が悪い | `400 Bad Request` / `401 Unauthorized` / `403 Forbidden` / `404 Not Found` / `429 Too Many Requests` |
 | **5xx サーバーエラー** | サーバー側の問題 | `500 Internal Server Error` / `502 Bad Gateway` / `503 Service Unavailable` |
 
 細かい違いの覚え方:
@@ -94,6 +94,7 @@ Set-Cookie: session=abc123; HttpOnly
 - `401` は「認証が要る / 認証情報が間違っている」
 - `403` は「認証は通ったが権限がない」
 - `404` は「リソースがない」
+- `429 Too Many Requests` は「短時間に呼びすぎ」。API のレート制限に引っかかった時に返る。レスポンスヘッダの `Retry-After` で「何秒後に再試行してよいか」が示されることがある
 - `500` は「サーバー側が想定外で落ちた」
 - `502 Bad Gateway` は、リバースプロキシやロードバランサが上流サーバーから不正な応答を受け取った時に返す
 - `503 Service Unavailable` は「一時的にサービス利用不可」。アプリ自身（メンテナンスモード / 過負荷）が返すこともあれば、ロードバランサが上流に到達できない時にも返される
