@@ -244,7 +244,7 @@ export default withPwa(
             { text: 'lesson126: WebSocket と Server-Sent Events（SSE）', link: '/lessons/lesson126/' },
             { text: 'lesson127: GraphQL と tRPC の地図', link: '/lessons/lesson127/' },
             { text: 'lesson128: Service Worker のライフサイクルとキャッシュ戦略', link: '/lessons/lesson128/' },
-            { text: 'lesson129: PWA の通知・インストール・manifest', link: '/lessons/lesson129/' },
+            { text: 'lesson129: PWA の manifest とインストール', link: '/lessons/lesson129/' },
             { text: 'lesson130: IndexedDB 入門', link: '/lessons/lesson130/' },
             { text: 'lesson131: エラートラッキング（Sentry）', link: '/lessons/lesson131/' },
             { text: 'lesson132: Web Analytics（Vercel Analytics / GA4）', link: '/lessons/lesson132/' },
