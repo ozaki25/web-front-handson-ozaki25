@@ -1,427 +1,389 @@
-# lesson131: エラートラッキング（Sentry）
+# lesson130: IndexedDB 入門
 
 ## ゴール
 
-- 本番のエラーを **見逃さず通知する** 仕組みの必要性を理解する
-- Sentry を React / Next.js プロジェクトに導入できる
-- Source Map で **minified コードを元のコードに復元** する流れが分かる
-- ユーザーコンテキスト / タグ / リリースで **エラーを絞り込む** 方法を知る
-- 代替サービス（Datadog / Bugsnag / Rollbar 等）の位置付けを把握する
+- IndexedDB が `localStorage` と何が違うか説明できる
+- 生 API の用語（database / objectStore / transaction / cursor）を読める
+- `idb` ライブラリで Promise ベースの最小コードを書ける
+- `Dexie.js` のクラス指向 API の利点を理解する
+- ユースケース（オフライン作業 / 大量データキャッシュ）を判断できる
 
 ## 解説
 
-### なぜエラートラッキングが必要か
+### `localStorage` の限界
 
-開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
+「Web Storage で値をブラウザに保存する」で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
 
-エラートラッキングサービスは:
+- **容量が小さい**（オリジン全体で 5〜10MB）
+- **値は文字列だけ**（オブジェクトは JSON 化が必要）
+- **同期 API**（読み書きで UI が止まる）
+- **検索 / インデックスがない**
+- **トランザクションがない**
 
-- ブラウザで起きたエラーを **自動収集** する
-- スタックトレース / OS / ブラウザ / URL / 直前の操作（breadcrumbs）を一緒に送る
-- **集約・重複排除** してダッシュボードに並べる
-- Slack / Email / PagerDuty に **通知** する
-- リリース単位で「**この版で増えたエラー**」を可視化する
+「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
 
-これがあるかないかで、本番運用の体感が大きく変わります。
+### IndexedDB とは
 
-### Sentry の位置付け
+ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
 
-[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
+- **容量は数十 MB 〜 GB クラス**（ブラウザによる）
+- **オブジェクトをそのまま** 保存（structured clone）
+- **完全に非同期**（イベント / Promise）
+- **インデックスでの検索** が可能
+- **トランザクション** でアトミック操作
+- **Service Worker からも使える**
 
-特徴:
+### 用語
 
-- React / Next.js / Node.js / モバイルなど **多言語対応**
-- パフォーマンス監視 / セッションリプレイ / プロファイリングも統合
-- Source Map アップロードが整っていて、**minify されたコードでも元のコードで読める**
-- 月 5,000 イベントまで **無料枠**
+| 用語 | 意味 |
+|---|---|
+| **Database** | 1 つの DB。複数の objectStore を持つ |
+| **Object Store** | テーブル / コレクションに相当 |
+| **Key Path** | レコードの主キーフィールド（`id` 等） |
+| **Index** | 検索を速くする補助インデックス |
+| **Transaction** | 読み書きをまとめる単位（`readonly` / `readwrite`） |
+| **Cursor** | 範囲走査するイテレータ |
 
-### React に導入する最小手順
+### 生 API の最小例
 
-```bash
-npm install @sentry/react
-```
+```js
+const open = indexedDB.open("my-db", 1);
 
-`src/main.tsx`（最初の方）:
-
-```tsx
-import * as Sentry from "@sentry/react";
-
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [
-    Sentry.browserTracingIntegration(),
-    Sentry.replayIntegration(),
-  ],
-  tracesSampleRate: 1.0,        // パフォーマンス計測。本番は 0.1 程度に
-  replaysSessionSampleRate: 0.1,
-  replaysOnErrorSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: import.meta.env.VITE_APP_VERSION,
-});
-```
-
-`.env`:
-
-```
-VITE_SENTRY_DSN=https://xxxxx@oXXX.ingest.sentry.io/12345
-VITE_APP_VERSION=1.0.0
-```
-
-DSN は Sentry の管理画面で「プロジェクトの設定」から取得します。
-
-> **補足: DSN は公開してよい値だが、悪用対策は別途**: `VITE_SENTRY_DSN` は `VITE_` プレフィックスのとおり **クライアントバンドルに埋め込まれる** ため、ブラウザの DevTools で誰でも読めます。Sentry の DSN は **設計上公開して構わない値** で、認証が必要な操作（プロジェクト削除等）はできません。ただし第三者がフェイクのエラーを送りつけて **イベント枠を食い潰す** 攻撃は可能なので、本番では Sentry プロジェクト設定の「**Allowed Domains**」で自分のサイトのオリジンに制限し、必要に応じて **Inbound Filters / Rate Limit** も併用します。CSRF や認証情報を持つ API キーとは扱いが違うこと、ただし完全に放置してよいわけではないこと、の 2 点を覚えておきます。
-
-### エラーを意図的に送る
-
-#### 自動的に拾われるもの
-
-- 未捕捉の `throw`
-- 未処理の Promise rejection
-- React のレンダリング中エラー（後述の Error Boundary 経由）
-
-#### 手動で送る
-
-```tsx
-try {
-  await someApi();
-} catch (e) {
-  Sentry.captureException(e);
-  throw e;  // 必要なら再 throw
-}
-
-// メッセージだけ送る
-Sentry.captureMessage("ユーザーが何度もログインに失敗");
-```
-
-### React の Error Boundary と統合
-
-Sentry は **Error Boundary をラップ** したコンポーネントを提供します（「Error Boundary と Suspense」と相性 ◎）。
-
-```tsx
-import * as Sentry from "@sentry/react";
-
-const App = () => (
-  <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-    <Routes />
-  </Sentry.ErrorBoundary>
-);
-```
-
-これだけで「**Error Boundary が捕まえた React レンダリングエラー** が Sentry に届く」状態になります。
-
-### Next.js に導入する最小手順
-
-[Sentry の Next.js SDK](https://docs.sentry.io/platforms/javascript/guides/nextjs/) は **ウィザード** で 1 コマンド導入できます。
-
-```bash
-npx @sentry/wizard@latest -i nextjs
-```
-
-ウィザードが行うこと:
-
-- プロジェクトの選択 / DSN の設定
-- `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
-- `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
-- `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
-- `next.config.ts` を `withSentryConfig` でラップ
-- ビルド時に **Source Map を自動アップロード** する設定を追加
-
-```ts
-// next.config.ts（生成例）
-import { withSentryConfig } from "@sentry/nextjs";
-
-const nextConfig = {
-  /* 既存の Next.js 設定 */
+open.onupgradeneeded = (event) => {
+  const db = event.target.result;
+  const store = db.createObjectStore("posts", { keyPath: "id" });
+  store.createIndex("by-author", "author");
 };
 
-export default withSentryConfig(nextConfig, {
-  org: "your-org",
-  project: "your-project",
-  silent: !process.env.CI,
-  widenClientFileUpload: true,
-});
+open.onsuccess = (event) => {
+  const db = event.target.result;
+
+  const tx = db.transaction("posts", "readwrite");
+  const store = tx.objectStore("posts");
+  store.put({ id: "1", title: "Hello", author: "Alice" });
+
+  tx.oncomplete = () => console.log("保存完了");
+};
 ```
 
-**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
+ポイント:
 
-### Source Map とは
+- `open` の **`onupgradeneeded`** でスキーマを定義（version を上げると再実行）
+- `transaction(name, mode)` で操作する store を選ぶ
+- `put` / `get` / `delete` / `getAll` などのメソッドはイベントハンドラで結果を受ける
 
-本番ビルドの JS は **minify** されて変数名が `a` / `b` になり、行も詰められています。これだとスタックトレースを見ても **どのコードか分からない**。
+**生 API は冗長で書きづらい** ので、ラッパーを使うのが普通です。
 
-Source Map は「minify 後の位置 → 元のソースの行・列」のマッピング情報です。これがあると:
+### `idb`（Promise ラッパー）
 
+[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
+
+```bash
+npm install idb
 ```
-TypeError: Cannot read property 'foo' of undefined
-  at a.b.c (index-Xj9k2.js:1:12345)
-```
-
-が:
-
-```
-TypeError: Cannot read property 'foo' of undefined
-  at UserProfile.fetchData (src/components/UserProfile.tsx:42:18)
-```
-
-に **復元** されます。
-
-#### Sentry の Source Map 運用
-
-- **ビルド時に Source Map を生成**（`vite build` / `next build`）
-- それを **Sentry にアップロード**（公開しない）
-- Sentry の管理画面で **元のソースで** スタックトレースが見られる
-
-`@sentry/nextjs` のウィザードがビルド時のアップロードまで設定してくれるので、最近は手動設定の必要が減りました。
-
-::: warning Source Map をブラウザに公開しない
-Source Map をそのまま `dist/` に置いてデプロイすると、**元のソースが誰でも読める** 状態になります。Sentry にアップロードして、ビルド成果物からは削除（または `.map` を CDN に出さない）するのが安全。
-:::
-
-### ユーザーコンテキスト
-
-「**誰の** エラーか」が分かると原因究明が圧倒的に早くなります。
 
 ```ts
-Sentry.setUser({
-  id: user.id,
-  email: user.email,
-  username: user.name,
+import { openDB, DBSchema } from "idb";
+
+interface MyDB extends DBSchema {
+  posts: {
+    key: string;
+    value: { id: string; title: string; author: string };
+    indexes: { "by-author": string };
+  };
+}
+
+const db = await openDB<MyDB>("my-db", 1, {
+  upgrade(db) {
+    const store = db.createObjectStore("posts", { keyPath: "id" });
+    store.createIndex("by-author", "author");
+  },
 });
+
+await db.put("posts", { id: "1", title: "Hello", author: "Alice" });
+const post = await db.get("posts", "1");
+const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
 ```
 
-ログアウト時:
+`DBSchema` を使うと **型付きの API** になり、IDE 補完が効きます。
+
+### `Dexie.js`（クラス指向）
+
+[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
+
+```bash
+npm install dexie
+```
 
 ```ts
-Sentry.setUser(null);
+import Dexie, { Table } from "dexie";
+
+interface Post {
+  id?: number;
+  title: string;
+  author: string;
+  createdAt: number;
+}
+
+class MyDB extends Dexie {
+  posts!: Table<Post, number>;
+  constructor() {
+    super("my-db");
+    this.version(1).stores({
+      posts: "++id, author, createdAt",
+    });
+  }
+}
+
+const db = new MyDB();
+
+await db.posts.add({ title: "Hello", author: "Alice", createdAt: Date.now() });
+
+const aliceLatest = await db.posts
+  .where("author").equals("Alice")
+  .reverse()
+  .sortBy("createdAt");
 ```
 
-::: tip 個人情報の扱い
-メールアドレスや氏名は **個人情報**。GDPR / 個人情報保護法的に、ユーザー同意やデータ最小化が必要です。本番では **ID だけ送る** / **ハッシュ化する** などの運用が無難。
-:::
+ポイント:
 
-### タグとコンテキスト
+- `++id` は **自動採番** の主キー
+- `stores` の文字列で **インデックスを宣言**
+- `where().equals().reverse().sortBy()` のような **チェーン** が書ける
+- React 用 hooks（`useLiveQuery`）も提供される
 
-タグは「**フィルタ用** の短い key-value」、コンテキストは「**詳細データ**」です。
+```tsx
+import { useLiveQuery } from "dexie-react-hooks";
 
-```ts
-// タグ（ダッシュボードで絞り込みに使える）
-Sentry.setTag("page", "checkout");
-Sentry.setTag("payment-provider", "stripe");
-
-// コンテキスト（イベントに添付される詳細）
-Sentry.setContext("cart", {
-  items: 3,
-  total: 12000,
-  currency: "JPY",
-});
+function PostList() {
+  const posts = useLiveQuery(() => db.posts.toArray(), []);
+  return (
+    <ul>
+      {posts?.map((p) => <li key={p.id}>{p.title}</li>)}
+    </ul>
+  );
+}
 ```
 
-### リリース管理
+`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
 
-「この版で増えたエラー」を見るには、`release` と `environment` を設定します。
+### `localStorage` / `sessionStorage` / IndexedDB の使い分け
 
-```ts
-Sentry.init({
-  dsn: "...",
-  release: "my-app@1.2.3",       // package.json のバージョンや Git の SHA
-  environment: process.env.NODE_ENV,
-});
-```
-
-CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知すると、ダッシュボードで:
-
-- 「リリース 1.2.3 で **新規** に出たエラー」
-- 「リリース 1.2.2 では出ていなかったが 1.2.3 で **退行** したエラー」
-- 「修正済みリリース」
-
-がトラッキングできます。
-
-### Breadcrumbs
-
-エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
-
-- ボタンクリック / フォーム送信
-- ページ遷移
-- ネットワークリクエスト
-- console.log（任意）
-
-```ts
-Sentry.addBreadcrumb({
-  category: "checkout",
-  message: "クーポンコードを適用",
-  level: "info",
-});
-```
-
-「エラー発生 5 秒前にこのボタンを押している」が分かるので **再現が容易** になります。
-
-### セッションリプレイ
-
-Sentry の **Session Replay** を有効にすると、エラー発生時の **画面録画** が見られます（DOM の差分を記録するので画像ではなく軽い）。
-
-```ts
-Sentry.init({
-  // ...
-  integrations: [Sentry.replayIntegration()],
-  replaysSessionSampleRate: 0.1,   // 通常セッションの 10%
-  replaysOnErrorSampleRate: 1.0,   // エラーが起きたセッションは 100%
-});
-```
-
-「**ユーザーがどう操作してエラーに辿り着いたか**」が動画で分かるのは強烈です。ただし **個人情報の保護** が必要（パスワード入力欄などはマスクする設定）。
-
-### 代替サービス
-
-| サービス | 特徴 |
+| 用途 | 推奨 |
 |---|---|
-| **Sentry** | OSS / 自前ホスト可。フロント・バック両方 |
-| **Datadog** | 監視全部入り（メトリクス / ログ / APM / RUM）。運用の重心が APM 寄り |
-| **Bugsnag** | エラートラッキング特化。料金体系がシンプル |
-| **Rollbar** | 老舗のエラートラッキング。深い検索機能 |
-| **LogRocket** | セッションリプレイが強み |
-| **Honeybadger** | 開発者にやさしい価格 |
+| ユーザー設定（ダークモード / 言語） | `localStorage` |
+| タブ単位の一時状態 | `sessionStorage` |
+| 認証トークン | **どちらも使わない**。HttpOnly Cookie に |
+| Todo / 下書き / オフライン編集データ | **IndexedDB** |
+| 画像 / 動画 / Blob | **IndexedDB**（Cache API も候補） |
+| API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
+| ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
 
-「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
+「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
 
-### Edge / Worker 環境での扱い
+### 容量とクォータ
 
-Cloudflare Workers / Vercel Edge Functions では従来の Sentry SDK が動きにくかったですが、2026 年現在は **`@sentry/cloudflare` / `@sentry/vercel-edge`** など環境別 SDK が整備されています。Next.js の Edge Middleware は `@sentry/nextjs` の `sentry.edge.config.ts` で対応します。
+ブラウザは「**クォータ**」というオリジン単位の上限を割り当てます。`navigator.storage.estimate()` で確認できます。
+
+```js
+const { quota, usage } = await navigator.storage.estimate();
+console.log(`使用 ${usage} / クォータ ${quota}`);
+```
+
+ChromeBook / iOS / 容量不足時に **自動退去**（eviction）されることがあります。**消えても困らない設計** にする / `navigator.storage.persist()` で **退去耐性** をリクエスト:
+
+```js
+const granted = await navigator.storage.persist();
+if (granted) console.log("永続化 OK");
+```
+
+ただしユーザーの Bookmark / インストール等の条件次第。
+
+### `Cache API` との違い
+
+Service Worker と一緒に出てくる **`Cache API`**（「Service Worker と PWA 深掘り」）と IndexedDB は **別物**:
+
+| | Cache API | IndexedDB |
+|---|---|---|
+| 単位 | Request / Response | 任意のオブジェクト |
+| 用途 | HTTP リソースの保存 | アプリのデータ保存 |
+| クエリ | URL マッチ | インデックス検索 |
+| トランザクション | なし | あり |
+
+「画像や HTML を保存 → Cache API」、「ユーザーが編集中の下書き → IndexedDB」と覚えればよいです。
+
+### IndexedDB のオフライン同期パターン
+
+```
+[ユーザー操作] → IndexedDB に保存（pending）
+                       ↓
+              [ネットがある時]
+                       ↓
+              バックエンドに POST
+                       ↓
+            成功したら IndexedDB のフラグを更新
+```
+
+- 書き込みは **常にローカルに保存**（UI が即座に反応）
+- バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
+- 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
+
+ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+
+### よくある罠
+
+- **transaction が auto-commit する**: `await` を別の Promise で挟むと **トランザクションが終わってしまう**。同じ tx の中ではすべての操作を **同期的に並べる**
+- **構造化クローンの制約**: 関数 / シンボル / DOM ノードは保存できない
+- **大量レコード**: `cursor` で逐次処理する。`getAll()` でメモリ爆発に注意
+- **iOS Safari**: 古いバージョンで挙動が不安定。最新版（17 / 18 系）はかなり改善
+- **マイグレーション**: `version` を上げて `upgrade` 内で `objectStoreNames` をチェックして差分を当てる
 
 ## 演習
 
 ### ゴール
 
-- React + Vite プロジェクトに Sentry を入れる
-- 意図的にエラーを起こして Sentry に届くことを確認する
-- ユーザーコンテキストとタグを付ける
+- Dexie.js で **オフラインメモアプリ** を作る
+- `localStorage` 比較で「容量 / 非同期 / 検索」の差を体感する
 
-### 手順 1: Sentry アカウントとプロジェクト作成
-
-[sentry.io](https://sentry.io/) で無料アカウントを作り、**新規プロジェクト**（platform = React）を作成。**DSN** を控えます。
-
-### 手順 2: 新規 React プロジェクト
+### 手順 1: 新規プロジェクト
 
 ```bash
-npm create vite@latest sentry-sample -- --template react-ts
-cd sentry-sample
-npm install @sentry/react
+npm create vite@latest indexeddb-sample -- --template react-ts
+cd indexeddb-sample
 npm install
+npm install dexie dexie-react-hooks
 ```
 
-### 手順 3: 初期化
+### 手順 2: DB の定義
 
-`.env`:
+`src/db.ts`:
 
-```
-VITE_SENTRY_DSN=（控えた DSN を貼る）
-VITE_APP_VERSION=0.1.0
-```
+```ts
+import Dexie, { Table } from "dexie";
 
-`src/main.tsx`:
+export interface Memo {
+  id?: number;
+  title: string;
+  body: string;
+  createdAt: number;
+  updatedAt: number;
+}
 
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import * as Sentry from "@sentry/react";
-import App from "./App.tsx";
-import "./index.css";
+class MemoDB extends Dexie {
+  memos!: Table<Memo, number>;
+  constructor() {
+    super("memo-app");
+    this.version(1).stores({
+      memos: "++id, updatedAt",
+    });
+  }
+}
 
-Sentry.init({
-  dsn: import.meta.env.VITE_SENTRY_DSN,
-  integrations: [Sentry.browserTracingIntegration()],
-  tracesSampleRate: 1.0,
-  environment: import.meta.env.MODE,
-  release: `sentry-sample@${import.meta.env.VITE_APP_VERSION}`,
-});
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <Sentry.ErrorBoundary fallback={<p>エラーが起きました</p>}>
-      <App />
-    </Sentry.ErrorBoundary>
-  </StrictMode>,
-);
+export const db = new MemoDB();
 ```
 
-### 手順 4: わざとエラーを起こす
+### 手順 3: メモ一覧 + 追加
 
 `src/App.tsx`:
 
 ```tsx
-import * as Sentry from "@sentry/react";
 import { useState } from "react";
+import { useLiveQuery } from "dexie-react-hooks";
+import { db, Memo } from "./db";
 
 export default function App() {
-  const [crash, setCrash] = useState(false);
+  const memos = useLiveQuery(
+    () => db.memos.orderBy("updatedAt").reverse().toArray(),
+    [],
+  );
+  const [title, setTitle] = useState("");
+  const [body, setBody] = useState("");
 
-  if (crash) {
-    throw new Error("意図的にクラッシュさせた");
-  }
-
-  const sendCustom = () => {
-    Sentry.captureMessage("カスタムメッセージ from Sentry test");
+  const add = async () => {
+    if (!title.trim()) return;
+    await db.memos.add({
+      title,
+      body,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+    setTitle("");
+    setBody("");
   };
 
-  const sendException = () => {
-    try {
-      // @ts-expect-error わざと
-      null.foo();
-    } catch (e) {
-      Sentry.captureException(e);
-    }
-  };
-
-  const setUser = () => {
-    Sentry.setUser({ id: "user-123", username: "テストユーザー" });
-    Sentry.setTag("test-run", "manual");
-  };
+  const remove = (id: number) => db.memos.delete(id);
 
   return (
-    <div style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>Sentry Demo</h1>
-      <button onClick={() => setCrash(true)}>レンダリングエラー</button>
-      <button onClick={sendException}>例外を送信</button>
-      <button onClick={sendCustom}>メッセージを送信</button>
-      <button onClick={setUser}>ユーザーをセット</button>
-    </div>
+    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
+      <h1>オフラインメモ</h1>
+      <div>
+        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="タイトル" />
+        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="本文" />
+        <button onClick={add}>追加</button>
+      </div>
+      <ul>
+        {memos?.map((m) => (
+          <li key={m.id}>
+            <strong>{m.title}</strong> — {new Date(m.updatedAt).toLocaleString()}
+            <p>{m.body}</p>
+            <button onClick={() => remove(m.id!)}>削除</button>
+          </li>
+        ))}
+      </ul>
+    </main>
   );
 }
 ```
 
-### 手順 5: 起動して確認
+### 手順 4: 確認
 
 ```bash
 npm run dev
 ```
 
-ボタンを押して、Sentry のダッシュボードでイベントが届くのを確認します（数秒〜数十秒の遅延あり）。
+メモを追加し、**ブラウザを閉じて再度開いて** も残っていることを確認。DevTools の Application → IndexedDB → `memo-app` → `memos` で実データが見られる。
+
+### 手順 5: ストレージ使用量を表示
+
+`App` 末尾に追加:
+
+```tsx
+import { useEffect, useState } from "react";
+
+const [usage, setUsage] = useState("");
+useEffect(() => {
+  navigator.storage.estimate().then(({ usage, quota }) => {
+    setUsage(`使用 ${Math.round((usage ?? 0) / 1024)}KB / クォータ ${Math.round((quota ?? 0) / 1024 / 1024)}MB`);
+  });
+}, [memos]);
+```
+
+`<p>{usage}</p>` を画面に出す。メモを増やすと使用量が増えていくのが見えます。
 
 ### 期待出力
 
-- 「レンダリングエラー」を押すと Error Boundary の fallback が表示され、Sentry にイベントが届く
-- 「例外を送信」で `TypeError` が届く
-- 「メッセージを送信」で文字列イベントが届く
-- 「ユーザーをセット」した後のイベントは **ユーザー情報付き** で届く
-- ダッシュボードで `release: sentry-sample@0.1.0` 付きとして表示される
+- メモがブラウザを閉じても残る
+- `Application → IndexedDB` でストアの中身が見られる
+- ストレージ使用量が表示され、メモ追加で増える
 
 ### 変える
 
-- `tracesSampleRate` を `0.1` にして、パフォーマンス計測のサンプリング率を下げる
-- `Sentry.replayIntegration()` を追加し、セッションリプレイを有効にする
-- `setTag("page", "home")` などタグを増やしてダッシュボードで絞り込みを試す
+- `useLiveQuery(() => db.memos.where("title").startsWithIgnoreCase("a").toArray())` のような **検索** を追加
+- DB の `version(2)` で `body` にインデックスを追加し、マイグレーション挙動を観察
+- 大量データ（1 万件）を一括追加して **`getAll` の遅さ** と **`each` cursor の差** を比較
 
 ### 自分で書く（任意）
 
-- Next.js プロジェクトに `npx @sentry/wizard@latest -i nextjs` で Sentry を入れる
-- API Route の中で意図的にエラーを起こし、Sentry に届くことを確認する
-- ビルド時に Source Map をアップロードして、minify 後のコードが元のソースで表示されることを確認
+- API と同期する Memo アプリを作る（**ローカルに保存 → サーバーに同期**）
+- 画像（Blob）を添付できるようにする
+- `localStorage` から IndexedDB に乗り換えるマイグレーションスクリプトを書く
 
 ## まとめ
 
-- **エラートラッキング** は「ユーザーが言わなければ気づけないバグ」を救うインフラ
-- Sentry は React / Next.js / Node.js を 1 つの SDK でカバー
-- React は `Sentry.init` + `Sentry.ErrorBoundary`、Next.js は **`npx @sentry/wizard@latest -i nextjs`** が最速
-- **Source Map** をアップロードすると、minify 後のスタックトレースが元のコードで読める（公開しない）
-- `setUser` / `setTag` / `setContext` で **絞り込みと原因究明** を加速
-- `release` / `environment` で **退行**（regression） を可視化
-- **Breadcrumbs** と **Session Replay** で再現が容易になる
-- 代替は Datadog / Bugsnag / Rollbar / LogRocket。**まず Sentry** が安全な選択
+- `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
+- 用語: **database / objectStore / transaction / cursor**
+- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
+- React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
+- 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
+- クォータ / 退去 / `navigator.storage.persist()` を意識する
+- オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番

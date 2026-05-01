@@ -1,327 +1,343 @@
-# lesson106: 画像とフォントの最適化
+# lesson105: バンドルサイズの最適化とコード分割
 
 ## ゴール
 
-- 画像が **LCP の最重要要因** であることを理解する
-- 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
-- `next/image` がやってくれる自動最適化の中身を説明できる
-- フォントが **CLS** と LCP にどう効くかを理解する
-- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
-- Self-hosted フォントと Google Fonts の使い分けを知る
+- バンドルサイズが LCP や INP に効く理由を説明できる
+- Vite のビルド出力を **Visualizer** で可視化できる
+- `import("...")` の **動的インポート** でコードを分割できる
+- `React.lazy` + `<Suspense>` でルート / コンポーネント単位の遅延読み込みができる
+- 「最初の 1 画面で **必要なコードだけ** を送る」考え方を持てる
+- Tree shaking が効く / 効かない書き方を区別できる
 
 ## 解説
 
-### 画像が LCP の最重要要因
+### バンドルサイズと CWV の関係
 
-ほとんどのページで **LCP（最大コンテンツ）はヒーロー画像** が選ばれます。だから「LCP を改善する」は事実上「画像を最適化する」とほぼ同義です。
+ブラウザは JS を **ダウンロード → パース → 実行** してから初めて画面を描画できます。バンドルが大きいと:
 
-### 画像最適化 5 つの技
+- ダウンロードに時間がかかる → **LCP 悪化**
+- パース・実行で **メインスレッドが詰まる** → **INP 悪化**
+- 大きな `<script>` が `<body>` を遮る → **First Paint も遅延**
 
-#### 1. フォーマット: WebP / AVIF を使う
+特にモバイル + 遅い回線では 100KB 違うだけで体感が劇的に変わります。**「送らないコードが最速」** が鉄則です。
 
-JPEG / PNG はもう古い選択肢です。現代は:
+### バンドル分析: rollup-plugin-visualizer
 
-- **WebP**: ブラウザ対応率 95% 超。JPEG より 25-35% 軽い
-- **AVIF**: 比較的新しい。WebP よりさらに 30% 軽い。ブラウザ対応率は約 95%
+Vite は **Rollup** をベースにビルドします。`rollup-plugin-visualizer` を入れると、ビルド成果物の中身を **木構造の図** で見られます。
 
-両者は **可逆 / 非可逆** 両方サポート。古いブラウザ用に JPEG をフォールバックで残すのが定番です。
-
-#### 2. サイズ: 表示サイズに合わせる
-
-3000×2000 の写真を `<img width="300" height="200">` で表示すると、**3000×2000 のファイルがそのまま転送** されます。これが LCP を遅らせる最大の原因です。
-
-対策:
-
-- **複数解像度** を用意して `srcset` で適切な一枚を選ばせる
-- ビルド時に **自動リサイズ** するツール（`next/image`、`vite-plugin-image-optimizer` 等）を使う
-
-```html
-<img
-  src="/photo-400.jpg"
-  srcset="/photo-400.jpg 400w, /photo-800.jpg 800w, /photo-1200.jpg 1200w"
-  sizes="(max-width: 600px) 100vw, 800px"
-  alt="海辺で撮影した記念写真"
-/>
+```bash
+npm install -D rollup-plugin-visualizer
 ```
 
-`sizes` は CSS のメディアクエリと同じ書き方で「表示サイズの目安」を伝えます。ブラウザがそれを見て `srcset` から最適な 1 枚を選びます。
+`vite.config.ts`:
 
-> **`alt` は意味のある文を入れる**: `alt="..."` のような placeholder は本番のコードに残してはいけません。スクリーンリーダーがその文字列を読み上げる形で利用者に届きます。`alt` には **画像が伝えたい情報** を 1 文で書き、見出し近くの装飾画像のように **何の情報も足さない** 画像なら `alt=""`（空文字）を指定します。空文字を指定するとスクリーンリーダーはその要素を読み飛ばします。`alt` 属性自体を省略すると「ファイル名を読み上げる」最悪のフォールバックになるので、必ず `alt=""` を明示します。
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 
-#### 3. 遅延読み込み: `loading="lazy"`
-
-画面外の画像は **読み込みを遅らせて** 後から取りに行きます。
-
-```html
-<!-- ページ最初に見える画像（first view）: eager -->
-<img src="/hero.jpg" loading="eager" fetchpriority="high" alt="サイトのトップビジュアル: 海辺の夕焼け" />
-
-<!-- 画面外の画像: lazy -->
-<img src="/below-fold.jpg" loading="lazy" alt="記事中の図表" />
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,        // ビルド後に自動でブラウザで開く
+      filename: "stats.html",
+      gzipSize: true,    // gzip 圧縮後のサイズも表示
+      brotliSize: true,  // brotli 圧縮後のサイズも表示
+    }),
+  ],
+});
 ```
 
-- **`loading="lazy"`**: ブラウザがスクロール位置に応じて読み込み開始
-- **`loading="eager"`**: 即時読み込み（既定）
-- **`fetchpriority="high"`**: ヒーロー画像で優先度を上げる（LCP の最強の武器）
+`npm run build` を実行すると `dist/` 出力後に `stats.html` がブラウザで開き、各依存パッケージのサイズが視覚的に分かります。意外なほど大きいライブラリ（例: `moment`、`lodash` 全部）が見つかることがあります。
 
-`loading="lazy"` を **first view の画像に付けてはいけません**（LCP が悪化）。ページの最重要画像には `fetchpriority="high"` を付けるのが 2026 年の定番です。
+### よくある肥大化パターン
 
-#### 4. プレースホルダ: ぼかし画像の先出し
+| パターン | 解決策 |
+|---|---|
+| `lodash` を `import _ from "lodash"` で全部読み込み | `import debounce from "lodash/debounce"` で個別 import |
+| `moment` を使っている | `date-fns` か `dayjs`（軽い）に置き換え |
+| `motion/react`（旧 `framer-motion`、2024 年に `motion` パッケージへ改称）を `import * as motion` で全部読み込み | `import { motion } from "motion/react"` の named import で必要分だけ |
+| Tree shaking が効かない CommonJS パッケージ | ESM 版 / 軽量代替を探す |
+| 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
+| アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
 
-LQIP（Low Quality Image Placeholder）と呼ばれる手法です。本物が読み込まれるまで、極小サイズのぼかし画像を表示しておきます。
+「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
 
-```html
-<!-- placeholder-blur と 本物の差し替え -->
-<img
-  src="/placeholder-blur.jpg"  /* 数 KB の小さい画像 */
-  data-src="/full.jpg"          /* 本物 */
-  ...
-/>
+### コード分割（Code Splitting）
+
+「最初の 1 画面で必要なコードだけ送る」を実現するのが **コード分割** です。アプリ全体を 1 つの大きなバンドルにせず、**画面 / 機能ごとに小さな chunk** に分けます。
+
+#### 1. 動的インポート `import("...")`
+
+JavaScript 標準の **動的 `import()`** を使うと、その行に到達するまでファイルを読み込みません。
+
+```ts
+// 静的 import: ビルド時に main bundle に含まれる
+import { heavyFunction } from "./heavy";
+
+// 動的 import: 実行時に必要になったら別 chunk として読み込む
+button.addEventListener("click", async () => {
+  const { heavyFunction } = await import("./heavy");
+  heavyFunction();
+});
 ```
 
-`next/image` の `placeholder="blur"` がこれを自動でやってくれます。
+ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
 
-#### 5. `<picture>` でフォーマットを分岐
+### 2. React.lazy + `<Suspense>`
 
-WebP / AVIF をサポートしていないブラウザに JPEG をフォールバックで返すには `<picture>` を使います。
-
-```html
-<picture>
-  <source srcset="/photo.avif" type="image/avif" />
-  <source srcset="/photo.webp" type="image/webp" />
-  <img src="/photo.jpg" alt="海辺で撮影した記念写真" width="800" height="600" />
-</picture>
-```
-
-ブラウザは上から順に対応形式を探し、最初に対応している `<source>` を使います。すべて非対応なら最後の `<img>` を使います。
-
-### `next/image` は全部やってくれる
-
-5 章 で扱った `<Image>` コンポーネントは、上記 5 つの最適化を **設定なしで** 全部やります。
-
-- フォーマット自動変換（WebP / AVIF）
-- 表示サイズに応じた `srcset` 生成
-- `loading="lazy"`（first view を除く自動判定は手動が確実）
-- `placeholder="blur"` でぼかし
-- `<picture>` 相当のフォールバック
-
-Next.js 以外の環境では同等の自動化は手作業が必要なので、Next.js が選ばれる理由の 1 つになっています。
-
-### フォントが CLS と LCP に効く
-
-フォントの読み込み挙動が悪いと:
-
-- **CLS 悪化**: フォントが切り替わった瞬間にテキスト幅が変わってレイアウトがズレる
-- **LCP 悪化**: テキストが LCP 要素なら、フォント読み込み完了まで描画されない
-
-主な現象:
-
-- **FOIT**（Flash of Invisible Text）: フォント読み込み中、テキストが **見えない**
-- **FOUT**（Flash of Unstyled Text）: フォント読み込み中、フォールバックフォントで一瞬表示 → 切り替わり
-
-### `font-display: swap`
-
-CSS の `@font-face` で `font-display: swap` を指定すると、**FOUT** モードになります。フォールバックフォントで先に表示し、本物のフォントが届いたら差し替えます。
-
-```css
-@font-face {
-  font-family: "MyFont";
-  src: url("/fonts/myfont.woff2") format("woff2");
-  font-display: swap;
-}
-```
-
-`swap` は LCP に有利（テキストが先に表示される）ですが、CLS は出やすくなります。トレードオフです。`optional` を選ぶと「100ms 以内に読み込めなければ諦める」という慎重派の挙動になります。
-
-### `<link rel="preload">` で先読み
-
-クリティカルなフォント（first view で使う）は **`<link rel="preload">`** でブラウザに「優先して読んでね」と伝えます。
-
-```html
-<link
-  rel="preload"
-  href="/fonts/myfont.woff2"
-  as="font"
-  type="font/woff2"
-  crossorigin
-/>
-```
-
-これで HTML パース中に並行して読み込みが始まり、CSS で `@font-face` が見つかった時にはほぼ準備完了の状態になります。LCP / CLS 双方に効きます。
-
-### `next/font` は全部やってくれる
-
-Next.js では `next/font` が自動で:
-
-- フォントをビルド時にダウンロード（self-host 化、Google Fonts への外部リクエスト削減）
-- サブセット化（必要な文字だけ抽出）
-- preload リンクを HTML に自動挿入
-- `font-display: swap` を既定にする
-- フォールバックフォントの幅メトリクスを近づけて CLS を抑制
+React コンポーネントを動的に読み込むには `React.lazy` を使います。
 
 ```tsx
-import { Inter } from "next/font/google";
+import { lazy, Suspense } from "react";
 
-const inter = Inter({ subsets: ["latin"], display: "swap" });
+// 通常の import
+// import { HeavyChart } from "./HeavyChart";
 
-export default function RootLayout({ children }: LayoutProps<"/">) {
+// 動的 import + lazy
+const HeavyChart = lazy(() => import("./HeavyChart"));
+
+function App() {
+  const [showChart, setShowChart] = useState(false);
+
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <div>
+      <button onClick={() => setShowChart(true)}>グラフを表示</button>
+      {showChart && (
+        <Suspense
+          fallback={
+            <p role="status" aria-live="polite">グラフ読み込み中...</p>
+          }
+        >
+          <HeavyChart />
+        </Suspense>
+      )}
+    </div>
   );
 }
 ```
 
-`next/font/google` は Google Fonts を自動 self-host 化、`next/font/local` は手元の `.woff2` をビルドに組み込みます。
+`HeavyChart` のコードは **ボタンを押すまで送られません**。`<Suspense fallback={...}>` で、読み込み中の表示も指定できます。fallback 要素には `role="status"` と `aria-live="polite"` を付けるのがおすすめです。スクリーンリーダーが「読み込み中」を発話してくれるようになり、何も無いまま黙って待たせる事故を防げます。
 
-### Self-host vs Google Fonts CDN
+#### 3. Next.js でのコード分割
 
-| 方式 | 利点 | 欠点 |
-|---|---|---|
-| Google Fonts CDN（`<link href="fonts.googleapis.com">`） | セットアップ簡単 | 外部ドメインへの追加 DNS / 接続 / プライバシー懸念 |
-| Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
-| `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
+Next.js の App Router は **デフォルトで自動コード分割** をします。`app/posts/page.tsx` の中身は `/posts` を訪れた時だけ送られ、トップ `/` には含まれません。
 
-2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
+明示的に分割したい時は `next/dynamic` を使います:
 
-### サブセット化
+```tsx
+import dynamic from "next/dynamic";
 
-日本語フォント（`Noto Sans JP` 等）はファイルが MB 単位で巨大です。**実際に使う文字だけを抽出した「サブセット」** を配信しないと一気に LCP / CLS が悪化します。
+const Chart = dynamic(() => import("./Chart"), {
+  loading: () => <p>読み込み中...</p>,
+  ssr: false,  // クライアント側でだけ実行
+});
 
-- ラテン文字だけのページなら `subsets: ["latin"]` で 30KB 程度
-- 日本語ページは `Noto Sans JP` の **第一水準漢字 + 平仮名 + 片仮名 + 数字 + 記号** に絞ったサブセットを用意（数百 KB 程度）
+export default function Page() {
+  return <Chart />;
+}
+```
 
-ビルド時にサブセット化するツール（`subset-font` パッケージ等）や、`next/font/google` の `subsets` 指定で自動化できます。
+`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
+
+### Tree Shaking の落とし穴
+
+**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
+
+#### 効く書き方（named import）
+
+```ts
+import { format } from "date-fns";
+// 使うのは format だけ。他の関数はバンドルされない
+```
+
+#### 効きにくい書き方
+
+```ts
+import * as dateFns from "date-fns";
+dateFns.format(...);
+// すべての export を読み込む可能性が上がる
+```
+
+```ts
+import _ from "lodash";
+// CommonJS の lodash は tree shaking が効かない。lodash 全部が含まれる
+```
+
+代替策:
+
+- `lodash` → `lodash-es`（ESM 版） or 個別関数 import（`import debounce from "lodash/debounce"`）
+- `moment` → `dayjs` / `date-fns`
+- 大きな UI ライブラリ → 個別パッケージ化されているものを選ぶ（Chakra UI v3、Radix UI のように）
+
+### `package.json` の `sideEffects: false`
+
+ライブラリ作者向けですが、自作のライブラリで Tree Shaking を効かせるには `package.json` に `sideEffects: false` を書きます。
+
+```json
+{
+  "name": "my-lib",
+  "sideEffects": false
+}
+```
+
+「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
 
 ## 演習
 
 ### ゴール
 
-- 既存の Next.js プロジェクト（または新規）に `<Image>` を入れる前後で Lighthouse の LCP を比較する
-- `next/font/google` で Google Fonts を self-host 化する
-- DevTools Network タブで画像 / フォントの読み込み順序を観察する
+- 既存の Vite + React プロジェクトに `rollup-plugin-visualizer` を入れる
+- `stats.html` を見てバンドル内容を可視化する
+- `React.lazy` でページ単位のコード分割を体験する
+- ビルド前後でサイズの違いを比較する
 
-### 手順 1: 画像最適化の前後比較（Next.js）
+### 途中から始める場合
 
-1. 5 章 で作った Next.js プロジェクト or 新規 `create-next-app` で:
+新規 Vite + React + TypeScript テンプレートを作ります（StackBlitz でも可）。
 
-   ```bash
-   npx create-next-app@latest perf-image --typescript --tailwind=false --app
-   cd perf-image
-   ```
+```bash
+npm create vite@latest perf-sample -- --template react-ts
+cd perf-sample
+npm install
+npm install -D rollup-plugin-visualizer
+```
 
-2. `app/page.tsx` に大きな画像を **素の `<img>` で** 配置（最初は最適化なし）:
+### 手順 1: Visualizer を有効化
 
-   ```tsx
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <img
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           style={{ width: 600, height: 400 }}
-         />
-       </main>
-     );
-   }
-   ```
+`vite.config.ts`:
 
-3. `npm run build && npm run start` でビルド済みを起動し、Lighthouse を Mobile で計測。LCP / 全体スコアをメモ
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { visualizer } from "rollup-plugin-visualizer";
 
-4. `<img>` を `<Image>` に置き換え:
+export default defineConfig({
+  plugins: [
+    react(),
+    visualizer({
+      open: true,
+      filename: "dist/stats.html",
+      gzipSize: true,
+    }),
+  ],
+});
+```
 
-   ```tsx
-   import Image from "next/image";
+### 手順 2: わざと大きなコンポーネントを作る
 
-   export default function Page() {
-     return (
-       <main>
-         <h1>画像比較</h1>
-         <Image
-           src="https://picsum.photos/2400/1600"
-           alt="サンプル"
-           width={600}
-           height={400}
-           priority
-         />
-       </main>
-     );
-   }
-   ```
-
-   `next.config.ts` に `picsum.photos` を許可:
-
-   ```ts
-   const nextConfig = {
-     images: {
-       remotePatterns: [{ protocol: "https", hostname: "picsum.photos" }],
-     },
-   };
-   export default nextConfig;
-   ```
-
-5. もう一度ビルド + Lighthouse。LCP が大幅に改善するはず（数秒 → 1 秒以下）
-
-### 手順 2: `next/font` でフォント
-
-`app/layout.tsx`:
+`src/HeavyChart.tsx`:
 
 ```tsx
-import { Inter } from "next/font/google";
+export function HeavyChart() {
+  // 実際のグラフライブラリの代わりに、大きな配列を生成
+  const data = Array.from({ length: 1000 }, (_, i) => ({
+    label: `点 ${i}`,
+    value: Math.sin(i / 50) * 100 + 100,
+  }));
 
-const inter = Inter({
-  subsets: ["latin"],
-  display: "swap",
-});
-
-export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html lang="ja" className={inter.className}>
-      <body>{children}</body>
-    </html>
+    <div>
+      <h2>グラフ（モック）</h2>
+      <ul>
+        {data.slice(0, 20).map((d) => (
+          <li key={d.label}>
+            {d.label}: {d.value.toFixed(2)}
+          </li>
+        ))}
+      </ul>
+    </div>
   );
 }
 ```
 
-ビルドして Network タブで:
+### 手順 3: lazy で読み込む
 
-- 自分のドメイン（`localhost:3000`）から `.woff2` が配信される
-- `fonts.googleapis.com` への外部リクエストが消える
-- HTML の `<head>` に `<link rel="preload" as="font">` が自動挿入されている
+`src/App.tsx`:
 
-### 手順 3: 画像のフォーマット確認
+```tsx
+import { lazy, Suspense, useState } from "react";
 
-Network タブの **Type** 列で:
+const HeavyChart = lazy(() =>
+  import("./HeavyChart").then((m) => ({ default: m.HeavyChart }))
+);
 
-- `<img>` 直書き: `jpeg` / `png`
-- `<Image>`: `webp` / `avif`（ブラウザ対応に応じて）
+export default function App() {
+  const [show, setShow] = useState(false);
 
-「Response Headers」の `content-type` も確認できます。
+  return (
+    <main>
+      <h1>パフォーマンス演習</h1>
+      <button onClick={() => setShow(true)}>グラフを表示</button>
+
+      {show && (
+        <Suspense fallback={<p>読み込み中...</p>}>
+          <HeavyChart />
+        </Suspense>
+      )}
+    </main>
+  );
+}
+```
+
+`HeavyChart` は **named export** なので `lazy` の中で `default` に変換しています。`export default function HeavyChart() {...}` にすれば変換は不要です。
+
+### 手順 4: ビルドして可視化
+
+```bash
+npm run build
+```
+
+ビルド完了後、自動で `stats.html` がブラウザで開きます。
+
+- 中央の大きなブロックが React 本体
+- 別の小さな chunk として `HeavyChart` のコードが分かれているはず
+- **Initial bundle**（最初に送られる JS）から `HeavyChart` が外れている
 
 ### 期待出力
 
-- 同じ画像でもファイルサイズが半分以下に縮む
-- LCP の数値が劇的に改善
-- フォントの FOIT / FOUT がほぼ気にならないレベル
+`dist/assets/` を見ると、複数の `.js` ファイルがあるはずです。
+
+```
+dist/
+├── index.html
+├── assets/
+│   ├── index-XXXXX.js     ← Initial bundle (App.tsx + React)
+│   └── HeavyChart-XXXXX.js ← lazy でロードされる別 chunk
+└── stats.html
+```
+
+開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
+
+- 最初に index-XXXXX.js が読み込まれる
+- 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
+
+の流れが見えます。
 
 ### 変える
 
-- `<Image priority>` を外してみる。LCP がやや悪化する（`priority` は first view の画像に必須）
-- `next/font/google` の `display: "swap"` を `display: "block"` に変えると、FOIT になることを確認
-- `<Image>` の `placeholder="blur"` を試す（ローカル画像を使う場合のみ）。読み込み中にぼかしが見える
+- `lazy` の動的 import を **静的 import** に戻してみる（`import { HeavyChart } from "./HeavyChart"`）。再ビルドすると `HeavyChart` のコードが Initial bundle に統合され、`stats.html` 上で 1 つの大きな塊になることを確認
+- `HeavyChart` の中身を増やしてみる（`Array.from({ length: 100000 }, ...)`）。バンドル内のサイズが目に見えて増える
+- `import * as dateFns from "date-fns"` を入れて、tree shaking が効いていない場合に何が起きるか観察（事前に `npm install date-fns`）
 
 ### 自分で書く
 
-- 普段使う画像を `<picture>` でラップして、AVIF / WebP / JPEG のフォールバック構造を手書きで作る
-- `<link rel="preload">` を `<head>` に追加して、特定の画像 / フォントを先読みさせる
+- 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
+- `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
+- `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
+
+### Next.js での実例
+
+教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
+
+それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
 
 ## まとめ
 
-- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
-- 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
-- **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
-- フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する
-- **`font-display: swap`** + **`<link rel="preload">`** が基本
-- **`next/font`** は Google Fonts の self-host 化 + subset + preload を自動化
+- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
+- **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
+- 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
+- **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割
+- Next.js は App Router の `page.tsx` 単位で **自動コード分割**、コンポーネント単位は `next/dynamic`
+- Tree shaking が効くのは **named import + ESM**、CommonJS や `import *` は要注意
