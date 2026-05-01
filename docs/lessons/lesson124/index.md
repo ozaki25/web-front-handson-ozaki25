@@ -52,42 +52,13 @@ OAuth 2.0 で最も使われ、安全とされるフロー。**Client の種類*
 
 サーバーが安全に `client_secret` を保持できる場合（Next.js の Route Handler など）。
 
-```
-[User]                         [Client(Server)]              [Auth Server]
-  │   1. ログインボタン押下       │                                │
-  │ ───────────────────────────> │                                │
-  │                              │   2. /authorize にリダイレクト │
-  │                              │ ──────────────────────────────>│
-  │   3. ログイン + 認可画面     │                                │
-  │ <─────────────────────────────────────────────────────────── │
-  │   4. 認可                    │                                │
-  │ ────────────────────────────────────────────────────────── > │
-  │                              │   5. /redirect?code=XXX        │
-  │                              │ <──────────────────────────────│
-  │                              │   6. /token (code + client_secret) │
-  │                              │ ──────────────────────────────>│
-  │                              │   7. access_token 取得         │
-  │                              │ <──────────────────────────────│
-```
+<img src="/diagrams/oauth-confidential-flow.svg" alt="Confidential Client の認可コードフロー: ユーザーがログインボタンを押すと Client がAuthorizationServerに/authorizeリダイレクト、ユーザーが認可すると認可コードが返り、ClientはそのコードとclientSecretで/tokenを叩きaccessTokenを取得する" class="diagram" />
 
 ##### B. Public Client（ブラウザの SPA / ネイティブアプリ）
 
 `client_secret` を保持できない場合。代わりに **PKCE**（後述）を必ず使います。
 
-```
-[Browser SPA]                                                   [Auth Server]
-   │   1. verifier を生成、challenge を計算                        │
-   │   2. /authorize?code_challenge=...                              │
-   │ ────────────────────────────────────────────────────────────────> │
-   │   3-4. ログイン + 認可                                          │
-   │ <───────────────────────────────────────────────────────────────│
-   │   5. /redirect?code=XXX                                         │
-   │ <───────────────────────────────────────────────────────────────│
-   │   6. /token (code + verifier) ← secret は持たない               │
-   │ ────────────────────────────────────────────────────────────────> │
-   │   7. access_token 取得                                          │
-   │ <───────────────────────────────────────────────────────────────│
-```
+<img src="/diagrams/oauth-pkce-flow.svg" alt="PKCE を使った Public Client の認可コードフロー: SPA が verifier と challenge を生成し code_challenge 付きで/authorizeを呼ぶ、認可コードを受け取ったら verifier と一緒に/tokenを叩く。client_secret は不要" class="diagram" />
 
 ポイント:
 

@@ -1,0 +1,12 @@
+sequenceDiagram
+    actor User as ユーザー
+    participant Client as Client（サーバー）
+    participant Auth as Authorization Server
+
+    User->>Client: 1. ログインボタン押下
+    Client->>Auth: 2. /authorize にリダイレクト
+    Auth->>User: 3. ログイン + 認可画面を表示
+    User->>Auth: 4. 認可
+    Auth->>Client: 5. /redirect?code=XXX
+    Client->>Auth: 6. /token（code + client_secret）
+    Auth->>Client: 7. access_token を返す

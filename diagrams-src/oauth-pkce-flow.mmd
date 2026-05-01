@@ -1,0 +1,11 @@
+sequenceDiagram
+    actor Browser as Browser SPA
+    participant Auth as Authorization Server
+
+    Browser->>Browser: 1. verifier 生成・challenge 計算
+    Browser->>Auth: 2. /authorize?code_challenge=...
+    Auth->>Browser: 3. ログイン + 認可画面を表示
+    Browser->>Auth: 4. 認可
+    Auth->>Browser: 5. /redirect?code=XXX
+    Browser->>Auth: 6. /token（code + verifier）
+    Auth->>Browser: 7. access_token を返す
