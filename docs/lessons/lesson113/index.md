@@ -1,4 +1,4 @@
-# lesson112: GitHub の PR とコードレビュー
+# lesson113: GitHub の PR とコードレビュー
 
 ## ゴール
 

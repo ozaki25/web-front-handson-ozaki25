@@ -1,4 +1,4 @@
-# lesson131: エラートラッキング（Sentry）
+# lesson132: エラートラッキング（Sentry）
 
 ## ゴール
 

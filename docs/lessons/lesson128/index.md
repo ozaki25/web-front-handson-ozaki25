@@ -1,4 +1,4 @@
-# lesson127: GraphQL と tRPC の地図
+# lesson128: GraphQL と tRPC の地図
 
 ## ゴール
 

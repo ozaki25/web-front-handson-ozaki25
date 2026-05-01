@@ -1,4 +1,4 @@
-# lesson118: Web Components 入門
+# lesson119: Web Components 入門
 
 ## ゴール
 

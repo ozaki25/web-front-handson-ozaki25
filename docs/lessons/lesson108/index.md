@@ -1,4 +1,4 @@
-# lesson107: package.json と npm スクリプト
+# lesson108: package.json と npm スクリプト
 
 ## ゴール
 

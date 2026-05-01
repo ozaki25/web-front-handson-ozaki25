@@ -1,4 +1,4 @@
-# lesson124: OAuth / OIDC の概念
+# lesson125: OAuth / OIDC の概念
 
 ## ゴール
 

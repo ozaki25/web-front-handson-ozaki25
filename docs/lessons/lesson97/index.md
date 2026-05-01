@@ -1,4 +1,4 @@
-# lesson96: Cookie と Web セキュリティ
+# lesson97: Cookie と Web セキュリティ
 
 ## ゴール
 
