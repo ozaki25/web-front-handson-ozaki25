@@ -123,6 +123,21 @@ You're importing a component that needs useState. This React Hook only works in 
 
 このメッセージが出たら、冒頭に `"use client";` を足せばすぐ直ります。
 
+### `client-only` でブラウザ専用コードを守る
+
+`server-only` の逆バージョンが `client-only` です。`navigator` や `window` などブラウザ API を使うモジュールをサーバーから import すると、サーバー実行時に `ReferenceError: window is not defined` のようなランタイムエラーになります。`client-only` を入れておくとビルド時に検出できます。
+
+```ts
+// lib/clipboard.ts
+import "client-only";
+
+export function copyToClipboard(text: string) {
+  navigator.clipboard.writeText(text);
+}
+```
+
+インストールは `npm install client-only`。`server-only` / `client-only` はどちらも「意図した境界を仕組みで守る」ためのパッケージです。
+
 ### ページが表示されるまでの流れ
 
 Server Component と Client Component がどのように協力してページを作るのか、時系列で見ておきます。

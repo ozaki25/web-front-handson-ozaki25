@@ -76,6 +76,21 @@ Next.js には重要なルールがあります。
 - 公開しても困らない（URL、アプリ名、GA トラッキング ID など）: `NEXT_PUBLIC_` を付ける
 - 公開すると困る（API キー、DB 接続文字列、JWT の秘密鍵など）: プレフィックスなし
 
+### `server-only` でシークレットの漏洩を防ぐ
+
+`NEXT_PUBLIC_` を付けない変数はサーバー専用ですが、そのモジュールを誤って Client Component から import してしまってもビルド時にはエラーが出ません。`server-only` パッケージはこの穴を塞ぎます。
+
+```ts
+// lib/db.ts
+import "server-only";
+
+export const db = /* DB クライアント（環境変数で接続文字列を読む）*/;
+```
+
+これを Client Component から import しようとすると、**ビルド時にエラー** になります。`import "server-only"` の 1 行が「このモジュールはサーバーでしか使えない」という宣言になります。DB クライアントや、シークレットを読む関数を書くファイルの先頭に入れておくと、誤 import を仕組みで防げます。
+
+インストールは `npm install server-only`。
+
 ## 演習
 
 ### 途中から始める場合
