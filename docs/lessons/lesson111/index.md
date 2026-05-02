@@ -5,7 +5,7 @@
 - Lint と Format が **役割の異なる別物** であることを理解する
 - ESLint の flat config（`eslint.config.js`）の最小形を読める
 - Prettier との連携で衝突しない設定を書ける
-- Biome がこの 2 役を **1 ツール** で 35x 速く処理することを理解する
+- Biome / oxlint など **Rust 製新ツール** の位置付けと選び方を理解する
 - 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
 - VS Code の保存時 autofix で「書きながら直る」体験を得る
 

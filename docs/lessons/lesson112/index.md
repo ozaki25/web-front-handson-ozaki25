@@ -14,34 +14,7 @@
 
 ## 解説
 
-### なぜ Rust 移行が進むのか
-
-JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トランスパイラ）は **JavaScript で書かれて** きました。それは「**自分自身でメタ的に開発できる**」という美点があった一方:
-
-- **シングルスレッド** 寄りで並列化が難しい
-- **GC のオーバーヘッド**
-- **JS 自体の起動コスト**
-
-これがプロジェクトサイズの増加に追いついていません。**Rust** は次の特徴で対抗:
-
-- **並列処理が得意**（fearless concurrency）
-- **GC なし** で予測可能なメモリ使用
-- **コンパイル時の最適化** で実行が速い
-- **WebAssembly に出せる**（CI / IDE 連携）
-
-結果として 2024〜2026 年の間に主要ツールが **Rust ベースに置き換え** が進んでいます。
-
-### 次世代ツールチェインの全体像
-
-| 役割 | 旧（JS 製） | 新（Rust 製） |
-|---|---|---|
-| バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
-| パーサー / トランスパイラ | Babel | **SWC** / Oxc |
-| Lint | ESLint | **Biome** / oxlint |
-| Format | Prettier | **Biome** / dprint |
-| 型チェック | tsc | **tsgo**（TypeScript 7 Beta） |
-
-それぞれを順に見ていきます。
+Rust 移行の背景と全体の役割分類は lesson109「フロントエンドツールの全体像と歴史」で扱い済みです。ここでは各ツールの詳細と導入判断に絞ります。
 
 ### Biome
 
@@ -73,7 +46,7 @@ npx biome init
 - 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
 - **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
 
-→ 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
+Biome は「lint + format を 1 ツールにまとめたい」ケースに向く。ただし **lint の速度と ESLint プラグイン互換性では oxlint が上**、フォーマットでも oxfmt（beta）が後から追いかけている。Oxc 系の成熟とともに「統合」という Biome の優位は縮小していく見込み。
 
 ### Oxc / oxlint
 
@@ -210,7 +183,8 @@ TypeScript 公式の Go 移植は **Beta まで到達**しており、`--noEmit`
 
 #### すぐ導入してもよい
 
-- **新規プロジェクト** で Biome 単独
+- **新規プロジェクト** で oxlint + Prettier（速度と ESLint 互換の両立）
+- **新規プロジェクト** で Biome（lint + format を 1 ツールにまとめたい場合）
 - **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
 - **oxlint を ESLint と並走** させて速度を体感
 
@@ -225,22 +199,6 @@ TypeScript 公式の Go 移植は **Beta まで到達**しており、`--noEmit`
 - **TypeScript の Rust 化**（公式 Go 版を待つ）
 - **完全な ESLint プラグイン互換** が出るまで
 
-### ツール選択のフレーム
-
-新規プロジェクトでの 2026 年標準:
-
-```
-言語: TypeScript 6.0
-バンドラ: Vite 8（内部 Rolldown + Oxc）
-        または Next.js 16（内部 Turbopack + SWC）
-Lint:   Biome / oxlint
-Format: Biome / Prettier
-テスト: Vitest（内部 Vite）/ Playwright
-パッケージ: pnpm / Bun
-```
-
-「**速い + 設定少ない**」を全方位で享受できる構成。
-
 ### 5 年後の展望
 
 おそらく続くもの:
@@ -251,11 +209,11 @@ Format: Biome / Prettier
 
 まだ揺れているもの:
 
-- **Biome vs ESLint** の決着（プラグイン互換次第）
+- **Oxc 系（oxlint + oxfmt）vs Biome vs ESLint** の決着（oxlint の JS プラグイン対応 + oxfmt 安定化が分岐点）
 - **Vite 系 vs Vercel 系** のシェア
 - **WebAssembly 化したツール**（IDE / ブラウザでの実行）
 
-「**まずは安定の ESLint + Prettier、心の準備として Biome / Oxc を試す**」が 2026 年の堅実なスタンス。
+VoidZero（oxlint / oxfmt / Rolldown / Vite）が 1 社で同方向に進んでいる点で、**Oxc 系ツールチェインへの収束**が最も蓋然性が高い。Biome は「統合 1 ツール」の利便性で独自路線を維持しようとしているが、Oxc 系が揃えば優位性は薄れる。
 
 ## 演習
 
@@ -348,6 +306,6 @@ time npx oxlint .
 - **SWC / Turbopack**: Next.js / Vercel が独自路線
 - **dprint**: Prettier 代替の Rust 製フォーマッタ
 - **TypeScript 7.0 Beta**（Go 版 / tsgo）が 2026 年 4 月にリリース。安定版は 2026 年夏ごろ見込み
-- 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
+- 「**新規 = oxlint + Prettier + Vite 8**」または Biome。Oxc 系（oxlint + oxfmt）の完成度が上がるにつれ勢力図が変わる見込み
 - 既存プロジェクトは「**速度に困ってから**」で良い
 - 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
