@@ -27,7 +27,7 @@
 | **フォーマッタ** | コードのスタイルを揃える（インデント・改行など） | Prettier / Biome / dprint |
 | **テストランナー** | テストを実行する | Jest / Vitest / Playwright |
 
-これに加えて、**開発サーバー**（Vite dev server / webpack-dev-server）と **パッケージマネージャ**（npm / pnpm / yarn / bun）も道具です。
+これに加えて、**開発サーバー**（Vite dev server / webpack-dev-server）と **パッケージマネージャ**（npm / pnpm / yarn / Bun）も道具です。
 
 ややこしいのは、1 つのツールが **複数の役割を兼ねる** ことです。Vite はバンドラだが内部で esbuild を使ってトランスパイルもする。Biome はリンタとフォーマッタを兼ねる。Oxc は将来的にバンドラ以外のすべてを統合する目標を持っています。
 
