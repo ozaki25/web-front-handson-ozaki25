@@ -72,6 +72,8 @@ jobs:
   - `uses: actions/...@v4`: 既製のアクションを使う
   - `run: ...`: シェルコマンドを実行
 
+<img src="/diagrams/github-actions-pipeline.svg" alt="push / pull_request がトリガーになり、lint・test・build の 3 つの job が並列実行される。各 job は checkout → setup-node → npm ci → コマンド の steps を順に実行し、すべて成功すると PR マージ可になる。" class="diagram" />
+
 ### Lint / テスト / ビルドを並列で
 
 実用的には次のような構成です。

@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 600 400" width="600" height="400">
+  <style>
+    .bg { fill: #ffffff; }
+    .text { fill: #111827; font-family: system-ui, sans-serif; font-size: 13px; }
+    .small { font-size: 11px; fill: #6b7280; }
+    .badge { font-size: 11px; font-weight: bold; }
+    .box-trigger { fill: #dbeafe; stroke: #3b82f6; stroke-width: 1.5; }
+    .box-workflow { fill: none; stroke: #d1d5db; stroke-width: 1.5; stroke-dasharray: 5 3; }
+    .box-job { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; }
+    .box-step { fill: #f9fafb; stroke: #d1d5db; stroke-width: 1; }
+    .box-result { fill: #fef9c3; stroke: #eab308; stroke-width: 1.5; }
+    .arrow { stroke: #9ca3af; fill: none; stroke-width: 1.5; }
+    .arr-head { fill: #9ca3af; }
+    .divider { stroke: #e5e7eb; stroke-width: 1; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #1e1e1e; }
+      .text { fill: #e5e7eb; }
+      .small { fill: #9ca3af; }
+      .box-trigger { fill: #1e3a5f; stroke: #60a5fa; }
+      .box-workflow { stroke: #4b5563; }
+      .box-job { fill: #14532d; stroke: #4ade80; }
+      .box-step { fill: #2a2a2a; stroke: #4b5563; }
+      .box-result { fill: #422006; stroke: #fbbf24; }
+      .arrow { stroke: #6b7280; }
+      .arr-head { fill: #6b7280; }
+      .divider { stroke: #374151; }
+    }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon class="arr-head" points="0 0, 8 3, 0 6"/>
+    </marker>
+    <marker id="ah2" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon class="arr-head" points="0 0, 8 3, 0 6"/>
+    </marker>
+  </defs>
+
+  <!-- Background -->
+  <rect class="bg" width="600" height="400" rx="8"/>
+
+  <!-- ① Trigger -->
+  <rect class="box-trigger" x="200" y="18" width="200" height="38" rx="6"/>
+  <text class="text" x="300" y="41" text-anchor="middle" font-weight="bold">push / pull_request</text>
+
+  <!-- Arrow: trigger → workflow -->
+  <line class="arrow" x1="300" y1="56" x2="300" y2="78" marker-end="url(#ah)"/>
+
+  <!-- Workflow outer box -->
+  <rect class="box-workflow" x="16" y="84" width="568" height="200" rx="8"/>
+  <text class="small" x="26" y="98">Workflow: CI</text>
+
+  <!-- ② Jobs label -->
+  <text class="small" x="300" y="116" text-anchor="middle">jobs（並列実行）</text>
+
+  <!-- Job: lint -->
+  <rect class="box-job" x="28" y="122" width="164" height="146" rx="6"/>
+  <text class="text badge" x="110" y="143" text-anchor="middle">lint</text>
+  <line class="divider" x1="28" y1="150" x2="192" y2="150"/>
+  <rect class="box-step" x="38" y="158" width="144" height="24" rx="3"/>
+  <text class="small" x="110" y="174" text-anchor="middle">checkout</text>
+  <line class="arrow" x1="110" y1="182" x2="110" y2="192" marker-end="url(#ah)"/>
+  <rect class="box-step" x="38" y="193" width="144" height="24" rx="3"/>
+  <text class="small" x="110" y="209" text-anchor="middle">setup-node</text>
+  <line class="arrow" x1="110" y1="217" x2="110" y2="227" marker-end="url(#ah)"/>
+  <rect class="box-step" x="38" y="228" width="144" height="24" rx="3"/>
+  <text class="small" x="110" y="244" text-anchor="middle">npm ci</text>
+  <line class="arrow" x1="110" y1="252" x2="110" y2="262" marker-end="url(#ah)"/>
+  <rect class="box-step" x="38" y="263" width="144" height="20" rx="3"/>
+  <text class="small" x="110" y="277" text-anchor="middle">npm run lint</text>
+
+  <!-- Job: test -->
+  <rect class="box-job" x="218" y="122" width="164" height="146" rx="6"/>
+  <text class="text badge" x="300" y="143" text-anchor="middle">test</text>
+  <line class="divider" x1="218" y1="150" x2="382" y2="150"/>
+  <rect class="box-step" x="228" y="158" width="144" height="24" rx="3"/>
+  <text class="small" x="300" y="174" text-anchor="middle">checkout</text>
+  <line class="arrow" x1="300" y1="182" x2="300" y2="192" marker-end="url(#ah)"/>
+  <rect class="box-step" x="228" y="193" width="144" height="24" rx="3"/>
+  <text class="small" x="300" y="209" text-anchor="middle">setup-node</text>
+  <line class="arrow" x1="300" y1="217" x2="300" y2="227" marker-end="url(#ah)"/>
+  <rect class="box-step" x="228" y="228" width="144" height="24" rx="3"/>
+  <text class="small" x="300" y="244" text-anchor="middle">npm ci</text>
+  <line class="arrow" x1="300" y1="252" x2="300" y2="262" marker-end="url(#ah)"/>
+  <rect class="box-step" x="228" y="263" width="144" height="20" rx="3"/>
+  <text class="small" x="300" y="277" text-anchor="middle">npm run test:run</text>
+
+  <!-- Job: build -->
+  <rect class="box-job" x="408" y="122" width="164" height="146" rx="6"/>
+  <text class="text badge" x="490" y="143" text-anchor="middle">build</text>
+  <line class="divider" x1="408" y1="150" x2="572" y2="150"/>
+  <rect class="box-step" x="418" y="158" width="144" height="24" rx="3"/>
+  <text class="small" x="490" y="174" text-anchor="middle">checkout</text>
+  <line class="arrow" x1="490" y1="182" x2="490" y2="192" marker-end="url(#ah)"/>
+  <rect class="box-step" x="418" y="193" width="144" height="24" rx="3"/>
+  <text class="small" x="490" y="209" text-anchor="middle">setup-node</text>
+  <line class="arrow" x1="490" y1="217" x2="490" y2="227" marker-end="url(#ah)"/>
+  <rect class="box-step" x="418" y="228" width="144" height="24" rx="3"/>
+  <text class="small" x="490" y="244" text-anchor="middle">npm ci</text>
+  <line class="arrow" x1="490" y1="252" x2="490" y2="262" marker-end="url(#ah)"/>
+  <rect class="box-step" x="418" y="263" width="144" height="20" rx="3"/>
+  <text class="small" x="490" y="277" text-anchor="middle">npm run build</text>
+
+  <!-- Arrow: jobs → result -->
+  <line class="arrow" x1="300" y1="284" x2="300" y2="316" marker-end="url(#ah)"/>
+  <text class="small" x="310" y="303">全て成功</text>
+
+  <!-- ③ Result -->
+  <rect class="box-result" x="180" y="322" width="240" height="38" rx="6"/>
+  <text class="text" x="300" y="346" text-anchor="middle" font-weight="bold">PR マージ可 / デプロイへ</text>
+
+  <!-- Legend: steps are sequential -->
+  <text class="small" x="300" y="392" text-anchor="middle">各 job の steps は上から順に実行。jobs どうしは並列</text>
+</svg>
