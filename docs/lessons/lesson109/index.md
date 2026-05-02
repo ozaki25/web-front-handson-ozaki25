@@ -68,7 +68,7 @@ webpack + Babel が圧倒的標準になった時代。代わりに `webpack.con
 
 - **Turbopack**（2022〜）: Vercel 製。Rust 製の webpack 後継、Next.js に組み込み
 - **Rspack**（2023〜）: ByteDance 製。webpack 互換の Rust 実装
-- **Oxc**（2023〜）: 高速 JS / TS パーサ + リンタ + フォーマッタ + リゾルバの統合プロジェクト。**oxlint** は ESLint より圧倒的に速く、Vue / Vite / Shopify などの主要 OSS が採用
+- **Oxc**（2023〜）: 高速 JS / TS パーサ + リンタ + フォーマッタ + リゾルバの統合プロジェクト。**oxlint** v1.0（2025 年 6 月）は ESLint より圧倒的に速く、Shopify / Airbnb などの主要 OSS が採用
 - **Biome**（2023〜）: ESLint + Prettier 互換を 1 バイナリで提供。lint と format を統合する立ち位置
 - **Rolldown**（2024〜）: Vite 公式の Rust 製 Rollup 互換バンドラ。Vite 8（2026 年 3 月）で本番ビルドの中核に正式採用済み
 

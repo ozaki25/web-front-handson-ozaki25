@@ -37,7 +37,7 @@ JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トラ
 |---|---|---|
 | バンドラ（dev / build） | esbuild + Rollup | **Rolldown** / Turbopack |
 | パーサー / トランスパイラ | Babel | **SWC** / Oxc |
-| Lint | ESLint | **Biome** / Oxlint |
+| Lint | ESLint | **Biome** / oxlint |
 | Format | Prettier | **Biome** / dprint |
 | 型チェック | tsc | **stc**（試行段階） |
 
@@ -75,9 +75,9 @@ npx biome init
 
 → 「**新規プロジェクトには Biome 単独**、既存資産があれば **Biome（フォーマット） + ESLint**（型情報を使うルール） のハイブリッド」が現実的。
 
-### Oxc / Oxlint
+### Oxc / oxlint
 
-[Oxc](https://oxc-project.github.io/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
+[Oxc](https://oxc.rs/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
 
 #### 構成要素
 
@@ -91,14 +91,14 @@ npx biome init
 
 「**Rust で書かれたフロントエンドの基盤一式**」を狙うプロジェクト。
 
-#### Oxlint の最小例
+#### oxlint の最小例
 
 ```bash
 npm install -D oxlint
 npx oxlint
 ```
 
-ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。
+ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。**v1.0 stable が 2025 年 6 月にリリース**（520+ ルール）。2026 年 3 月には **JS プラグイン（alpha）** が追加され、ESLint v9+ 互換の既存プラグインがそのまま動く見込みになった。型情報を使うルール（type-aware linting）も alpha として追加済み。
 
 ```json
 // .oxlintrc.json
@@ -212,7 +212,7 @@ npm install -D dprint
 
 - **新規プロジェクト** で Biome 単独
 - **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
-- **Oxlint を ESLint と並走** させて速度を体感
+- **oxlint を ESLint と並走** させて速度を体感
 
 #### 慎重に
 
@@ -233,7 +233,7 @@ npm install -D dprint
 言語: TypeScript 5.9
 バンドラ: Vite 8（内部 Rolldown + Oxc）
         または Next.js 16（内部 Turbopack + SWC）
-Lint:   Biome / Oxlint
+Lint:   Biome / oxlint
 Format: Biome / Prettier
 テスト: Vitest（内部 Vite）/ Playwright
 パッケージ: pnpm / Bun
@@ -261,7 +261,7 @@ Format: Biome / Prettier
 
 ### ゴール
 
-- Biome と Oxlint をそれぞれ既存プロジェクトに **共存** させる
+- Biome と oxlint をそれぞれ既存プロジェクトに **共存** させる
 - 速度を **同じプロジェクト** で比較する
 
 ### 手順 1: ベースのプロジェクト
@@ -303,7 +303,7 @@ npx biome init
 time npx biome check .
 ```
 
-### 手順 4: Oxlint を試す
+### 手順 4: oxlint を試す
 
 ```bash
 npm install -D oxlint
@@ -318,7 +318,7 @@ time npx oxlint .
 |---|---|---|
 | ESLint | 2.5s | 5 |
 | Biome | 0.3s | 4 |
-| Oxlint | 0.1s | 3 |
+| oxlint | 0.1s | 3 |
 
 「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
 
@@ -331,7 +331,7 @@ time npx oxlint .
 
 - 1000 ファイル規模のプロジェクトで再測定
 - CI でそれぞれを実行し、月のビルド時間を試算
-- IDE 拡張（Biome / Oxlint）を入れて、保存時のレイテンシを比較
+- IDE 拡張（Biome / oxlint）を入れて、保存時のレイテンシを比較
 
 ### 自分で書く（任意）
 
@@ -343,7 +343,7 @@ time npx oxlint .
 
 - フロントエンドツールが **Rust 製** に置き換わりつつある
 - **Biome**: Lint + Format 1 ツール、設定 1 ファイル、35x 高速
-- **Oxc / Oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
+- **Oxc / oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
 - **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
 - **SWC / Turbopack**: Next.js / Vercel が独自路線
 - **dprint**: Prettier 代替の Rust 製フォーマッタ
