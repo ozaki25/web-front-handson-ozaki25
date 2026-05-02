@@ -1,4 +1,4 @@
-# lesson135: AI を前提にした開発（Claude Code / MCP / Hooks / Skills）
+# lesson136: AI を前提にした開発（Claude Code / MCP / Hooks / Skills）
 
 ## ゴール
 

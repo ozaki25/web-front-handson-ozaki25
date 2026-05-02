@@ -1,4 +1,4 @@
-# lesson129: Service Worker のライフサイクルとキャッシュ戦略
+# lesson130: Service Worker のライフサイクルとキャッシュ戦略
 
 ## ゴール
 

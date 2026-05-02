@@ -1,4 +1,4 @@
-# lesson127: WebSocket と Server-Sent Events（SSE）
+# lesson128: WebSocket と Server-Sent Events（SSE）
 
 ## ゴール
 

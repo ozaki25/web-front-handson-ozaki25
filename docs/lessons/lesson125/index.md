@@ -1,4 +1,4 @@
-# lesson124: 依存性セキュリティ（npm audit / Dependabot）
+# lesson125: 依存性セキュリティ（npm audit / Dependabot）
 
 ## ゴール
 

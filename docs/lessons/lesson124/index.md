@@ -1,4 +1,4 @@
-# lesson123: CORS の詳細
+# lesson124: CORS の詳細
 
 ## ゴール
 
