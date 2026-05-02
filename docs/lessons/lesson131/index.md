@@ -1,389 +1,190 @@
-# lesson131: IndexedDB 入門
+# lesson130: PWA の manifest とインストール
 
 ## ゴール
 
-- IndexedDB が `localStorage` と何が違うか説明できる
-- 生 API の用語（database / objectStore / transaction / cursor）を読める
-- `idb` ライブラリで Promise ベースの最小コードを書ける
-- `Dexie.js` のクラス指向 API の利点を理解する
-- ユースケース（オフライン作業 / 大量データキャッシュ）を判断できる
+- PWA がなぜ「インストール」できるのかを説明できる
+- `manifest.webmanifest` の主要フィールドを設定できる
+- `display` の違い（`standalone` / `browser`）を体験できる
+- Web Push 通知のサーバー → SW → ブラウザの大まかな流れを説明できる
+- iOS Safari の制約を把握している
 
 ## 解説
 
-### `localStorage` の限界
+lesson129 で学んだ Service Worker を使って、ネイティブアプリに近い機能を追加します。
 
-「Web Storage で値をブラウザに保存する」で扱った Web Storage（`localStorage` / `sessionStorage`）には、次の制約があります。
+### PWA とは「インストールできる Web アプリ」
 
-- **容量が小さい**（オリジン全体で 5〜10MB）
-- **値は文字列だけ**（オブジェクトは JSON 化が必要）
-- **同期 API**（読み書きで UI が止まる）
-- **検索 / インデックスがない**
-- **トランザクションがない**
+通常の Web サイトはブラウザで URL を開くだけですが、PWA（Progressive Web App）は次の条件を満たすとホーム画面に追加できるようになります。
 
-「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
+- HTTPS で配信されている
+- Service Worker が登録されている
+- **`manifest.webmanifest` が設定されている**
 
-### IndexedDB とは
+ホーム画面からアプリアイコンで起動でき、`display: standalone` を指定するとアドレスバーが消えてネイティブアプリのような見た目になります。
 
-ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
+インストールの主なメリット:
+- ブラウザ URL バーなしで起動できる（アプリらしい外観）
+- ホーム画面のアイコンからすぐ開ける
+- オフラインキャッシュと組み合わせると、ネットがなくても起動できる
 
-- **容量は数十 MB 〜 GB クラス**（ブラウザによる）
-- **オブジェクトをそのまま** 保存（structured clone）
-- **完全に非同期**（イベント / Promise）
-- **インデックスでの検索** が可能
-- **トランザクション** でアトミック操作
-- **Service Worker からも使える**
+### `manifest.webmanifest` の役割
 
-### 用語
+`manifest.webmanifest` は「このアプリの名前・アイコン・起動方法」をブラウザに伝える JSON ファイルです。HTML の `<head>` から次のように参照します。
 
-| 用語 | 意味 |
+```html
+<link rel="manifest" href="/manifest.webmanifest" />
+```
+
+ブラウザはこのファイルを見て「インストール可能か」を判断し、アドレスバーにインストールアイコンを表示するかどうか決めます。
+
+### 主要フィールド
+
+```json
+{
+  "name": "My PWA App",
+  "short_name": "PWA",
+  "description": "サンプル PWA アプリ",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
+    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
+```
+
+| フィールド | 役割 |
 |---|---|
-| **Database** | 1 つの DB。複数の objectStore を持つ |
-| **Object Store** | テーブル / コレクションに相当 |
-| **Key Path** | レコードの主キーフィールド（`id` 等） |
-| **Index** | 検索を速くする補助インデックス |
-| **Transaction** | 読み書きをまとめる単位（`readonly` / `readwrite`） |
-| **Cursor** | 範囲走査するイテレータ |
+| `name` | インストール画面・スプラッシュに表示される正式名 |
+| `short_name` | ホーム画面のアイコン下に表示される短い名前 |
+| `display` | 起動時のブラウザ UI の表示モード（後述） |
+| `theme_color` | 上部バーや OS タスクバーの色 |
+| `background_color` | スプラッシュ画面の背景色 |
+| `icons` | ホーム画面のアイコン（複数サイズを用意） |
+| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
 
-### 生 API の最小例
+### `display` の違い
 
-```js
-const open = indexedDB.open("my-db", 1);
+起動時にブラウザ UI をどこまで表示するかを指定します。
 
-open.onupgradeneeded = (event) => {
-  const db = event.target.result;
-  const store = db.createObjectStore("posts", { keyPath: "id" });
-  store.createIndex("by-author", "author");
-};
-
-open.onsuccess = (event) => {
-  const db = event.target.result;
-
-  const tx = db.transaction("posts", "readwrite");
-  const store = tx.objectStore("posts");
-  store.put({ id: "1", title: "Hello", author: "Alice" });
-
-  tx.oncomplete = () => console.log("保存完了");
-};
-```
-
-ポイント:
-
-- `open` の **`onupgradeneeded`** でスキーマを定義（version を上げると再実行）
-- `transaction(name, mode)` で操作する store を選ぶ
-- `put` / `get` / `delete` / `getAll` などのメソッドはイベントハンドラで結果を受ける
-
-**生 API は冗長で書きづらい** ので、ラッパーを使うのが普通です。
-
-### `idb`（Promise ラッパー）
-
-[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
-
-```bash
-npm install idb
-```
-
-```ts
-import { openDB, DBSchema } from "idb";
-
-interface MyDB extends DBSchema {
-  posts: {
-    key: string;
-    value: { id: string; title: string; author: string };
-    indexes: { "by-author": string };
-  };
-}
-
-const db = await openDB<MyDB>("my-db", 1, {
-  upgrade(db) {
-    const store = db.createObjectStore("posts", { keyPath: "id" });
-    store.createIndex("by-author", "author");
-  },
-});
-
-await db.put("posts", { id: "1", title: "Hello", author: "Alice" });
-const post = await db.get("posts", "1");
-const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
-```
-
-`DBSchema` を使うと **型付きの API** になり、IDE 補完が効きます。
-
-### `Dexie.js`（クラス指向）
-
-[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
-
-```bash
-npm install dexie
-```
-
-```ts
-import Dexie, { Table } from "dexie";
-
-interface Post {
-  id?: number;
-  title: string;
-  author: string;
-  createdAt: number;
-}
-
-class MyDB extends Dexie {
-  posts!: Table<Post, number>;
-  constructor() {
-    super("my-db");
-    this.version(1).stores({
-      posts: "++id, author, createdAt",
-    });
-  }
-}
-
-const db = new MyDB();
-
-await db.posts.add({ title: "Hello", author: "Alice", createdAt: Date.now() });
-
-const aliceLatest = await db.posts
-  .where("author").equals("Alice")
-  .reverse()
-  .sortBy("createdAt");
-```
-
-ポイント:
-
-- `++id` は **自動採番** の主キー
-- `stores` の文字列で **インデックスを宣言**
-- `where().equals().reverse().sortBy()` のような **チェーン** が書ける
-- React 用 hooks（`useLiveQuery`）も提供される
-
-```tsx
-import { useLiveQuery } from "dexie-react-hooks";
-
-function PostList() {
-  const posts = useLiveQuery(() => db.posts.toArray(), []);
-  return (
-    <ul>
-      {posts?.map((p) => <li key={p.id}>{p.title}</li>)}
-    </ul>
-  );
-}
-```
-
-`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
-
-### `localStorage` / `sessionStorage` / IndexedDB の使い分け
-
-| 用途 | 推奨 |
+| 値 | 見た目 |
 |---|---|
-| ユーザー設定（ダークモード / 言語） | `localStorage` |
-| タブ単位の一時状態 | `sessionStorage` |
-| 認証トークン | **どちらも使わない**。HttpOnly Cookie に |
-| Todo / 下書き / オフライン編集データ | **IndexedDB** |
-| 画像 / 動画 / Blob | **IndexedDB**（Cache API も候補） |
-| API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
-| ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
+| `standalone` | アドレスバーとナビゲーションボタンが消え、アプリのように見える |
+| `browser` | 通常のブラウザタブと同じ見た目 |
+| `minimal-ui` | アドレスバーだけ残してナビゲーションボタンを消す |
+| `fullscreen` | ブラウザ UI が完全に消える（ゲーム向け） |
 
-「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
+多くの PWA では `standalone` を選びます。`browser` にすると「なぜわざわざインストールしたのか」という見た目になるので、インストールを促す意味がなくなります。
 
-### 容量とクォータ
+> **ダークモード対応**: `<meta name="theme-color">` に `media` 属性を付けると OS のテーマ設定に応じて切り替えられます。マニフェストの `theme_color` はインストール後のフォールバックとして残し、`<meta>` が上書きする形になります。
+>
+> ```html
+> <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
+> <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
+> ```
 
-ブラウザは「**クォータ**」というオリジン単位の上限を割り当てます。`navigator.storage.estimate()` で確認できます。
+### Web Push 通知の仕組み（概念のみ）
 
-```js
-const { quota, usage } = await navigator.storage.estimate();
-console.log(`使用 ${usage} / クォータ ${quota}`);
-```
+Service Worker があるとブラウザを閉じていても通知を受け取れます。ただし配信の仕組みは少し複雑です。
 
-ChromeBook / iOS / 容量不足時に **自動退去**（eviction）されることがあります。**消えても困らない設計** にする / `navigator.storage.persist()` で **退去耐性** をリクエスト:
-
-```js
-const granted = await navigator.storage.persist();
-if (granted) console.log("永続化 OK");
-```
-
-ただしユーザーの Bookmark / インストール等の条件次第。
-
-### `Cache API` との違い
-
-Service Worker と一緒に出てくる **`Cache API`**（「Service Worker と PWA 深掘り」）と IndexedDB は **別物**:
-
-| | Cache API | IndexedDB |
-|---|---|---|
-| 単位 | Request / Response | 任意のオブジェクト |
-| 用途 | HTTP リソースの保存 | アプリのデータ保存 |
-| クエリ | URL マッチ | インデックス検索 |
-| トランザクション | なし | あり |
-
-「画像や HTML を保存 → Cache API」、「ユーザーが編集中の下書き → IndexedDB」と覚えればよいです。
-
-### IndexedDB のオフライン同期パターン
+Web Push では **Push Service** というリレーサーバーが必ず間に入ります。Apple・Google・Mozilla それぞれがブラウザごとに運営しており、あなたのサーバーは直接ブラウザには送れません。
 
 ```
-[ユーザー操作] → IndexedDB に保存（pending）
-                       ↓
-              [ネットがある時]
-                       ↓
-              バックエンドに POST
-                       ↓
-            成功したら IndexedDB のフラグを更新
+クライアント ──購読──→ Push Service ──endpoint 発行──→ クライアント
+クライアント ──endpoint を保存──→ あなたのサーバー
+あなたのサーバー ──送信──→ Push Service ──配信──→ SW → 通知表示
 ```
 
-- 書き込みは **常にローカルに保存**（UI が即座に反応）
-- バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
-- 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
+この仕組みが存在する理由は、**バッテリーと通信の効率化**です。スマートフォンがすべてのアプリのサーバーと常時接続を保つ代わりに、OS レベルで Push Service との接続を 1 本だけ維持することで消費電力を抑えています。
 
-ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+**VAPID** は「あなたのサーバーが正規の送信者である」ことを Push Service に証明するための公開鍵暗号の仕組みです。秘密鍵で署名して送ることで、無関係な第三者が勝手に通知を送れなくなります。
 
-### よくある罠
+実装には `web-push` パッケージ（Node.js）と Service Worker の `push` イベントリスナーが必要です。本レッスンでは流れの把握にとどめ、実装は扱いません。
 
-- **transaction が auto-commit する**: `await` を別の Promise で挟むと **トランザクションが終わってしまう**。同じ tx の中ではすべての操作を **同期的に並べる**
-- **構造化クローンの制約**: 関数 / シンボル / DOM ノードは保存できない
-- **大量レコード**: `cursor` で逐次処理する。`getAll()` でメモリ爆発に注意
-- **iOS Safari**: 古いバージョンで挙動が不安定。最新版（17 / 18 系）はかなり改善
-- **マイグレーション**: `version` を上げて `upgrade` 内で `objectStoreNames` をチェックして差分を当てる
+### iOS Safari の制約
+
+デスクトップ Chrome / Android Chrome では比較的スムーズに動く Web Push ですが、iOS は制約が多いので注意が必要です。
+
+- **iOS 16.4 以降のみ** Web Push が動作する
+- **ホーム画面にインストール済みであること**が必須（Safari ブラウザのまま開いただけでは通知を受け取れない）
+- HTTPS と明示的なユーザー操作も必要
+
+「iOS の Safari で開いているだけ」では動かない、という点は実装前に確認しておく必要があります。
+
+### 確認ツール
+
+- Chrome DevTools → **Application** タブ
+  - **Manifest**: マニフェストの内容とアイコンのプレビュー
+  - **Service Workers**: 登録状態の確認・更新ボタン
+- **Lighthouse** → PWA カテゴリでインストール可能性をチェック
 
 ## 演習
 
 ### ゴール
 
-- Dexie.js で **オフラインメモアプリ** を作る
-- `localStorage` 比較で「容量 / 非同期 / 検索」の差を体感する
+- `manifest.webmanifest` を作成してインストールアイコンが現れることを確認する
+- `display` の違いを実際に見比べる
 
-### 手順 1: 新規プロジェクト
+### 手順 1: manifest.webmanifest を作成する
 
-```bash
-npm create vite@latest indexeddb-sample -- --template react-ts
-cd indexeddb-sample
-npm install
-npm install dexie dexie-react-hooks
-```
+lesson129 で作った `pwa-sample` プロジェクトを使います。lesson129 では `vite-plugin-pwa` の `manifest` オプションで自動生成していましたが、ここでは静的ファイルを手動で配置する形を確認します。
 
-### 手順 2: DB の定義
+アイコンは lesson129 の手順で `public/pwa-192.png` / `public/pwa-512.png` を置いている前提です。まだ無ければ、任意の 192×192 / 512×512 PNG を同名で配置してください（無くても manifest 自体は読めますが、DevTools のアイコンプレビューが壊れた画像になります）。
 
-`src/db.ts`:
+`public/manifest.webmanifest`:
 
-```ts
-import Dexie, { Table } from "dexie";
-
-export interface Memo {
-  id?: number;
-  title: string;
-  body: string;
-  createdAt: number;
-  updatedAt: number;
-}
-
-class MemoDB extends Dexie {
-  memos!: Table<Memo, number>;
-  constructor() {
-    super("memo-app");
-    this.version(1).stores({
-      memos: "++id, updatedAt",
-    });
-  }
-}
-
-export const db = new MemoDB();
-```
-
-### 手順 3: メモ一覧 + 追加
-
-`src/App.tsx`:
-
-```tsx
-import { useState } from "react";
-import { useLiveQuery } from "dexie-react-hooks";
-import { db, Memo } from "./db";
-
-export default function App() {
-  const memos = useLiveQuery(
-    () => db.memos.orderBy("updatedAt").reverse().toArray(),
-    [],
-  );
-  const [title, setTitle] = useState("");
-  const [body, setBody] = useState("");
-
-  const add = async () => {
-    if (!title.trim()) return;
-    await db.memos.add({
-      title,
-      body,
-      createdAt: Date.now(),
-      updatedAt: Date.now(),
-    });
-    setTitle("");
-    setBody("");
-  };
-
-  const remove = (id: number) => db.memos.delete(id);
-
-  return (
-    <main style={{ padding: 24, fontFamily: "sans-serif" }}>
-      <h1>オフラインメモ</h1>
-      <div>
-        <input value={title} onChange={(e) => setTitle(e.target.value)} placeholder="タイトル" />
-        <textarea value={body} onChange={(e) => setBody(e.target.value)} placeholder="本文" />
-        <button onClick={add}>追加</button>
-      </div>
-      <ul>
-        {memos?.map((m) => (
-          <li key={m.id}>
-            <strong>{m.title}</strong> — {new Date(m.updatedAt).toLocaleString()}
-            <p>{m.body}</p>
-            <button onClick={() => remove(m.id!)}>削除</button>
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
+```json
+{
+  "name": "PWA Sample App",
+  "short_name": "PWA",
+  "description": "Service Worker とオフライン対応のサンプル",
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#1e40af",
+  "background_color": "#ffffff",
+  "lang": "ja",
+  "icons": [
+    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" },
+    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png" }
+  ]
 }
 ```
 
-### 手順 4: 確認
+`index.html` の `<head>` にリンクを追加します:
 
-```bash
-npm run dev
+```html
+<link rel="manifest" href="/manifest.webmanifest" />
+<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
+<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a" />
 ```
 
-メモを追加し、**ブラウザを閉じて再度開いて** も残っていることを確認。DevTools の Application → IndexedDB → `memo-app` → `memos` で実データが見られる。
-
-### 手順 5: ストレージ使用量を表示
-
-`App` 末尾に追加:
-
-```tsx
-import { useEffect, useState } from "react";
-
-const [usage, setUsage] = useState("");
-useEffect(() => {
-  navigator.storage.estimate().then(({ usage, quota }) => {
-    setUsage(`使用 ${Math.round((usage ?? 0) / 1024)}KB / クォータ ${Math.round((quota ?? 0) / 1024 / 1024)}MB`);
-  });
-}, [memos]);
-```
-
-`<p>{usage}</p>` を画面に出す。メモを増やすと使用量が増えていくのが見えます。
+`npm run build && npm run preview` でビルドし、DevTools → Application → Manifest でアイコンと name が表示されることを確認します。
 
 ### 期待出力
 
-- メモがブラウザを閉じても残る
-- `Application → IndexedDB` でストアの中身が見られる
-- ストレージ使用量が表示され、メモ追加で増える
+- DevTools → Application → Manifest でアイコンと `name: "PWA Sample App"` が表示される
+- アドレスバーにインストールアイコン（PC は ⊕ のようなアイコン）が現れる
 
 ### 変える
 
-- `useLiveQuery(() => db.memos.where("title").startsWithIgnoreCase("a").toArray())` のような **検索** を追加
-- DB の `version(2)` で `body` にインデックスを追加し、マイグレーション挙動を観察
-- 大量データ（1 万件）を一括追加して **`getAll` の遅さ** と **`each` cursor の差** を比較
+`display` を `"standalone"` から `"browser"` に変更して `npm run build && npm run preview` で再ビルドします。
 
-### 自分で書く（任意）
+インストール済みのアプリに変更を反映するには、DevTools → Application → Manifest の「Uninstall」で一度アンインストールしてから再インストールしてください（インストール済みの状態では変更が反映されません）。
 
-- API と同期する Memo アプリを作る（**ローカルに保存 → サーバーに同期**）
-- 画像（Blob）を添付できるようにする
-- `localStorage` から IndexedDB に乗り換えるマイグレーションスクリプトを書く
+期待差分:
+
+- `standalone`: ホーム画面から起動するとアドレスバーが消え、アプリのように見える
+- `browser`: ホーム画面から起動してもアドレスバーが表示され、通常のブラウザタブと同じ
 
 ## まとめ
 
-- `localStorage` の限界（容量小 / 文字列のみ / 同期 / 検索なし）を超える **クライアント DB** が IndexedDB
-- 用語: **database / objectStore / transaction / cursor**
-- 生 API は冗長 → **`idb`**（薄いラッパー） か **`Dexie.js`**（クラス指向） を使う
-- React なら **`dexie-react-hooks`** の `useLiveQuery` で自動再描画
-- 「ユーザー設定 → localStorage」「アプリのデータ → IndexedDB」「HTTP リソース → Cache API」の使い分け
-- クォータ / 退去 / `navigator.storage.persist()` を意識する
-- オフライン同期は「**ローカル即保存** + バックグラウンド同期」が定番
+- PWA は HTTPS + Service Worker + **`manifest.webmanifest`** の 3 点セットでインストール可能になる
+- `display: standalone` でアドレスバーを消し、ネイティブアプリのような外観にできる
+- **Web Push** は Push Service が中継する 3 システム構成。Push Service が存在する理由はバッテリー・通信効率のため
+- **VAPID** で送信者を認証し、第三者による不正送信を防ぐ
+- **iOS Safari** で Push 通知が使えるのは iOS 16.4 以降かつホーム画面インストール後のみ
+- DevTools の Application タブと Lighthouse PWA カテゴリで動作確認できる

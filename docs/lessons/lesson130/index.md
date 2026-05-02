@@ -1,190 +1,407 @@
-# lesson130: PWA の manifest とインストール
+# lesson129: Service Worker のライフサイクルとキャッシュ戦略
 
 ## ゴール
 
-- PWA がなぜ「インストール」できるのかを説明できる
-- `manifest.webmanifest` の主要フィールドを設定できる
-- `display` の違い（`standalone` / `browser`）を体験できる
-- Web Push 通知のサーバー → SW → ブラウザの大まかな流れを説明できる
-- iOS Safari の制約を把握している
+- Service Worker の特徴（DOM 不可・HTTPS 必須・同一オリジン）を説明できる
+- install / activate / fetch の 3 つのライフサイクルと `event.waitUntil()` の役割を理解する
+- Cache First・Network First・Stale While Revalidate など主要なキャッシュ戦略を使い分けられる
+- Workbox と `vite-plugin-pwa` でオフライン対応を実装できる
 
 ## 解説
 
-lesson129 で学んだ Service Worker を使って、ネイティブアプリに近い機能を追加します。
+### PWA とは
 
-### PWA とは「インストールできる Web アプリ」
+「**Progressive Web App**」= Web を **アプリのように扱う** ための仕組みの総称。本講座のドキュメントサイト自体も `@vite-pwa/vitepress` で PWA 化済みで、デスクトップ / モバイルから **インストール** できます。
 
-通常の Web サイトはブラウザで URL を開くだけですが、PWA（Progressive Web App）は次の条件を満たすとホーム画面に追加できるようになります。
+PWA の柱:
 
-- HTTPS で配信されている
-- Service Worker が登録されている
-- **`manifest.webmanifest` が設定されている**
+1. **Service Worker**（バックグラウンドのスクリプト）
+2. **Web App Manifest**（インストール時のメタデータ）
+3. **HTTPS**（必須）
+4. インストール可能 / オフライン対応 / 通知
 
-ホーム画面からアプリアイコンで起動でき、`display: standalone` を指定するとアドレスバーが消えてネイティブアプリのような見た目になります。
+### Service Worker とは
 
-インストールの主なメリット:
-- ブラウザ URL バーなしで起動できる（アプリらしい外観）
-- ホーム画面のアイコンからすぐ開ける
-- オフラインキャッシュと組み合わせると、ネットがなくても起動できる
+**ブラウザのバックグラウンドで動く、ネットワークプロキシ的な JavaScript**。ページから独立して動き、`fetch` イベントを **横取り** してキャッシュ応答 / カスタム応答ができます。
 
-### `manifest.webmanifest` の役割
+特徴:
 
-`manifest.webmanifest` は「このアプリの名前・アイコン・起動方法」をブラウザに伝える JSON ファイルです。HTML の `<head>` から次のように参照します。
+- **DOM にアクセスできない**（ワーカー）
+- **HTTPS 必須**（localhost は例外）
+- **同一オリジン** に限定
+- **永続的** に動き、ページが閉じても残る（バックグラウンドで通知 / 同期）
 
-```html
-<link rel="manifest" href="/manifest.webmanifest" />
-```
+### ライフサイクル
 
-ブラウザはこのファイルを見て「インストール可能か」を判断し、アドレスバーにインストールアイコンを表示するかどうか決めます。
-
-### 主要フィールド
-
-```json
-{
-  "name": "My PWA App",
-  "short_name": "PWA",
-  "description": "サンプル PWA アプリ",
-  "start_url": "/",
-  "display": "standalone",
-  "theme_color": "#1e40af",
-  "background_color": "#ffffff",
-  "lang": "ja",
-  "icons": [
-    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
-    { "src": "/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
-  ]
-}
-```
-
-| フィールド | 役割 |
-|---|---|
-| `name` | インストール画面・スプラッシュに表示される正式名 |
-| `short_name` | ホーム画面のアイコン下に表示される短い名前 |
-| `display` | 起動時のブラウザ UI の表示モード（後述） |
-| `theme_color` | 上部バーや OS タスクバーの色 |
-| `background_color` | スプラッシュ画面の背景色 |
-| `icons` | ホーム画面のアイコン（複数サイズを用意） |
-| `purpose: "maskable"` | OS が円形等にトリミングできるアイコン |
-
-### `display` の違い
-
-起動時にブラウザ UI をどこまで表示するかを指定します。
-
-| 値 | 見た目 |
-|---|---|
-| `standalone` | アドレスバーとナビゲーションボタンが消え、アプリのように見える |
-| `browser` | 通常のブラウザタブと同じ見た目 |
-| `minimal-ui` | アドレスバーだけ残してナビゲーションボタンを消す |
-| `fullscreen` | ブラウザ UI が完全に消える（ゲーム向け） |
-
-多くの PWA では `standalone` を選びます。`browser` にすると「なぜわざわざインストールしたのか」という見た目になるので、インストールを促す意味がなくなります。
-
-> **ダークモード対応**: `<meta name="theme-color">` に `media` 属性を付けると OS のテーマ設定に応じて切り替えられます。マニフェストの `theme_color` はインストール後のフォールバックとして残し、`<meta>` が上書きする形になります。
->
-> ```html
-> <meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff">
-> <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a">
-> ```
-
-### Web Push 通知の仕組み（概念のみ）
-
-Service Worker があるとブラウザを閉じていても通知を受け取れます。ただし配信の仕組みは少し複雑です。
-
-Web Push では **Push Service** というリレーサーバーが必ず間に入ります。Apple・Google・Mozilla それぞれがブラウザごとに運営しており、あなたのサーバーは直接ブラウザには送れません。
+3 つの状態を順に行き来します。
 
 ```
-クライアント ──購読──→ Push Service ──endpoint 発行──→ クライアント
-クライアント ──endpoint を保存──→ あなたのサーバー
-あなたのサーバー ──送信──→ Push Service ──配信──→ SW → 通知表示
+[ install ] → [ activate ] → [ idle / fetch / message ]
+                                       ↑
+                                       │（更新時）新 SW が install
 ```
 
-この仕組みが存在する理由は、**バッテリーと通信の効率化**です。スマートフォンがすべてのアプリのサーバーと常時接続を保つ代わりに、OS レベルで Push Service との接続を 1 本だけ維持することで消費電力を抑えています。
+#### `install`
 
-**VAPID** は「あなたのサーバーが正規の送信者である」ことを Push Service に証明するための公開鍵暗号の仕組みです。秘密鍵で署名して送ることで、無関係な第三者が勝手に通知を送れなくなります。
+「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
 
-実装には `web-push` パッケージ（Node.js）と Service Worker の `push` イベントリスナーが必要です。本レッスンでは流れの把握にとどめ、実装は扱いません。
+`event.waitUntil(promise)` は、この Promise が解決するまでライフサイクルの遷移を保留する API です。キャッシュ保存が終わる前に SW がアクティブにならないよう制御するために使います。
 
-### iOS Safari の制約
+```js
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((cache) =>
+      cache.addAll(["/", "/index.html", "/styles.css", "/app.js"]),
+    ),
+  );
+});
+```
 
-デスクトップ Chrome / Android Chrome では比較的スムーズに動く Web Push ですが、iOS は制約が多いので注意が必要です。
+#### `activate`
 
-- **iOS 16.4 以降のみ** Web Push が動作する
-- **ホーム画面にインストール済みであること**が必須（Safari ブラウザのまま開いただけでは通知を受け取れない）
-- HTTPS と明示的なユーザー操作も必要
+「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
 
-「iOS の Safari で開いているだけ」では動かない、という点は実装前に確認しておく必要があります。
+```js
+self.addEventListener("activate", (event) => {
+  event.waitUntil(
+    caches.keys().then((keys) =>
+      Promise.all(keys.filter((k) => k !== "v1").map((k) => caches.delete(k))),
+    ),
+  );
+});
+```
+
+#### `fetch`
+
+「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
+
+```js
+self.addEventListener("fetch", (event) => {
+  event.respondWith(
+    caches.match(event.request).then((res) => res || fetch(event.request)),
+  );
+});
+```
+
+### キャッシュ戦略（Workbox 風）
+
+リソース別に **どんな順序でキャッシュ / ネットワークを使うか** を決める戦略。
+
+| 戦略 | 流れ | 適切なリソース |
+|---|---|---|
+| **CacheFirst** | キャッシュ → なければネット | フォント / 画像 / 不変アセット |
+| **NetworkFirst** | ネット → 失敗したらキャッシュ | API レスポンス / HTML（最新優先） |
+| **StaleWhileRevalidate** | キャッシュ即返却 + 裏でネット更新 | 一覧 / プロフィール画像（やや古くて OK） |
+| **NetworkOnly** | ネットのみ | POST / 認証など |
+| **CacheOnly** | キャッシュのみ | 完全オフライン専用ページ |
+
+#### CacheFirst の例
+
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.destination === "image") {
+    event.respondWith(
+      caches.match(event.request).then((res) =>
+        res || fetch(event.request).then((networkRes) => {
+          const clone = networkRes.clone();
+          caches.open("images").then((c) => c.put(event.request, clone));
+          return networkRes;
+        }),
+      ),
+    );
+  }
+});
+```
+
+#### NetworkFirst の例
+
+```js
+self.addEventListener("fetch", (event) => {
+  if (event.request.url.includes("/api/")) {
+    event.respondWith(
+      fetch(event.request)
+        .then((res) => {
+          const clone = res.clone();
+          caches.open("api").then((c) => c.put(event.request, clone));
+          return res;
+        })
+        .catch(() => caches.match(event.request)),
+    );
+  }
+});
+```
+
+### Workbox
+
+Google が出している **キャッシュ戦略のヘルパー** ライブラリ。生で書くと冗長な処理を **数行で** 表現できます。
+
+```js
+// sw.js
+import { precacheAndRoute } from "workbox-precaching";
+import { registerRoute } from "workbox-routing";
+import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from "workbox-strategies";
+import { ExpirationPlugin } from "workbox-expiration";
+
+precacheAndRoute(self.__WB_MANIFEST);
+
+registerRoute(
+  ({ request }) => request.destination === "image",
+  new CacheFirst({
+    cacheName: "images",
+    plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 3600 })],
+  }),
+);
+
+registerRoute(
+  ({ url }) => url.pathname.startsWith("/api/"),
+  new NetworkFirst({ cacheName: "api", networkTimeoutSeconds: 3 }),
+);
+
+registerRoute(
+  ({ request }) => request.destination === "script" || request.destination === "style",
+  new StaleWhileRevalidate({ cacheName: "assets" }),
+);
+```
+
+### Vite / Next.js での導入
+
+#### Vite + `vite-plugin-pwa`
+
+```bash
+npm install -D vite-plugin-pwa
+```
+
+```ts
+// vite.config.ts
+import { VitePWA } from "vite-plugin-pwa";
+
+export default defineConfig({
+  plugins: [
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "My App",
+        short_name: "App",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        icons: [
+          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
+          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
+      },
+    }),
+  ],
+});
+```
+
+#### Next.js + `@ducanh2912/next-pwa` / `serwist`
+
+Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
+
+```bash
+npm install @serwist/next serwist
+```
+
+`next.config.ts`:
+
+```ts
+import withSerwistInit from "@serwist/next";
+
+const withSerwist = withSerwistInit({
+  swSrc: "src/sw.ts",
+  swDest: "public/sw.js",
+});
+
+export default withSerwist({});
+```
+
+`src/sw.ts`:
+
+```ts
+import { defaultCache } from "@serwist/next/worker";
+import { Serwist } from "serwist";
+
+declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
+
+new Serwist({
+  precacheEntries: self.__SW_MANIFEST,
+  skipWaiting: true,
+  clientsClaim: true,
+  navigationPreload: true,
+  runtimeCaching: defaultCache,
+}).addEventListeners();
+```
+
+### オフライン対応
+
+最小例: ネットが切れた時に「オフライン画面」を出す。
+
+```js
+const OFFLINE_URL = "/offline.html";
+
+self.addEventListener("install", (event) => {
+  event.waitUntil(
+    caches.open("v1").then((c) => c.add(OFFLINE_URL)),
+  );
+});
+
+self.addEventListener("fetch", (event) => {
+  if (event.request.mode === "navigate") {
+    event.respondWith(
+      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
+    );
+  }
+});
+```
+
+`/offline.html` は静的に **「オフラインです」** と書かれた HTML を置きます。
+
+### よくある罠
+
+- **HTTPS でないと動かない**（localhost 以外）
+- **Service Worker は更新が反映されない問題**（古い SW がキャッシュを返し続ける）→ `skipWaiting()` + `clientsClaim()` を使う / **更新確認 UI** を入れる
+- **キャッシュが暴走** → `ExpirationPlugin` で件数 / 期間を制限
 
 ### 確認ツール
 
 - Chrome DevTools → **Application** タブ
-  - **Manifest**: マニフェストの内容とアイコンのプレビュー
-  - **Service Workers**: 登録状態の確認・更新ボタン
-- **Lighthouse** → PWA カテゴリでインストール可能性をチェック
+  - **Manifest**: マニフェストの内容
+  - **Service Workers**: 登録状態 / 更新ボタン
+  - **Cache Storage**: キャッシュの中身
+  - **Storage**: クォータと使用量
+- **Lighthouse** → PWA カテゴリ（インストール可能性 / オフライン動作のチェック）
+- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
 
 ## 演習
 
 ### ゴール
 
-- `manifest.webmanifest` を作成してインストールアイコンが現れることを確認する
-- `display` の違いを実際に見比べる
+- Vite プロジェクトに `vite-plugin-pwa` を入れて PWA 化
+- 自前の Service Worker を書いて **オフライン fallback** を実装
+- ホーム画面追加 / Lighthouse の PWA 診断を通す
 
-### 手順 1: manifest.webmanifest を作成する
+### 手順 1: 新規プロジェクト
 
-lesson129 で作った `pwa-sample` プロジェクトを使います。lesson129 では `vite-plugin-pwa` の `manifest` オプションで自動生成していましたが、ここでは静的ファイルを手動で配置する形を確認します。
-
-アイコンは lesson129 の手順で `public/pwa-192.png` / `public/pwa-512.png` を置いている前提です。まだ無ければ、任意の 192×192 / 512×512 PNG を同名で配置してください（無くても manifest 自体は読めますが、DevTools のアイコンプレビューが壊れた画像になります）。
-
-`public/manifest.webmanifest`:
-
-```json
-{
-  "name": "PWA Sample App",
-  "short_name": "PWA",
-  "description": "Service Worker とオフライン対応のサンプル",
-  "start_url": "/",
-  "display": "standalone",
-  "theme_color": "#1e40af",
-  "background_color": "#ffffff",
-  "lang": "ja",
-  "icons": [
-    { "src": "/pwa-192.png", "sizes": "192x192", "type": "image/png" },
-    { "src": "/pwa-512.png", "sizes": "512x512", "type": "image/png" }
-  ]
-}
+```bash
+npm create vite@latest pwa-sample -- --template react-ts
+cd pwa-sample
+npm install
+npm install -D vite-plugin-pwa
 ```
 
-`index.html` の `<head>` にリンクを追加します:
+### 手順 2: vite.config.ts
+
+```ts
+import { defineConfig } from "vite";
+import react from "@vitejs/plugin-react";
+import { VitePWA } from "vite-plugin-pwa";
+
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: "autoUpdate",
+      manifest: {
+        name: "PWA Sample",
+        short_name: "PWA",
+        start_url: "/",
+        display: "standalone",
+        theme_color: "#1e40af",
+        background_color: "#ffffff",
+        icons: [
+          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
+          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
+        ],
+      },
+      workbox: {
+        globPatterns: ["**/*.{js,css,html,svg,png}"],
+        navigateFallback: "/offline.html",
+        runtimeCaching: [
+          {
+            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
+            handler: "StaleWhileRevalidate",
+            options: { cacheName: "google-fonts-stylesheets" },
+          },
+          {
+            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
+            handler: "CacheFirst",
+            options: {
+              cacheName: "google-fonts-webfonts",
+              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
+            },
+          },
+        ],
+      },
+    }),
+  ],
+});
+```
+
+### 手順 3: オフラインページ
+
+`public/offline.html`:
 
 ```html
-<link rel="manifest" href="/manifest.webmanifest" />
-<meta name="theme-color" media="(prefers-color-scheme: light)" content="#ffffff" />
-<meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0f172a" />
+<!doctype html>
+<html lang="ja">
+  <head><meta charset="UTF-8"><title>オフライン</title></head>
+  <body>
+    <h1>オフラインです</h1>
+    <p>ネットワークに接続してください</p>
+  </body>
+</html>
 ```
 
-`npm run build && npm run preview` でビルドし、DevTools → Application → Manifest でアイコンと name が表示されることを確認します。
+`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
+
+### 手順 4: ビルドとプレビュー
+
+```bash
+npm run build
+npm run preview
+```
+
+`http://localhost:4173` で開いて DevTools の Application タブを確認。
+
+1. **Service Workers**: SW が登録されている
+2. **Manifest**: フィールドが反映されている
+3. ネットを **Offline** に切り替えて再読込 → `offline.html` が表示される
+
+### 手順 5: Lighthouse で PWA 診断
+
+DevTools → Lighthouse → PWA カテゴリで実行。**インストール可能性** が緑になっていることを確認。
 
 ### 期待出力
 
-- DevTools → Application → Manifest でアイコンと `name: "PWA Sample App"` が表示される
-- アドレスバーにインストールアイコン（PC は ⊕ のようなアイコン）が現れる
+- アドレスバーに **インストールアイコン** が出る
+- ホーム画面 / アプリ一覧から起動可能
+- オフラインで `/offline.html` が表示される
+- Lighthouse の PWA カテゴリが緑
 
 ### 変える
 
-`display` を `"standalone"` から `"browser"` に変更して `npm run build && npm run preview` で再ビルドします。
+- `runtimeCaching` で API URL を `NetworkFirst` でキャッシュ
+- `manifest.shortcuts` を追加して **長押しメニュー** を作る
+- `purpose: "maskable"` のアイコンを追加して、Android で円形にトリミングされる挙動を確認
 
-インストール済みのアプリに変更を反映するには、DevTools → Application → Manifest の「Uninstall」で一度アンインストールしてから再インストールしてください（インストール済みの状態では変更が反映されません）。
+### 自分で書く（任意）
 
-期待差分:
-
-- `standalone`: ホーム画面から起動するとアドレスバーが消え、アプリのように見える
-- `browser`: ホーム画面から起動してもアドレスバーが表示され、通常のブラウザタブと同じ
+- `IndexedDB` を使って、オフラインで作成したデータを再接続時に同期する
+- `ExpirationPlugin` でキャッシュの有効期限と最大件数を設定する
+- Lighthouse の PWA カテゴリで全項目が緑になるよう診断結果を改善する
 
 ## まとめ
 
-- PWA は HTTPS + Service Worker + **`manifest.webmanifest`** の 3 点セットでインストール可能になる
-- `display: standalone` でアドレスバーを消し、ネイティブアプリのような外観にできる
-- **Web Push** は Push Service が中継する 3 システム構成。Push Service が存在する理由はバッテリー・通信効率のため
-- **VAPID** で送信者を認証し、第三者による不正送信を防ぐ
-- **iOS Safari** で Push 通知が使えるのは iOS 16.4 以降かつホーム画面インストール後のみ
-- DevTools の Application タブと Lighthouse PWA カテゴリで動作確認できる
+- **Service Worker** は **install / activate / fetch** のライフサイクルで動く
+- `event.waitUntil()` で Promise が完了するまでライフサイクルの遷移を保留できる
+- キャッシュ戦略は **CacheFirst / NetworkFirst / StaleWhileRevalidate / NetworkOnly / CacheOnly** から選ぶ
+- **Workbox** で戦略の記述が劇的に短くなる
+- Vite は `vite-plugin-pwa`、Next.js は `@serwist/next` が定番
+- **`navigateFallback`** で **オフラインページ** を出せる
+- DevTools の Application タブと **Lighthouse PWA** で診断
+
+Web Push 通知とインストール設定は「PWA の通知・インストール・manifest」のレッスンで扱います。
