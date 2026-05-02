@@ -1,0 +1,86 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 420" width="560" height="420">
+  <style>
+    .bg      { fill: #ffffff; }
+    .text    { fill: #111827; font-family: system-ui, sans-serif; font-size: 13px; }
+    .small   { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; }
+    .trigger { fill: #dbeafe; stroke: #3b82f6; stroke-width: 1.5; }
+    .parallel{ fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; }
+    .build   { fill: #fef3c7; stroke: #f59e0b; stroke-width: 1.5; }
+    .deploy  { fill: #fce7f3; stroke: #ec4899; stroke-width: 1.5; }
+    .arrow   { stroke: #9ca3af; stroke-width: 1.5; fill: none; }
+    .note    { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; font-style: italic; }
+    @media (prefers-color-scheme: dark) {
+      .bg      { fill: #1e1e1e; }
+      .text    { fill: #e5e7eb; }
+      .small   { fill: #9ca3af; }
+      .trigger { fill: #1e3a5f; stroke: #60a5fa; }
+      .parallel{ fill: #14532d; stroke: #4ade80; }
+      .build   { fill: #451a03; stroke: #fbbf24; }
+      .deploy  { fill: #500724; stroke: #f472b6; }
+      .arrow   { stroke: #6b7280; }
+      .note    { fill: #9ca3af; }
+    }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon fill="#9ca3af" points="0 0, 8 3, 0 6"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="560" height="420" rx="8"/>
+
+  <!-- Trigger -->
+  <rect class="trigger" x="180" y="16" width="200" height="36" rx="6"/>
+  <text class="text" x="280" y="39" text-anchor="middle" font-weight="bold">push / PR</text>
+
+  <!-- Arrow: trigger → parallel row -->
+  <line class="arrow" x1="280" y1="52" x2="280" y2="76" marker-end="url(#ah)"/>
+
+  <!-- Parallel label -->
+  <text class="small" x="280" y="90" text-anchor="middle">並列実行</text>
+
+  <!-- Parallel jobs -->
+  <rect class="parallel" x="20"  y="96" width="140" height="36" rx="6"/>
+  <text class="text" x="90"  y="119" text-anchor="middle" font-weight="bold">Lint</text>
+
+  <rect class="parallel" x="210" y="96" width="140" height="36" rx="6"/>
+  <text class="text" x="280" y="119" text-anchor="middle" font-weight="bold">Typecheck</text>
+
+  <rect class="parallel" x="400" y="96" width="140" height="36" rx="6"/>
+  <text class="text" x="470" y="119" text-anchor="middle" font-weight="bold">Test</text>
+
+  <!-- Convergence lines: 3 jobs → build -->
+  <!-- from Lint bottom-center -->
+  <line class="arrow" x1="90"  y1="132" x2="90"  y2="156"/>
+  <line class="arrow" x1="280" y1="132" x2="280" y2="156"/>
+  <line class="arrow" x1="470" y1="132" x2="470" y2="156"/>
+  <!-- horizontal connector -->
+  <line class="arrow" x1="90"  y1="156" x2="470" y2="156"/>
+  <!-- down to build -->
+  <line class="arrow" x1="280" y1="156" x2="280" y2="180" marker-end="url(#ah)"/>
+
+  <!-- Build -->
+  <rect class="build" x="200" y="186" width="160" height="36" rx="6"/>
+  <text class="text" x="280" y="209" text-anchor="middle" font-weight="bold">Build</text>
+
+  <!-- Arrow: build → deploy -->
+  <line class="arrow" x1="280" y1="222" x2="280" y2="256" marker-end="url(#ah)"/>
+
+  <!-- "main のみ" annotation -->
+  <text class="note" x="296" y="243">main マージ時のみ</text>
+
+  <!-- Deploy -->
+  <rect class="deploy" x="200" y="262" width="160" height="36" rx="6"/>
+  <text class="text" x="280" y="285" text-anchor="middle" font-weight="bold">Deploy</text>
+
+  <!-- Legend -->
+  <line x1="20" y1="336" x2="540" y2="336" stroke="#e5e7eb" stroke-width="1"/>
+  <rect class="parallel" x="20"  y="350" width="14" height="14" rx="2"/>
+  <text class="small" x="40"  y="362">並列（独立）</text>
+  <rect class="build"   x="130" y="350" width="14" height="14" rx="2"/>
+  <text class="small" x="150" y="362">直列（前段に依存）</text>
+  <rect class="deploy"  x="280" y="350" width="14" height="14" rx="2"/>
+  <text class="small" x="300" y="362">main のみ実行</text>
+
+  <text class="small" x="280" y="400" text-anchor="middle">PR では lint / typecheck / test / build まで。deploy は main マージ後に実行。</text>
+</svg>

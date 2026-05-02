@@ -25,23 +25,7 @@
 
 ### パイプラインの基本構成
 
-```
-push / PR
-   ↓
-┌─────────┐  ┌─────────┐  ┌─────────┐
-│  Lint   │  │ Typecheck│  │  Test   │   ← 並列実行
-└─────────┘  └─────────┘  └─────────┘
-        ↓        ↓        ↓
-        └────────┴────────┘
-                   ↓
-              ┌─────────┐
-              │  Build  │
-              └─────────┘
-                   ↓
-              ┌─────────┐
-              │ Deploy  │  ← main にマージされた時のみ
-              └─────────┘
-```
+<img src="/diagrams/cicd-pipeline-design.svg" alt="push/PR をトリガーに lint・typecheck・test が並列実行され、すべて成功すると build が走る。main マージ時のみさらに deploy が実行される。" class="diagram" />
 
 ポイント:
 
