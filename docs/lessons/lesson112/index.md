@@ -39,7 +39,7 @@ JavaScript ツール群（バンドラ / リンタ / フォーマッタ / トラ
 | パーサー / トランスパイラ | Babel | **SWC** / Oxc |
 | Lint | ESLint | **Biome** / oxlint |
 | Format | Prettier | **Biome** / dprint |
-| 型チェック | tsc | **stc**（試行段階） |
+| 型チェック | tsc | **tsgo**（TypeScript 7 Beta） |
 
 それぞれを順に見ていきます。
 
@@ -61,7 +61,7 @@ npx biome init
 
 ```json
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
   "linter": { "enabled": true, "rules": { "recommended": true } },
   "formatter": { "enabled": true, "indentStyle": "space" }
 }
@@ -197,13 +197,13 @@ npm install -D dprint
 
 「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
 
-- [`stc`](https://github.com/dudykr/stc): SWC のチームによる試み（**型チェッカ**）
-- [Microsoft / tsgo](https://github.com/microsoft/typescript-go)（Go 製、**2025 年に発表 + preview リリース**）: 公式の **Go ベース TypeScript**。型チェック / 言語サービスを Go で書き直し、`tsc` 比 10 倍級の高速化を目指す
+- [TypeScript 7 / tsgo](https://github.com/microsoft/typescript-go)（Go 製）: TypeScript を Go で書き直した公式移植。**TypeScript 7.0 Beta（2026 年 4 月）** がリリース済みで、`tsc`（TS 6.0）比 約 10 倍の高速化を実現。型チェック / 言語サービスが Go でネイティブ実行される。安定版は 2026 年夏ごろの見込み
+- [`stc`](https://github.com/dudykr/stc)（SWC チームの試み）: **2025 年 3 月に開発終了（archived）**。後継として tsgo が事実上代替
 
-特に **TypeScript 公式が Go で書き直す** プロジェクトは、近い将来 `tsc` 自体が大幅に高速化する可能性があります。
+TypeScript 公式の Go 移植は **Beta まで到達**しており、`--noEmit` 用途では実用レベルです。VS Code 拡張のプレビューも Marketplace で公開中。
 
 ::: warning
-2026 年現在、これらは **まだ完全互換ではない**。型チェックは tsc / IDE のままで、ビルドだけ SWC / esbuild という現状が続きます。
+2026 年現在、TypeScript 7 は **Beta 段階**。型チェックの完全互換は確認されていますが、エコシステムのツールが追いつくのに時間がかかる見込みです。新規プロジェクトの本番採用は安定版（2026 年夏ごろ）を待つのが無難です。
 :::
 
 ### 既存プロジェクトへの導入判断
@@ -230,7 +230,7 @@ npm install -D dprint
 新規プロジェクトでの 2026 年標準:
 
 ```
-言語: TypeScript 5.9
+言語: TypeScript 6.0
 バンドラ: Vite 8（内部 Rolldown + Oxc）
         または Next.js 16（内部 Turbopack + SWC）
 Lint:   Biome / oxlint
@@ -293,7 +293,7 @@ npx biome init
 ```json
 // biome.json
 {
-  "$schema": "https://biomejs.dev/schemas/2.0.0/schema.json",
+  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
   "linter": { "enabled": true, "rules": { "recommended": true } },
   "formatter": { "enabled": true, "indentStyle": "space" }
 }
@@ -337,7 +337,7 @@ time npx oxlint .
 
 - 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
 - dprint を入れて Prettier と比較
-- TypeScript Go 版（`tsgo`）の preview を試す
+- TypeScript 7.0 Beta（`tsgo`）を試す（VS Code 拡張プレビューが Marketplace で公開中）
 
 ## まとめ
 
@@ -347,7 +347,7 @@ time npx oxlint .
 - **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
 - **SWC / Turbopack**: Next.js / Vercel が独自路線
 - **dprint**: Prettier 代替の Rust 製フォーマッタ
-- **TypeScript 公式の Go 版**（tsgo）が 2025 年に preview リリース、2026 年現在も成熟中
+- **TypeScript 7.0 Beta**（Go 版 / tsgo）が 2026 年 4 月にリリース。安定版は 2026 年夏ごろ見込み
 - 「**新規 = Biome 単独 + Vite 8**」が今の堅実解
 - 既存プロジェクトは「**速度に困ってから**」で良い
 - 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
