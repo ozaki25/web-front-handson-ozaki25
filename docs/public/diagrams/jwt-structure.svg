@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 220" width="560" height="220">
+  <style>
+    .bg    { fill: #ffffff; }
+    .text  { fill: #111827; font-family: system-ui, sans-serif; font-size: 13px; }
+    .sub   { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; }
+    .mono  { font-family: monospace, monospace; font-size: 11px; }
+    .dot   { fill: #9ca3af; font-family: monospace; font-size: 20px; font-weight: bold; }
+    .box-h { fill: #dbeafe; stroke: #3b82f6; stroke-width: 1.5; }
+    .box-p { fill: #dcfce7; stroke: #22c55e; stroke-width: 1.5; }
+    .box-s { fill: #fce7f3; stroke: #ec4899; stroke-width: 1.5; }
+    .lbl-h { fill: #1d4ed8; font-family: monospace, monospace; font-size: 11px; }
+    .lbl-p { fill: #15803d; font-family: monospace, monospace; font-size: 11px; }
+    .lbl-s { fill: #9d174d; font-family: monospace, monospace; font-size: 11px; }
+    @media (prefers-color-scheme: dark) {
+      .bg    { fill: #1e1e1e; }
+      .text  { fill: #e5e7eb; }
+      .sub   { fill: #9ca3af; }
+      .dot   { fill: #6b7280; }
+      .box-h { fill: #1e3a5f; stroke: #60a5fa; }
+      .box-p { fill: #14532d; stroke: #4ade80; }
+      .box-s { fill: #500724; stroke: #f472b6; }
+      .lbl-h { fill: #93c5fd; }
+      .lbl-p { fill: #86efac; }
+      .lbl-s { fill: #f9a8d4; }
+    }
+  </style>
+
+  <rect class="bg" width="560" height="220" rx="8"/>
+
+  <!-- Token string -->
+  <text class="text" x="280" y="30" text-anchor="middle" font-weight="bold">JWT の文字列構造</text>
+  <rect class="box-h" x="20"  y="44" width="148" height="28" rx="4"/>
+  <text class="lbl-h mono" x="94"  y="63" text-anchor="middle">eyJhbGciOiJIUzI1NiJ9</text>
+  <text class="dot" x="170" y="66">.</text>
+  <rect class="box-p" x="180" y="44" width="180" height="28" rx="4"/>
+  <text class="lbl-p mono" x="270" y="63" text-anchor="middle">eyJzdWIiOiJ1c2VyMSJ9</text>
+  <text class="dot" x="362" y="66">.</text>
+  <rect class="box-s" x="372" y="44" width="168" height="28" rx="4"/>
+  <text class="lbl-s mono" x="456" y="63" text-anchor="middle">SflKxwRJSMeKKF2QT4fw...</text>
+
+  <!-- Labels -->
+  <text class="lbl-h" x="94"  y="90" text-anchor="middle" font-weight="bold">Header</text>
+  <text class="lbl-p" x="270" y="90" text-anchor="middle" font-weight="bold">Payload</text>
+  <text class="lbl-s" x="456" y="90" text-anchor="middle" font-weight="bold">Signature</text>
+
+  <!-- Header box detail -->
+  <rect class="box-h" x="20" y="104" width="148" height="50" rx="4"/>
+  <text class="sub" x="94" y="121" text-anchor="middle">アルゴリズム情報</text>
+  <text class="sub" x="94" y="136" text-anchor="middle">Base64url エンコード</text>
+  <text class="sub" x="94" y="148" text-anchor="middle">（誰でも読める）</text>
+
+  <!-- Payload box detail -->
+  <rect class="box-p" x="180" y="104" width="180" height="50" rx="4"/>
+  <text class="sub" x="270" y="121" text-anchor="middle">ユーザー情報 / 期限</text>
+  <text class="sub" x="270" y="136" text-anchor="middle">Base64url エンコード</text>
+  <text class="sub" x="270" y="148" text-anchor="middle">（暗号化なし・誰でも読める）</text>
+
+  <!-- Signature box detail -->
+  <rect class="box-s" x="372" y="104" width="168" height="50" rx="4"/>
+  <text class="sub" x="456" y="121" text-anchor="middle">秘密鍵で署名</text>
+  <text class="sub" x="456" y="136" text-anchor="middle">改ざん検知に使う</text>
+  <text class="sub" x="456" y="148" text-anchor="middle">（中身は確認できない）</text>
+
+  <!-- Note -->
+  <text class="sub" x="280" y="180" text-anchor="middle">JWS（署名のみ）の構造。JWE はさらに Payload を暗号化する 5 パート構成。</text>
+  <text class="sub" x="280" y="196" text-anchor="middle">Payload に秘密情報（パスワード等）を入れてはいけない（JWS の場合は誰でもデコード可能）。</text>
+</svg>

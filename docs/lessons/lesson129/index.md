@@ -411,7 +411,59 @@ const handler = (req: Request) =>
 export { handler as GET, handler as POST };
 ```
 
-`utils/trpc.ts` / Provider 設定 / Client での使用は tRPC 公式の Quickstart に従う。`trpc.listUsers.useQuery()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
+`utils/trpc.ts`:
+
+```ts
+import { createTRPCReact } from "@trpc/react-query";
+import type { AppRouter } from "@/server/router";
+
+export const trpc = createTRPCReact<AppRouter>();
+```
+
+`app/providers.tsx`:
+
+```tsx
+"use client";
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { httpBatchLink } from "@trpc/client";
+import { trpc } from "@/utils/trpc";
+
+export function TRPCProvider({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
+  const [trpcClient] = useState(() =>
+    trpc.createClient({
+      links: [httpBatchLink({ url: "/api/trpc" })],
+    }),
+  );
+  return (
+    <trpc.Provider client={trpcClient} queryClient={queryClient}>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
+    </trpc.Provider>
+  );
+}
+```
+
+`app/layout.tsx` で `<TRPCProvider>` でラップし、`app/users/page.tsx` では:
+
+```tsx
+"use client";
+import { trpc } from "@/utils/trpc";
+
+export default function UsersPage() {
+  const { data, isLoading } = trpc.listUsers.useQuery();
+  if (isLoading) return <p>読込中...</p>;
+  return (
+    <ul>
+      {data?.map((u) => (
+        <li key={u.id}>{u.name} — {u.email}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+`trpc.listUsers.useQuery()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
 
 ### 手順 4: GraphQL 版
 

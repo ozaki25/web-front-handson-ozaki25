@@ -405,7 +405,7 @@ DevTools の Network タブで:
 
 - `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
 - `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
-- `allowOrigins` に `*` を入れると、`credentials` を使う場合だけエラー（仕様違反）
+- `origin` に `"*"` を入れると、`credentials` を使う場合だけエラー（仕様違反）
 
 ### 自分で書く（任意）
 

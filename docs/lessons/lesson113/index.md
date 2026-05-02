@@ -45,13 +45,7 @@ git init
 
 Git では変更が次の 3 段階を辿ります。
 
-```
-作業ディレクトリ          ステージング         リポジトリ（履歴）
-（編集中のファイル）  →  （add した変更）  →  （commit した変更）
-       │                      │                      │
-       └─ git add ─────────────                       │
-       └─ git commit -m "..." ────────────────────────┘
-```
+<img src="/diagrams/git-three-areas.svg" alt="作業ディレクトリ → git add → ステージング → git commit → リポジトリ の 3 エリア。git restore / checkout でリポジトリから作業ディレクトリに戻せる。" class="diagram" />
 
 - **作業ディレクトリ**: ファイルを編集しただけの状態。Git はまだ気にしない
 - **ステージング**: `git add` で変更を「次の commit に含める」と予約した状態

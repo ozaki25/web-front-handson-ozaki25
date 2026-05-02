@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 200" width="580" height="200">
+  <style>
+    .bg    { fill: #ffffff; }
+    .text  { fill: #111827; font-family: system-ui, sans-serif; font-size: 13px; }
+    .sub   { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; }
+    .cmd   { fill: #1d4ed8; font-family: monospace, monospace; font-size: 12px; font-weight: bold; }
+    .box-a { fill: #dbeafe; stroke: #3b82f6; stroke-width: 1.5; }
+    .box-b { fill: #fef9c3; stroke: #eab308; stroke-width: 1.5; }
+    .box-c { fill: #dcfce7; stroke: #22c55e; stroke-width: 1.5; }
+    .arrow { stroke: #9ca3af; fill: none; stroke-width: 1.5; }
+    .arr   { fill: #9ca3af; }
+    @media (prefers-color-scheme: dark) {
+      .bg    { fill: #1e1e1e; }
+      .text  { fill: #e5e7eb; }
+      .sub   { fill: #9ca3af; }
+      .cmd   { fill: #93c5fd; }
+      .box-a { fill: #1e3a5f; stroke: #60a5fa; }
+      .box-b { fill: #422006; stroke: #fbbf24; }
+      .box-c { fill: #14532d; stroke: #4ade80; }
+      .arrow { stroke: #6b7280; }
+      .arr   { fill: #6b7280; }
+    }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon class="arr" points="0 0, 8 3, 0 6"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="580" height="200" rx="8"/>
+
+  <!-- Box A: 作業ディレクトリ -->
+  <rect class="box-a" x="20"  y="40" width="150" height="80" rx="6"/>
+  <text class="text" x="95"  y="72" text-anchor="middle" font-weight="bold">作業ディレクトリ</text>
+  <text class="sub"  x="95"  y="90" text-anchor="middle">編集中のファイル</text>
+  <text class="sub"  x="95" y="106" text-anchor="middle">（Git 管理外）</text>
+
+  <!-- Box B: ステージング -->
+  <rect class="box-b" x="215" y="40" width="150" height="80" rx="6"/>
+  <text class="text" x="290" y="72" text-anchor="middle" font-weight="bold">ステージング</text>
+  <text class="sub"  x="290" y="90" text-anchor="middle">次の commit に</text>
+  <text class="sub"  x="290" y="106" text-anchor="middle">含める変更</text>
+
+  <!-- Box C: リポジトリ -->
+  <rect class="box-c" x="410" y="40" width="150" height="80" rx="6"/>
+  <text class="text" x="485" y="72" text-anchor="middle" font-weight="bold">リポジトリ</text>
+  <text class="sub"  x="485" y="90" text-anchor="middle">commit 済みの</text>
+  <text class="sub"  x="485" y="106" text-anchor="middle">履歴</text>
+
+  <!-- Arrow A→B: git add -->
+  <line class="arrow" x1="171" y1="80" x2="213" y2="80" marker-end="url(#ah)"/>
+  <text class="cmd"  x="192" y="70" text-anchor="middle">git add</text>
+
+  <!-- Arrow B→C: git commit -->
+  <line class="arrow" x1="366" y1="80" x2="408" y2="80" marker-end="url(#ah)"/>
+  <text class="cmd"  x="387" y="70" text-anchor="middle">git commit</text>
+
+  <!-- Arrow C→A: git checkout / restore -->
+  <path class="arrow" d="M 485 120 Q 485 160 290 160 Q 95 160 95 122" marker-end="url(#ah)"/>
+  <text class="cmd"  x="290" y="155" text-anchor="middle">git restore / checkout</text>
+</svg>

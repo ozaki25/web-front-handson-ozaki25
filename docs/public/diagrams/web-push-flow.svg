@@ -1,0 +1,71 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 560 300" width="560" height="300">
+  <style>
+    .bg    { fill: #ffffff; }
+    .text  { fill: #111827; font-family: system-ui, sans-serif; font-size: 13px; }
+    .sub   { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; }
+    .actor { fill: #f9fafb; stroke: #d1d5db; stroke-width: 1.5; }
+    .arrow { stroke: #9ca3af; fill: none; stroke-width: 1.5; }
+    .arr   { fill: #9ca3af; }
+    .step1 { fill: #3b82f6; font-family: system-ui, sans-serif; font-size: 11px; }
+    .step2 { fill: #22c55e; font-family: system-ui, sans-serif; font-size: 11px; }
+    .step3 { fill: #f59e0b; font-family: system-ui, sans-serif; font-size: 11px; }
+    .divider { stroke: #e5e7eb; stroke-width: 1; stroke-dasharray: 4 3; }
+    @media (prefers-color-scheme: dark) {
+      .bg    { fill: #1e1e1e; }
+      .text  { fill: #e5e7eb; }
+      .sub   { fill: #9ca3af; }
+      .actor { fill: #2a2a2a; stroke: #4b5563; }
+      .arrow { stroke: #6b7280; }
+      .arr   { fill: #6b7280; }
+      .divider { stroke: #374151; }
+    }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon class="arr" points="0 0, 8 3, 0 6"/>
+    </marker>
+    <marker id="ahl" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon class="arr" points="8 0, 0 3, 8 6"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="560" height="300" rx="8"/>
+
+  <!-- Actor boxes -->
+  <rect class="actor" x="20"  y="16" width="110" height="40" rx="6"/>
+  <text class="text" x="75"  y="40" text-anchor="middle" font-weight="bold">ブラウザ</text>
+
+  <rect class="actor" x="225" y="16" width="110" height="40" rx="6"/>
+  <text class="text" x="280" y="33" text-anchor="middle" font-weight="bold">Push Service</text>
+  <text class="sub"  x="280" y="50" text-anchor="middle">Apple / Google / Mozilla</text>
+
+  <rect class="actor" x="430" y="16" width="110" height="40" rx="6"/>
+  <text class="text" x="485" y="40" text-anchor="middle" font-weight="bold">あなたのサーバー</text>
+
+  <!-- Lifelines -->
+  <line class="divider" x1="75"  y1="56" x2="75"  y2="285"/>
+  <line class="divider" x1="280" y1="56" x2="280" y2="285"/>
+  <line class="divider" x1="485" y1="56" x2="485" y2="285"/>
+
+  <!-- Step 1: Subscribe -->
+  <text class="step1" x="10" y="84" font-weight="bold">①購読</text>
+  <line class="arrow" x1="77" y1="90" x2="278" y2="90" marker-end="url(#ah)"/>
+  <text class="sub"  x="178" y="85" text-anchor="middle">購読リクエスト（VAPID 公開鍵）</text>
+  <line class="arrow" x1="278" y1="108" x2="77" y2="108" marker-end="url(#ahl)"/>
+  <text class="sub"  x="178" y="103" text-anchor="middle">endpoint（購読 URL）を発行</text>
+  <line class="arrow" x1="77" y1="126" x2="483" y2="126" marker-end="url(#ah)"/>
+  <text class="sub"  x="280" y="121" text-anchor="middle">endpoint をサーバーに保存</text>
+
+  <!-- Step 2: Send -->
+  <text class="step2" x="10" y="160" font-weight="bold">②送信</text>
+  <line class="arrow" x1="483" y1="166" x2="282" y2="166" marker-end="url(#ahl)"/>
+  <text class="sub"  x="382" y="161" text-anchor="middle">Push 送信（VAPID 秘密鍵で署名）</text>
+  <line class="arrow" x1="278" y1="184" x2="77"  y2="184" marker-end="url(#ahl)"/>
+  <text class="sub"  x="178" y="179" text-anchor="middle">プッシュメッセージ配信</text>
+
+  <!-- Step 3: Show -->
+  <text class="step3" x="10" y="218" font-weight="bold">③表示</text>
+  <text class="sub"  x="75"  y="230" text-anchor="middle">push イベント</text>
+  <text class="sub"  x="75"  y="244" text-anchor="middle">→ SW が受信</text>
+  <text class="sub"  x="75"  y="258" text-anchor="middle">→ 通知表示</text>
+</svg>

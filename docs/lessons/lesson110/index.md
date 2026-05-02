@@ -325,7 +325,7 @@ export function heavyFunction() {
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
+- **Vite 8（2026 年 3 月）から Rolldown を中核に**。本番ビルドが Rollup から Rolldown に切り替わり、esbuild が担った領域も順次 Rolldown / Oxc に置き換わっていく（移行期は一部経路に esbuild が残る）
 - 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
 - HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
 - 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成

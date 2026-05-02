@@ -103,8 +103,9 @@ import { ImageResponse } from "next/og";
 export const size = { width: 1200, height: 630 };
 export const contentType = "image/png";
 
-export default async function OG({ params }: { params: { slug: string } }) {
-  const post = await getPost(params.slug);
+export default async function OG({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const post = await getPost(slug);
   return new ImageResponse(
     (
       <div

@@ -35,11 +35,7 @@ PWA の柱:
 
 3 つの状態を順に行き来します。
 
-```
-[ install ] → [ activate ] → [ idle / fetch / message ]
-                                       ↑
-                                       │（更新時）新 SW が install
-```
+<img src="/diagrams/sw-lifecycle.svg" alt="Service Worker のライフサイクル: install（事前キャッシュ）→ activate（古いキャッシュ削除）→ idle/fetch/message（リクエスト横取り・通知受信）。更新時は新 SW が install し、旧 SW 終了後に activate する。" class="diagram" />
 
 #### `install`
 

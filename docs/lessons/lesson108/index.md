@@ -230,7 +230,7 @@ npm install -D concurrently
 `npm:dev:*` は「`dev:` で始まる scripts を全部並列実行する」というショートハンドです。`npm run dev` を叩くと、`dev:client` と `dev:server` が同時に起動し、ターミナルにこう出ます。
 
 ```
-[dev:client] VITE v5.4.0  ready in 234 ms
+[dev:client] VITE v8.0.0  ready in 234 ms
 [dev:client] ➜  Local:   http://localhost:5173/
 [dev:server] API listening on :3001
 ```

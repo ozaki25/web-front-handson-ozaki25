@@ -1,0 +1,56 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 580 160" width="580" height="160">
+  <style>
+    .bg    { fill: #ffffff; }
+    .text  { fill: #111827; font-family: system-ui, sans-serif; font-size: 13px; }
+    .sub   { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; }
+    .box   { fill: #f0fdf4; stroke: #22c55e; stroke-width: 1.5; }
+    .box2  { fill: #fef9c3; stroke: #eab308; stroke-width: 1.5; }
+    .box3  { fill: #dbeafe; stroke: #3b82f6; stroke-width: 1.5; }
+    .arrow { stroke: #9ca3af; fill: none; stroke-width: 1.5; }
+    .arr   { fill: #9ca3af; }
+    .note  { fill: #6b7280; font-family: system-ui, sans-serif; font-size: 11px; font-style: italic; }
+    @media (prefers-color-scheme: dark) {
+      .bg    { fill: #1e1e1e; }
+      .text  { fill: #e5e7eb; }
+      .sub   { fill: #9ca3af; }
+      .box   { fill: #14532d; stroke: #4ade80; }
+      .box2  { fill: #422006; stroke: #fbbf24; }
+      .box3  { fill: #1e3a5f; stroke: #60a5fa; }
+      .arrow { stroke: #6b7280; }
+      .arr   { fill: #6b7280; }
+      .note  { fill: #9ca3af; }
+    }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">
+      <polygon class="arr" points="0 0, 8 3, 0 6"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="580" height="160" rx="8"/>
+
+  <!-- install -->
+  <rect class="box"  x="20"  y="30" width="110" height="44" rx="6"/>
+  <text class="text" x="75"  y="56" text-anchor="middle" font-weight="bold">install</text>
+  <text class="sub"  x="75"  y="70" text-anchor="middle">事前キャッシュ</text>
+
+  <!-- arrow install → activate -->
+  <line class="arrow" x1="131" y1="52" x2="179" y2="52" marker-end="url(#ah)"/>
+
+  <!-- activate -->
+  <rect class="box2" x="180" y="30" width="110" height="44" rx="6"/>
+  <text class="text" x="235" y="56" text-anchor="middle" font-weight="bold">activate</text>
+  <text class="sub"  x="235" y="70" text-anchor="middle">古いキャッシュ削除</text>
+
+  <!-- arrow activate → idle/fetch -->
+  <line class="arrow" x1="291" y1="52" x2="339" y2="52" marker-end="url(#ah)"/>
+
+  <!-- idle/fetch/message -->
+  <rect class="box3" x="340" y="30" width="220" height="44" rx="6"/>
+  <text class="text" x="450" y="52" text-anchor="middle" font-weight="bold">idle / fetch / message</text>
+  <text class="sub"  x="450" y="68" text-anchor="middle">リクエスト横取り・通知受信</text>
+
+  <!-- Update path: new SW installs while old is active -->
+  <path class="arrow" d="M 450 74 Q 450 120 380 120 Q 160 120 75 120 Q 75 120 75 76" marker-end="url(#ah)"/>
+  <text class="note" x="260" y="116" text-anchor="middle">更新時: 新 SW が install → 旧 SW 終了後に activate</text>
+</svg>
