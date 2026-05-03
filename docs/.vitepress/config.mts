@@ -72,10 +72,29 @@ export default withPwa(
       ['meta', { name: 'theme-color', media: '(prefers-color-scheme: dark)', content: '#26201a' }],
     ],
     themeConfig: {
-      nav: [{ text: 'ホーム', link: '/' }],
+      nav: [
+        { text: 'ホーム', link: '/' },
+        { text: 'クイズ', link: '/quiz/' },
+      ],
       sidebar: [
         { text: 'トップ', link: '/' },
         { text: 'はじめに', link: '/introduction/' },
+        {
+          text: 'クイズ',
+          collapsed: true,
+          items: [
+            { text: '一覧', link: '/quiz/' },
+            { text: '1章 HTML / CSS', link: '/quiz/chapter1/' },
+            { text: '2章 JavaScript', link: '/quiz/chapter2/' },
+            { text: '3章 TypeScript', link: '/quiz/chapter3/' },
+            { text: '4章 React', link: '/quiz/chapter4/' },
+            { text: '5章 Next.js', link: '/quiz/chapter5/' },
+            { text: '6章 ブラウザの仕組み', link: '/quiz/chapter6/' },
+            { text: '7章 実務で使う周辺知識', link: '/quiz/chapter7/' },
+            { text: 'ランダム出題', link: '/quiz/random/' },
+            { text: '復習', link: '/quiz/review/' },
+          ],
+        },
         {
           text: '1. HTML / CSS',
           collapsed: true,

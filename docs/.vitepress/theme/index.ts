@@ -7,6 +7,10 @@ import { injectSpeedInsights } from '@vercel/speed-insights'
 import LessonComplete from './components/LessonComplete.vue'
 import LessonProgress from './components/LessonProgress.vue'
 import LiveDemo from './components/LiveDemo.vue'
+import QuizCard from './components/QuizCard.vue'
+import QuizPage from './components/QuizPage.vue'
+import QuizTop from './components/QuizTop.vue'
+import QuizReview from './components/QuizReview.vue'
 import './custom.css'
 
 export default {
@@ -21,6 +25,10 @@ export default {
     enhanceAppWithTabs(app)
     app.component('LessonProgress', LessonProgress)
     app.component('LiveDemo', LiveDemo)
+    app.component('QuizCard', QuizCard)
+    app.component('QuizPage', QuizPage)
+    app.component('QuizTop', QuizTop)
+    app.component('QuizReview', QuizReview)
     if (typeof window !== 'undefined') {
       injectVercelAnalytics()
       injectSpeedInsights()
