@@ -1,4 +1,4 @@
-# lesson132: IndexedDB 入門
+# lesson133: IndexedDB 入門
 
 ## ゴール
 
