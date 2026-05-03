@@ -63,6 +63,8 @@ Content-Type: application/json
 
 メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
 
+<img src="/diagrams/cors-preflight-sequence.svg" alt="プリフライトの時系列: ブラウザが OPTIONS を送り、サーバーが Allow ヘッダ付き 204 を返すと本リクエストが許可される。拒否時は本リクエストがブロックされる。シンプルリクエストは OPTIONS なし。" class="diagram" />
+
 ```
 OPTIONS /posts HTTP/1.1
 Origin: https://my-site.example
