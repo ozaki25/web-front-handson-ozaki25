@@ -1,3 +1,1368 @@
 import type { Quiz } from "../types";
 
-export const chapter7: Quiz[] = [];
+export const chapter7: Quiz[] = [
+  // lesson98: セマンティック HTML とアクセシビリティの基礎
+  {
+    id: "q213",
+    lesson: "lesson98",
+    difficulty: "easy",
+    question: "セマンティック HTML において、ページの主要コンテンツを囲むのに最も適切な要素はどれですか？",
+    choices: ["<div>", "<main>", "<section>", "<article>"],
+    answer: 1,
+    explanation:
+      "`<main>` はページの主要コンテンツを示すセマンティック要素です。1 ページに 1 つだけ使い、スクリーンリーダーはここにジャンプできます。",
+  },
+  {
+    id: "q214",
+    lesson: "lesson98",
+    difficulty: "normal",
+    question: "WCAG（Web Content Accessibility Guidelines）が定める「知覚可能（Perceivable）」の原則に当てはまる対応はどれですか？",
+    choices: [
+      "キーボードだけで全機能を操作できる",
+      "画像に代替テキスト（alt 属性）を付ける",
+      "エラーメッセージを分かりやすく書く",
+      "コンテンツの意味や構造を説明できる",
+    ],
+    answer: 1,
+    explanation:
+      "「知覚可能」は情報を複数の感覚で受け取れるようにすることです。画像の `alt` テキストは視覚障害者がスクリーンリーダーで内容を把握できるようにします。",
+  },
+  {
+    id: "q215",
+    lesson: "lesson98",
+    difficulty: "hard",
+    question: "ページの見出し構造として正しいのはどれですか？",
+    choices: [
+      "h1 → h3 → h2（順番は自由）",
+      "h1 を複数使ってよい",
+      "h1 は 1 ページに 1 つ、h2 → h3 → h4 と入れ子順を守る",
+      "見出しはすべて h2 で統一する",
+    ],
+    answer: 2,
+    explanation:
+      "見出し階層はスキップせず順番に使います（h1 → h2 → h3）。h1 は 1 ページに 1 つが原則です。スクリーンリーダーはこの構造でページをナビゲートします。",
+  },
+
+  // lesson99: ARIA 属性とキーボード操作
+  {
+    id: "q216",
+    lesson: "lesson99",
+    difficulty: "normal",
+    question: "`aria-label` 属性の用途として正しいのはどれですか？",
+    choices: [
+      "要素を非表示にする",
+      "スクリーンリーダー向けに視覚的ラベルのない要素に名前を付ける",
+      "CSS スタイルを適用する",
+      "フォームのバリデーションを定義する",
+    ],
+    answer: 1,
+    explanation:
+      "`aria-label` はアイコンボタンなど視覚的なラベルがない要素に対し、スクリーンリーダーが読み上げる名前を直接指定します。",
+  },
+  {
+    id: "q217",
+    lesson: "lesson99",
+    difficulty: "hard",
+    question: "キーボードフォーカスの管理として正しいのはどれですか？",
+    choices: [
+      "`tabindex='-1'` を付けると Tab キーでフォーカス順に含まれる",
+      "`tabindex='0'` を付けると DOM 順でフォーカスに含まれる",
+      "`tabindex='100'` を推奨する",
+      "フォーカスアウトラインは常に非表示にすべき",
+    ],
+    answer: 1,
+    explanation:
+      "`tabindex='0'` は要素を Tab キーのフォーカス順に自然な DOM 順で追加します。`-1` はプログラム的フォーカスのみ可（Tab では到達しない）。アウトラインを消すとキーボードユーザーが迷子になります。",
+  },
+
+  // lesson100: アクセシビリティの自動チェック
+  {
+    id: "q218",
+    lesson: "lesson100",
+    difficulty: "easy",
+    question: "Lighthouse でアクセシビリティスコアを計測するには、どこから実行できますか？",
+    choices: [
+      "Chrome DevTools の Network タブ",
+      "Chrome DevTools の Lighthouse タブ",
+      "Firefox DevTools のみ",
+      "npm でインストールが必要なコマンドラインツール専用",
+    ],
+    answer: 1,
+    explanation:
+      "Lighthouse は Chrome DevTools の Lighthouse タブから実行できます。コマンドラインや CI でも使えますが、ブラウザからすぐ試せます。",
+  },
+  {
+    id: "q219",
+    lesson: "lesson100",
+    difficulty: "normal",
+    question: "axe-core などの自動アクセシビリティチェックツールで検出できない問題はどれですか？",
+    choices: [
+      "コントラスト比の不足",
+      "alt テキストが空",
+      "aria-label の欠如",
+      "コンテンツの読み上げ順序が意味的に正しいかどうか",
+    ],
+    answer: 3,
+    explanation:
+      "自動ツールは構造的な問題（alt の有無、コントラスト比など）は検出できますが、「コンテンツの意味的な順序が正しいか」のような人間の判断が必要な問題は検出できません。",
+  },
+
+  // lesson101: Vitest でユニットテスト
+  {
+    id: "q220",
+    lesson: "lesson101",
+    difficulty: "easy",
+    question: "Vitest でテストを書くとき、テストケースを定義する関数はどれですか？",
+    choices: ["assert()", "test() または it()", "spec()", "check()"],
+    answer: 1,
+    explanation:
+      "Vitest では `test('説明', () => { ... })` または `it('説明', () => { ... })` でテストケースを定義します。どちらも同じです。",
+  },
+  {
+    id: "q221",
+    lesson: "lesson101",
+    difficulty: "normal",
+    question: "Vitest で「`add(1, 2)` が `3` を返すことを確認する」アサーションとして正しいのはどれですか？",
+    choices: [
+      "assert.equal(add(1, 2), 3)",
+      "expect(add(1, 2)).toBe(3)",
+      "check(add(1, 2) === 3)",
+      "verify(add(1, 2)).equals(3)",
+    ],
+    answer: 1,
+    explanation:
+      "Vitest は `expect` と Jest 互換マッチャーを使います。`expect(値).toBe(期待値)` は厳密等価（`===`）でチェックします。",
+  },
+  {
+    id: "q222",
+    lesson: "lesson101",
+    difficulty: "hard",
+    question: "Vitest でスパイ（spy）を使う目的として正しいのはどれですか？",
+    choices: [
+      "ネットワークリクエストを本物のサーバーに送るため",
+      "関数が呼ばれた回数や引数を記録し、テスト内で検証するため",
+      "テストファイルを自動生成するため",
+      "TypeScript の型チェックを行うため",
+    ],
+    answer: 1,
+    explanation:
+      "スパイ（`vi.spyOn`）は関数の呼び出し履歴を記録します。「特定の関数が何回・どの引数で呼ばれたか」を検証できます。",
+  },
+
+  // lesson102: React Testing Library
+  {
+    id: "q223",
+    lesson: "lesson102",
+    difficulty: "normal",
+    question: "React Testing Library の設計思想として正しいのはどれですか？",
+    choices: [
+      "コンポーネントの内部実装（state, props の値）を直接テストする",
+      "ユーザーが実際に行う操作（クリック・入力）の視点でテストする",
+      "スナップショットテストだけを使う",
+      "DOM には触れずロジックのみをテストする",
+    ],
+    answer: 1,
+    explanation:
+      "RTL は「ユーザーがどう使うか」の視点でテストすることを推奨します。実装の詳細ではなく、画面に表示されたテキストやロールでクエリします。",
+  },
+  {
+    id: "q224",
+    lesson: "lesson102",
+    difficulty: "hard",
+    question: "RTL で「ボタンをクリックする」操作をシミュレートするために推奨される方法はどれですか？",
+    choices: [
+      "element.click() を直接呼ぶ",
+      "fireEvent.click(element)",
+      "userEvent.click(element)（@testing-library/user-event）",
+      "simulate('click') を使う",
+    ],
+    answer: 2,
+    explanation:
+      "`userEvent.click()` は実際のブラウザのクリックに近い一連のイベント（pointerdown, mousedown, click など）を発火します。`fireEvent` より現実に近い挙動をシミュレートできます。",
+  },
+
+  // lesson103: MSW
+  {
+    id: "q225",
+    lesson: "lesson103",
+    difficulty: "normal",
+    question: "MSW（Mock Service Worker）を使う主なメリットはどれですか？",
+    choices: [
+      "テスト中にコンポーネントの render をスキップできる",
+      "ネットワーク層で API レスポンスをインターセプトしモックできる",
+      "TypeScript の型を自動生成する",
+      "React の状態管理を不要にする",
+    ],
+    answer: 1,
+    explanation:
+      "MSW は Service Worker（ブラウザ）または Node.js のインターセプターを使ってネットワークリクエストをモックします。アプリコードを変えずにテスト用レスポンスを返せます。",
+  },
+  {
+    id: "q226",
+    lesson: "lesson103",
+    difficulty: "hard",
+    question: "MSW で GET `/api/users` に対するモックハンドラを定義する正しい書き方はどれですか？",
+    choices: [
+      "mock.get('/api/users', () => [...])",
+      "http.get('/api/users', () => HttpResponse.json([...]))",
+      "intercept('GET', '/api/users').reply([...])",
+      "nock('/api/users').get().reply(200, [...])",
+    ],
+    answer: 1,
+    explanation:
+      "MSW v2 では `http.get(path, resolver)` でハンドラを定義し、`HttpResponse.json()` でレスポンスを返します。",
+  },
+
+  // lesson104: Playwright
+  {
+    id: "q227",
+    lesson: "lesson104",
+    difficulty: "easy",
+    question: "E2E テストと単体テストの主な違いはどれですか？",
+    choices: [
+      "E2E テストは TypeScript でしか書けない",
+      "E2E テストは実際のブラウザでアプリ全体を動かして動作を確認する",
+      "単体テストは遅く、E2E テストは速い",
+      "E2E テストはサーバーを必要としない",
+    ],
+    answer: 1,
+    explanation:
+      "E2E（End-to-End）テストは本物のブラウザでフロントエンドからバックエンドまで全体を通して動作を検証します。単体テストは個々の関数・コンポーネントを隔離してテストします。",
+  },
+  {
+    id: "q228",
+    lesson: "lesson104",
+    difficulty: "normal",
+    question: "Playwright でページ上のボタンをクリックするコードとして正しいのはどれですか？",
+    choices: [
+      "page.find('button').click()",
+      "await page.click('button')",
+      "browser.clickButton('button')",
+      "page.query('button').trigger('click')",
+    ],
+    answer: 1,
+    explanation:
+      "Playwright の `page.click(selector)` は指定したセレクターの要素をクリックします。非同期なので `await` が必要です。",
+  },
+
+  // lesson105: Core Web Vitals
+  {
+    id: "q229",
+    lesson: "lesson105",
+    difficulty: "normal",
+    question: "Core Web Vitals の 3 指標として正しい組み合わせはどれですか？",
+    choices: [
+      "FCP / TTI / TBT",
+      "LCP / INP / CLS",
+      "TTFB / FID / FCP",
+      "Speed Index / LCP / FID",
+    ],
+    answer: 1,
+    explanation:
+      "Core Web Vitals は LCP（Largest Contentful Paint）・INP（Interaction to Next Paint）・CLS（Cumulative Layout Shift）の 3 指標です。",
+  },
+  {
+    id: "q230",
+    lesson: "lesson105",
+    difficulty: "hard",
+    question: "CLS（Cumulative Layout Shift）を改善するために最も効果的な対策はどれですか？",
+    choices: [
+      "画像に `loading='lazy'` を付ける",
+      "画像や iframe に `width` / `height` 属性を指定してレイアウトシフトを防ぐ",
+      "JavaScript を非同期読み込みにする",
+      "フォントを Google Fonts から読み込む",
+    ],
+    answer: 1,
+    explanation:
+      "CLS は読み込み後にコンテンツが動くことで発生します。画像や埋め込みに `width`/`height` を明示することでブラウザが事前にスペースを確保し、シフトを防げます。",
+  },
+
+  // lesson106: バンドルサイズの最適化
+  {
+    id: "q231",
+    lesson: "lesson106",
+    difficulty: "normal",
+    question: "コード分割（Code Splitting）の主なメリットはどれですか？",
+    choices: [
+      "ソースコードが読みやすくなる",
+      "初期ロード時に必要なコードだけ送ることでページ表示が速くなる",
+      "TypeScript のコンパイルが速くなる",
+      "テストカバレッジが上がる",
+    ],
+    answer: 1,
+    explanation:
+      "コード分割はバンドルを複数チャンクに分け、必要なときだけ読み込みます。初期バンドルが小さくなり初期表示速度が向上します。",
+  },
+  {
+    id: "q232",
+    lesson: "lesson106",
+    difficulty: "hard",
+    question: "Next.js / React で動的インポートを使ってコード分割するときの書き方はどれですか？",
+    choices: [
+      "import('./HeavyComponent') を useEffect 内で呼ぶ",
+      "const HeavyComponent = React.lazy(() => import('./HeavyComponent'))",
+      "require('./HeavyComponent')",
+      "import HeavyComponent from './HeavyComponent' に split 属性を付ける",
+    ],
+    answer: 1,
+    explanation:
+      "`React.lazy(() => import('./HeavyComponent'))` で動的インポートしてコード分割できます。`<Suspense>` とセットで使います。",
+  },
+
+  // lesson107: 画像とフォントの最適化
+  {
+    id: "q233",
+    lesson: "lesson107",
+    difficulty: "easy",
+    question: "Web パフォーマンスにおいて画像を最適化する方法として正しいのはどれですか？",
+    choices: [
+      "すべての画像を PNG 形式で保存する",
+      "WebP や AVIF などの次世代フォーマットを使い、適切なサイズを指定する",
+      "画像はすべてインライン Base64 で埋め込む",
+      "画像はすべてアニメーション GIF にする",
+    ],
+    answer: 1,
+    explanation:
+      "WebP / AVIF は JPEG / PNG より高圧縮で品質を保てます。また `srcset` で適切な解像度を配信することでムダな転送量を減らせます。",
+  },
+  {
+    id: "q234",
+    lesson: "lesson107",
+    difficulty: "normal",
+    question: "フォントの「FOUT（Flash of Unstyled Text）」を防ぐためにどうすればよいですか？",
+    choices: [
+      "フォントを読み込まない",
+      "フォントの `font-display: swap` を `font-display: optional` に変えてフォールバックを許容する",
+      "フォントを preload してブロッキングを最小化する",
+      "すべてのテキストを画像にする",
+    ],
+    answer: 2,
+    explanation:
+      "`<link rel='preload'>` でフォントを事前に読み込むと、レンダリング前にフォントが用意されます。`font-display: optional` はフォールバックを使いますが、FOUT ではなく FOIT になります。",
+  },
+
+  // lesson108: package.json と npm スクリプト
+  {
+    id: "q235",
+    lesson: "lesson108",
+    difficulty: "easy",
+    question: "`package.json` の `scripts` フィールドに定義されたコマンドを実行するには何を使いますか？",
+    choices: [
+      "node スクリプト名",
+      "npm run スクリプト名",
+      "exec スクリプト名",
+      "bash スクリプト名",
+    ],
+    answer: 1,
+    explanation:
+      "`npm run <スクリプト名>` で `package.json` の `scripts` に定義されたコマンドを実行できます。`start` / `test` / `build` は `npm start` などの短縮形も使えます。",
+  },
+  {
+    id: "q236",
+    lesson: "lesson108",
+    difficulty: "normal",
+    question: "`package.json` の `devDependencies` と `dependencies` の違いはどれですか？",
+    choices: [
+      "`devDependencies` は本番ビルドに含まれ、`dependencies` は開発時のみ使われる",
+      "`devDependencies` は開発時のみ必要なツール、`dependencies` は本番でも必要なライブラリ",
+      "違いはなく、どちらに書いても同じ",
+      "`devDependencies` はグローバルインストール、`dependencies` はローカル",
+    ],
+    answer: 1,
+    explanation:
+      "`dependencies` はアプリ実行時に必要なもの（React など）、`devDependencies` はビルド・テスト・リントなど開発ツールです。本番サーバーでは `devDependencies` のインストールを省けます。",
+  },
+
+  // lesson109: フロントエンドツールの全体像と歴史
+  {
+    id: "q237",
+    lesson: "lesson109",
+    difficulty: "easy",
+    question: "JavaScript のパッケージマネージャーとして広く使われているツールはどれですか？",
+    choices: ["pip", "cargo", "npm / pnpm / Bun", "gem"],
+    answer: 2,
+    explanation:
+      "JavaScript のパッケージマネージャーは npm（Node.js 同梱）、pnpm（高速・省ディスク）、Bun（高速ランタイム兼マネージャー）などが使われます。",
+  },
+  {
+    id: "q238",
+    lesson: "lesson109",
+    difficulty: "normal",
+    question: "モジュールバンドラーの主な役割はどれですか？",
+    choices: [
+      "CSS を TypeScript に変換する",
+      "複数のファイル・依存モジュールを結合して最適化されたファイルを生成する",
+      "ユニットテストを実行する",
+      "HTTP サーバーを起動する",
+    ],
+    answer: 1,
+    explanation:
+      "モジュールバンドラー（Webpack / Vite / Rolldown など）は ES Modules の import 解決・Tree Shaking・コード分割・最適化を行い、ブラウザで動くファイルを生成します。",
+  },
+
+  // lesson110: Vite の仕組み
+  {
+    id: "q239",
+    lesson: "lesson110",
+    difficulty: "normal",
+    question: "Vite が開発サーバーを高速に起動できる主な理由はどれですか？",
+    choices: [
+      "すべてのファイルを事前にバンドルするから",
+      "ネイティブ ES Modules をブラウザに直接配信し、変更があったファイルのみ変換するから",
+      "TypeScript を使わないから",
+      "React のレンダリングを最適化するから",
+    ],
+    answer: 1,
+    explanation:
+      "Vite はネイティブ ESM をブラウザに直接返し、必要なファイルのみをオンデマンドに変換します。全体バンドルが不要なため起動が速いです。",
+  },
+  {
+    id: "q240",
+    lesson: "lesson110",
+    difficulty: "hard",
+    question: "Vite の本番ビルドで使われるバンドラーはどれですか？",
+    choices: ["esbuild（開発と本番どちらも）", "Rollup / Rolldown", "Webpack", "Parcel"],
+    answer: 1,
+    explanation:
+      "Vite は開発時に esbuild（高速変換）、本番ビルドに Rollup（または次世代の Rolldown）を使います。Rollup の豊富なプラグインエコシステムを活用するためです。",
+  },
+
+  // lesson111: ESLint / Prettier / Biome
+  {
+    id: "q241",
+    lesson: "lesson111",
+    difficulty: "easy",
+    question: "ESLint の主な役割はどれですか？",
+    choices: [
+      "コードのインデントや改行を統一する",
+      "JavaScript / TypeScript のコードにバグや問題のあるパターンがないか静的解析する",
+      "ユニットテストを実行する",
+      "依存パッケージのバージョンを管理する",
+    ],
+    answer: 1,
+    explanation:
+      "ESLint はコードの静的解析（Linting）ツールです。未使用変数・潜在的バグ・スタイルルール違反などを検出します。フォーマットは Prettier や Biome が担います。",
+  },
+  {
+    id: "q242",
+    lesson: "lesson111",
+    difficulty: "normal",
+    question: "Biome がツールチェインとして提供するものはどれですか？",
+    choices: [
+      "テストランナーのみ",
+      "Linter（ESLint 相当）と Formatter（Prettier 相当）をワンツールで提供する",
+      "バンドラーのみ",
+      "パッケージマネージャーのみ",
+    ],
+    answer: 1,
+    explanation:
+      "Biome は Rust 製の高速ツールで、Linter と Formatter を単一のツールとして提供します。ESLint + Prettier の組み合わせをシンプルに置き換えられます。",
+  },
+
+  // lesson112: 次世代ツールチェイン
+  {
+    id: "q243",
+    lesson: "lesson112",
+    difficulty: "normal",
+    question: "Rolldown が Rollup と比べて優れているとされる点はどれですか？",
+    choices: [
+      "プラグインが多い",
+      "Rust で書かれており、バンドル処理が大幅に高速",
+      "ブラウザで直接動く",
+      "TypeScript を必要としない",
+    ],
+    answer: 1,
+    explanation:
+      "Rolldown は Rollup 互換の API を持ちながら Rust で実装されているため、バンドル速度が大幅に向上します。Vite の将来のバンドラーとして開発されています。",
+  },
+  {
+    id: "q244",
+    lesson: "lesson112",
+    difficulty: "hard",
+    question: "Turbopack が Next.js でデフォルトの開発サーバーになっている利点はどれですか？",
+    choices: [
+      "Webpack より機能が少ないため軽量",
+      "Rust ベースのインクリメンタルバンドルにより HMR が高速",
+      "ESLint のチェックが自動で走る",
+      "Tailwind CSS が自動で適用される",
+    ],
+    answer: 1,
+    explanation:
+      "Turbopack は Rust で書かれたインクリメンタルバンドラーで、変更があったファイルのみ再処理します。大規模プロジェクトで HMR（Hot Module Replacement）が速くなります。",
+  },
+
+  // lesson113: Git の基本操作
+  {
+    id: "q245",
+    lesson: "lesson113",
+    difficulty: "easy",
+    question: "Git でファイルの変更をステージングエリアに追加するコマンドはどれですか？",
+    choices: ["git commit -m '...'", "git push", "git add <ファイル名>", "git status"],
+    answer: 2,
+    explanation:
+      "`git add` でファイルの変更をステージングエリアに追加します。その後 `git commit` でコミットとして記録します。",
+  },
+  {
+    id: "q246",
+    lesson: "lesson113",
+    difficulty: "normal",
+    question: "Git でブランチを新しく作成して切り替えるコマンドはどれですか？",
+    choices: [
+      "git new feature-branch",
+      "git checkout -b feature-branch",
+      "git branch -m feature-branch",
+      "git switch --create feature-branch（または git checkout -b でも可）",
+    ],
+    answer: 3,
+    explanation:
+      "`git switch --create <branch>` または `git checkout -b <branch>` でブランチ作成と切り替えを同時に行えます。現在では `git switch -c` が推奨されます。",
+  },
+
+  // lesson114: GitHub の PR とコードレビュー
+  {
+    id: "q247",
+    lesson: "lesson114",
+    difficulty: "easy",
+    question: "GitHub の Pull Request（PR）の主な目的はどれですか？",
+    choices: [
+      "コードをリモートリポジトリに push する",
+      "変更をレビューしてもらい、承認後にブランチをマージする",
+      "ブランチを削除する",
+      "コミット履歴を編集する",
+    ],
+    answer: 1,
+    explanation:
+      "PR はブランチの変更をチームにレビューしてもらい、コメント・修正・承認のプロセスを経てメインブランチにマージするワークフローです。",
+  },
+  {
+    id: "q248",
+    lesson: "lesson114",
+    difficulty: "normal",
+    question: "GitHub でコードレビュー中に「Request Changes」を選ぶとどうなりますか？",
+    choices: [
+      "即座に PR がマージされる",
+      "PR の Author に修正が必要であることを伝え、マージをブロックする",
+      "PR を削除する",
+      "コメントなしで承認される",
+    ],
+    answer: 1,
+    explanation:
+      "「Request Changes」は修正が必要であることを示し、レビュアーが「Approve」するまでマージをブロックできます（ブランチ保護ルール設定時）。",
+  },
+
+  // lesson115: GitHub Actions で CI
+  {
+    id: "q249",
+    lesson: "lesson115",
+    difficulty: "easy",
+    question: "GitHub Actions のワークフローファイルを置く場所はどこですか？",
+    choices: [
+      ".github/workflows/*.yml",
+      "ci/*.yml",
+      "actions/*.yml",
+      ".circleci/config.yml",
+    ],
+    answer: 0,
+    explanation:
+      "GitHub Actions のワークフローは `.github/workflows/` ディレクトリに YAML ファイルとして置きます。",
+  },
+  {
+    id: "q250",
+    lesson: "lesson115",
+    difficulty: "normal",
+    question: "GitHub Actions で PR への push 時にワークフローをトリガーするイベントはどれですか？",
+    choices: [
+      "on: push",
+      "on: pull_request",
+      "on: merge",
+      "on: commit",
+    ],
+    answer: 1,
+    explanation:
+      "`on: pull_request` を指定するとプルリクエストの作成・更新時にワークフローがトリガーされます。",
+  },
+
+  // lesson116: CI/CD パイプラインの設計
+  {
+    id: "q251",
+    lesson: "lesson116",
+    difficulty: "normal",
+    question: "CI（Continuous Integration）の主な目的はどれですか？",
+    choices: [
+      "コードを自動でデプロイする",
+      "変更のたびにビルド・テストを自動実行し、問題を早期発見する",
+      "コードレビューを自動化する",
+      "依存パッケージを自動更新する",
+    ],
+    answer: 1,
+    explanation:
+      "CI はコードを頻繁にマージし、そのたびに自動でビルド・テストを実行することで、バグの早期発見とコードベースの品質維持を図ります。",
+  },
+  {
+    id: "q252",
+    lesson: "lesson116",
+    difficulty: "hard",
+    question: "CD（Continuous Delivery）と Continuous Deployment の違いはどれですか？",
+    choices: [
+      "Delivery は自動テスト、Deployment は手動テスト",
+      "Delivery は本番デプロイを人が承認、Deployment は本番まで自動化",
+      "Delivery はフロントエンド、Deployment はバックエンド用",
+      "違いはなく同じ意味",
+    ],
+    answer: 1,
+    explanation:
+      "Continuous Delivery はビルド・テスト後に本番デプロイを人が承認します。Continuous Deployment はそこまで自動化し、テスト通過後に自動で本番にデプロイします。",
+  },
+
+  // lesson117: React Hook Form
+  {
+    id: "q253",
+    lesson: "lesson117",
+    difficulty: "easy",
+    question: "React Hook Form の `register` 関数の役割はどれですか？",
+    choices: [
+      "フォームをサーバーに送信する",
+      "input 要素を React Hook Form に登録してバリデーション・値管理を委譲する",
+      "フォームをリセットする",
+      "エラーメッセージを表示する",
+    ],
+    answer: 1,
+    explanation:
+      "`register('fieldName', rules)` を input の ref / onChange / onBlur に展開することで、フォームフィールドを RHF に登録して管理できます。",
+  },
+  {
+    id: "q254",
+    lesson: "lesson117",
+    difficulty: "normal",
+    question: "React Hook Form が useState を使ったフォームより優れている点はどれですか？",
+    choices: [
+      "フォームのデザインが自動的に美しくなる",
+      "フィールド変更のたびに全体を再レンダリングしないため、パフォーマンスが高い",
+      "TypeScript が不要になる",
+      "HTML バリデーション属性（required など）を無視できる",
+    ],
+    answer: 1,
+    explanation:
+      "RHF は非制御コンポーネント（ref ベース）で動くため、入力のたびに React の再レンダリングが走りません。大きなフォームで特にパフォーマンス差が出ます。",
+  },
+
+  // lesson118: Zod
+  {
+    id: "q255",
+    lesson: "lesson118",
+    difficulty: "easy",
+    question: "Zod を使う主なメリットはどれですか？",
+    choices: [
+      "CSS の型安全を実現する",
+      "スキーマ定義から TypeScript の型と実行時バリデーションを両方得られる",
+      "データベースのマイグレーションを自動生成する",
+      "React の props 型を自動推論する",
+    ],
+    answer: 1,
+    explanation:
+      "Zod はスキーマを一度定義するだけで、TypeScript 型（`z.infer<typeof schema>`）と実行時のバリデーション（`schema.parse(data)`）を両方提供します。",
+  },
+  {
+    id: "q256",
+    lesson: "lesson118",
+    difficulty: "normal",
+    question: "Zod の `z.string().min(1).email()` の意味はどれですか？",
+    choices: [
+      "1 文字以上かつメールアドレス形式の文字列を期待する",
+      "空文字またはメールアドレスを許可する",
+      "数値のみ許可する",
+      "省略可能なメールフィールドを定義する",
+    ],
+    answer: 0,
+    explanation:
+      "`.min(1)` は 1 文字以上、`.email()` はメールアドレス形式の検証を追加します。両方のバリデーションを通過した文字列のみ受け入れます。",
+  },
+
+  // lesson119: 状態管理の地図
+  {
+    id: "q257",
+    lesson: "lesson119",
+    difficulty: "normal",
+    question: "状態管理において「サーバーキャッシュ状態」の管理に最も適したライブラリはどれですか？",
+    choices: ["Zustand", "Redux", "TanStack Query（React Query）", "useState"],
+    answer: 2,
+    explanation:
+      "TanStack Query はサーバーからのデータ取得・キャッシュ・再検証を専門に扱います。「サーバーキャッシュ状態」と「クライアント UI 状態」を分離することで管理がシンプルになります。",
+  },
+  {
+    id: "q258",
+    lesson: "lesson119",
+    difficulty: "hard",
+    question: "Zustand が Redux より「軽量」と言われる理由はどれですか？",
+    choices: [
+      "Zustand はパッケージサイズが 0 バイト",
+      "Reducer・Action・Dispatch などのボイラープレートが不要でシンプルな API",
+      "TypeScript をサポートしていない",
+      "React と組み合わせて使えない",
+    ],
+    answer: 1,
+    explanation:
+      "Zustand はストアを `create()` で定義するだけで動きます。Redux の Action / Reducer / Selector の分離が不要なため、コード量が少なくシンプルです。",
+  },
+
+  // lesson120: TanStack Query / Zustand 実践
+  {
+    id: "q259",
+    lesson: "lesson120",
+    difficulty: "normal",
+    question: "TanStack Query の `useQuery` が提供する主な機能はどれですか？",
+    choices: [
+      "フォームのバリデーション",
+      "データ取得・ローディング状態・エラー状態・キャッシュ管理を自動で処理する",
+      "グローバルな UI 状態の管理",
+      "データの永続化（localStorage への保存）",
+    ],
+    answer: 1,
+    explanation:
+      "`useQuery` はデータフェッチの実行・ローディング中/エラー/成功の状態管理・バックグラウンド再取得・キャッシュを自動で扱います。",
+  },
+  {
+    id: "q260",
+    lesson: "lesson120",
+    difficulty: "hard",
+    question: "TanStack Query でデータを変更（POST / PUT / DELETE）するために使うフックはどれですか？",
+    choices: ["useQuery", "useMutation", "useStore", "useAction"],
+    answer: 1,
+    explanation:
+      "`useMutation` はデータ変更のための非同期処理に使います。成功・エラー時のコールバックや楽観的更新もサポートします。",
+  },
+
+  // lesson121: Web Components 入門
+  {
+    id: "q261",
+    lesson: "lesson121",
+    difficulty: "normal",
+    question: "Web Components の主な 3 技術として正しい組み合わせはどれですか？",
+    choices: [
+      "React / Vue / Angular",
+      "Custom Elements / Shadow DOM / HTML Templates",
+      "TypeScript / Webpack / Babel",
+      "Service Worker / IndexedDB / WebSocket",
+    ],
+    answer: 1,
+    explanation:
+      "Web Components は Custom Elements（カスタムタグ定義）・Shadow DOM（カプセル化されたスタイル）・HTML Templates（再利用可能なマークアップ）の 3 技術から成ります。",
+  },
+  {
+    id: "q262",
+    lesson: "lesson121",
+    difficulty: "hard",
+    question: "Shadow DOM を使う主な目的はどれですか？",
+    choices: [
+      "コンポーネントの CSS とロジックをページの他の部分から完全に分離する",
+      "DOM を高速に検索する",
+      "仮想 DOM の代替として使う",
+      "アニメーションを GPU で処理する",
+    ],
+    answer: 0,
+    explanation:
+      "Shadow DOM はコンポーネント内部の DOM と CSS をカプセル化します。外部の CSS が内部に影響せず、内部の CSS も外部に漏れません。",
+  },
+
+  // lesson122: 環境変数とシークレット管理
+  {
+    id: "q263",
+    lesson: "lesson122",
+    difficulty: "easy",
+    question: "API キーなどの秘密情報を安全に管理する方法として正しいのはどれですか？",
+    choices: [
+      "ソースコードに直接ハードコードする",
+      "`.env.local` などの環境変数ファイルに書き、`.gitignore` でリポジトリから除外する",
+      "フロントエンドの JavaScript に埋め込む",
+      "README.md に記載する",
+    ],
+    answer: 1,
+    explanation:
+      "API キーはコードに書かず環境変数として管理し、`.env.local` は `.gitignore` でリポジトリ外に保ちます。本番は CI/CD やホスティングのシークレット機能を使います。",
+  },
+  {
+    id: "q264",
+    lesson: "lesson122",
+    difficulty: "normal",
+    question: "GitHub Actions でシークレットを安全に使う方法はどれですか？",
+    choices: [
+      "ワークフロー YAML に直接値を書く",
+      "GitHub Settings の Secrets に登録し、ワークフロー内で `${{ secrets.MY_KEY }}` で参照する",
+      "`.env` ファイルをリポジトリにコミットする",
+      "環境変数に `PUBLIC_` プレフィックスを付ける",
+    ],
+    answer: 1,
+    explanation:
+      "GitHub Secrets に登録した値はログに表示されません。ワークフロー内で `${{ secrets.シークレット名 }}` で安全に参照できます。",
+  },
+
+  // lesson123: フィーチャーフラグ
+  {
+    id: "q265",
+    lesson: "lesson123",
+    difficulty: "normal",
+    question: "フィーチャーフラグ（Feature Flag）を使う主な目的はどれですか？",
+    choices: [
+      "CSS のスタイルを動的に変える",
+      "コードをデプロイしたまま特定ユーザーや環境にだけ機能を有効化する",
+      "テストカバレッジを上げる",
+      "TypeScript の型チェックを強化する",
+    ],
+    answer: 1,
+    explanation:
+      "フィーチャーフラグを使うとコードはデプロイ済みでも機能の有効化を設定でコントロールできます。段階的ロールアウトや A/B テストに使われます。",
+  },
+  {
+    id: "q266",
+    lesson: "lesson123",
+    difficulty: "hard",
+    question: "フィーチャーフラグを使った「カナリアリリース」の説明として正しいのはどれですか？",
+    choices: [
+      "全ユーザーに一度に新機能を公開する",
+      "一部のユーザー（5% など）にだけ新機能を有効にして、問題がなければ段階的に広げる",
+      "開発環境だけで新機能を有効にする",
+      "古い機能を完全に削除する",
+    ],
+    answer: 1,
+    explanation:
+      "カナリアリリースは少数のユーザーに先行公開してリスクを最小化する戦略です。問題があれば全体公開前に検知して切り戻せます。",
+  },
+
+  // lesson124: CSP
+  {
+    id: "q267",
+    lesson: "lesson124",
+    difficulty: "normal",
+    question: "Content-Security-Policy（CSP）の主な目的はどれですか？",
+    choices: [
+      "HTTPS を強制する",
+      "読み込み可能なリソースの出所を制限して XSS などの攻撃を軽減する",
+      "Cookie を暗号化する",
+      "API レートリミットを設定する",
+    ],
+    answer: 1,
+    explanation:
+      "CSP は HTTP レスポンスヘッダーで、スクリプト・スタイル・画像などの読み込み元を制限します。インジェクション攻撃（XSS など）の被害を抑えます。",
+  },
+  {
+    id: "q268",
+    lesson: "lesson124",
+    difficulty: "hard",
+    question: "`Content-Security-Policy: script-src 'self'` の意味はどれですか？",
+    choices: [
+      "すべてのオリジンからスクリプトを読み込める",
+      "同一オリジンからのスクリプトのみ許可し、外部ドメインやインラインスクリプトをブロックする",
+      "インラインスクリプトのみ許可する",
+      "スクリプトを一切ブロックしない",
+    ],
+    answer: 1,
+    explanation:
+      "`script-src 'self'` は同一オリジンのスクリプトのみを許可します。CDN など外部ドメインのスクリプトやインラインの `<script>` はブロックされます。",
+  },
+
+  // lesson125: CORS の詳細
+  {
+    id: "q269",
+    lesson: "lesson125",
+    difficulty: "normal",
+    question: "CORS（Cross-Origin Resource Sharing）のプリフライトリクエストが発生する条件はどれですか？",
+    choices: [
+      "GET リクエストをするとき常に発生する",
+      "PUT / DELETE やカスタムヘッダーを含む「シンプルでないリクエスト」のとき",
+      "HTTPS を使うとき",
+      "Cookie を送るとき常に発生する",
+    ],
+    answer: 1,
+    explanation:
+      "プリフライト（OPTIONS リクエスト）はシンプルリクエスト（GET/POST + 標準ヘッダー）以外で発生します。PUT / DELETE・カスタムヘッダー・application/json などが該当します。",
+  },
+  {
+    id: "q270",
+    lesson: "lesson125",
+    difficulty: "hard",
+    question: "サーバーが `Access-Control-Allow-Origin: *` を返すとき、できないことはどれですか？",
+    choices: [
+      "GET リクエストにレスポンスを返す",
+      "Cookie を含むクレデンシャルリクエスト（`credentials: 'include'`）を受け付ける",
+      "JSON を返す",
+      "キャッシュを利用する",
+    ],
+    answer: 1,
+    explanation:
+      "`Access-Control-Allow-Origin: *`（ワイルドカード）ではクレデンシャル（Cookie / Authorization ヘッダー）を使うリクエストは許可されません。Cookie を含めるには特定のオリジンを指定する必要があります。",
+  },
+
+  // lesson126: 依存性セキュリティ
+  {
+    id: "q271",
+    lesson: "lesson126",
+    difficulty: "easy",
+    question: "`npm audit` を実行する目的はどれですか？",
+    choices: [
+      "インストール済みパッケージのパフォーマンスを測定する",
+      "依存パッケージに既知の脆弱性がないか確認する",
+      "未使用のパッケージを削除する",
+      "package.json の構文チェックを行う",
+    ],
+    answer: 1,
+    explanation:
+      "`npm audit` は npm registry の脆弱性データベースと照合し、インストール済みパッケージに既知のセキュリティ問題がないかレポートします。",
+  },
+  {
+    id: "q272",
+    lesson: "lesson126",
+    difficulty: "normal",
+    question: "GitHub Dependabot の役割はどれですか？",
+    choices: [
+      "本番サーバーを監視する",
+      "依存パッケージに脆弱性や新バージョンがあるとき自動で PR を作成する",
+      "コードレビューを自動化する",
+      "デプロイを自動化する",
+    ],
+    answer: 1,
+    explanation:
+      "Dependabot はリポジトリの依存関係を監視し、脆弱性の修正バージョンや新しいバージョンへの更新 PR を自動で作成します。",
+  },
+
+  // lesson127: OAuth / OIDC
+  {
+    id: "q273",
+    lesson: "lesson127",
+    difficulty: "normal",
+    question: "OAuth 2.0 の主な用途はどれですか？",
+    choices: [
+      "パスワードを暗号化して保存する",
+      "リソースへのアクセス権限を第三者アプリに委譲する",
+      "HTTPS 証明書を発行する",
+      "JWT トークンを生成する",
+    ],
+    answer: 1,
+    explanation:
+      "OAuth 2.0 は「Google アカウントでログイン」のように、ユーザーがパスワードを教えずに第三者アプリへアクセス権を委譲するための認可フレームワークです。",
+  },
+  {
+    id: "q274",
+    lesson: "lesson127",
+    difficulty: "hard",
+    question: "OIDC（OpenID Connect）が OAuth 2.0 に追加するものはどれですか？",
+    choices: [
+      "アクセストークンの有効期限を延ばす仕組み",
+      "認証（ユーザーが誰か）を確認するための ID トークン",
+      "リフレッシュトークンを廃止する",
+      "PKCE を不要にする",
+    ],
+    answer: 1,
+    explanation:
+      "OAuth 2.0 は認可（何ができるか）のプロトコルです。OIDC はその上に認証（誰か）を追加し、ユーザー情報を含む ID トークン（JWT）を発行します。",
+  },
+
+  // lesson128: JWT
+  {
+    id: "q275",
+    lesson: "lesson128",
+    difficulty: "normal",
+    question: "JWT（JSON Web Token）の構造として正しいのはどれですか？",
+    choices: [
+      "Header + Signature の 2 部",
+      "Header + Payload + Signature の 3 部をドット（.）で連結",
+      "Base64 エンコードされた JSON 1 つ",
+      "AES で暗号化されたバイナリデータ",
+    ],
+    answer: 1,
+    explanation:
+      "JWT は「Header.Payload.Signature」の 3 部で構成されます。Header と Payload は Base64URL エンコードされた JSON です。Signature で改ざん検知します。",
+  },
+  {
+    id: "q276",
+    lesson: "lesson128",
+    difficulty: "hard",
+    question: "JWT の Payload（クレーム）に含める情報として適切でないものはどれですか？",
+    choices: [
+      "ユーザー ID",
+      "トークンの有効期限（exp）",
+      "ユーザーのパスワード",
+      "ロール情報（admin / user など）",
+    ],
+    answer: 2,
+    explanation:
+      "JWT の Payload は Base64URL エンコードされているだけで暗号化されていません。誰でも読めるため、パスワードや機密情報を含めてはいけません。",
+  },
+
+  // lesson129: WebSocket と SSE
+  {
+    id: "q277",
+    lesson: "lesson129",
+    difficulty: "normal",
+    question: "WebSocket と HTTP の主な違いはどれですか？",
+    choices: [
+      "WebSocket は UDP を使う",
+      "WebSocket はハンドシェイク後に双方向の永続接続を維持でき、サーバーからもデータを push できる",
+      "WebSocket は画像配信専用",
+      "WebSocket は HTTP/2 で廃止された",
+    ],
+    answer: 1,
+    explanation:
+      "WebSocket はハンドシェイク（HTTP Upgrade）後に双方向の永続接続になります。チャット・リアルタイム更新などに使われます。",
+  },
+  {
+    id: "q278",
+    lesson: "lesson129",
+    difficulty: "hard",
+    question: "Server-Sent Events（SSE）と WebSocket の使い分けとして正しいのはどれですか？",
+    choices: [
+      "SSE は双方向通信、WebSocket は一方向通信",
+      "SSE はサーバーからクライアントへの一方向プッシュに向き、WebSocket は双方向通信が必要な場合に使う",
+      "SSE は UDP、WebSocket は TCP",
+      "違いはなくどちらでも同じ",
+    ],
+    answer: 1,
+    explanation:
+      "SSE は HTTP の `text/event-stream` を使い、サーバーからクライアントへの一方向プッシュを実現します。ニュースフィードや進捗通知に適しています。双方向が必要ならば WebSocket を使います。",
+  },
+
+  // lesson130: GraphQL と tRPC
+  {
+    id: "q279",
+    lesson: "lesson130",
+    difficulty: "normal",
+    question: "GraphQL が REST と比べて優れている点はどれですか？",
+    choices: [
+      "HTTP を使わない",
+      "クライアントが必要なフィールドだけを指定して取得でき、過不足なくデータを受け取れる",
+      "スキーマ定義が不要",
+      "認証が自動",
+    ],
+    answer: 1,
+    explanation:
+      "GraphQL ではクエリでフィールドを選択するため、オーバーフェッチ（不要なデータ取得）やアンダーフェッチ（複数リクエスト必要）を防げます。",
+  },
+  {
+    id: "q280",
+    lesson: "lesson130",
+    difficulty: "hard",
+    question: "tRPC を使う主なメリットはどれですか？",
+    choices: [
+      "REST API を GraphQL に自動変換する",
+      "TypeScript のみでフロントエンドとバックエンドの型を共有し、型安全な API 呼び出しを実現する",
+      "データベースの ORM として使える",
+      "GraphQL スキーマを自動生成する",
+    ],
+    answer: 1,
+    explanation:
+      "tRPC は TypeScript モノレポ内でサーバー側の手続き定義をフロント側で型安全に呼び出せます。スキーマ生成やコード生成が不要です。",
+  },
+
+  // lesson131: Service Worker
+  {
+    id: "q281",
+    lesson: "lesson131",
+    difficulty: "normal",
+    question: "Service Worker の主な役割はどれですか？",
+    choices: [
+      "DOM を操作してアニメーションを表示する",
+      "ブラウザとネットワークの間に割り込み、リクエストのキャッシュやオフライン対応を実現する",
+      "CSS を動的に生成する",
+      "WebGL グラフィックを処理する",
+    ],
+    answer: 1,
+    explanation:
+      "Service Worker はブラウザのバックグラウンドスクリプトで、ネットワークリクエストをインターセプトします。キャッシュ戦略によりオフライン動作や高速化を実現します。",
+  },
+  {
+    id: "q282",
+    lesson: "lesson131",
+    difficulty: "hard",
+    question: "Service Worker の「Cache First」キャッシュ戦略の説明として正しいのはどれですか？",
+    choices: [
+      "常にネットワークから取得し、成功したらキャッシュする",
+      "まずキャッシュを確認し、あればそれを返す。なければネットワークに取りに行く",
+      "キャッシュとネットワーク両方に同時リクエストし、速い方を返す",
+      "オフライン時にのみキャッシュを使う",
+    ],
+    answer: 1,
+    explanation:
+      "Cache First はパフォーマンス優先の戦略です。キャッシュヒット時はネットワークにアクセスしません。静的アセット（JS / CSS）に適しています。",
+  },
+
+  // lesson132: PWA manifest
+  {
+    id: "q283",
+    lesson: "lesson132",
+    difficulty: "easy",
+    question: "PWA（Progressive Web App）の Web App Manifest ファイルの主な役割はどれですか？",
+    choices: [
+      "Service Worker を登録する",
+      "アプリ名・アイコン・テーマカラーなどを定義し、ホーム画面へのインストールを可能にする",
+      "オフラインキャッシュを設定する",
+      "プッシュ通知の内容を定義する",
+    ],
+    answer: 1,
+    explanation:
+      "`manifest.json` にアプリ名・アイコン・表示モード・テーマカラーを定義することで、ブラウザが「ホーム画面に追加」を提示できるようになります。",
+  },
+  {
+    id: "q284",
+    lesson: "lesson132",
+    difficulty: "normal",
+    question: "PWA がネイティブアプリに近い体験を提供できる理由として正しいのはどれですか？",
+    choices: [
+      "Swift や Kotlin で書かれているから",
+      "Service Worker によるオフライン動作・プッシュ通知・ホーム画面インストールを組み合わせるから",
+      "GPU を直接利用するから",
+      "App Store で配布されるから",
+    ],
+    answer: 1,
+    explanation:
+      "PWA は Service Worker（オフライン・プッシュ）・Web App Manifest（インストール）・HTTPS の組み合わせにより、Web ベースでありながらネイティブに近い体験を提供できます。",
+  },
+
+  // lesson133: IndexedDB
+  {
+    id: "q285",
+    lesson: "lesson133",
+    difficulty: "easy",
+    question: "IndexedDB と localStorage の主な違いはどれですか？",
+    choices: [
+      "IndexedDB はサーバーサイドで使う",
+      "IndexedDB は大容量・構造化データを非同期で保存でき、localStorage より高機能",
+      "localStorage は IndexedDB より大容量",
+      "IndexedDB は Cookie と同じ仕組み",
+    ],
+    answer: 1,
+    explanation:
+      "IndexedDB はブラウザ内の非同期 NoSQL データベースです。大量データのインデックス検索・トランザクションが可能です。localStorage は同期・文字列のみ・容量制限（5MB 程度）があります。",
+  },
+  {
+    id: "q286",
+    lesson: "lesson133",
+    difficulty: "normal",
+    question: "IndexedDB を操作するとき、`idb` などのライブラリを使う主な理由はどれですか？",
+    choices: [
+      "IndexedDB はブラウザに直接アクセスできないから",
+      "ネイティブ API がイベントベースで扱いにくいため、Promise ベースのラッパーを使うと簡潔に書けるから",
+      "セキュリティ上の理由から直接使えないから",
+      "iOS では IndexedDB が使えないから",
+    ],
+    answer: 1,
+    explanation:
+      "IndexedDB のネイティブ API はコールバック / イベントベースで冗長です。`idb` などのラッパーライブラリを使うと Promise / async-await で簡潔に書けます。",
+  },
+
+  // lesson134: エラートラッキング（Sentry）
+  {
+    id: "q287",
+    lesson: "lesson134",
+    difficulty: "easy",
+    question: "Sentry のようなエラートラッキングツールを導入する主なメリットはどれですか？",
+    choices: [
+      "コードの自動修正",
+      "本番環境で発生したエラーを収集・集約し、スタックトレースや再現情報を確認できる",
+      "テストを自動生成する",
+      "バンドルサイズを削減する",
+    ],
+    answer: 1,
+    explanation:
+      "Sentry はクライアント / サーバー両方のエラーをリアルタイムで収集します。スタックトレース・ユーザー情報・コンテキストが集約されるため、本番バグの調査が効率化します。",
+  },
+  {
+    id: "q288",
+    lesson: "lesson134",
+    difficulty: "normal",
+    question: "Sentry でエラーが発生したときに「どのソースコードの何行目か」を特定するために必要なものはどれですか？",
+    choices: [
+      "TypeScript の型定義ファイル",
+      "Source Map（ソースマップ）",
+      "テストカバレッジレポート",
+      "ESLint の設定ファイル",
+    ],
+    answer: 1,
+    explanation:
+      "本番の minify されたコードだけではエラー箇所が分かりません。Source Map をアップロードすることで、Sentry がエラーを元のソースコードの行に対応させて表示します。",
+  },
+
+  // lesson135: Web Analytics
+  {
+    id: "q289",
+    lesson: "lesson135",
+    difficulty: "easy",
+    question: "Web Analytics（アナリティクス）を導入する主な目的はどれですか？",
+    choices: [
+      "コードのバグを検出する",
+      "ユーザーがどのページをどれだけ訪問しているかなどの行動データを収集・分析する",
+      "API のレスポンスタイムを測定する",
+      "A/B テストのコードを自動生成する",
+    ],
+    answer: 1,
+    explanation:
+      "Web Analytics はページビュー・セッション・ユーザー行動などを収集します。サイトの使われ方を把握してコンテンツや UX の改善に役立てます。",
+  },
+  {
+    id: "q290",
+    lesson: "lesson135",
+    difficulty: "normal",
+    question: "Vercel Analytics が Google Analytics と異なる特徴はどれですか？",
+    choices: [
+      "イベントトラッキングができない",
+      "プライバシーフレンドリーでクッキーレス計測が可能で、Vercel プロジェクトにすぐ統合できる",
+      "リアルタイムデータが見られない",
+      "Next.js でしか使えない",
+    ],
+    answer: 1,
+    explanation:
+      "Vercel Analytics はクッキーを使わずプライバシーに配慮した計測ができ、Vercel へのデプロイプロジェクトに数行で統合できます。Core Web Vitals も計測します。",
+  },
+
+  // lesson136: OGP と SEO 実践
+  {
+    id: "q291",
+    lesson: "lesson136",
+    difficulty: "easy",
+    question: "OGP（Open Graph Protocol）の `og:image` を設定すると何が変わりますか？",
+    choices: [
+      "Google の検索順位が上がる",
+      "SNS でページを共有したときにサムネイル画像が表示される",
+      "ページの読み込み速度が向上する",
+      "アクセシビリティが向上する",
+    ],
+    answer: 1,
+    explanation:
+      "`og:image` を設定することで、Twitter・Facebook・LINE などで URL を共有したときにサムネイル画像が表示されます。クリック率（CTR）向上につながります。",
+  },
+  {
+    id: "q292",
+    lesson: "lesson136",
+    difficulty: "normal",
+    question: "Next.js App Router で動的な OGP 画像を生成するために使えるものはどれですか？",
+    choices: [
+      "next/image コンポーネント",
+      "ImageResponse（next/og）",
+      "generateStaticParams",
+      "middleware.ts",
+    ],
+    answer: 1,
+    explanation:
+      "`next/og` の `ImageResponse` を使うと、Route Handler から JSX で記述した OGP 画像を動的に生成できます。",
+  },
+
+  // lesson137: AI を前提にした開発
+  {
+    id: "q293",
+    lesson: "lesson137",
+    difficulty: "easy",
+    question: "Claude Code が提供する主な機能はどれですか？",
+    choices: [
+      "Web サーバーとして動く",
+      "コードベースを読み書きし、ターミナルコマンドを実行できる AI コーディングアシスタント",
+      "デザインツール",
+      "データベース管理システム",
+    ],
+    answer: 1,
+    explanation:
+      "Claude Code はファイルの読み書き・コマンド実行・git 操作などをコンテキストとして把握しながら開発を支援する AI アシスタントです。",
+  },
+  {
+    id: "q294",
+    lesson: "lesson137",
+    difficulty: "normal",
+    question: "MCP（Model Context Protocol）の主な目的はどれですか？",
+    choices: [
+      "React コンポーネントの Props を定義する",
+      "AI モデルが外部ツール・データソースと標準化されたプロトコルで連携できるようにする",
+      "CSS の変数を定義する",
+      "HTTP/2 の多重化を管理する",
+    ],
+    answer: 1,
+    explanation:
+      "MCP は AI モデルが外部の API・データベース・ツールと安全かつ標準的に連携するためのプロトコルです。ツールの種類に依存しない汎用インターフェースを提供します。",
+  },
+  {
+    id: "q295",
+    lesson: "lesson137",
+    difficulty: "normal",
+    question: "Claude Code の Hooks 機能の主な用途はどれですか？",
+    choices: [
+      "React の useEffect と同じ",
+      "ファイル編集・コマンド実行などのイベントにシェルスクリプトを連携させ、ワークフローを自動化する",
+      "CSS アニメーションを定義する",
+      "ユーザー認証を管理する",
+    ],
+    answer: 1,
+    explanation:
+      "Claude Code の Hooks は PreToolUse / PostToolUse などのイベントにシェルスクリプトを登録できます。コミット前の自動チェックやフォーマットなどに使えます。",
+  },
+  {
+    id: "q296",
+    lesson: "lesson137",
+    difficulty: "hard",
+    question: "AI と協調した開発において「CLAUDE.md」ファイルを置く目的はどれですか？",
+    choices: [
+      "TypeScript の設定ファイル",
+      "プロジェクトの方針・規約を AI が読み込み、一貫した作業ができるようにするガイドファイル",
+      "CSS のグローバルスタイル",
+      "GitHub Actions のワークフロー定義",
+    ],
+    answer: 1,
+    explanation:
+      "CLAUDE.md にプロジェクト固有の規約・禁止事項・手順を書くことで、AI アシスタントがセッションをまたいで一貫した判断をできるようになります。",
+  },
+  {
+    id: "q297",
+    lesson: "lesson137",
+    difficulty: "normal",
+    question: "AI が生成したコードをそのままコミットすることのリスクとして正しいのはどれですか？",
+    choices: [
+      "AI は常に正確なので検証不要",
+      "AI のトレーニングデータに古い API や廃止された書き方が含まれる可能性があり、動作確認が必要",
+      "コードのインデントが崩れる",
+      "ライセンス情報が消える",
+    ],
+    answer: 1,
+    explanation:
+      "AI モデルの学習データには古いバージョンの API が含まれます。生成コードは必ず動作確認・型チェック・レビューを経てからコミットすることが重要です。",
+  },
+  {
+    id: "q298",
+    lesson: "lesson137",
+    difficulty: "hard",
+    question: "Claude Code の Skills（スラッシュコマンド）の説明として正しいのはどれですか？",
+    choices: [
+      "CSS のクラスを自動生成する機能",
+      "繰り返す作業手順をファイルに定義し、`/スキル名` で呼び出して実行できる再利用可能なワークフロー",
+      "npm パッケージを検索する機能",
+      "ブラウザの DevTools と連携する機能",
+    ],
+    answer: 1,
+    explanation:
+      "Skills は `.claude/commands/` に Markdown で手順を記述し、`/コマンド名` で呼び出せます。定型的な作業（リファクタリング手順など）をチーム間で共有できます。",
+  },
+  {
+    id: "q299",
+    lesson: "lesson137",
+    difficulty: "normal",
+    question: "AI を使った開発で「コンテキストウィンドウ」を意識する理由はどれですか？",
+    choices: [
+      "ウィンドウサイズによってコードの品質が変わるから",
+      "AI が一度に処理できるテキスト量に上限があり、超えると古い情報が失われるから",
+      "ブラウザのタブを管理するためのAPI だから",
+      "React の仮想 DOM と関係があるから",
+    ],
+    answer: 1,
+    explanation:
+      "AI モデルには処理できるトークン数（コンテキストウィンドウ）の上限があります。長い会話や大量のコードを扱う場合、古い情報が切り捨てられます。重要な情報は CLAUDE.md などに外部化することが有効です。",
+  },
+  {
+    id: "q300",
+    lesson: "lesson137",
+    difficulty: "hard",
+    question: "Claude Code の Sub-agent（サブエージェント）機能の主なメリットはどれですか？",
+    choices: [
+      "CSS のスタイルを自動生成する",
+      "独立したタスクを並列実行させ、メインのコンテキストを汚染せずに複雑な作業を分担できる",
+      "テストを完全に自動化する",
+      "データベースを直接操作できる",
+    ],
+    answer: 1,
+    explanation:
+      "Sub-agent はメインセッションとは別のコンテキストでタスクを実行します。独立した調査・ファイル操作を並列化したり、メインコンテキストを肥大化させずに作業を委譲できます。",
+  },
+];
