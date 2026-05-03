@@ -1,287 +1,338 @@
-# lesson126: OAuth / OIDC の概念
+# lesson125: 依存性セキュリティ（npm audit / Dependabot）
 
 ## ゴール
 
-- 「**認証**」と「**認可**」の違いを言える
-- OAuth 2.0 の **登場人物（Role）** を説明できる
-- OpenID Connect（OIDC）が「OAuth に **認証** を載せた拡張」だと分かる
-- Auth.js / NextAuth.js・Firebase Auth などの選択肢を把握している
-
-::: tip このレッスンの方針
-認証は「自前で実装すると事故りやすい」分野です。本講座では概念の地図 + 既存 SaaS / ライブラリの選び方に絞ります。実装は SaaS のドキュメントと併せて行うのが現実的。
-:::
+- 「依存パッケージ経由で攻撃される」という **サプライチェーン** リスクを理解する
+- `npm audit` のレポートを読み、優先度を判断できる
+- **Dependabot / Renovate** で更新を自動化できる
+- パッケージを採用する時の判断軸（DL 数 / メンテナンス / 依存の深さ）を持つ
+- ロックファイル / 整合性検証 / SBOM の役割を知る
 
 ## 解説
 
-### 認証 と 認可
+### サプライチェーン攻撃とは
 
-最初に区別すべき 2 つの言葉。
+「自分のコードは安全」でも、**依存している npm パッケージ** が改ざんされると、そのまま自分のサイトに **攻撃コードが配布** されます。実際に過去:
 
-| 用語 | 意味 |
+- `event-stream` 事件（2018）: 人気ライブラリの管理権限を譲り受けた攻撃者が暗号通貨ウォレット狙いのコードを混入
+- `colors.js` / `faker.js` 事件（2022）: 作者本人が抗議で暴走コードを混入
+- typosquatting: `react-doom`（react-dom の typo）のような偽パッケージ
+
+これらは npm 公式に公開されたパッケージ経由で広まります。**依存ツリー** が深くなるほど攻撃面が広がり、リスクも増します。
+
+### npm audit
+
+`npm audit` は **既知の脆弱性 DB**（GitHub Advisory Database） に対し、現在の依存ツリーをチェックします。
+
+```bash
+npm audit
+```
+
+出力例:
+
+```
+# npm audit report
+
+semver  <5.7.2
+Severity: high
+ReDoS in semver - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
+fix available via `npm audit fix`
+node_modules/semver
+
+5 vulnerabilities (2 high, 3 moderate)
+```
+
+### 重要度（Severity）
+
+| レベル | 対応の目安 |
 |---|---|
-| **認証**（Authentication, AuthN） | **誰** か（あなたは本当に山田さんか？） |
-| **認可**（Authorization, AuthZ） | **何ができる** か（山田さんはこのファイルを編集できるか？） |
+| **critical** | 即座に対応。本番が止まっても直す |
+| **high** | 計画的に修正、長くて 1 週間 |
+| **moderate** | 月次でまとめて対応 |
+| **low** | 余力で対応 |
 
-ID + パスワードでログインするのは認証。「管理者だけ /admin にアクセス可」は認可。**OAuth は本来 認可** で、**OIDC は 認証**。混乱の元なので、地図を頭に置いておきます。
+### `npm audit fix`
 
-### OAuth 2.0
+```bash
+npm audit fix
+```
 
-「**ユーザーがパスワードを渡さずに、第三者アプリに自分のリソースへのアクセスを認可** する」プロトコル。
+semver の範囲内で **自動アップデート** します。安全だが、メジャーバージョン更新が必要なケースは手動。
 
-例: 「**Spotify に Google フォトの写真を読ませる**」と言われた時、Spotify に Google パスワードを渡すのは危険。OAuth なら Google 上で認可するだけで、Spotify は **アクセストークン** を受け取って Google フォト API を叩けます。
+```bash
+npm audit fix --force
+```
 
-#### 登場する役割（Role）
+`--force` で **メジャーアップデート込み** で直してくれますが、**破壊的変更** が混じる可能性があります。CI / 動作確認とセットでないと危険。
 
-Auth.js を使う実装では、この 4 役を理解しておくと「どこで何が起きているか」が掴みやすくなります。
+### 「audit だけ」では足りない
 
-| 役 | 例 |
-|---|---|
-| **Resource Owner** | エンドユーザー（あなた） |
-| **Client** | アクセスするアプリ（Spotify） |
-| **Authorization Server** | 認可するサーバー（Google） |
-| **Resource Server** | API サーバー（Google フォト API） |
+`npm audit` の限界:
 
-<details>
-<summary>OAuth / OIDC の内部フロー（深掘り）</summary>
+- **devDependencies の脆弱性** がノイズになりやすい（本番に届かないものまで警告）
+- **fix なし** の脆弱性は手動で対処するしかない
+- **新しい脆弱性** は DB に登録された後に通知される（ゼロデイには無力）
 
-#### 認可コードフロー（推奨）
+**audit + 自動アップデート + パッケージ選定** の三本柱で補い合うのが現実的な対策です。
 
-OAuth 2.0 で最も使われ、安全とされるフロー。**Client の種類** によって `client_secret` の扱いが変わるので、2 つに分けて図解します。
+### Dependabot
 
-##### A. Confidential Client（サーバーアプリ / BFF）
+GitHub の純正サービス。**依存パッケージのバージョンを自動で PR 作成** してくれます。
 
-サーバーが安全に `client_secret` を保持できる場合（Next.js の Route Handler など）。
+`.github/dependabot.yml`:
 
-<img src="/diagrams/oauth-confidential-flow.svg" alt="Confidential Client の認可コードフロー: ユーザーがログインボタンを押すと Client がAuthorizationServerに/authorizeリダイレクト、ユーザーが認可すると認可コードが返り、ClientはそのコードとclientSecretで/tokenを叩きaccessTokenを取得する" class="diagram" />
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule:
+      interval: "weekly"
+    open-pull-requests-limit: 10
+    groups:
+      production:
+        dependency-type: "production"
+      development:
+        dependency-type: "development"
+```
 
-##### B. Public Client（ブラウザの SPA / ネイティブアプリ）
+毎週月曜に依存をチェックし、更新があれば PR を作ります。`production` / `development` でグループ化することで PR が散らばらず管理しやすくなります。セキュリティ脆弱性は常時監視されており、発見次第すぐ PR が来ます。
 
-`client_secret` を保持できない場合。代わりに **PKCE**（後述）を必ず使います。
+GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
 
-<img src="/diagrams/oauth-pkce-flow.svg" alt="PKCE を使った Public Client の認可コードフロー: SPA が verifier と challenge を生成し code_challenge 付きで/authorizeを呼ぶ、認可コードを受け取ったら verifier と一緒に/tokenを叩く。client_secret は不要" class="diagram" />
+### Renovate
 
-ポイント:
+[Renovate](https://docs.renovatebot.com/) は OSS の代替。Dependabot より **設定が柔軟** で、Bot が活発に開発されています。
 
-- **認可コード**（短命）→ アクセストークンに **サーバー側で交換**（A） / **PKCE で偽装防止**（B）
-- ブラウザに **直接トークン** を渡さない（漏洩リスクが下がる）
-- 現代の Web では **Auth.js / Clerk / Auth0 がこれを内部で組み立てる**
-
-#### Implicit Flow は非推奨
-
-ブラウザに直接トークンを返す **Implicit Flow** は古いやり方。**現代は使わない**。SPA であっても **Authorization Code Flow with PKCE** が推奨。
-
-#### PKCE（Proof Key for Code Exchange）
-
-「**認可コードが盗まれてもトークンに交換できない**」を実現する仕組み。
-
-1. クライアントが **ランダムな verifier** を生成
-2. その **ハッシュ**（challenge） を `/authorize` に渡す
-3. 認可コードを **/token に送る時に verifier を一緒に送る**
-4. 認可サーバーが challenge と一致するかを検証
-
-ネイティブアプリ / SPA で必須。Auth0 / Clerk などの SaaS は自動でやってくれます。
-
-</details>
-
-### OpenID Connect（OIDC）
-
-OAuth 2.0 は **認可** のフレームワーク。**「誰がログインしたか」** を扱う仕組みが標準化されていなかった。OIDC は OAuth 2.0 の上に **認証情報の規格** を載せたものです。
-
-OIDC は次を追加:
-
-- **`openid` スコープ**: OIDC を有効化
-- **ID Token**: 「**この人がログインした**」を表す JWT
-- **`/userinfo` エンドポイント**: ユーザープロフィール取得
-
-#### ID Token の中身
+`renovate.json`:
 
 ```json
 {
-  "iss": "https://accounts.google.com",   // 発行者
-  "sub": "user-123",                        // ユーザー ID
-  "aud": "my-client-id",                    // クライアント ID
-  "exp": 1714000000,                        // 有効期限
-  "iat": 1713999000,                        // 発行時刻
-  "email": "user@example.com",
-  "name": "山田太郎"
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": [
+    "config:recommended",
+    ":dependencyDashboard"
+  ],
+  "schedule": ["before 9am on monday"],
+  "packageRules": [
+    {
+      "matchPackagePatterns": ["^@types/"],
+      "groupName": "type definitions"
+    },
+    {
+      "matchUpdateTypes": ["patch", "minor"],
+      "automerge": true,
+      "minimumReleaseAge": "3 days"
+    }
+  ]
 }
 ```
 
-これに **署名** が付き、クライアントが **公開鍵で検証** することで「**確かに Google が発行した本物**」を確認できます。ID Token のフォーマットが **JWT** で、その構造とセキュリティは「JWT の構造とセキュリティ」のレッスンで詳しく扱います。
+`minimumReleaseAge` は「公開から指定日数が経過したバージョンだけ更新する」設定です。新しく公開されたパッケージには悪意あるコードが混入していることがあり、公開直後に自動マージすると気づく間もなく本番に入ってしまいます。3〜7 日待つことでコミュニティが問題を検知する時間を確保できます。
 
-### 既存 SaaS / ライブラリの位置付け
+Renovate の主な特徴:
 
-「**自前実装は避ける**」が現代の標準。代表的選択肢:
+- Group で複数パッケージをまとめて 1 PR に束ねられる
+- `automerge: true` で CI が通過すれば自動マージ（`minimumReleaseAge` と組み合わせて使う）
+- Dependency Dashboard という Issue で全更新を一覧できる
+- monorepo・Docker・GitHub Actions など npm 以外にも対応している
 
-| サービス / ライブラリ | 特徴 |
-|---|---|
-| **Auth0** | エンタープライズ標準。フロー / IdP 連携 / カスタムが豊富 |
-| **Clerk** | React / Next.js 専用、UI コンポーネントが秀逸。スタートアップで人気 |
-| **NextAuth.js**（Auth.js） | Next.js 用 OSS。OAuth プロバイダ多数、自前で動かせる |
-| **Supabase Auth** | DB + 認証セット。Postgres ベース |
-| **Firebase Authentication** | Google エコシステム。設定が簡単 |
-| **AWS Cognito** | AWS 系インフラと統合 |
-| **WorkOS** | エンタープライズ向け SAML / SSO |
-| **Lucia / better-auth** | より軽量、自前で書きたい時の OSS |
+「Dependabot は設定ゼロで使える標準選択肢、Renovate は細かく制御したい場合の選択肢」という使い分けが一般的です。
 
-選び方:
+### Socket と OSV-Scanner
 
-- **すぐ使いたい**: Clerk / Supabase
-- **エンタープライズ要件**（SAML / SCIM）: Auth0 / WorkOS
-- **OSS / ホストせず手元で**: NextAuth / better-auth
-- **既存インフラに揃える**: Cognito / Firebase
+audit では拾えない攻撃を補う 2 つのツール。
 
-### Passkeys（パスワードレス）
+#### Socket
 
-2024 年以降、Apple / Google / Microsoft が **Passkeys**（FIDO2 / WebAuthn）の普及を進めています。**パスワードを使わず、デバイスの生体認証で OIDC ログイン** できる仕組み。
+[socket.dev](https://socket.dev/) は **疑わしいパッケージの挙動** を静的解析で検知。`postinstall` でネットに繋いだ / 環境変数を読んだ / shell を起動した、などのフラグを立てます。
 
-```html
-<!-- 簡略 -->
-<script>
-const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
-</script>
+```bash
+npx @socketsecurity/cli scan
 ```
 
-主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
+GitHub Actions で **PR 単位** に新規依存をスキャンする運用も可能。
 
-### よくある事故
+#### OSV-Scanner（Google）
 
-- **JWT の検証を skip** していて偽造を許す → **必ず署名検証**
-- **localStorage にトークン** を入れて XSS で持ち出される → **HttpOnly Cookie** に
-- **Refresh Token が無期限** → 短命 + ローテートを徹底
-- **CORS で `Allow-Origin: *` + `Allow-Credentials: true`** → 仕様違反、CORS エラー
-- **redirect_uri が緩い**（`*` 許可）→ open redirect で攻撃可能
-- **state パラメータを検証していない** → CSRF 成立
+```bash
+npx osv-scanner -L package-lock.json
+```
 
-これらが起きやすいので、**SaaS の SDK** に従うのが安全です。
+OSV.dev という横断的脆弱性 DB を参照。Python / Go / Rust などにも使えます。
+
+### 整合性検証
+
+`package-lock.json` には各パッケージの **`integrity`** フィールドがあり、ハッシュで完全性を確認します。
+
+```json
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "integrity": "sha512-...",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz"
+  }
+}
+```
+
+`npm ci` は **lock の通りにそのままインストール** し、ハッシュが合わなければエラー。CI ではこれを使って改ざんを検知。
+
+### SBOM（Software Bill of Materials）
+
+「ソフトウェアの **部品表**」。何のパッケージをどのバージョンで使っているかを **機械可読な形式**（SPDX / CycloneDX） で出力します。
+
+```bash
+npm sbom --sbom-format=cyclonedx > sbom.json
+```
+
+なぜ必要:
+
+- 新しい脆弱性が報告された時、**自社のどのプロダクトが影響を受けるか** を即座に確認できる
+- 米国の調達基準では SBOM の提出を求めるケースが増えている
+
+GitHub には **Dependency Graph** が組み込みで、リポジトリの依存を可視化してくれます。
+
+### パッケージを採用する時の判断軸
+
+新しい npm パッケージを入れる時、次を見る習慣を。
+
+#### 1. ダウンロード数
+
+[npmtrends](https://npmtrends.com/) でダウンロード推移を確認。**月数百万 DL** あると安定。**急増** はバズ後で挙動が変わるかも、**減少** はメンテナンスが止まった可能性。
+
+#### 2. メンテナンスの頻度
+
+GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** をチェック。**3 ヶ月コミットがない** と要注意。
+
+#### 3. 依存の深さ
+
+`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
+
+#### 4. ライセンス
+
+MIT / Apache 2.0 / BSD は OK。**GPL** は公開要件があるので業務利用前に法務確認。
+
+#### 5. メンテナーの質
+
+GitHub の **メンテナー一覧** / セキュリティポリシーの整備状況。1 人で管理されているプロジェクトは、その人が離れたり悪意を持った瞬間にリスクが集中します。
+
+#### 6. 代替案
+
+「**標準で書ける** ことを依存追加で済ませていないか」を再検討。`Date.now()` / `fetch` / `Intl` / `Set` など、**ブラウザ / Node 標準で書ける** ものは依存を入れない方がよい。
+
+### ゼロデイへの備え
+
+audit に載る前の脆弱性（ゼロデイ）への対処は限定的:
+
+- **GitHub Advisory** をウォッチ
+- **新パッケージの即採用は避ける**（少なくとも数日寝かせる）
+- **`postinstall` を実行しないインストール**（`--ignore-scripts`）を CI で
+- **lockfile を厳しく**（`npm ci`、`pnpm install --frozen-lockfile`）
+
+### おすすめの基本セット
+
+最小構成:
+
+1. **Dependabot Alerts ON**（GitHub の Security タブ）
+2. **Dependabot version updates** で週次 PR
+3. **CI で `npm audit --omit=dev`** を実行（本番依存だけチェック）
+4. **`npm ci`** で lockfile 通りインストール
+5. **SBOM をビルド成果物に含める**（後で照会できる）
+
+これで「**最低限** のサプライチェーン対策」になります。
 
 ## 演習
 
 ### ゴール
 
-- NextAuth.js（Auth.js）で Google ログインを最小実装する
-- Auth.js が発行するセッション Cookie（JWE）を DevTools で確認する
+- `npm audit` を読む
+- Dependabot を有効にして PR が来る状態を作る
+- 新しいパッケージを採用する判断材料を集める
 
-### 手順 1: 新規 Next.js
-
-```bash
-npx create-next-app@latest auth-sample --ts --app
-cd auth-sample
-npm install next-auth
-```
-
-### 手順 2: Google OAuth クライアント作成
-
-[Google Cloud Console](https://console.cloud.google.com/) で:
-
-1. プロジェクトを作成
-2. APIs & Services → Credentials → OAuth 2.0 Client ID
-3. Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
-4. Client ID と Secret を控える
-
-### 手順 3: NextAuth の設定
-
-`.env.local`:
-
-```
-GOOGLE_CLIENT_ID=...
-GOOGLE_CLIENT_SECRET=...
-AUTH_SECRET=（任意のランダム文字列）
-AUTH_URL=http://localhost:3000
-```
-
-> **補足: 環境変数名は v5 で `AUTH_*` に変わった**: Auth.js v5（旧 NextAuth.js）では `NEXTAUTH_SECRET` / `NEXTAUTH_URL` が **`AUTH_SECRET` / `AUTH_URL` にリネーム**されました。v4 系のチュートリアルをコピペすると古い名前のまま動かないので注意します。`AUTH_SECRET` は `npx auth secret` でランダム生成できます。
-
-`auth.ts`:
-
-```ts
-import NextAuth from "next-auth";
-import Google from "next-auth/providers/google";
-
-export const { handlers, signIn, signOut, auth } = NextAuth({
-  providers: [
-    Google({
-      clientId: process.env.GOOGLE_CLIENT_ID!,
-      clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
-    }),
-  ],
-});
-```
-
-`app/api/auth/[...nextauth]/route.ts`:
-
-```ts
-import { handlers } from "@/auth";
-export const { GET, POST } = handlers;
-```
-
-`app/page.tsx`:
-
-```tsx
-import { signIn, signOut, auth } from "@/auth";
-
-export default async function Home() {
-  const session = await auth();
-
-  if (!session) {
-    return (
-      <main style={{ padding: 24 }}>
-        <form action={async () => { "use server"; await signIn("google"); }}>
-          <button>Google でログイン</button>
-        </form>
-      </main>
-    );
-  }
-
-  return (
-    <main style={{ padding: 24 }}>
-      <p>ようこそ {session.user?.name} さん</p>
-      <pre>{JSON.stringify(session, null, 2)}</pre>
-      <form action={async () => { "use server"; await signOut(); }}>
-        <button>ログアウト</button>
-      </form>
-    </main>
-  );
-}
-```
-
-### 手順 4: 起動
+### 手順 1: 既存プロジェクトで audit
 
 ```bash
-npm run dev
+cd /path/to/your-project
+npm audit
+npm audit --json | jq '.metadata.vulnerabilities'
 ```
 
-`http://localhost:3000` で Google ログインを試します。
+`.metadata.vulnerabilities` で重要度ごとの件数が JSON で見えます。
 
-### 手順 5: セッション Cookie を覗く
+### 手順 2: 自動修正を試す
 
-ブラウザの DevTools → Application → Cookies で **`authjs.session-token`** を確認。Auth.js v5 の既定では **JWE（暗号化 JWT）** で発行されるため、[jwt.io](https://jwt.io/) に貼っても **デコードできません**（暗号化されている）。これは「Cookie が盗まれても中身を読めない」セキュリティ目的です。
+```bash
+npm audit fix       # semver 範囲内で自動更新
+git diff package*.json
+```
 
-JWT の構造（JWS と JWE の違い・署名アルゴリズム）は「JWT の構造とセキュリティ」のレッスンで詳しく扱います。
+修正後は **必ず動作確認 + テスト**。
+
+### 手順 3: Dependabot を有効化
+
+`.github/dependabot.yml`:
+
+```yaml
+version: 2
+updates:
+  - package-ecosystem: "npm"
+    directory: "/"
+    schedule: { interval: "weekly" }
+    groups:
+      minor-and-patch:
+        update-types: ["minor", "patch"]
+```
+
+GitHub の **Settings → Code security → Dependabot alerts** を ON。`Settings → Code security → Dependabot security updates` も ON。
+
+### 手順 4: パッケージ採用の練習
+
+候補: `dayjs` / `date-fns` / `luxon`
+
+それぞれを次の観点で比較:
+
+- npmtrends の DL 推移
+- GitHub のメンテナンス頻度
+- Bundlephobia のサイズと依存
+- TypeScript 型定義の有無
+- ライセンス
+
+採用する 1 つを決めて、`npm install` する。
+
+### 手順 5: SBOM を出す
+
+```bash
+npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json
+ls -la sbom.json
+```
 
 ### 期待出力
 
-- Google ログインが成立し、セッション情報が表示される
-- Cookie に **`authjs.session-token`**（JWE）が入っている
-- jwt.io で **デコードできず警告** が出る（暗号化されているため正常）
+- `npm audit` で脆弱性の表が出る（または `0 vulnerabilities`）
+- Dependabot を有効化すると **数時間〜1 日で初回の PR / Alert** が来る
+- パッケージ比較の表ができ、採用根拠を説明できる
+- SBOM の JSON が生成される
 
 ### 変える
 
-- `Email` プロバイダ（マジックリンク）を追加
-- 複数プロバイダ（GitHub / Discord）を追加
-- ログイン後にしかアクセスできないルートを **Middleware で保護** する
+- `dependabot.yml` の `interval` を `daily` に変えて頻度を上げる
+- `automerge: true` のルールで patch 更新を自動マージにする
+- CI に `npm audit --omit=dev --audit-level=high` を追加して **high 以上で fail** にする
 
 ### 自分で書く（任意）
 
-- Clerk に置き換えて UI コンポーネントの体験を比較
-- Supabase Auth を試して DB / 認証統合の体験
-- Passkey 対応プロバイダ（WebAuthn）を有効にしてパスワードなしログイン
+- Renovate を導入し、Dashboard Issue で全更新を一覧する
+- Socket / OSV-Scanner を CI に組み込む
+- 自社で許可するライセンスを決め、許可外があれば fail するルールを CI に書く
 
 ## まとめ
 
-- **認証**（誰か） と **認可**（何ができるか） を区別する。OAuth は認可、OIDC は認証
-- **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準（Auth.js 等が内部で処理）
-- **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
-- **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
-- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
-- JWT の構造とセキュリティは「JWT の構造とセキュリティ」のレッスンで扱います
+- 自分のコードが安全でも **依存パッケージ経由** で攻撃される（サプライチェーン）
+- **`npm audit`** で既知の脆弱性をチェック。Severity に従って対応
+- 自動修正は `npm audit fix`、メジャー込みなら `--force`（要動作確認）
+- **Dependabot / Renovate** で依存更新を自動 PR 化
+- `npm audit` の補完に **Socket / OSV-Scanner**
+- **lockfile + `npm ci` + integrity** で改ざん検知
+- **SBOM** で「自社の何が影響を受けるか」を素早く特定
+- 新しいパッケージは **DL 数 / メンテ頻度 / 依存の深さ / ライセンス** で判断
+- 「**標準で書けるなら依存しない**」が最大の防御

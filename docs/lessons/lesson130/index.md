@@ -1,403 +1,540 @@
-# lesson130: Service Worker のライフサイクルとキャッシュ戦略
+# lesson129: GraphQL と tRPC の地図
 
 ## ゴール
 
-- Service Worker の特徴（DOM 不可・HTTPS 必須・同一オリジン）を説明できる
-- install / activate / fetch の 3 つのライフサイクルと `event.waitUntil()` の役割を理解する
-- Cache First・Network First・Stale While Revalidate など主要なキャッシュ戦略を使い分けられる
-- Workbox と `vite-plugin-pwa` でオフライン対応を実装できる
+- REST と **GraphQL** と **tRPC** の違いを 3 行で言える
+- GraphQL のクエリ / ミューテーション / サブスクリプションの最小例を読める
+- tRPC の「型安全な RPC」の考え方を理解する
+- 自分のプロジェクトで **どれを選ぶか** の判断軸を持つ
+- 関連エコシステム（Apollo Client / urql / Relay / GraphQL Yoga）の位置付けが分かる
 
 ## 解説
 
-### PWA とは
+### 3 つの選択肢
 
-「**Progressive Web App**」= Web を **アプリのように扱う** ための仕組みの総称。本講座のドキュメントサイト自体も `@vite-pwa/vitepress` で PWA 化済みで、デスクトップ / モバイルから **インストール** できます。
+API の設計には主に 3 つの流派があります。
 
-PWA の柱:
+| | スタイル | 特徴 |
+|---|---|---|
+| **REST** | リソース指向 + HTTP メソッド | 標準的、CDN キャッシュが効く |
+| **GraphQL** | スキーマ + クエリ言語 | 必要なフィールドだけ取得、複数リソース 1 リクエスト |
+| **tRPC** | 関数呼び出し + TypeScript | 型がそのまま伝わる、クライアント自動生成不要 |
 
-1. **Service Worker**（バックグラウンドのスクリプト）
-2. **Web App Manifest**（インストール時のメタデータ）
-3. **HTTPS**（必須）
-4. インストール可能 / オフライン対応 / 通知
+「**どれが正解** 」ではなく、**プロジェクトとチームに合わせて** 選びます。
 
-### Service Worker とは
+### REST のおさらいと弱み
 
-**ブラウザのバックグラウンドで動く、ネットワークプロキシ的な JavaScript**。ページから独立して動き、`fetch` イベントを **横取り** してキャッシュ応答 / カスタム応答ができます。
+```
+GET    /users/123          ← 取得
+POST   /users              ← 作成
+PUT    /users/123          ← 更新（全部）
+PATCH  /users/123          ← 更新（一部）
+DELETE /users/123          ← 削除
+```
+
+長所:
+
+- HTTP メソッドとパスで読みやすい
+- **CDN / プロキシのキャッシュ** が効く
+- 標準なのでツールが豊富（Postman / OpenAPI）
+
+弱み:
+
+- **取得しすぎ / 取得不足**（Over/Under fetching）。`GET /users/123` で名前しか要らないのにフルプロフィールが返る
+- **複数リソースのために何回も呼ぶ**（N+1 問題）
+- **バージョニングが面倒**（v1 / v2 / v3 を共存させる）
+
+### GraphQL
+
+「**1 つのエンドポイント**（POST /graphql）に **クエリ言語** を送って、必要なフィールドだけ取得する」考え方。Facebook が 2015 年に公開。
+
+#### スキーマ
+
+```graphql
+type User {
+  id: ID!
+  name: String!
+  email: String!
+  posts: [Post!]!
+}
+
+type Post {
+  id: ID!
+  title: String!
+  body: String!
+  author: User!
+}
+
+type Query {
+  user(id: ID!): User
+  posts(limit: Int = 10): [Post!]!
+}
+
+type Mutation {
+  createPost(title: String!, body: String!): Post!
+}
+
+type Subscription {
+  postAdded: Post!
+}
+```
+
+#### クエリ
+
+```graphql
+query {
+  user(id: "123") {
+    name
+    posts(limit: 5) {
+      title
+    }
+  }
+}
+```
+
+レスポンス:
+
+```json
+{
+  "data": {
+    "user": {
+      "name": "山田",
+      "posts": [{ "title": "Hello" }, { "title": "GraphQL 楽しい" }]
+    }
+  }
+}
+```
+
+ポイント:
+
+- **`name` と `posts.title` だけ** 要求 → サーバーはそれだけ返す（**Over fetch を防げる**）
+- **複数リソース**（user + posts） を 1 リクエストで取れる（**N+1 を防げる**）
+
+#### ミューテーション
+
+```graphql
+mutation {
+  createPost(title: "新記事", body: "本文") {
+    id
+    title
+  }
+}
+```
+
+書き込みは `mutation` で書きます（query との明示的な区別）。
+
+#### サブスクリプション
+
+```graphql
+subscription {
+  postAdded {
+    id
+    title
+  }
+}
+```
+
+WebSocket / SSE 上で **リアルタイムに新着を受信** できます。
+
+#### サーバー側の実装
+
+人気の選択肢:
+
+| ライブラリ | 特徴 |
+|---|---|
+| **Apollo Server** | フルスタック。エンタープライズ |
+| **GraphQL Yoga** | 軽量で速い。Next.js / Bun と相性 |
+| **Pothos / TypeGraphQL** | TypeScript 中心のスキーマ定義 |
+| **Hasura / PostGraphile** | DB から自動生成 |
+
+#### クライアント側の主な選択肢
+
+| ライブラリ | 特徴 |
+|---|---|
+| **Apollo Client** | キャッシュ機能が強い。エコシステム最大 |
+| **urql** | 軽量、設定がシンプル |
+| **Relay** | Meta 製。ページネーション / フラグメントで強力 |
+| **GraphQL Request** | 最小、シンプルな fetch ラッパー |
+| **graphql-codegen** | スキーマ → 型 / Hooks 自動生成 |
+
+#### 例: Apollo Client + Next.js
+
+```bash
+npm install @apollo/client graphql
+```
+
+```tsx
+import { ApolloClient, InMemoryCache, gql } from "@apollo/client";
+
+const client = new ApolloClient({
+  uri: "/api/graphql",
+  cache: new InMemoryCache(),
+});
+
+const data = await client.query({
+  query: gql`
+    query {
+      user(id: "123") { name }
+    }
+  `,
+});
+```
+
+#### GraphQL の弱み
+
+- **CDN キャッシュが効きにくい**（POST 1 本のため）
+- **学習コスト**（スキーマ言語、N+1 解決の DataLoader、フラグメント）
+- **小規模では過剰**（モノリスな自社 API なら REST / tRPC で十分）
+- **ファイルアップロード** は専用拡張が必要
+
+### tRPC
+
+「**TypeScript の関数を、そのままクライアントから呼ぶ**」発想。Next.js / TypeScript 専用と言って良い構造。
 
 特徴:
 
-- **DOM にアクセスできない**（ワーカー）
-- **HTTPS 必須**（localhost は例外）
-- **同一オリジン** に限定
-- **永続的** に動き、ページが閉じても残る（バックグラウンドで通知 / 同期）
+- **API スキーマを書かない**（TypeScript の型がスキーマ）
+- **クライアントが型を自動取得**（`import type` の延長）
+- **コード生成が要らない**
 
-### ライフサイクル
-
-3 つの状態を順に行き来します。
-
-<img src="/diagrams/sw-lifecycle.svg" alt="Service Worker のライフサイクル: install（事前キャッシュ）→ activate（古いキャッシュ削除）→ idle/fetch/message（リクエスト横取り・通知受信）。更新時は新 SW が install し、旧 SW 終了後に activate する。" class="diagram" />
-
-#### `install`
-
-「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
-
-`event.waitUntil(promise)` は、この Promise が解決するまでライフサイクルの遷移を保留する API です。キャッシュ保存が終わる前に SW がアクティブにならないよう制御するために使います。
-
-```js
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open("v1").then((cache) =>
-      cache.addAll(["/", "/index.html", "/styles.css", "/app.js"]),
-    ),
-  );
-});
-```
-
-#### `activate`
-
-「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
-
-```js
-self.addEventListener("activate", (event) => {
-  event.waitUntil(
-    caches.keys().then((keys) =>
-      Promise.all(keys.filter((k) => k !== "v1").map((k) => caches.delete(k))),
-    ),
-  );
-});
-```
-
-#### `fetch`
-
-「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
-
-```js
-self.addEventListener("fetch", (event) => {
-  event.respondWith(
-    caches.match(event.request).then((res) => res || fetch(event.request)),
-  );
-});
-```
-
-### キャッシュ戦略（Workbox 風）
-
-リソース別に **どんな順序でキャッシュ / ネットワークを使うか** を決める戦略。
-
-| 戦略 | 流れ | 適切なリソース |
-|---|---|---|
-| **CacheFirst** | キャッシュ → なければネット | フォント / 画像 / 不変アセット |
-| **NetworkFirst** | ネット → 失敗したらキャッシュ | API レスポンス / HTML（最新優先） |
-| **StaleWhileRevalidate** | キャッシュ即返却 + 裏でネット更新 | 一覧 / プロフィール画像（やや古くて OK） |
-| **NetworkOnly** | ネットのみ | POST / 認証など |
-| **CacheOnly** | キャッシュのみ | 完全オフライン専用ページ |
-
-#### CacheFirst の例
-
-```js
-self.addEventListener("fetch", (event) => {
-  if (event.request.destination === "image") {
-    event.respondWith(
-      caches.match(event.request).then((res) =>
-        res || fetch(event.request).then((networkRes) => {
-          const clone = networkRes.clone();
-          caches.open("images").then((c) => c.put(event.request, clone));
-          return networkRes;
-        }),
-      ),
-    );
-  }
-});
-```
-
-#### NetworkFirst の例
-
-```js
-self.addEventListener("fetch", (event) => {
-  if (event.request.url.includes("/api/")) {
-    event.respondWith(
-      fetch(event.request)
-        .then((res) => {
-          const clone = res.clone();
-          caches.open("api").then((c) => c.put(event.request, clone));
-          return res;
-        })
-        .catch(() => caches.match(event.request)),
-    );
-  }
-});
-```
-
-### Workbox
-
-Google が出している **キャッシュ戦略のヘルパー** ライブラリ。生で書くと冗長な処理を **数行で** 表現できます。
-
-```js
-// sw.js
-import { precacheAndRoute } from "workbox-precaching";
-import { registerRoute } from "workbox-routing";
-import { CacheFirst, NetworkFirst, StaleWhileRevalidate } from "workbox-strategies";
-import { ExpirationPlugin } from "workbox-expiration";
-
-precacheAndRoute(self.__WB_MANIFEST);
-
-registerRoute(
-  ({ request }) => request.destination === "image",
-  new CacheFirst({
-    cacheName: "images",
-    plugins: [new ExpirationPlugin({ maxEntries: 50, maxAgeSeconds: 30 * 24 * 3600 })],
-  }),
-);
-
-registerRoute(
-  ({ url }) => url.pathname.startsWith("/api/"),
-  new NetworkFirst({ cacheName: "api", networkTimeoutSeconds: 3 }),
-);
-
-registerRoute(
-  ({ request }) => request.destination === "script" || request.destination === "style",
-  new StaleWhileRevalidate({ cacheName: "assets" }),
-);
-```
-
-### Vite / Next.js での導入
-
-#### Vite + `vite-plugin-pwa`
-
-```bash
-npm install -D vite-plugin-pwa
-```
+#### サーバー側
 
 ```ts
-// vite.config.ts
-import { VitePWA } from "vite-plugin-pwa";
+// server/router.ts
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
 
-export default defineConfig({
-  plugins: [
-    VitePWA({
-      registerType: "autoUpdate",
-      manifest: {
-        name: "My App",
-        short_name: "App",
-        start_url: "/",
-        display: "standalone",
-        theme_color: "#1e40af",
-        icons: [
-          { src: "icon-192.png", sizes: "192x192", type: "image/png" },
-          { src: "icon-512.png", sizes: "512x512", type: "image/png" },
-        ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png,woff2}"],
-      },
+const t = initTRPC.create();
+
+export const appRouter = t.router({
+  hello: t.procedure
+    .input(z.object({ name: z.string() }))
+    .query(({ input }) => `Hello, ${input.name}`),
+
+  createPost: t.procedure
+    .input(z.object({ title: z.string(), body: z.string() }))
+    .mutation(async ({ input }) => {
+      // DB に保存
+      return { id: "p1", ...input };
     }),
-  ],
 });
+
+export type AppRouter = typeof appRouter;
 ```
 
-#### Next.js + `@ducanh2912/next-pwa` / `serwist`
-
-Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
-
-```bash
-npm install @serwist/next serwist
-```
-
-`next.config.ts`:
+#### Next.js の Route Handler に乗せる
 
 ```ts
-import withSerwistInit from "@serwist/next";
+// app/api/trpc/[trpc]/route.ts
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { appRouter } from "@/server/router";
 
-const withSerwist = withSerwistInit({
-  swSrc: "src/sw.ts",
-  swDest: "public/sw.js",
-});
+const handler = (req: Request) =>
+  fetchRequestHandler({
+    endpoint: "/api/trpc",
+    req,
+    router: appRouter,
+    createContext: () => ({}),
+  });
 
-export default withSerwist({});
+export { handler as GET, handler as POST };
 ```
 
-`src/sw.ts`:
+#### クライアント側
 
 ```ts
-import { defaultCache } from "@serwist/next/worker";
-import { Serwist } from "serwist";
+// utils/trpc.ts
+import { createTRPCContext } from "@trpc/tanstack-react-query";
+import type { AppRouter } from "@/server/router";
 
-declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
-
-new Serwist({
-  precacheEntries: self.__SW_MANIFEST,
-  skipWaiting: true,
-  clientsClaim: true,
-  navigationPreload: true,
-  runtimeCaching: defaultCache,
-}).addEventListeners();
+export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
 ```
 
-### オフライン対応
-
-最小例: ネットが切れた時に「オフライン画面」を出す。
-
-```js
-const OFFLINE_URL = "/offline.html";
-
-self.addEventListener("install", (event) => {
-  event.waitUntil(
-    caches.open("v1").then((c) => c.add(OFFLINE_URL)),
-  );
-});
-
-self.addEventListener("fetch", (event) => {
-  if (event.request.mode === "navigate") {
-    event.respondWith(
-      fetch(event.request).catch(() => caches.match(OFFLINE_URL)),
-    );
-  }
-});
+```tsx
+const trpc = useTRPC();
+const { data } = useQuery(trpc.hello.queryOptions({ name: "world" }));
+//        ^? string  ← サーバーから自動推論
 ```
 
-`/offline.html` は静的に **「オフラインです」** と書かれた HTML を置きます。
+ポイント:
 
-### よくある罠
+- 「**サーバーで関数を変えたら**、**クライアントの呼び出し側で即型エラー**」
+- IDE で **オートコンプリート** がそのまま効く
+- スキーマ言語を書かない / コード生成しない / **TypeScript ファースト**
 
-- **HTTPS でないと動かない**（localhost 以外）
-- **Service Worker は更新が反映されない問題**（古い SW がキャッシュを返し続ける）→ `skipWaiting()` + `clientsClaim()` を使う / **更新確認 UI** を入れる
-- **キャッシュが暴走** → `ExpirationPlugin` で件数 / 期間を制限
+### REST / GraphQL / tRPC の選び方
 
-### 確認ツール
+#### こういう時は **REST**
 
-- Chrome DevTools → **Application** タブ
-  - **Manifest**: マニフェストの内容
-  - **Service Workers**: 登録状態 / 更新ボタン
-  - **Cache Storage**: キャッシュの中身
-  - **Storage**: クォータと使用量
-- **Lighthouse** → PWA カテゴリ（インストール可能性 / オフライン動作のチェック）
-- [PWA Builder](https://www.pwabuilder.com/) でマニフェスト診断
+- 公開 API（外部の開発者向け / SDK 配布）
+- CDN キャッシュを最大限活かしたい
+- HTTP の知識だけで読める「**普通**」が欲しい
+- 多言語クライアント（iOS / Android / Web）でも動く
+
+#### こういう時は **GraphQL**
+
+- フロントから **複数リソースを 1 回で** 取りたい
+- フィールド過不足の最適化が大事
+- 大規模 / 多チーム（バックエンドとフロントの **契約** をスキーマで明示）
+- リアルタイム要件（Subscription）
+
+#### こういう時は **tRPC**
+
+- フロント / バックが **同じ TypeScript リポジトリ**
+- 自社専用 API（外部公開しない）
+- 型の一貫性を **何より優先** したい
+- 小〜中規模で **手数を最小** にしたい（Next.js + tRPC が定番）
+
+### 共存もアリ
+
+「**REST + tRPC**」「**GraphQL + tRPC**」のような組合せもよく見ます:
+
+- 公開 API は REST / GraphQL
+- 自社の Next.js 内部は tRPC
+
+「**外向き / 内向きで分ける**」のは現実的な解。
+
+### Server Components 時代の API
+
+Next.js の App Router では **Server Component が直接 DB を叩ける**（`async function` の中で `prisma.user.findFirst({...})`）ようになりました。これは **「Web フロントが API を呼ぶ」発想を崩します**。
+
+- 初期表示は **Server Component が直接 DB / 外部 API**
+- 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
+
+「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代です。
+
+### よくある質問
+
+#### 「GraphQL は重い」は本当？
+
+DataLoader を使った **N+1 対策** をやれば、REST の何倍も軽くなることもあります。逆に **無対策だと重い**。エコシステムの知識が要る。
+
+#### 「tRPC は本番に強い？」
+
+Vercel / T3 Stack（Next.js + tRPC + Prisma）は実本番で多数事例あり。エンタープライズの大規模では **tRPC v11 + Server Actions** で十分。
+
+#### REST + Zod + OpenAPI で似たことができる？
+
+できます。`tsoa` / `zod-openapi` / `Hono + zod-openapi` で **REST に型** を載せた構成は最近人気。**「tRPC 風 REST」** と呼ばれます。
 
 ## 演習
 
 ### ゴール
 
-- Vite プロジェクトに `vite-plugin-pwa` を入れて PWA 化
-- 自前の Service Worker を書いて **オフライン fallback** を実装
-- ホーム画面追加 / Lighthouse の PWA 診断を通す
+- 同じ「**ユーザー一覧 + 詳細**」を REST / GraphQL / tRPC の **3 通り** で書いて比較する
+- それぞれの **コード量 / 型の通り方 / DX** を体感する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: ベースの Next.js
 
 ```bash
-npm create vite@latest pwa-sample -- --template react-ts
-cd pwa-sample
-npm install
-npm install -D vite-plugin-pwa
+npx create-next-app@latest api-styles --ts --app
+cd api-styles
 ```
 
-### 手順 2: vite.config.ts
+### 手順 2: REST 版
+
+`app/api/users/route.ts`:
 
 ```ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import { VitePWA } from "vite-plugin-pwa";
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
 
-export default defineConfig({
-  plugins: [
-    react(),
-    VitePWA({
-      registerType: "autoUpdate",
-      manifest: {
-        name: "PWA Sample",
-        short_name: "PWA",
-        start_url: "/",
-        display: "standalone",
-        theme_color: "#1e40af",
-        background_color: "#ffffff",
-        icons: [
-          { src: "/pwa-192.png", sizes: "192x192", type: "image/png" },
-          { src: "/pwa-512.png", sizes: "512x512", type: "image/png" },
-        ],
-      },
-      workbox: {
-        globPatterns: ["**/*.{js,css,html,svg,png}"],
-        navigateFallback: "/offline.html",
-        runtimeCaching: [
-          {
-            urlPattern: /^https:\/\/fonts\.googleapis\.com/,
-            handler: "StaleWhileRevalidate",
-            options: { cacheName: "google-fonts-stylesheets" },
-          },
-          {
-            urlPattern: /^https:\/\/fonts\.gstatic\.com/,
-            handler: "CacheFirst",
-            options: {
-              cacheName: "google-fonts-webfonts",
-              expiration: { maxEntries: 30, maxAgeSeconds: 60 * 60 * 24 * 365 },
-            },
-          },
-        ],
-      },
-    }),
-  ],
-});
+export async function GET() {
+  return Response.json(users);
+}
 ```
 
-### 手順 3: オフラインページ
+`app/users-rest/page.tsx`:
 
-`public/offline.html`:
+```tsx
+type User = { id: string; name: string; email: string };
 
-```html
-<!doctype html>
-<html lang="ja">
-  <head><meta charset="UTF-8"><title>オフライン</title></head>
-  <body>
-    <h1>オフラインです</h1>
-    <p>ネットワークに接続してください</p>
-  </body>
-</html>
+export default async function Page() {
+  const res = await fetch("http://localhost:3000/api/users", { cache: "no-store" });
+  const users: User[] = await res.json();
+  return (
+    <ul>
+      {users.map((u) => (
+        <li key={u.id}>{u.name}</li>
+      ))}
+    </ul>
+  );
+}
 ```
 
-`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
+REST は **クライアント側で型** を別途定義するのがネック（ずれると壊れる）。
 
-### 手順 4: ビルドとプレビュー
+### 手順 3: tRPC 版
 
 ```bash
-npm run build
-npm run preview
+npm install @trpc/server @trpc/client @trpc/tanstack-react-query @tanstack/react-query zod superjson
 ```
 
-`http://localhost:4173` で開いて DevTools の Application タブを確認。
+> tRPC v11 では `@trpc/tanstack-react-query` 統合が推奨です（旧 `@trpc/react-query` も動きますが「Classic」扱い）。
 
-1. **Service Workers**: SW が登録されている
-2. **Manifest**: フィールドが反映されている
-3. ネットを **Offline** に切り替えて再読込 → `offline.html` が表示される
+`server/router.ts`:
 
-### 手順 5: Lighthouse で PWA 診断
+```ts
+import { initTRPC } from "@trpc/server";
+import { z } from "zod";
 
-DevTools → Lighthouse → PWA カテゴリで実行。**インストール可能性** が緑になっていることを確認。
+const t = initTRPC.create();
+
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
+
+export const appRouter = t.router({
+  listUsers: t.procedure.query(() => users),
+  getUser: t.procedure.input(z.object({ id: z.string() })).query(({ input }) =>
+    users.find((u) => u.id === input.id),
+  ),
+});
+
+export type AppRouter = typeof appRouter;
+```
+
+`app/api/trpc/[trpc]/route.ts`:
+
+```ts
+import { fetchRequestHandler } from "@trpc/server/adapters/fetch";
+import { appRouter } from "@/server/router";
+
+const handler = (req: Request) =>
+  fetchRequestHandler({
+    endpoint: "/api/trpc",
+    req,
+    router: appRouter,
+    createContext: () => ({}),
+  });
+
+export { handler as GET, handler as POST };
+```
+
+`utils/trpc.ts`:
+
+```ts
+import { createTRPCContext } from "@trpc/tanstack-react-query";
+import type { AppRouter } from "@/server/router";
+
+export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
+```
+
+`app/providers.tsx`:
+
+```tsx
+"use client";
+import { useState } from "react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { httpBatchLink, createTRPCClient } from "@trpc/client";
+import { TRPCProvider } from "@/utils/trpc";
+import type { AppRouter } from "@/server/router";
+
+export function Providers({ children }: { children: React.ReactNode }) {
+  const [queryClient] = useState(() => new QueryClient());
+  const [trpcClient] = useState(() =>
+    createTRPCClient<AppRouter>({
+      links: [httpBatchLink({ url: "/api/trpc" })],
+    }),
+  );
+  return (
+    <QueryClientProvider client={queryClient}>
+      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
+        {children}
+      </TRPCProvider>
+    </QueryClientProvider>
+  );
+}
+```
+
+`app/layout.tsx` で `<Providers>` でラップし、`app/users/page.tsx` では:
+
+```tsx
+"use client";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/utils/trpc";
+
+export default function UsersPage() {
+  const trpc = useTRPC();
+  const { data, isLoading } = useQuery(trpc.listUsers.queryOptions());
+  if (isLoading) return <p>読込中...</p>;
+  return (
+    <ul>
+      {data?.map((u) => (
+        <li key={u.id}>{u.name} — {u.email}</li>
+      ))}
+    </ul>
+  );
+}
+```
+
+`trpc.listUsers.queryOptions()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
+
+### 手順 4: GraphQL 版
+
+```bash
+npm install graphql graphql-yoga
+```
+
+`app/api/graphql/route.ts`:
+
+```ts
+import { createYoga, createSchema } from "graphql-yoga";
+
+const users = [
+  { id: "1", name: "Alice", email: "a@example.com" },
+  { id: "2", name: "Bob", email: "b@example.com" },
+];
+
+const yoga = createYoga({
+  schema: createSchema({
+    typeDefs: `
+      type User { id: ID! name: String! email: String! }
+      type Query { users: [User!]! user(id: ID!): User }
+    `,
+    resolvers: {
+      Query: {
+        users: () => users,
+        user: (_: unknown, { id }: { id: string }) => users.find((u) => u.id === id),
+      },
+    },
+  }),
+  graphqlEndpoint: "/api/graphql",
+  fetchAPI: { Response },
+});
+
+export const GET = yoga;
+export const POST = yoga;
+```
+
+`http://localhost:3000/api/graphql` で GraphiQL が開いてクエリを試せます。
 
 ### 期待出力
 
-- アドレスバーに **インストールアイコン** が出る
-- ホーム画面 / アプリ一覧から起動可能
-- オフラインで `/offline.html` が表示される
-- Lighthouse の PWA カテゴリが緑
+- 3 通りで同じデータが取得できる
+- tRPC 版は **クライアント側に型を一切書かない** のに型が通る
+- GraphQL 版は **必要なフィールドだけ** 要求する記述ができる
 
 ### 変える
 
-- `runtimeCaching` で API URL を `NetworkFirst` でキャッシュ
-- `manifest.shortcuts` を追加して **長押しメニュー** を作る
-- `purpose: "maskable"` のアイコンを追加して、Android で円形にトリミングされる挙動を確認
+- tRPC で `getUser` を呼んでみる。`input` を間違えると **クライアントの型エラー** が出ることを確認
+- GraphQL で **複数リソース** を 1 リクエストで取得する（user + その投稿）
+- REST に Zod を入れて、レスポンスの型を保証する
 
 ### 自分で書く（任意）
 
-- `IndexedDB` を使って、オフラインで作成したデータを再接続時に同期する
-- `ExpirationPlugin` でキャッシュの有効期限と最大件数を設定する
-- Lighthouse の PWA カテゴリで全項目が緑になるよう診断結果を改善する
+- T3 Stack（Next.js + tRPC + Prisma + Tailwind）の最小例を作る
+- 既存の REST API を GraphQL でラップする（Apollo / Yoga）
+- 公開 API を REST、内部 API を tRPC、で分ける構成を作る
 
 ## まとめ
 
-- **Service Worker** は **install / activate / fetch** のライフサイクルで動く
-- `event.waitUntil()` で Promise が完了するまでライフサイクルの遷移を保留できる
-- キャッシュ戦略は **CacheFirst / NetworkFirst / StaleWhileRevalidate / NetworkOnly / CacheOnly** から選ぶ
-- **Workbox** で戦略の記述が劇的に短くなる
-- Vite は `vite-plugin-pwa`、Next.js は `@serwist/next` が定番
-- **`navigateFallback`** で **オフラインページ** を出せる
-- DevTools の Application タブと **Lighthouse PWA** で診断
-
-Web Push 通知とインストール設定は「PWA の通知・インストール・manifest」のレッスンで扱います。
+- **REST** は標準で **CDN キャッシュが効く**。公開 API / 多言語クライアントに強い
+- **GraphQL** は **必要なフィールドだけ** / **複数リソース 1 回**。大規模・多チーム / リアルタイム
+- **tRPC** は **型がそのまま伝わる**。Next.js + TypeScript モノレポで圧倒的 DX
+- **どれが正解** ではなく、プロジェクトとチームに合わせて選ぶ
+- 共存（外向き REST + 内向き tRPC）も実用解
+- Next.js App Router の **Server Components / Server Actions** が「API すら不要」の選択肢として加わった

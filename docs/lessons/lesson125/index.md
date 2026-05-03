@@ -1,338 +1,427 @@
-# lesson125: 依存性セキュリティ（npm audit / Dependabot）
+# lesson124: CORS の詳細
 
 ## ゴール
 
-- 「依存パッケージ経由で攻撃される」という **サプライチェーン** リスクを理解する
-- `npm audit` のレポートを読み、優先度を判断できる
-- **Dependabot / Renovate** で更新を自動化できる
-- パッケージを採用する時の判断軸（DL 数 / メンテナンス / 依存の深さ）を持つ
-- ロックファイル / 整合性検証 / SBOM の役割を知る
+- 同一オリジンポリシーと CORS（Cross-Origin Resource Sharing）の関係を説明できる
+- **シンプルリクエスト** と **プリフライト**（OPTIONS）の違いを区別できる
+- `Access-Control-Allow-Origin` / `Allow-Credentials` / `Allow-Headers` の使い分けが分かる
+- `credentials: "include"` と Cookie の絡みを理解する
+- よくある CORS エラーを **メッセージから即座に原因に到達** できる
 
 ## 解説
 
-### サプライチェーン攻撃とは
+### 同一オリジンポリシーの復習
 
-「自分のコードは安全」でも、**依存している npm パッケージ** が改ざんされると、そのまま自分のサイトに **攻撃コードが配布** されます。実際に過去:
+ブラウザは「**異なるオリジン** からの応答を JS に渡さない」という規則（同一オリジンポリシー）を持っています。
 
-- `event-stream` 事件（2018）: 人気ライブラリの管理権限を譲り受けた攻撃者が暗号通貨ウォレット狙いのコードを混入
-- `colors.js` / `faker.js` 事件（2022）: 作者本人が抗議で暴走コードを混入
-- typosquatting: `react-doom`（react-dom の typo）のような偽パッケージ
+オリジン = `スキーム + ホスト + ポート`。
 
-これらは npm 公式に公開されたパッケージ経由で広まります。**依存ツリー** が深くなるほど攻撃面が広がり、リスクも増します。
+| URL A | URL B | 同一オリジン？ |
+|---|---|---|
+| `https://example.com` | `https://example.com/api` | はい |
+| `https://example.com` | `http://example.com` | **いいえ**（スキームが違う） |
+| `https://example.com` | `https://api.example.com` | **いいえ**（ホストが違う） |
+| `https://example.com:443` | `https://example.com:8080` | **いいえ**（ポートが違う） |
 
-### npm audit
+### CORS = 「異なるオリジンからの読み取りを **明示的に許可**」
 
-`npm audit` は **既知の脆弱性 DB**（GitHub Advisory Database） に対し、現在の依存ツリーをチェックします。
+API がブラウザから直接呼ばれる現代では、別オリジンから読みたい場面が多発します。CORS は「**サーバー側がレスポンスヘッダで許可を出した時** に限り、ブラウザが JS にレスポンスを渡す」仕組みです。
 
-```bash
-npm audit
+ポイント:
+
+- **送信は誰でもできる**（リクエスト自体はブラウザが送る）
+- **応答を JS が読めるかどうか** は CORS ヘッダ次第
+- だから **CSRF とは別問題**（CSRF は送信を防ぐ話）
+
+### シンプルリクエスト
+
+GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエストは、ブラウザが直接送信します。
+
+条件（ざっくり）:
+
+- メソッドは GET / POST / HEAD
+- カスタムヘッダなし
+- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
+
+例:
+
+```js
+fetch("https://api.example.com/posts");
 ```
 
-出力例:
+サーバーは応答に CORS ヘッダを返す:
 
-```
-# npm audit report
-
-semver  <5.7.2
-Severity: high
-ReDoS in semver - https://github.com/advisories/GHSA-c2qf-rxjj-qqgw
-fix available via `npm audit fix`
-node_modules/semver
-
-5 vulnerabilities (2 high, 3 moderate)
+```http
+HTTP/1.1 200 OK
+Access-Control-Allow-Origin: https://my-site.example
+Content-Type: application/json
 ```
 
-### 重要度（Severity）
+`Access-Control-Allow-Origin` がリクエスト元オリジンと一致 / `*` ならブラウザが JS に応答を渡す。一致しなければ **JS から読めずエラー**。
 
-| レベル | 対応の目安 |
+### プリフライト（OPTIONS）
+
+メソッドが PUT / DELETE / PATCH、または `Content-Type: application/json` のような **シンプルでない** リクエストは、ブラウザが **本リクエストの前に OPTIONS** を送って許可を確認します。
+
+<img src="/diagrams/cors-preflight-sequence.svg" alt="プリフライトの時系列: ブラウザが OPTIONS を送り、サーバーが Allow ヘッダ付き 204 を返すと本リクエストが許可される。拒否時は本リクエストがブロックされる。シンプルリクエストは OPTIONS なし。" class="diagram" />
+
+```
+OPTIONS /posts HTTP/1.1
+Origin: https://my-site.example
+Access-Control-Request-Method: PUT
+Access-Control-Request-Headers: Content-Type, Authorization
+```
+
+サーバーが応答:
+
+```
+HTTP/1.1 204 No Content
+Access-Control-Allow-Origin: https://my-site.example
+Access-Control-Allow-Methods: GET, POST, PUT, DELETE
+Access-Control-Allow-Headers: Content-Type, Authorization
+Access-Control-Max-Age: 3600
+```
+
+OPTIONS の応答が **OK + 適切なヘッダ** ならブラウザは本リクエストを送る。NG なら本リクエストは飛ばない。
+
+#### `Access-Control-Max-Age`
+
+OPTIONS の結果を **キャッシュする秒数**。これがないとリクエストごとに OPTIONS が走って遅くなります。`3600`（1 時間）程度が目安。
+
+### 主要ヘッダ
+
+#### サーバー → ブラウザ（応答）
+
+| ヘッダ | 内容 |
 |---|---|
-| **critical** | 即座に対応。本番が止まっても直す |
-| **high** | 計画的に修正、長くて 1 週間 |
-| **moderate** | 月次でまとめて対応 |
-| **low** | 余力で対応 |
+| `Access-Control-Allow-Origin` | 許可するオリジン（または `*`） |
+| `Access-Control-Allow-Methods` | 許可するメソッド |
+| `Access-Control-Allow-Headers` | 許可するリクエストヘッダ |
+| `Access-Control-Allow-Credentials` | Cookie / Authorization を含むリクエストを許可するか |
+| `Access-Control-Expose-Headers` | JS から読めるレスポンスヘッダの追加リスト |
+| `Access-Control-Max-Age` | プリフライトのキャッシュ秒 |
 
-### `npm audit fix`
+#### ブラウザ → サーバー（リクエスト）
 
-```bash
-npm audit fix
+| ヘッダ | 内容 |
+|---|---|
+| `Origin` | リクエスト元オリジン（**ブラウザが自動付与、JS から偽装不能**） |
+| `Access-Control-Request-Method` | プリフライト時の本来のメソッド |
+| `Access-Control-Request-Headers` | プリフライト時の本来のヘッダ |
+
+### Cookie / 認証ヘッダを含めるには
+
+デフォルトで `fetch` は **クロスオリジンで Cookie を送らない**。送る場合は **両側に追加設定** が必要です。
+
+#### クライアント側
+
+```js
+fetch("https://api.example.com/me", {
+  credentials: "include",   // Cookie / Authorization を送る
+});
 ```
 
-semver の範囲内で **自動アップデート** します。安全だが、メジャーバージョン更新が必要なケースは手動。
+`credentials` の値:
 
-```bash
-npm audit fix --force
+- `"omit"`: 送らない（デフォルトのクロスオリジン）
+- `"same-origin"`: 同一オリジンの時だけ送る（デフォルトの同一オリジン）
+- `"include"`: 常に送る（クロスオリジンでも）
+
+#### サーバー側
+
+```
+Access-Control-Allow-Origin: https://my-site.example
+Access-Control-Allow-Credentials: true
 ```
 
-`--force` で **メジャーアップデート込み** で直してくれますが、**破壊的変更** が混じる可能性があります。CI / 動作確認とセットでないと危険。
+**重要な制約**:
 
-### 「audit だけ」では足りない
+- `Allow-Credentials: true` の時、`Allow-Origin: *` は **使えない**。**具体的なオリジン** を返す必要がある
+- `Access-Control-Allow-Origin` に複数のオリジンは並べられない（`*` か **1 つだけ**）
 
-`npm audit` の限界:
+複数許可したい場合は **リクエストの Origin を見て動的に返す**:
 
-- **devDependencies の脆弱性** がノイズになりやすい（本番に届かないものまで警告）
-- **fix なし** の脆弱性は手動で対処するしかない
-- **新しい脆弱性** は DB に登録された後に通知される（ゼロデイには無力）
+```ts
+const allowed = [
+  "https://my-site.example",
+  "https://staging.example",
+  "http://localhost:3000",
+];
 
-**audit + 自動アップデート + パッケージ選定** の三本柱で補い合うのが現実的な対策です。
-
-### Dependabot
-
-GitHub の純正サービス。**依存パッケージのバージョンを自動で PR 作成** してくれます。
-
-`.github/dependabot.yml`:
-
-```yaml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule:
-      interval: "weekly"
-    open-pull-requests-limit: 10
-    groups:
-      production:
-        dependency-type: "production"
-      development:
-        dependency-type: "development"
-```
-
-毎週月曜に依存をチェックし、更新があれば PR を作ります。`production` / `development` でグループ化することで PR が散らばらず管理しやすくなります。セキュリティ脆弱性は常時監視されており、発見次第すぐ PR が来ます。
-
-GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
-
-### Renovate
-
-[Renovate](https://docs.renovatebot.com/) は OSS の代替。Dependabot より **設定が柔軟** で、Bot が活発に開発されています。
-
-`renovate.json`:
-
-```json
-{
-  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
-  "extends": [
-    "config:recommended",
-    ":dependencyDashboard"
-  ],
-  "schedule": ["before 9am on monday"],
-  "packageRules": [
-    {
-      "matchPackagePatterns": ["^@types/"],
-      "groupName": "type definitions"
-    },
-    {
-      "matchUpdateTypes": ["patch", "minor"],
-      "automerge": true,
-      "minimumReleaseAge": "3 days"
-    }
-  ]
-}
-```
-
-`minimumReleaseAge` は「公開から指定日数が経過したバージョンだけ更新する」設定です。新しく公開されたパッケージには悪意あるコードが混入していることがあり、公開直後に自動マージすると気づく間もなく本番に入ってしまいます。3〜7 日待つことでコミュニティが問題を検知する時間を確保できます。
-
-Renovate の主な特徴:
-
-- Group で複数パッケージをまとめて 1 PR に束ねられる
-- `automerge: true` で CI が通過すれば自動マージ（`minimumReleaseAge` と組み合わせて使う）
-- Dependency Dashboard という Issue で全更新を一覧できる
-- monorepo・Docker・GitHub Actions など npm 以外にも対応している
-
-「Dependabot は設定ゼロで使える標準選択肢、Renovate は細かく制御したい場合の選択肢」という使い分けが一般的です。
-
-### Socket と OSV-Scanner
-
-audit では拾えない攻撃を補う 2 つのツール。
-
-#### Socket
-
-[socket.dev](https://socket.dev/) は **疑わしいパッケージの挙動** を静的解析で検知。`postinstall` でネットに繋いだ / 環境変数を読んだ / shell を起動した、などのフラグを立てます。
-
-```bash
-npx @socketsecurity/cli scan
-```
-
-GitHub Actions で **PR 単位** に新規依存をスキャンする運用も可能。
-
-#### OSV-Scanner（Google）
-
-```bash
-npx osv-scanner -L package-lock.json
-```
-
-OSV.dev という横断的脆弱性 DB を参照。Python / Go / Rust などにも使えます。
-
-### 整合性検証
-
-`package-lock.json` には各パッケージの **`integrity`** フィールドがあり、ハッシュで完全性を確認します。
-
-```json
-{
-  "node_modules/react": {
-    "version": "19.2.0",
-    "integrity": "sha512-...",
-    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz"
+export async function GET(req: Request) {
+  const origin = req.headers.get("Origin") ?? "";
+  const headers = new Headers({ "Content-Type": "application/json" });
+  if (allowed.includes(origin)) {
+    headers.set("Access-Control-Allow-Origin", origin);
+    headers.set("Access-Control-Allow-Credentials", "true");
+    headers.set("Vary", "Origin");
   }
+  return new Response(JSON.stringify({ ok: true }), { headers });
 }
 ```
 
-`npm ci` は **lock の通りにそのままインストール** し、ハッシュが合わなければエラー。CI ではこれを使って改ざんを検知。
+`Vary: Origin` を入れると **CDN がオリジン別にキャッシュ** してくれます。これがないと、別オリジンのキャッシュを別の人に返してしまう事故が起きます。
 
-### SBOM（Software Bill of Materials）
+### Cookie 側の `SameSite`
 
-「ソフトウェアの **部品表**」。何のパッケージをどのバージョンで使っているかを **機械可読な形式**（SPDX / CycloneDX） で出力します。
+「クロスオリジンで Cookie を送る」には Cookie 側の **`SameSite`** 属性も `None`（+ `Secure`）でないといけません。
 
-```bash
-npm sbom --sbom-format=cyclonedx > sbom.json
+```
+Set-Cookie: session=abc; SameSite=None; Secure; HttpOnly; Path=/
 ```
 
-なぜ必要:
+- `SameSite=Strict`: クロスサイトには絶対送らない
+- `SameSite=Lax`: トップレベルナビゲーションでは送る（デフォルト）
+- `SameSite=None`（+ Secure）: クロスサイトでも送る（同意必要）
 
-- 新しい脆弱性が報告された時、**自社のどのプロダクトが影響を受けるか** を即座に確認できる
-- 米国の調達基準では SBOM の提出を求めるケースが増えている
+これをセットで考えないと、CORS 設定だけ整えても **Cookie が飛ばずログイン状態が維持されない** 事故になります。
 
-GitHub には **Dependency Graph** が組み込みで、リポジトリの依存を可視化してくれます。
+### Next.js / Express での設定例
 
-### パッケージを採用する時の判断軸
+#### Next.js（Route Handler）
 
-新しい npm パッケージを入れる時、次を見る習慣を。
+```ts
+// app/api/posts/route.ts
+import { NextResponse } from "next/server";
 
-#### 1. ダウンロード数
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://my-site.example",
+];
 
-[npmtrends](https://npmtrends.com/) でダウンロード推移を確認。**月数百万 DL** あると安定。**急増** はバズ後で挙動が変わるかも、**減少** はメンテナンスが止まった可能性。
+function corsHeaders(origin: string | null): HeadersInit {
+  const isAllowed = origin && ALLOWED_ORIGINS.includes(origin);
+  const headers: Record<string, string> = {
+    "Access-Control-Allow-Credentials": "true",
+    "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+    "Access-Control-Allow-Headers": "Content-Type, Authorization",
+    "Access-Control-Max-Age": "3600",
+    "Vary": "Origin",
+  };
+  // 許可されていないオリジンには Allow-Origin ヘッダ自体を返さない
+  // （空文字を返すとブラウザは「許可なし」だがプロキシ / CDN のキャッシュ汚染源になる）
+  if (isAllowed) {
+    headers["Access-Control-Allow-Origin"] = origin!;
+  }
+  return headers;
+}
 
-#### 2. メンテナンスの頻度
+export async function OPTIONS(req: Request) {
+  return new NextResponse(null, {
+    status: 204,
+    headers: corsHeaders(req.headers.get("Origin")),
+  });
+}
 
-GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** をチェック。**3 ヶ月コミットがない** と要注意。
+export async function GET(req: Request) {
+  return NextResponse.json({ posts: [] }, {
+    headers: corsHeaders(req.headers.get("Origin")),
+  });
+}
+```
 
-#### 3. 依存の深さ
+#### Express の `cors` パッケージ
 
-`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
+```js
+import cors from "cors";
 
-#### 4. ライセンス
+app.use(
+  cors({
+    origin: ["https://my-site.example", "http://localhost:3000"],
+    credentials: true,
+    maxAge: 3600,
+  }),
+);
+```
 
-MIT / Apache 2.0 / BSD は OK。**GPL** は公開要件があるので業務利用前に法務確認。
+### よくある CORS エラーと原因
 
-#### 5. メンテナーの質
+ブラウザのコンソールに出るメッセージ別の対処。
 
-GitHub の **メンテナー一覧** / セキュリティポリシーの整備状況。1 人で管理されているプロジェクトは、その人が離れたり悪意を持った瞬間にリスクが集中します。
+#### `No 'Access-Control-Allow-Origin' header is present on the requested resource`
 
-#### 6. 代替案
+→ サーバーがそもそも CORS ヘッダを返していない / OPTIONS で 4xx を返している。サーバー側設定を見直す。
 
-「**標準で書ける** ことを依存追加で済ませていないか」を再検討。`Date.now()` / `fetch` / `Intl` / `Set` など、**ブラウザ / Node 標準で書ける** ものは依存を入れない方がよい。
+#### `The 'Access-Control-Allow-Origin' header has a value 'X' that is not equal to the supplied origin`
 
-### ゼロデイへの備え
+→ `Allow-Origin` が **間違ったオリジン** を返している。動的に Origin を見て一致するものを返す。
 
-audit に載る前の脆弱性（ゼロデイ）への対処は限定的:
+#### `The value of the 'Access-Control-Allow-Origin' header in the response must not be the wildcard '*' when the request's credentials mode is 'include'`
 
-- **GitHub Advisory** をウォッチ
-- **新パッケージの即採用は避ける**（少なくとも数日寝かせる）
-- **`postinstall` を実行しないインストール**（`--ignore-scripts`）を CI で
-- **lockfile を厳しく**（`npm ci`、`pnpm install --frozen-lockfile`）
+→ `credentials: "include"` の時は **`*` ではなく具体的オリジン** を返す。
 
-### おすすめの基本セット
+#### `Method PUT is not allowed by Access-Control-Allow-Methods`
 
-最小構成:
+→ `Allow-Methods` に PUT を追加。OPTIONS の応答に必ず含める。
 
-1. **Dependabot Alerts ON**（GitHub の Security タブ）
-2. **Dependabot version updates** で週次 PR
-3. **CI で `npm audit --omit=dev`** を実行（本番依存だけチェック）
-4. **`npm ci`** で lockfile 通りインストール
-5. **SBOM をビルド成果物に含める**（後で照会できる）
+#### `Request header 'X-Custom' is not allowed by Access-Control-Allow-Headers`
 
-これで「**最低限** のサプライチェーン対策」になります。
+→ `Allow-Headers` にカスタムヘッダを追加。
+
+#### `Cookie が送られない`
+
+→ クライアント側 `credentials: "include"`、サーバー側 `Allow-Credentials: true`、Cookie の `SameSite=None; Secure` の **3 点セット** を確認。
+
+### CORS が要らないケース
+
+- **同一オリジンへのリクエスト**（`/api/...` のような相対パス）
+- **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
+- **サーバー → サーバー**（fetch がブラウザを通らない）
+
+「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
+
+### CORB / CORP / COEP / COOP
+
+似た名前の仕組みが他にもあります。混同しないように整理:
+
+| 名前 | 役割 |
+|---|---|
+| **CORS** | クロスオリジンレスポンスを **JS に読ませるか** |
+| **CORB**（Cross-Origin Read Blocking） | ブラウザが Spectre 対策で内部的に行うレスポンス遮断 |
+| **CORP**（`Cross-Origin-Resource-Policy`） | リソース側が **誰に埋め込まれるか** を制限 |
+| **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
+| **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
+
+通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
 
 ## 演習
 
 ### ゴール
 
-- `npm audit` を読む
-- Dependabot を有効にして PR が来る状態を作る
-- 新しいパッケージを採用する判断材料を集める
+- 自前 API に対して CORS エラーを **出してから直す** 流れを体験する
+- プリフライトの OPTIONS が飛ぶことを観察する
 
-### 手順 1: 既存プロジェクトで audit
-
-```bash
-cd /path/to/your-project
-npm audit
-npm audit --json | jq '.metadata.vulnerabilities'
-```
-
-`.metadata.vulnerabilities` で重要度ごとの件数が JSON で見えます。
-
-### 手順 2: 自動修正を試す
+### 手順 1: API サーバー（Hono）
 
 ```bash
-npm audit fix       # semver 範囲内で自動更新
-git diff package*.json
+mkdir cors-server
+cd cors-server
+npm init -y
+npm install hono @hono/node-server
 ```
 
-修正後は **必ず動作確認 + テスト**。
+`server.ts`:
 
-### 手順 3: Dependabot を有効化
+```ts
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
 
-`.github/dependabot.yml`:
+const app = new Hono();
 
-```yaml
-version: 2
-updates:
-  - package-ecosystem: "npm"
-    directory: "/"
-    schedule: { interval: "weekly" }
-    groups:
-      minor-and-patch:
-        update-types: ["minor", "patch"]
+app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
+
+serve({ fetch: app.fetch, port: 4000 });
+console.log("API on http://localhost:4000");
 ```
-
-GitHub の **Settings → Code security → Dependabot alerts** を ON。`Settings → Code security → Dependabot security updates` も ON。
-
-### 手順 4: パッケージ採用の練習
-
-候補: `dayjs` / `date-fns` / `luxon`
-
-それぞれを次の観点で比較:
-
-- npmtrends の DL 推移
-- GitHub のメンテナンス頻度
-- Bundlephobia のサイズと依存
-- TypeScript 型定義の有無
-- ライセンス
-
-採用する 1 つを決めて、`npm install` する。
-
-### 手順 5: SBOM を出す
 
 ```bash
-npm sbom --sbom-format=cyclonedx --omit=dev > sbom.json
-ls -la sbom.json
+npx tsx server.ts
 ```
+
+### 手順 2: クライアント（別ポート）
+
+別ターミナルで:
+
+```bash
+npm create vite@latest cors-client -- --template vanilla-ts
+cd cors-client
+npm install
+npm run dev
+```
+
+`src/main.ts`:
+
+```ts
+async function load() {
+  const res = await fetch("http://localhost:4000/posts");
+  const data = await res.json();
+  document.body.textContent = JSON.stringify(data);
+}
+load();
+```
+
+ブラウザで `http://localhost:5173`（Vite のデフォルトポート）を開くと、コンソールに **CORS エラー** が出るはずです。
+
+```
+Access to fetch at 'http://localhost:4000/posts' from origin 'http://localhost:5173' has been blocked by CORS policy:
+No 'Access-Control-Allow-Origin' header is present on the requested resource.
+```
+
+### 手順 3: サーバーで CORS を許可
+
+`server.ts`:
+
+```ts
+import { Hono } from "hono";
+import { serve } from "@hono/node-server";
+import { cors } from "hono/cors";
+
+const app = new Hono();
+
+app.use(
+  "*",
+  cors({
+    origin: ["http://localhost:5173"],
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    maxAge: 3600,
+  }),
+);
+
+app.get("/posts", (c) => c.json({ posts: ["a", "b", "c"] }));
+app.put("/posts/:id", (c) => c.json({ ok: true }));
+
+serve({ fetch: app.fetch, port: 4000 });
+```
+
+再起動するとクライアントから読めるようになります。
+
+### 手順 4: プリフライトを観察
+
+PUT を呼ぶ:
+
+```ts
+await fetch("http://localhost:4000/posts/1", {
+  method: "PUT",
+  headers: { "Content-Type": "application/json" },
+  body: JSON.stringify({ title: "updated" }),
+});
+```
+
+DevTools の Network タブで:
+
+1. まず **OPTIONS** が飛ぶ
+2. 200 / 204 が返る
+3. その後 **PUT** が飛ぶ
+
+を確認します。
 
 ### 期待出力
 
-- `npm audit` で脆弱性の表が出る（または `0 vulnerabilities`）
-- Dependabot を有効化すると **数時間〜1 日で初回の PR / Alert** が来る
-- パッケージ比較の表ができ、採用根拠を説明できる
-- SBOM の JSON が生成される
+- 最初は CORS エラー
+- サーバーで許可してから読める
+- PUT 時に **OPTIONS → PUT** の 2 段階のリクエストが見える
 
 ### 変える
 
-- `dependabot.yml` の `interval` を `daily` に変えて頻度を上げる
-- `automerge: true` のルールで patch 更新を自動マージにする
-- CI に `npm audit --omit=dev --audit-level=high` を追加して **high 以上で fail** にする
+- `Access-Control-Max-Age: 3600` を削除すると毎回 OPTIONS が飛ぶ
+- `credentials: true` を消した状態で `fetch(url, { credentials: "include" })` するとエラー
+- `origin` に `"*"` を入れると、`credentials` を使う場合だけエラー（仕様違反）
 
 ### 自分で書く（任意）
 
-- Renovate を導入し、Dashboard Issue で全更新を一覧する
-- Socket / OSV-Scanner を CI に組み込む
-- 自社で許可するライセンスを決め、許可外があれば fail するルールを CI に書く
+- Next.js の Route Handler で同じ CORS 設定を再現する
+- `SameSite=None; Secure` の Cookie を使ってログインを成立させる
+- バックエンドプロキシ（Next.js の `/api/proxy`）を立てて、CORS を消す構成にする
 
 ## まとめ
 
-- 自分のコードが安全でも **依存パッケージ経由** で攻撃される（サプライチェーン）
-- **`npm audit`** で既知の脆弱性をチェック。Severity に従って対応
-- 自動修正は `npm audit fix`、メジャー込みなら `--force`（要動作確認）
-- **Dependabot / Renovate** で依存更新を自動 PR 化
-- `npm audit` の補完に **Socket / OSV-Scanner**
-- **lockfile + `npm ci` + integrity** で改ざん検知
-- **SBOM** で「自社の何が影響を受けるか」を素早く特定
-- 新しいパッケージは **DL 数 / メンテ頻度 / 依存の深さ / ライセンス** で判断
-- 「**標準で書けるなら依存しない**」が最大の防御
+- CORS は **「クロスオリジン応答を JS に読ませるかどうか」** をサーバーが許可する仕組み
+- **シンプルリクエスト** と **プリフライト**（OPTIONS） の 2 ルート
+- 主要ヘッダ: `Allow-Origin` / `Allow-Methods` / `Allow-Headers` / `Allow-Credentials` / `Max-Age`
+- **`credentials: "include"`** を使うなら、サーバー側で `Allow-Credentials: true` + 具体的なオリジン
+- **Cookie の `SameSite=None; Secure`** とセットで考える
+- 動的に Origin を見て返す時は **`Vary: Origin`** をつけて CDN を安全に
+- エラーメッセージから原因を特定できる定型パターンを覚える
+- 「バックエンドプロキシで CORS を消す」も実用解
