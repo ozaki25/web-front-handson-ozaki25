@@ -282,6 +282,15 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
   fi
 
+  # --- クイズデータの検証 ---
+  staged_quiz=$(echo "$STAGED" | grep '^docs/quiz/data/.*\.ts$' || true)
+  if [ -n "$staged_quiz" ]; then
+    quiz_out=$(npm run -s quiz:validate 2>&1 || true)
+    if echo "$quiz_out" | grep -q '✗'; then
+      block "クイズデータの検証に失敗しました。\n${quiz_out}"
+    fi
+  fi
+
   # .claude/ ファイルの削除を禁止
   deleted=$(git diff --cached --diff-filter=D --name-only | grep '^\.claude/' || true)
   if [ -n "$deleted" ]; then
