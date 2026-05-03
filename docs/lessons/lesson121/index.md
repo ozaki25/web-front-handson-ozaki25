@@ -194,7 +194,7 @@ git config core.hooksPath .githooks
 
 ```sh
 #!/bin/sh
-# v8.18 以降は protect サブコマンドが廃止。git --pre-commit --staged で代替する
+# v8.19.0 以降 protect は非推奨。git --pre-commit --staged が公式推奨コマンド
 gitleaks git --pre-commit --staged --no-banner || exit 1
 ```
 
@@ -369,7 +369,7 @@ export default function ClientPage() {
 
 ```bash
 brew install gitleaks       # macOS。Linux は go install / docker でも
-# または: docker run -v $(pwd):/path zricethezav/gitleaks detect --source /path
+# または: docker run -v $(pwd):/path zricethezav/gitleaks git /path
 ```
 
 リポジトリ直下で:
@@ -378,7 +378,7 @@ brew install gitleaks       # macOS。Linux は go install / docker でも
 git init
 echo "AWS_SECRET=AKIA1234567890ABCDEF" > test.txt
 git add test.txt
-gitleaks protect --staged
+gitleaks git --pre-commit --staged
 ```
 
 `AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
@@ -389,7 +389,7 @@ gitleaks protect --staged
 mkdir -p .githooks
 cat > .githooks/pre-commit <<'EOF'
 #!/bin/sh
-gitleaks protect --staged --no-banner || exit 1
+gitleaks git --pre-commit --staged --no-banner || exit 1
 EOF
 chmod +x .githooks/pre-commit
 git config core.hooksPath .githooks
