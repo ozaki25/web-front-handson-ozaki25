@@ -47,7 +47,7 @@ import { useQuery } from "@tanstack/react-query";
 type Post = { id: number; title: string; body: string };
 
 function PostsList() {
-  const { data, isLoading, error } = useQuery({
+  const { data, isPending, error } = useQuery({
     queryKey: ["posts"],
     queryFn: async () => {
       const res = await fetch("https://jsonplaceholder.typicode.com/posts");
@@ -56,7 +56,7 @@ function PostsList() {
     },
   });
 
-  if (isLoading) return <p>読み込み中...</p>;
+  if (isPending) return <p>読み込み中...</p>;
   if (error) return <p>エラー: {String(error)}</p>;
   return (
     <ul>
@@ -326,7 +326,7 @@ export default function App() {
   const toggleTheme = useThemeStore((s) => s.toggle);
   const queryClient = useQueryClient();
 
-  const { data, isLoading, error } = useQuery({
+  const { data, isPending, error } = useQuery({
     queryKey: ["posts"],
     queryFn: async () => {
       const res = await fetch("https://jsonplaceholder.typicode.com/posts");
@@ -380,7 +380,7 @@ export default function App() {
       </div>
 
       <h2>記事一覧（TanStack Query）</h2>
-      {isLoading && <p>読み込み中...</p>}
+      {isPending && <p>読み込み中...</p>}
       {error && <p>エラー</p>}
       <ul>
         {data?.slice(0, 10).map((p) => (

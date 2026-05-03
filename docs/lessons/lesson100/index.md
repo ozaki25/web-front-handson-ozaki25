@@ -12,7 +12,7 @@
 
 ### チェックの 3 段構え
 
-a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は 3〜4 割で、残りは **文脈** に依存します。たとえば:
+a11y は「自動化で 100% は担保できない」領域です。色のコントラスト比や `alt` の有無のような **機械的にチェックできる項目** は WCAG 問題の約 **57%**（axe-core 公称）で、残りは **文脈** に依存します。たとえば:
 
 - `alt="画像"` と書いてあっても、画像の本当の内容を表していなければ機械は気づけない
 - ボタンラベルが `aria-label="保存"` でも、「何を保存するのか」が文脈に合ってなければ機械は気づけない
@@ -67,7 +67,7 @@ Lighthouse との違い:
 
 - axe DevTools は **Deque**（a11y 専門会社）が提供。業界標準の axe-core エンジンを使う
 - 違反の説明が詳しく、**修正方法のコード例** まで載っている
-- Lighthouse は axe-core の一部を内蔵している。つまり **axe DevTools の方が厳しめ**
+- Lighthouse の Accessibility カテゴリは axe-core を実行している（ただし設定とルールセットは Lighthouse 側で絞られているため、axe DevTools 単体の方が拾える件数は多い）
 
 両方回して、Lighthouse で基本を見て、axe で細部を詰めるのが定番です。
 
@@ -133,8 +133,8 @@ test("トップページに a11y 違反がない", async ({ page }) => {
   const results = await new AxeBuilder({ page })
     // 既知の現状割れているチェックは disable する（後で順次解消）
     .disableRules(["color-contrast"])
-    // 最初は WCAG A / AA だけに絞ると現実的
-    .withTags(["wcag2a", "wcag2aa"])
+    // 最初は WCAG A / AA だけに絞ると現実的（2.0 / 2.1 / 2.2 の AA も含める）
+    .withTags(["wcag2a", "wcag2aa", "wcag21aa", "wcag22aa"])
     .analyze();
 
   expect(results.violations).toEqual([]);
@@ -215,7 +215,7 @@ Mac なら VoiceOver（`Cmd + F5`）、Windows なら NVDA をインストール
 
 ## まとめ
 
-- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは 3〜4 割しかカバーできない
+- a11y チェックは **自動 + 手動 + 実ユーザー** の 3 段構え。自動だけでは WCAG 問題の約 57%（axe-core 公称）しかカバーできない
 - **Lighthouse**: Chrome 内蔵。a11y スコアと違反一覧を即出せる
 - **axe DevTools**: Chrome 拡張。より詳細・厳しめ。Deque 提供の業界標準
 - 手動チェック: キーボードだけで操作 / スクリーンリーダーで読ませる

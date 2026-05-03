@@ -142,7 +142,7 @@ const enabled = isFeatureEnabled(currentUser.id, 10); // 10% の人だけ true
 | **GrowthBook** | OSS + クラウド。**A/B テスト統計が強い**。コスパ良し |
 | **Statsig** | フラグ + 実験 + プロダクト分析統合。Meta 出身チーム |
 | **Flagsmith** | OSS / セルフホスト可能 |
-| **Vercel Edge Config + Vercel Toolbar** | Vercel 内製の軽量フラグ |
+| **Vercel `flags` SDK + Edge Config** | Vercel 公式のフラグ SDK（`flags` パッケージ）。Edge Config と組み合わせて軽量に運用でき、Vercel Toolbar から overrides も可能 |
 | **PostHog Feature Flags** | Analytics と統合 |
 
 #### LaunchDarkly の最小例

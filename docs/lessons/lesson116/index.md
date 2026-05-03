@@ -102,7 +102,7 @@ jobs:
 #### `actions/cache` で任意のディレクトリ
 
 ```yaml
-- uses: actions/cache@v4
+- uses: actions/cache@v5
   with:
     path: |
       ~/.npm

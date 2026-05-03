@@ -187,10 +187,9 @@ npm install next-auth
 GOOGLE_CLIENT_ID=...
 GOOGLE_CLIENT_SECRET=...
 AUTH_SECRET=（任意のランダム文字列）
-AUTH_URL=http://localhost:3000
 ```
 
-> **補足: 環境変数名は v5 で `AUTH_*` に変わった**: Auth.js v5（旧 NextAuth.js）では `NEXTAUTH_SECRET` / `NEXTAUTH_URL` が **`AUTH_SECRET` / `AUTH_URL` にリネーム**されました。v4 系のチュートリアルをコピペすると古い名前のまま動かないので注意します。`AUTH_SECRET` は `npx auth secret` でランダム生成できます。
+> **補足: 環境変数名は v5 で `AUTH_*` に変わった**: Auth.js v5（旧 NextAuth.js）では `NEXTAUTH_SECRET` / `NEXTAUTH_URL` が **`AUTH_SECRET` / `AUTH_URL` にエイリアス（v4 名はそのままも動く）**されました。v5 で本番に必須なのは `AUTH_SECRET` だけで、`AUTH_URL` は **多くの環境で不要**（リクエストヘッダから自動検出されます。リバースプロキシ越し等で誤検出する場合に明示するくらい）です。`AUTH_SECRET` は `npx auth secret` でランダム生成できます。
 
 `auth.ts`:
 

@@ -208,28 +208,37 @@ npm install @serwist/next serwist
 import withSerwistInit from "@serwist/next";
 
 const withSerwist = withSerwistInit({
-  swSrc: "src/sw.ts",
+  swSrc: "app/sw.ts",
   swDest: "public/sw.js",
 });
 
 export default withSerwist({});
 ```
 
-`src/sw.ts`:
+`app/sw.ts`:
 
 ```ts
 import { defaultCache } from "@serwist/next/worker";
+import type { PrecacheEntry, SerwistGlobalConfig } from "serwist";
 import { Serwist } from "serwist";
 
-declare const self: ServiceWorkerGlobalScope & { __SW_MANIFEST: any };
+declare global {
+  interface WorkerGlobalScope extends SerwistGlobalConfig {
+    __SW_MANIFEST: (PrecacheEntry | string)[] | undefined;
+  }
+}
 
-new Serwist({
+declare const self: ServiceWorkerGlobalScope;
+
+const serwist = new Serwist({
   precacheEntries: self.__SW_MANIFEST,
   skipWaiting: true,
   clientsClaim: true,
   navigationPreload: true,
   runtimeCaching: defaultCache,
-}).addEventListeners();
+});
+
+serwist.addEventListeners();
 ```
 
 ### オフライン対応

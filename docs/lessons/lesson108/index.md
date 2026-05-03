@@ -352,7 +352,7 @@ npm install -D vitest          # devDependencies に入る
     "@vitejs/plugin-react": "^6.0.0",
     "typescript": "^6.0.0",
     "vite": "^8.0.0",
-    "vitest": "^3.0.0"
+    "vitest": "^4.0.0"
   }
 }
 ```

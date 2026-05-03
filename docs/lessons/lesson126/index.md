@@ -116,7 +116,7 @@ GitHub の **「Security」タブ** に Dependabot Alerts が並びます。
   "schedule": ["before 9am on monday"],
   "packageRules": [
     {
-      "matchPackagePatterns": ["^@types/"],
+      "matchPackageNames": ["/^@types//"],
       "groupName": "type definitions"
     },
     {

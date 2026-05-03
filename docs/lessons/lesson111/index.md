@@ -186,7 +186,7 @@ npx biome init
 #### Biome の魅力
 
 - **設定ファイルが 1 つだけ**（`biome.json`）
-- **ESLint + Prettier より 35x 速い**（10000 ファイル: ESLint 45.2s vs Biome 0.8s）
+- **ESLint + Prettier より大幅に速い**（公式ベンチマークでは Lint がマルチスレッドで約 15x、Format がマルチスレッドで約 25x。条件次第ではさらに伸びる）
 - **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
 - **Lint と Format の衝突がない**（同じツール内なので）
 - **VS Code 拡張**（`biomejs.biome`）も公式
@@ -416,7 +416,7 @@ export default function App() {
 - **ESLint v9** で flat config が既定化、**v10（2026 年 2 月）で `.eslintrc` を完全廃止**
 - ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
 - VS Code の保存時 autofix で「書きながら綺麗になる」体験
-- **Biome** は Lint + Format を 1 ツール、Rust 製、35x 速い、設定 1 ファイル
+- **Biome** は Lint + Format を 1 ツール、Rust 製、ESLint / Prettier より大幅に速い（公式ベンチで Lint 約 15x / Format 約 25x）、設定 1 ファイル
 - 2026 年は **ESLint + Prettier**（最大派閥） / **Biome**（統合の利便性） / **oxlint + Prettier**（速度伸び盛り） の 3 択。決定的な勝者はまだいない
 - 大規模 / 複雑なルールが必要なら ESLint、新規小規模で設定を減らしたいなら Biome、速度と ESLint 互換が欲しいなら oxlint
 - `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
