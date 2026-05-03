@@ -52,6 +52,10 @@
 5. **コピペ → 変える → 自分で書く** の 3 段階を各レッスンで回す。
 6. **最新版を前提にする**。ただしデファクトになる見込みがある新機能は、先取りして扱うことがある。
 7. **ライブラリ API は必ず Context7 で確認してから書く**。Next.js / React / TypeScript など任意のライブラリについて API・設定・挙動を本文に書く前に、Context7 MCP の `resolve-library-id` → `get-library-docs` で最新ドキュメントを取得し、内容と照合すること。トレーニングデータの知識だけで書いてはならない。
+   - **Context7 が使えない場合のフォールバック**: ネットワーク制限等で Context7 に接続できないときは、**独断で進めず**、以下の順で公式ドキュメントを直接取得すること。
+     1. `curl https://raw.githubusercontent.com/<org>/<repo>/main/<path>` で公式リポジトリの README / CHANGELOG / ドキュメントファイルを直接取得する
+     2. GitHub API (`https://api.github.com/repos/<org>/<repo>/contents/<path>`) でディレクトリ構成を確認してからファイルを取得する
+     3. 上記でも取得できない場合は「Context7 に接続できないため確認できない」とユーザーに報告し、作業を止める。推測で書かない。
 
 ## 7. レッスン構成テンプレート
 
