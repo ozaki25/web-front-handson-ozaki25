@@ -159,9 +159,10 @@ updateTag("posts");
 ```tsx
 import { revalidateTag } from "next/cache";
 
-revalidateTag("posts");
+revalidateTag("posts", "max"); // "max" で stale-while-revalidate
 ```
 
+- Next.js 16 で第 2 引数に **cacheLife profile**（`"max"` 推奨、または `"seconds" / "minutes" / "hours" / "days" / "weeks"`、もしくは `{ expire: number }`）を渡す形に変わりました。第 2 引数を省略する旧形式は deprecated です。
 - Server Action と Route Handler の両方から使えます。
 - webhook や管理者操作など、ユーザーが結果ページに即遷移しないバックグラウンド更新に向きます。
 

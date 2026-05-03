@@ -14,7 +14,7 @@
 **Proxy** は、Next.js が **すべてのリクエストの前** に実行してくれる関数です。ページや Route Handler が呼ばれる前に「認証済みか確認する」「言語設定でリダイレクトする」など、横断的な前処理を書けます。
 
 ::: tip Next.js 15 以前の `middleware.ts` から改名
-Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、既定ランタイムも Edge から **Node.js** に変更されました。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
+Next.js 15 以前は **`middleware.ts`** という名前で同じ役割を担っていました。Next.js 16 から **ネットワーク境界の役割** を明示するために **`proxy.ts`** へ改名され、ランタイムも Edge から **Node.js（固定・edge には変更不可）** になりました。Edge ランタイムが必要なケースは引き続き `middleware.ts` を使えます。挙動の基本は変わらないので、古いチュートリアルやブログで `middleware.ts` を見たら「今は proxy のことだ」と読み替えてください。
 :::
 
 配置ルール:
@@ -58,7 +58,7 @@ export const config = {
 
 ### Node.js ランタイムで動く
 
-Next.js 16 から、proxy は **既定で Node.js ランタイム** で動くようになりました。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。
+Next.js 16 から、proxy は **Node.js ランタイム固定** で動きます（`runtime` の設定はできず、変更すればエラー）。以前の middleware が Edge ランタイム（軽量だが Node の `fs` / `path` 等が使えない制約）だったのに対し、proxy では **Node.js の全 API が使えます**。JWT の検証ライブラリ、DB クライアントなども扱えるようになった反面、「軽量な前処理」という設計意図は変わっていません。Edge で動かしたい場合は `middleware.ts` を使い続けてください。
 
 重要な指針:
 
@@ -222,7 +222,7 @@ export const config = {
 ## まとめ
 
 - `proxy.ts` はルート直下に 1 ファイル、全リクエストに割り込む
-- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 で既定ランタイムが **Edge → Node.js** に
+- Next.js 15 までの `middleware.ts` から改名された。Next.js 16 でランタイムは **Node.js 固定**（Edge は使えない / 必要なら従来の `middleware.ts` を継続利用）
 - `NextResponse.next` / `redirect` / `rewrite` で分岐
 - `matcher` で適用パスを絞る
 - Node.js の全 API が使えるようになったが、**毎リクエスト前に走る** ので軽量な前処理に留める

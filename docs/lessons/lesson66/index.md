@@ -106,18 +106,19 @@ export default nextConfig;
 ```ts
 const nextConfig: NextConfig = {
   reactCompiler: {
-    compilationMode: "annotation",  // "all" | "annotation" | "infer"
+    compilationMode: "annotation",  // "infer"（既定） | "annotation" | "syntax" | "all"
   },
 };
 ```
 
 | `compilationMode` | 説明 |
 |---|---|
+| `"infer"`（デフォルト） | PascalCase 命名 / `use` 接頭辞のフック / JSX を返す / フックを呼ぶ、のいずれかに当てはまる関数だけを自動判定して変換 |
 | `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ変換。まず試したいときはここから |
-| `"infer"` | Rules of React の前提を満たす関数のみ自動判定して変換 |
-| `"all"`（デフォルト） | すべてのコンポーネントを変換 |
+| `"syntax"` | Flow の型注釈を頼りに変換（Flow ユーザー向け） |
+| `"all"` | すべてのコンポーネントを変換 |
 
-`"annotation"` から段階的に始めて動作を確認し、問題がなければ `"all"` に切り替えるのが安全な導入順序です。
+`"annotation"` から段階的に始めて動作を確認し、問題がなければ `"infer"`（既定）または `"all"` に切り替えるのが安全な導入順序です。
 
 ### Vite で有効化
 
@@ -298,7 +299,7 @@ function LegacyComponent() {
 1. **`eslint-plugin-react-compiler` を入れて警告を見る**
 2. 警告を直せる範囲で直す
 3. **`compilationMode: "annotation"`** で **限定的に試す**
-4. 動作確認 → 問題なければ **`"all"`** に切り替え
+4. 動作確認 → 問題なければ既定の **`"infer"`** または **`"all"`** に切り替え
 5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
 
 「全部一気に」ではなく **段階導入** が事故を減らします。

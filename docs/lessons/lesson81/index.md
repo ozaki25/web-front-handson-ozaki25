@@ -281,6 +281,6 @@ revalidateTag("todos");
 `<form action={fn}>` でサーバーに POST が飛びますが、**これは Next.js の Server Actions が内部で CSRF を防いでいる** からこそ安全に使えます。具体的には:
 
 - アクションごとに **暗号化された ID** が割り当てられ、フォーム送信時に確認される
-- リクエストの **Origin ヘッダ** と Host ヘッダの一致がチェックされる（`next.config.ts` の `serverActions.allowedOrigins` で許可リスト追加可能）
+- リクエストの **Origin ヘッダ** と Host ヘッダの一致がチェックされる（`next.config.ts` の `experimental.serverActions.allowedOrigins` で許可リスト追加可能）
 
 このため、別オリジンのサイトから埋め込んだフォームでは Server Actions を呼べません。**自前で CSRF トークンを発行する必要はありません**。一方、`<form action="/api/...">` のように Route Handler を直接叩く場合はこの保護が効かないため、別途 Origin 検証 / トークンが必要です。

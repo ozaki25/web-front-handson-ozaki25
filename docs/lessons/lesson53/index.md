@@ -1,32 +1,30 @@
 # lesson53: JSX を書く
 
 <script setup>
-const closeScript = '<' + '/script>'
-const demoHtml =
-  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
-  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
-  '<div id="root"></div>'
+const demoHtml = '<div id="root"></div>'
 
 const demoJs = `
 // 本来 JSX で書く <h1 className="title">Hello, React</h1> は
 // ビルド時に React.createElement(...) に変換されます。
-// このデモは CDN から React を読み込み、変換後の形を直接書いています。
-// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
-// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
-const h = React.createElement;
+// このデモは esm.sh から React 19 を動的 import で読み込み、変換後の形を直接書いています。
+Promise.all([
+  import('https://esm.sh/react@19.2.0'),
+  import('https://esm.sh/react-dom@19.2.0/client'),
+]).then(([{ default: React }, { createRoot }]) => {
+  const h = React.createElement;
 
-function App() {
-  const name = 'Alice';
-  return h(
-    'div',
-    null,
-    h('h1', { className: 'title' }, 'Hello, React'),
-    h('p', null, 'こんにちは、' + name + ' さん')
-  );
-}
+  function App() {
+    const name = 'Alice';
+    return h(
+      'div',
+      null,
+      h('h1', { className: 'title' }, 'Hello, React'),
+      h('p', null, 'こんにちは、' + name + ' さん')
+    );
+  }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(h(App));
+  createRoot(document.getElementById('root')).render(h(App));
+});
 `
 </script>
 

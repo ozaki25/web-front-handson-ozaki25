@@ -1,46 +1,45 @@
 # lesson60: 条件で出し分ける
 
 <script setup>
-const closeScript = '<' + '/script>'
-const demoHtml =
-  '<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js">' + closeScript +
-  '<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js">' + closeScript +
-  '<div id="root"></div>'
+const demoHtml = '<div id="root"></div>'
 
 const demoJs = `
-// 注: iframe 内の UMD 利用のため React 18 を読み込んでいます。
-// （React 19 は UMD ビルドを廃止したため。コース本体は React 19.2 前提）
-const h = React.createElement;
-const { useState } = React;
+// esm.sh から React 19 を動的 import で読み込みます。
+Promise.all([
+  import('https://esm.sh/react@19.2.0'),
+  import('https://esm.sh/react-dom@19.2.0/client'),
+]).then(([{ default: React }, { createRoot }]) => {
+  const h = React.createElement;
+  const { useState } = React;
 
-function App() {
-  const [isLoggedIn, setIsLoggedIn] = useState(false);
-  const [unread, setUnread] = useState(0);
+  function App() {
+    const [isLoggedIn, setIsLoggedIn] = useState(false);
+    const [unread, setUnread] = useState(0);
 
-  return h(
-    'div',
-    null,
-    // (1) 三項演算子: 2 択の切り替え
-    isLoggedIn
-      ? h('p', null, 'ようこそ、Alice さん')
-      : h('p', null, 'ゲストさん、こんにちは'),
-    h(
-      'button',
-      { onClick: () => setIsLoggedIn(v => !v), style: { marginRight: '8px' } },
-      isLoggedIn ? 'ログアウト' : 'ログイン'
-    ),
-    h('hr'),
-    // (2) && で「あるときだけ出す」
-    h('p', null, '未読: ' + unread),
-    unread > 0 &&
-      h('p', { style: { color: '#b91c1c', fontWeight: 'bold' } }, unread + ' 件の未読があります'),
-    h('button', { onClick: () => setUnread(c => c + 1), style: { marginRight: '8px' } }, '+1'),
-    h('button', { onClick: () => setUnread(0) }, '既読にする')
-  );
-}
+    return h(
+      'div',
+      null,
+      // (1) 三項演算子: 2 択の切り替え
+      isLoggedIn
+        ? h('p', null, 'ようこそ、Alice さん')
+        : h('p', null, 'ゲストさん、こんにちは'),
+      h(
+        'button',
+        { onClick: () => setIsLoggedIn(v => !v), style: { marginRight: '8px' } },
+        isLoggedIn ? 'ログアウト' : 'ログイン'
+      ),
+      h('hr'),
+      // (2) && で「あるときだけ出す」
+      h('p', null, '未読: ' + unread),
+      unread > 0 &&
+        h('p', { style: { color: '#b91c1c', fontWeight: 'bold' } }, unread + ' 件の未読があります'),
+      h('button', { onClick: () => setUnread(c => c + 1), style: { marginRight: '8px' } }, '+1'),
+      h('button', { onClick: () => setUnread(0) }, '既読にする')
+    );
+  }
 
-const root = ReactDOM.createRoot(document.getElementById('root'));
-root.render(h(App));
+  createRoot(document.getElementById('root')).render(h(App));
+});
 `
 </script>
 
