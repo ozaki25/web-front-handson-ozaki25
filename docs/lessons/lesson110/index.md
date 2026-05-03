@@ -34,14 +34,14 @@ Vite が登場した当初の戦略は **「開発と本番で違うツールを
 
 #### Vite 8（2026 年 3 月）で Rolldown を中核に
 
-[Vite 8](https://vite.dev/blog/announcing-vite8) は **Rolldown** という Rust 製の新しいバンドラを **中核に据え**、Rollup ベースの本番ビルド経路を Rolldown ベース（`rolldown-vite`）に切り替える方向に進みました。esbuild が担当していた依存事前バンドルや TS/JSX 変換も段階的に Rolldown / Oxc に置き換わっていきますが、移行期では **既定として採用** されつつも esbuild が一部経路に残っており、将来の小バージョンで完全に 1 段化する見込みです。
+[Vite 8](https://vite.dev/blog/announcing-vite8) で **Rolldown** という Rust 製の新しいバンドラに **完全統一**されました。本番ビルドの Rollup も、開発時の依存事前バンドル / TS・JSX 変換を担っていた esbuild も、すべて Rolldown / Oxc に置き換わっています。
 
 - **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
 - **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
 - 結果として Vite はビルドが **最大 10〜30 倍速** になった
 - Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
 
-「esbuild + Rollup の 2 段構成」から「Rolldown 中心」へ移っていく流れ、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
+「esbuild + Rollup の 2 段構成」から「Rolldown 単独」に統一された、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
 
 ### 開発サーバーの仕組み
 
@@ -325,7 +325,7 @@ export function heavyFunction() {
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown を中核に**。本番ビルドが Rollup から Rolldown に切り替わり、esbuild が担った領域も順次 Rolldown / Oxc に置き換わっていく（移行期は一部経路に esbuild が残る）
+- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
 - 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
 - HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
 - 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成

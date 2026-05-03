@@ -228,7 +228,7 @@ export function useWebSocket(url: string) {
 Next.js の Route Handler は **Node.js Runtime / Edge Runtime** の 2 種類があり、`export const runtime` で切り替えられます。WebSocket をホストできるかは Runtime とデプロイ先で大きく変わります。
 
 - **Edge Runtime（Vercel Edge）**: WebSocket サーバー側はホストできない。SSE の配信は OK
-- **Cloudflare Workers**: Workers 単体では HTTP レスポンスで返すため長時間 WebSocket を保てないが、**Durable Objects** を使うと 1 部屋 = 1 オブジェクトでステートフルな WebSocket サーバーを実装できる
+- **Cloudflare Workers**: 単体の Worker でも `WebSocketPair` で WebSocket Upgrade を受け付けられる（接続待機中は CPU を消費しない）。複数接続の協調（チャットルームなど）が必要なら **Durable Objects** で 1 部屋 = 1 オブジェクトのステートフル構成にする
 - **Node.js Runtime + 通常の Node プロセス**（`next start` 等）: 実験的な「Route Handler の WebSocket Upgrade」サポートが入りつつあるが、Vercel の **サーバーレス関数では長時間接続を保てない** ため実運用は不向き
 - **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実解
 

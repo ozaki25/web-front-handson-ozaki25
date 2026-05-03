@@ -244,14 +244,15 @@ export { handler as GET, handler as POST };
 
 ```ts
 // utils/trpc.ts
-import { createTRPCReact } from "@trpc/react-query";
+import { createTRPCContext } from "@trpc/tanstack-react-query";
 import type { AppRouter } from "@/server/router";
 
-export const trpc = createTRPCReact<AppRouter>();
+export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
 ```
 
 ```tsx
-const { data } = trpc.hello.useQuery({ name: "world" });
+const trpc = useTRPC();
+const { data } = useQuery(trpc.hello.queryOptions({ name: "world" }));
 //        ^? string  ← サーバーから自動推論
 ```
 
@@ -368,8 +369,10 @@ REST は **クライアント側で型** を別途定義するのがネック（
 ### 手順 3: tRPC 版
 
 ```bash
-npm install @trpc/server @trpc/client @trpc/react-query @tanstack/react-query zod superjson
+npm install @trpc/server @trpc/client @trpc/tanstack-react-query @tanstack/react-query zod superjson
 ```
+
+> tRPC v11 では `@trpc/tanstack-react-query` 統合が推奨です（旧 `@trpc/react-query` も動きますが「Classic」扱い）。
 
 `server/router.ts`:
 
@@ -414,10 +417,10 @@ export { handler as GET, handler as POST };
 `utils/trpc.ts`:
 
 ```ts
-import { createTRPCReact } from "@trpc/react-query";
+import { createTRPCContext } from "@trpc/tanstack-react-query";
 import type { AppRouter } from "@/server/router";
 
-export const trpc = createTRPCReact<AppRouter>();
+export const { TRPCProvider, useTRPC } = createTRPCContext<AppRouter>();
 ```
 
 `app/providers.tsx`:
@@ -426,32 +429,37 @@ export const trpc = createTRPCReact<AppRouter>();
 "use client";
 import { useState } from "react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { httpBatchLink } from "@trpc/client";
-import { trpc } from "@/utils/trpc";
+import { httpBatchLink, createTRPCClient } from "@trpc/client";
+import { TRPCProvider } from "@/utils/trpc";
+import type { AppRouter } from "@/server/router";
 
-export function TRPCProvider({ children }: { children: React.ReactNode }) {
+export function Providers({ children }: { children: React.ReactNode }) {
   const [queryClient] = useState(() => new QueryClient());
   const [trpcClient] = useState(() =>
-    trpc.createClient({
+    createTRPCClient<AppRouter>({
       links: [httpBatchLink({ url: "/api/trpc" })],
     }),
   );
   return (
-    <trpc.Provider client={trpcClient} queryClient={queryClient}>
-      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
-    </trpc.Provider>
+    <QueryClientProvider client={queryClient}>
+      <TRPCProvider trpcClient={trpcClient} queryClient={queryClient}>
+        {children}
+      </TRPCProvider>
+    </QueryClientProvider>
   );
 }
 ```
 
-`app/layout.tsx` で `<TRPCProvider>` でラップし、`app/users/page.tsx` では:
+`app/layout.tsx` で `<Providers>` でラップし、`app/users/page.tsx` では:
 
 ```tsx
 "use client";
-import { trpc } from "@/utils/trpc";
+import { useQuery } from "@tanstack/react-query";
+import { useTRPC } from "@/utils/trpc";
 
 export default function UsersPage() {
-  const { data, isLoading } = trpc.listUsers.useQuery();
+  const trpc = useTRPC();
+  const { data, isLoading } = useQuery(trpc.listUsers.queryOptions());
   if (isLoading) return <p>読込中...</p>;
   return (
     <ul>
@@ -463,7 +471,7 @@ export default function UsersPage() {
 }
 ```
 
-`trpc.listUsers.useQuery()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
+`trpc.listUsers.queryOptions()` の戻り値は **完全に型付き**（サーバー側の型がそのまま伝わる）。
 
 ### 手順 4: GraphQL 版
 
