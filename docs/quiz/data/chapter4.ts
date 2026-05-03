@@ -1,3 +1,604 @@
 import type { Quiz } from "../types";
 
-export const chapter4: Quiz[] = [];
+export const chapter4: Quiz[] = [
+  {
+    id: "q112",
+    lesson: "lesson52",
+    difficulty: "easy",
+    question: "React の基本的な考え方として正しいものはどれですか？",
+    choices: [
+      "UI を「今の状態」から計算される結果として書き、状態が変わると React が差分を DOM に反映する",
+      "DOM 要素を直接取得して手動で更新するライブラリ",
+      "HTML をサーバーサイドでのみ生成するフレームワーク",
+      "CSS-in-JS の仕組みを提供するライブラリ",
+    ],
+    answer: 0,
+    explanation:
+      "React では「画面は状態から計算された結果」という考え方で UI を書きます。状態（state）が変わると React が仮想 DOM を使って差分を計算し、変わった部分だけ DOM に反映します。",
+  },
+  {
+    id: "q113",
+    lesson: "lesson52",
+    difficulty: "normal",
+    question: "仮想 DOM（virtual DOM）の説明として正しいものはどれですか？",
+    choices: [
+      "JS のオブジェクトツリーで表した UI のスナップショットで、実 DOM との差分計算に使われる",
+      "HTML を文字列として保持してから一括 innerHTML で表示する仕組み",
+      "ブラウザの実際の DOM をキャッシュしてアクセスを高速化する仕組み",
+      "仮想の画面を作ってスクリーンショットを生成する仕組み",
+    ],
+    answer: 0,
+    explanation:
+      "仮想 DOM は React が内部で保持する JS オブジェクトのツリーです。state が変わると新しい仮想 DOM を作り、前回との差分（diff）を計算して、変わった部分だけ実 DOM に反映します（reconciliation）。",
+  },
+  {
+    id: "q114",
+    lesson: "lesson53",
+    difficulty: "easy",
+    question: "JSX で CSS クラスを指定する際、HTML の class 属性に相当するものはどれですか？",
+    choices: [
+      "className",
+      "class",
+      "cssClass",
+      "styleClass",
+    ],
+    answer: 0,
+    explanation:
+      "JSX は JavaScript の拡張構文のため、JavaScript の予約語 class を属性名に使えません。代わりに className を使います。React は className を HTML の class 属性に変換します。",
+  },
+  {
+    id: "q115",
+    lesson: "lesson53",
+    difficulty: "normal",
+    question: "JSX で複数の要素を返すとき、余分な HTML タグを追加せずに囲む方法はどれですか？",
+    choices: [
+      "フラグメント（<> ... </> または <React.Fragment>）を使う",
+      "<span> で囲む",
+      "配列として返す",
+      "return の後ろにカンマで並べる",
+    ],
+    answer: 0,
+    explanation:
+      "React コンポーネントは単一のルート要素を返す必要があります。余分な <div> を追加したくないときは <> ... </> （フラグメント）を使います。DOM に余分なノードが追加されません。",
+  },
+  {
+    id: "q116",
+    lesson: "lesson54",
+    difficulty: "easy",
+    question: "React コンポーネントに props として値を渡す書き方はどれですか？",
+    choices: [
+      "<Greeting name='Alice' /> のように JSX の属性として渡す",
+      "グローバル変数に値を入れてからコンポーネントを呼び出す",
+      "document.querySelector でコンポーネントの DOM を取得してから属性を変更する",
+      "コンポーネントの内部変数に直接代入する",
+    ],
+    answer: 0,
+    explanation:
+      "props は JSX の属性として渡します。<Greeting name='Alice' /> と書くと、Greeting 関数の第 1 引数に { name: 'Alice' } というオブジェクトが渡されます。",
+  },
+  {
+    id: "q117",
+    lesson: "lesson54",
+    difficulty: "normal",
+    question: "React でコンポーネントのタグの間に書いた内容（子要素）を受け取るために使う props の名前はどれですか？",
+    choices: [
+      "children",
+      "content",
+      "innerElement",
+      "slot",
+    ],
+    answer: 0,
+    explanation:
+      "<Card><p>本文</p></Card> のように書いたとき、<p>本文</p> は Card コンポーネントの props.children に渡されます。children を JSX 内で {children} と書けば子要素を表示できます。",
+  },
+  {
+    id: "q118",
+    lesson: "lesson55",
+    difficulty: "normal",
+    question: "React で配列をリスト表示するとき、各要素に key prop を付ける理由はなんですか？",
+    choices: [
+      "React が要素の変更・削除・並び替えを追跡して効率的に DOM を更新するため",
+      "CSS クラスを自動生成するため",
+      "コンポーネントの型を識別するため",
+      "key がないとレンダリングできないため",
+    ],
+    answer: 0,
+    explanation:
+      "key は React がリストの各要素を識別するために使います。ユニークな key があることで、順序が変わったり要素が削除されたりしたときに、React が効率的に差分を計算できます。",
+  },
+  {
+    id: "q119",
+    lesson: "lesson55",
+    difficulty: "easy",
+    question: "React で todos 配列を <li> に変換して表示する書き方はどれですか？",
+    choices: [
+      "{todos.map((todo) => <li key={todo.id}>{todo.text}</li>)}",
+      "{for (const todo of todos) { <li>{todo.text}</li> }}",
+      "{todos.forEach((todo) => <li>{todo.text}</li>)}",
+      "<list items={todos} />",
+    ],
+    answer: 0,
+    explanation:
+      "JSX の中で配列を描画するには .map() を使います。for 文は式ではないため JSX の {} の中には書けません。forEach は戻り値がないため JSX の配列を返しません。",
+  },
+  {
+    id: "q120",
+    lesson: "lesson56",
+    difficulty: "easy",
+    question: "React の useState フックの使い方として正しいものはどれですか？",
+    choices: [
+      "const [count, setCount] = useState(0) のように [値, 更新関数] を分割代入する",
+      "useState(0).value でアクセスし、useState(0).set() で更新する",
+      "count = useState(0) のように変数に直接代入する",
+      "const state = useGlobalState(0) のようにグローバル変数として使う",
+    ],
+    answer: 0,
+    explanation:
+      "useState は [現在の値, 値を更新する関数] の配列を返します。分割代入で const [count, setCount] = useState(0) のように受け取るのが慣例です。",
+  },
+  {
+    id: "q121",
+    lesson: "lesson56",
+    difficulty: "normal",
+    question: "setCount(count + 1) と setCount((c) => c + 1) の使い分けはなんですか？",
+    choices: [
+      "前の値を使う更新には (c) => c + 1 の関数形式が安全（バッチ処理時も正しく動く）",
+      "どちらも同じで、使い分けは不要",
+      "(c) => c + 1 形式は非推奨で、count + 1 を常に使うべき",
+      "(c) => c + 1 はクラスコンポーネントでしか使えない",
+    ],
+    answer: 0,
+    explanation:
+      "setCount(c => c + 1) は「前の状態 c を受け取り、次の状態を返す」関数形式です。同じイベント内で複数回 setState が呼ばれるバッチ処理でも前の値を正確に参照でき、バグが起きにくいです。",
+  },
+  {
+    id: "q122",
+    lesson: "lesson56",
+    difficulty: "normal",
+    question: "React コンポーネントが再レンダリングされるのはどのタイミングですか？",
+    choices: [
+      "useState の更新関数（setX）が呼ばれたとき、または親コンポーネントが再レンダリングされたとき",
+      "setTimeout で一定時間ごとに自動的に起きる",
+      "document.body が変化したとき",
+      "明示的に ReactDOM.render() を呼んだときだけ",
+    ],
+    answer: 0,
+    explanation:
+      "React はコンポーネントの state が変わったとき（setX 呼び出し）や、props が変わったとき（親の再レンダリング）に再レンダリングを行います。DOM の変化を React が監視しているわけではありません。",
+  },
+  {
+    id: "q123",
+    lesson: "lesson57",
+    difficulty: "normal",
+    question: "配列の state を更新するとき、直接 push() を使わず新しい配列を作る理由はなんですか？",
+    choices: [
+      "React は参照の変化で状態変更を検知するため。同じ配列オブジェクトを渡すと「変化なし」と判断されて再レンダリングされない",
+      "push() は React 環境では動作しないため",
+      "配列は const で宣言するので変更できないため",
+      "イミュータブル更新はデバッグを難しくするためにあえて使わない",
+    ],
+    answer: 0,
+    explanation:
+      "React は state が変わったかどうかを「前の参照と同じかどうか」で判断します。push() で同じ配列を書き換えても参照は変わらず、再レンダリングが起きません。スプレッド構文で新しい配列を作ることで参照が変わり、更新が検知されます。",
+  },
+  {
+    id: "q124",
+    lesson: "lesson57",
+    difficulty: "normal",
+    question: "配列 state から id が一致する要素を削除するイミュータブル更新の書き方はどれですか？",
+    choices: [
+      "setTodos((prev) => prev.filter((t) => t.id !== id))",
+      "todos.splice(index, 1); setTodos(todos)",
+      "setTodos((prev) => { prev.delete(id); return prev })",
+      "todos.length = todos.length - 1; setTodos(todos)",
+    ],
+    answer: 0,
+    explanation:
+      "filter() は条件を満たす要素だけを残した新しい配列を返します。元の配列は変更しません。splice は元の配列を破壊的に変更するため使えません。",
+  },
+  {
+    id: "q125",
+    lesson: "lesson58",
+    difficulty: "normal",
+    question: "useReducer の reducer 関数が従うべきルールはなんですか？",
+    choices: [
+      "純粋関数（同じ state と action を渡すと常に同じ新しい state を返す）でなければならない",
+      "async/await を使って非同期処理をする関数でなければならない",
+      "コンポーネントの外でなく、コンポーネントの内部に定義しなければならない",
+      "dispatch を呼び出す関数でなければならない",
+    ],
+    answer: 0,
+    explanation:
+      "reducer は (state, action) => newState という形の純粋関数です。副作用（API 呼び出しや localStorage 書き込み）を含めてはいけません。同じ入力には常に同じ出力を返す必要があります。",
+  },
+  {
+    id: "q126",
+    lesson: "lesson58",
+    difficulty: "normal",
+    question: "useReducer のメリットはなんですか？",
+    choices: [
+      "state の更新ロジックを reducer 関数に集中させることで、コンポーネントから分離して管理しやすくなる",
+      "useState より常に高速に動作する",
+      "非同期処理を自動で管理してくれる",
+      "Redux ライブラリの代わりとして完全に機能する",
+    ],
+    answer: 0,
+    explanation:
+      "useReducer は状態更新ロジックを reducer という 1 つの関数にまとめます。操作の種類が増えてもコンポーネント側は dispatch を呼ぶだけになり、ロジックとビューが分離されます。",
+  },
+  {
+    id: "q127",
+    lesson: "lesson59",
+    difficulty: "normal",
+    question: "React の制御コンポーネント（controlled component）とはどんなものですか？",
+    choices: [
+      "value を state で管理し、onChange で state を更新することで入力値が常に state と同期している <input>",
+      "外部ライブラリで状態管理される入力コンポーネント",
+      "バリデーション機能を内蔵した組み込みコンポーネント",
+      "useRef で DOM を直接操作する入力コンポーネント",
+    ],
+    answer: 0,
+    explanation:
+      "制御コンポーネントは value={state} と onChange で state を更新する仕組みを持ちます。入力値が常に React の state と同期しているため、入力内容をリアルタイムで使えます（バリデーション・プレビューなど）。",
+  },
+  {
+    id: "q128",
+    lesson: "lesson59",
+    difficulty: "normal",
+    question: "テキスト入力の onChange ハンドラで入力値を取得するには何を参照しますか？",
+    choices: [
+      "event.target.value",
+      "event.value",
+      "event.input",
+      "event.currentTarget.text",
+    ],
+    answer: 0,
+    explanation:
+      "onChange のイベントハンドラは SyntheticEvent を受け取ります。テキスト入力の現在値は event.target.value から取得します。これを setState の引数に渡して state を更新します。",
+  },
+  {
+    id: "q129",
+    lesson: "lesson60",
+    difficulty: "easy",
+    question: "React の JSX で「条件が true のときだけ要素を表示」するイディオムはどれですか？",
+    choices: [
+      "{isLoggedIn && <p>ようこそ</p>}",
+      "{if (isLoggedIn) <p>ようこそ</p>}",
+      "{isLoggedIn ? <p>ようこそ</p>}",
+      "<Show when={isLoggedIn}><p>ようこそ</p></Show>",
+    ],
+    answer: 0,
+    explanation:
+      "&& 演算子を使うと「左辺が truthy なら右辺を評価して返す」ため、条件が true のときだけ要素をレンダリングできます。左辺が false のとき、React は false をレンダリングしません。",
+  },
+  {
+    id: "q130",
+    lesson: "lesson60",
+    difficulty: "easy",
+    question: "React で 2 択の表示切り替えに使うイディオムはどれですか？",
+    choices: [
+      "三項演算子（isLoggedIn ? <A /> : <B />）",
+      "if 文（if (isLoggedIn) return <A />;）のみ",
+      "&& で両方書く",
+      "switch 文",
+    ],
+    answer: 0,
+    explanation:
+      "JSX は式なので if 文を直接書けません。2 択の切り替えは三項演算子（条件 ? A : B）を使います。if 文はコンポーネント関数のトップレベルや useEffect の中では使えます。",
+  },
+  {
+    id: "q131",
+    lesson: "lesson61",
+    difficulty: "normal",
+    question: "子コンポーネントで起きたイベントを親の state に反映するパターンはどれですか？",
+    choices: [
+      "親が関数（コールバック）を props として子に渡し、子がそれを呼び出す",
+      "グローバル変数を介して子が直接親の state を書き換える",
+      "子が document.dispatchEvent でイベントを発火して親が聞く",
+      "React は子から親への通信をサポートしていない",
+    ],
+    answer: 0,
+    explanation:
+      "React の基本パターンは「コールバック props」です。親が onAdd={(text) => ...} のような関数を子に渡し、子がそれを呼び出すことで親に値を伝えます。state は親が持ち続けます。",
+  },
+  {
+    id: "q132",
+    lesson: "lesson61",
+    difficulty: "normal",
+    question: "「state を親に持たせる（state lifting）」とはどういう意味ですか？",
+    choices: [
+      "複数の子コンポーネントが同じ state を共有したいとき、その state を共通の親に移動させること",
+      "state をグローバル変数に移動させること",
+      "useReducer に移行すること",
+      "state を localStorage に永続化すること",
+    ],
+    answer: 0,
+    explanation:
+      "複数の子が同じデータを参照・変更する必要があるとき、その state を共通の親コンポーネントに「持ち上げる」（lift up）ことで、props として各子に配布できます。",
+  },
+  {
+    id: "q133",
+    lesson: "lesson62",
+    difficulty: "normal",
+    question: "React の Context API を使うための 3 点セットはどれですか？",
+    choices: [
+      "createContext（コンテキスト作成）/ Provider（値を提供）/ useContext（値を受け取る）",
+      "useState / useReducer / useRef",
+      "createStore / Provider / connect",
+      "createContext / Consumer / Selector",
+    ],
+    answer: 0,
+    explanation:
+      "React の Context は createContext で作成し、Provider で値を提供して useContext で読み取ります。途中のコンポーネントは props を受け渡す必要がなく、prop drilling を解消できます。",
+  },
+  {
+    id: "q134",
+    lesson: "lesson62",
+    difficulty: "normal",
+    question: "Context の Provider で包んだコンポーネントが value を更新したとき、どのコンポーネントが再レンダリングされますか？",
+    choices: [
+      "useContext でその Context を読んでいるコンポーネントすべて",
+      "Provider の直接の子コンポーネントのみ",
+      "アプリ全体が再レンダリングされる",
+      "Provider 自身のみ",
+    ],
+    answer: 0,
+    explanation:
+      "Context の value が変わると、useContext でその Context を購読しているコンポーネントがすべて再レンダリングされます。頻繁に変わる値を広い Context に入れるとパフォーマンスに影響することがあります。",
+  },
+  {
+    id: "q135",
+    lesson: "lesson62",
+    difficulty: "hard",
+    question: "Context API を使うべきでない典型的な場面はどれですか？",
+    choices: [
+      "頻繁に更新される値（カウンターや入力値）を全コンポーネントに提供する（不要な再レンダリングが多発する）",
+      "テーマカラーやログイン情報など、変化が少ない値を共有する",
+      "アプリ全体の言語設定（i18n）を共有する",
+      "ユーザー情報などのグローバルな読み取り専用データを共有する",
+    ],
+    answer: 0,
+    explanation:
+      "Context の value が変わるたびに useContext を呼んでいるすべての子が再レンダリングされます。頻繁に更新されるローカルな値は useState で局所管理するか、状態管理ライブラリを使う方が適切です。",
+  },
+  {
+    id: "q136",
+    lesson: "lesson63",
+    difficulty: "normal",
+    question: "useRef の主な用途はどれですか？",
+    choices: [
+      "DOM 要素への参照取得（input.focus() など命令的操作）と、再レンダリングを起こさない値の保持",
+      "グローバル状態の管理",
+      "コンポーネントのメモ化（再レンダリングのスキップ）",
+      "依存配列の値を比較するためのキャッシュ",
+    ],
+    answer: 0,
+    explanation:
+      "useRef は .current プロパティに DOM 要素や値を格納します。useState と違い、.current を変更しても再レンダリングを起こしません。フォームの自動 focus や外部ライブラリへの DOM 渡しで使います。",
+  },
+  {
+    id: "q137",
+    lesson: "lesson63",
+    difficulty: "normal",
+    question: "useRef と useState の最大の違いはなんですか？",
+    choices: [
+      "useRef を更新しても再レンダリングが起きない。useState の更新関数を呼ぶと再レンダリングが起きる",
+      "useRef は数値専用、useState は文字列専用",
+      "useRef は親コンポーネントでしか使えない",
+      "useRef は DOM 要素に使えない",
+    ],
+    answer: 0,
+    explanation:
+      "useState の更新関数を呼ぶとコンポーネントが再レンダリングされます。useRef の .current を直接変更しても再レンダリングは起きません。この違いにより、useRef はタイマー ID のような「画面に反映しなくてよい値」の保持にも適しています。",
+  },
+  {
+    id: "q138",
+    lesson: "lesson64",
+    difficulty: "normal",
+    question: "useEffect の第 2 引数（依存配列）に空の配列 [] を渡すとどうなりますか？",
+    choices: [
+      "マウント時（コンポーネントが初めて DOM に追加されたとき）に 1 回だけ実行される",
+      "毎回のレンダリング後に実行される",
+      "アンマウント時にだけ実行される",
+      "useEffect は実行されない",
+    ],
+    answer: 0,
+    explanation:
+      "依存配列が [] のとき、useEffect は初回レンダリング後（マウント時）に 1 回だけ実行されます。API 取得や document.title の設定など、マウント時にだけ行いたい処理に使います。",
+  },
+  {
+    id: "q139",
+    lesson: "lesson64",
+    difficulty: "normal",
+    question: "useEffect のクリーンアップ関数（return () => { ... }）はいつ実行されますか？",
+    choices: [
+      "コンポーネントのアンマウント時、および次の useEffect が実行される前",
+      "コンポーネントがマウントされる前",
+      "state が更新されるたびにすぐ実行される",
+      "エラーが発生したときのみ実行される",
+    ],
+    answer: 0,
+    explanation:
+      "useEffect が return する関数（クリーンアップ）は、コンポーネントのアンマウント時と、次の effect が実行される直前に呼ばれます。イベントリスナーの削除やタイマーのクリアに使います。",
+  },
+  {
+    id: "q140",
+    lesson: "lesson64",
+    difficulty: "hard",
+    question: "useEffect の依存配列に todos を入れた場合 ([todos])、どのタイミングで実行されますか？",
+    choices: [
+      "初回レンダリング後、その後は todos の値が変わるたびに実行される",
+      "todos が undefined になったときだけ実行される",
+      "todos の長さが変わったときだけ実行される",
+      "todos が追加されたときのみ実行される",
+    ],
+    answer: 0,
+    explanation:
+      "依存配列に値を入れると、初回と「その値が変わったとき」に useEffect が実行されます。React は前回と今回の値を Object.is で比較し、変化があれば再実行します。",
+  },
+  {
+    id: "q141",
+    lesson: "lesson65",
+    difficulty: "normal",
+    question: "useMemo の役割はなんですか？",
+    choices: [
+      "計算コストの高い処理の結果をメモ化し、依存配列の値が変わったときだけ再計算する",
+      "コンポーネントの再レンダリングをスキップする",
+      "useState の更新をバッチ処理する",
+      "非同期処理の結果をキャッシュする",
+    ],
+    answer: 0,
+    explanation:
+      "useMemo は const value = useMemo(() => heavyCalc(data), [data]) のように使います。data が変わったときだけ heavyCalc を再実行し、変わっていない場合は前回の結果を返します。",
+  },
+  {
+    id: "q142",
+    lesson: "lesson65",
+    difficulty: "normal",
+    question: "useMemo を使う前に確認すべきことはなんですか？",
+    choices: [
+      "「まず普通に書いて計測する」こと。パフォーマンス問題が実際に発生するまで useMemo は不要なことが多い",
+      "すべての計算に useMemo を使うべきで、確認は不要",
+      "useMemo は非推奨なので代わりに useCallback を使う",
+      "大型プロジェクトでのみ意味があるため、小規模プロジェクトでは使わない",
+    ],
+    answer: 0,
+    explanation:
+      "useMemo の呼び出し自体にもコストがかかります。「まず普通に書き、パフォーマンス計測で問題が見つかったら最適化する」という原則が推奨されています。過剰なメモ化はコードを複雑にします。",
+  },
+  {
+    id: "q143",
+    lesson: "lesson66",
+    difficulty: "normal",
+    question: "React Compiler が自動化する主な機能はなんですか？",
+    choices: [
+      "useMemo / useCallback / React.memo による手動メモ化の自動化",
+      "TypeScript の型注釈の自動生成",
+      "CSS モジュールの自動作成",
+      "API のデータ取得の最適化",
+    ],
+    answer: 0,
+    explanation:
+      "React Compiler（旧称 React Forget）はコンパイル時に自動でメモ化を適用します。開発者が手動で useMemo / useCallback / React.memo を書く必要がなくなります。React 19 / React Compiler 1.0 で安定化しました。",
+  },
+  {
+    id: "q144",
+    lesson: "lesson66",
+    difficulty: "hard",
+    question: "React Compiler が正しく動作するための「Rules of React」の要件はなんですか？",
+    choices: [
+      "コンポーネントと hooks が副作用なしの純粋な関数であること",
+      "すべての変数に型注釈を付けること",
+      "コンポーネント名を大文字で始めること",
+      "props を必ずオブジェクトスプレッドで渡すこと",
+    ],
+    answer: 0,
+    explanation:
+      "React Compiler は React の Rules（コンポーネントが純粋関数、hooks をトップレベルでのみ呼ぶなど）に従ったコードを前提にします。副作用のある処理をレンダリング中に書いているコードでは最適化が機能しません。",
+  },
+  {
+    id: "q145",
+    lesson: "lesson67",
+    difficulty: "normal",
+    question: "カスタムフックを作る主なメリットはなんですか？",
+    choices: [
+      "コンポーネント間でステートフルなロジックを再利用できる",
+      "コンポーネントのレンダリング速度が自動で向上する",
+      "グローバル状態を管理できる",
+      "React の組み込みフックを使わずに済む",
+    ],
+    answer: 0,
+    explanation:
+      "カスタムフック（use で始まる関数）は useState や useEffect などを組み合わせたロジックを抽出し、複数のコンポーネントで再利用できます。UI のロジックとビューを分離できます。",
+  },
+  {
+    id: "q146",
+    lesson: "lesson67",
+    difficulty: "easy",
+    question: "カスタムフックの命名規則はなんですか？",
+    choices: [
+      "use から始める（例: useLocalStorage, useDebounce）",
+      "hook から始める（例: hookLocalStorage）",
+      "custom から始める（例: customLocalStorage）",
+      "大文字で始める（例: LocalStorage）",
+    ],
+    answer: 0,
+    explanation:
+      "カスタムフックは use から始める名前にします。React がこの命名規則を使って「フックのルール（条件分岐の中で呼ばない等）」を ESLint で検証できるようにしています。",
+  },
+  {
+    id: "q147",
+    lesson: "lesson68",
+    difficulty: "easy",
+    question: "React DevTools ブラウザ拡張の主な機能はなんですか？",
+    choices: [
+      "コンポーネントツリーの閲覧、props/state の確認と編集、再レンダリングのハイライト",
+      "JavaScript のデバッグのみ（ブレークポイント設置）",
+      "HTTP リクエストの監視",
+      "CSS スタイルの編集",
+    ],
+    answer: 0,
+    explanation:
+      "React DevTools はコンポーネントツリーを視覚化し、各コンポーネントの現在の props と state を確認・変更できます。Profiler タブで再レンダリングのパフォーマンス計測もできます。",
+  },
+  {
+    id: "q148",
+    lesson: "lesson68",
+    difficulty: "normal",
+    question: "React DevTools の Profiler タブはどんな用途に使いますか？",
+    choices: [
+      "どのコンポーネントが何回・どのくらいの時間で再レンダリングされたかを計測する",
+      "ネットワークのリクエスト速度を計測する",
+      "JavaScript の実行時間全体を計測する",
+      "バンドルサイズを分析する",
+    ],
+    answer: 0,
+    explanation:
+      "Profiler を使うと「Record」ボタン押下中のコンポーネントの再レンダリング回数・時間・理由（why did this render）を可視化できます。不要な再レンダリングを特定してパフォーマンス改善するときに使います。",
+  },
+  {
+    id: "q149",
+    lesson: "lesson69",
+    difficulty: "normal",
+    question: "React の Error Boundary の役割はなんですか？",
+    choices: [
+      "子コンポーネントツリーで発生した JavaScript エラーを捕捉し、クラッシュの代わりにフォールバック UI を表示する",
+      "try/catch と同じで、関数内のエラーを捕捉する",
+      "API 通信のエラーを自動で再試行する",
+      "TypeScript の型エラーを実行時に捕捉する",
+    ],
+    answer: 0,
+    explanation:
+      "Error Boundary はクラスコンポーネントで実装する React の仕組みで、子ツリーのレンダリング中のエラーを捕捉して代替 UI を表示します。try/catch では React のレンダリングエラーを捕捉できません。",
+  },
+  {
+    id: "q150",
+    lesson: "lesson69",
+    difficulty: "normal",
+    question: "React の Suspense コンポーネントは何に使いますか？",
+    choices: [
+      "非同期に読み込まれるコンポーネントやデータが準備できるまでフォールバック（ローディング UI）を表示する",
+      "コンポーネントの再レンダリングを一時停止する",
+      "エラー発生時にフォールバック UI を表示する",
+      "useEffect の実行を遅延させる",
+    ],
+    answer: 0,
+    explanation:
+      "<Suspense fallback={<Loading />}> で子コンポーネントを包むと、子が「準備中」の間は fallback を表示し、準備が整ったら子を表示します。コード分割（lazy）やデータ取得ライブラリと組み合わせて使います。",
+  },
+  {
+    id: "q151",
+    lesson: "lesson69",
+    difficulty: "hard",
+    question: "Error Boundary と Suspense を組み合わせるとどんな UX を実現できますか？",
+    choices: [
+      "データ取得中はローディング表示（Suspense）し、取得に失敗したらエラー UI（Error Boundary）を表示できる",
+      "すべての非同期処理を直列に処理できる",
+      "ページ遷移のアニメーションを制御できる",
+      "コンポーネントの lazy loading を無効にできる",
+    ],
+    answer: 0,
+    explanation:
+      "Suspense（ローディング）と Error Boundary（エラー）を組み合わせると、通信の 3 状態（成功・ローディング・エラー）をそれぞれのコンポーネントで宣言的に表現できます。React 19 では Server Components とも自然に連携します。",
+  },
+];
