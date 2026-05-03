@@ -139,13 +139,16 @@ Sentry や Datadog の **CSP レポート機能** を使うとダッシュボー
 
 #### 静的なポリシー（next.config.ts のヘッダ）
 
+静的ポリシーは**サーバーレスポンスが固定値**のため、nonce を埋め込めません。Next.js の inline script を通すには `'unsafe-inline'` が必要になり、XSS 保護が大幅に弱まります。**本番の Next.js アプリには動的 nonce 方式（下記）を使ってください。** 静的方式は Report-Only 調査の出発点として使う程度にとどめます。
+
 ```ts
-// next.config.ts
+// next.config.ts — ⚠ unsafe-inline は XSS 保護を無効化に近い状態にする。
+// 本番は下記の proxy.ts + nonce 方式に置き換えること。
 import type { NextConfig } from "next";
 
 const cspHeader = `
   default-src 'self';
-  script-src 'self' 'unsafe-inline' 'unsafe-eval';
+  script-src 'self' 'unsafe-inline';
   style-src 'self' 'unsafe-inline';
   img-src 'self' data: https:;
   font-src 'self' https://fonts.gstatic.com;
@@ -182,7 +185,9 @@ Next.js は SSR したマークアップに **inline script を埋め込んで**
 
 #### 動的なポリシー（Proxy + nonce）
 
-Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。
+Next.js 16 では `proxy.ts`（旧 middleware.ts）でリクエスト時に nonce を生成し、ヘッダで配ります。nonce がブラウザに届くまでの経路は次の通りです。
+
+<img src="/diagrams/csp-nonce-flow.svg" alt="CSP nonce の 7 ステップ: ①ブラウザがリクエスト送信 → ②proxy.ts が nonce 生成 → ③x-nonce ヘッダを RSC に転送 → ④RSC が nonce を読んで &lt;Script nonce&gt; を生成 → ⑤RSC が HTML を返す → ⑥proxy.ts が CSP ヘッダを付与してブラウザへ → ⑦ブラウザが nonce 照合して script を実行" class="diagram" />
 
 ```ts
 // proxy.ts

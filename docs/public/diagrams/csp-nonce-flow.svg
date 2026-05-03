@@ -1,0 +1,100 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 700 460" width="700" height="460" font-family="system-ui, sans-serif" font-size="13">
+  <style>
+    text { fill: #1e293b; }
+    @media (prefers-color-scheme: dark) {
+      text { fill: #e2e8f0; }
+      .bg { fill: #1e293b; }
+      .lane { fill: #334155; }
+      .label-bg { fill: #475569; }
+      .note-bg { fill: #1e3a5f; }
+    }
+    .bg { fill: #f8fafc; }
+    .lane { fill: #e2e8f0; }
+    .label-bg { fill: #64748b; }
+    .label-text { fill: #ffffff; font-weight: 600; }
+    .arrow { stroke: #3b82f6; stroke-width: 1.5; fill: none; marker-end: url(#ah); }
+    .arrow-green { stroke: #22c55e; stroke-width: 1.5; fill: none; marker-end: url(#ah-ok); }
+    .lifeline { stroke: #94a3b8; stroke-width: 1; stroke-dasharray: 4,4; }
+    .box-blue { fill: #dbeafe; stroke: #3b82f6; stroke-width: 1; }
+    .box-green { fill: #dcfce7; stroke: #22c55e; stroke-width: 1; }
+    .box-yellow { fill: #fef9c3; stroke: #ca8a04; stroke-width: 1; }
+    .box-purple { fill: #ede9fe; stroke: #7c3aed; stroke-width: 1; }
+    .step-num { fill: #64748b; font-size: 11px; }
+    .code { font-family: 'Courier New', monospace; font-size: 11px; }
+    .note-bg { fill: #fef9c3; }
+  </style>
+  <defs>
+    <marker id="ah" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#3b82f6"/>
+    </marker>
+    <marker id="ah-ok" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">
+      <path d="M0,0 L8,3 L0,6 Z" fill="#22c55e"/>
+    </marker>
+  </defs>
+
+  <!-- background -->
+  <rect class="bg" width="700" height="460" rx="8"/>
+
+  <!-- actor positions: Browser=90, proxy.ts=330, RSC Server=580 -->
+
+  <!-- Actor: Browser -->
+  <rect class="label-bg" x="30" y="14" width="120" height="28" rx="4"/>
+  <text class="label-text" x="90" y="33" text-anchor="middle">ブラウザ</text>
+
+  <!-- Actor: proxy.ts (Edge) -->
+  <rect class="label-bg" x="255" y="14" width="150" height="28" rx="4"/>
+  <text class="label-text" x="330" y="33" text-anchor="middle">proxy.ts (Edge)</text>
+
+  <!-- Actor: Next.js Server (RSC) -->
+  <rect class="label-bg" x="510" y="14" width="160" height="28" rx="4"/>
+  <text class="label-text" x="590" y="33" text-anchor="middle">Next.js Server (RSC)</text>
+
+  <!-- Lifelines -->
+  <line class="lifeline" x1="90" y1="42" x2="90" y2="450"/>
+  <line class="lifeline" x1="330" y1="42" x2="330" y2="450"/>
+  <line class="lifeline" x1="590" y1="42" x2="590" y2="450"/>
+
+  <!-- ① Browser → proxy.ts: HTTP リクエスト -->
+  <text class="step-num" x="60" y="78">① HTTP リクエスト</text>
+  <line class="arrow" x1="90" y1="83" x2="320" y2="83"/>
+
+  <!-- ② proxy.ts: nonce 生成 (internal) -->
+  <rect class="box-yellow" x="235" y="105" width="190" height="36" rx="4"/>
+  <text x="330" y="120" text-anchor="middle" font-size="11" fill="#92400e">② nonce 生成</text>
+  <text class="code" x="330" y="135" text-anchor="middle" fill="#92400e">crypto.randomUUID() → base64</text>
+
+  <!-- ③ proxy.ts → RSC: x-nonce ヘッダ転送 -->
+  <text class="step-num" x="335" y="165">③ x-nonce ヘッダ付きで転送</text>
+  <line class="arrow" x1="330" y1="170" x2="580" y2="170"/>
+  <rect class="box-blue" x="390" y="155" width="140" height="20" rx="3"/>
+  <text x="460" y="169" text-anchor="middle" font-size="11" fill="#1e40af">x-nonce: abc123</text>
+
+  <!-- ④ RSC: nonce 読み取り → HTML 生成 (internal) -->
+  <rect class="box-purple" x="495" y="192" width="190" height="50" rx="4"/>
+  <text x="590" y="208" text-anchor="middle" font-size="11" fill="#5b21b6">④ nonce 読み取り</text>
+  <text class="code" x="590" y="223" text-anchor="middle" fill="#5b21b6">headers().get('x-nonce')</text>
+  <text class="code" x="590" y="237" text-anchor="middle" fill="#5b21b6">&lt;Script nonce="abc123"&gt;</text>
+
+  <!-- ⑤ RSC → proxy.ts: HTML レスポンス -->
+  <text class="step-num" x="335" y="265">⑤ HTML レスポンス</text>
+  <line class="arrow-green" x1="590" y1="270" x2="340" y2="270"/>
+  <rect class="box-green" x="410" y="255" width="140" height="20" rx="3"/>
+  <text x="480" y="269" text-anchor="middle" font-size="11" fill="#166534">nonce 付き script タグ</text>
+
+  <!-- proxy.ts adds CSP header (internal) -->
+  <rect class="box-yellow" x="235" y="292" width="190" height="36" rx="4"/>
+  <text x="330" y="307" text-anchor="middle" font-size="11" fill="#92400e">CSP ヘッダをレスポンスに付与</text>
+  <text class="code" x="330" y="322" text-anchor="middle" fill="#92400e">Content-Security-Policy: 'nonce-abc123'</text>
+
+  <!-- ⑥ proxy.ts → Browser: HTML + CSP ヘッダ -->
+  <text class="step-num" x="100" y="352">⑥ HTML + CSP ヘッダ</text>
+  <line class="arrow-green" x1="330" y1="357" x2="100" y2="357"/>
+  <rect class="box-green" x="140" y="342" width="150" height="20" rx="3"/>
+  <text x="215" y="356" text-anchor="middle" font-size="11" fill="#166534">CSP: nonce-abc123</text>
+
+  <!-- ⑦ Browser: nonce 照合 → script 実行 -->
+  <rect class="box-blue" x="18" y="378" width="144" height="50" rx="4"/>
+  <text x="90" y="395" text-anchor="middle" font-size="11" fill="#1e40af">⑦ nonce 照合</text>
+  <text class="code" x="90" y="410" text-anchor="middle" fill="#1e40af">CSP の nonce ==</text>
+  <text class="code" x="90" y="424" text-anchor="middle" fill="#1e40af">script の nonce → 実行 ✓</text>
+</svg>
