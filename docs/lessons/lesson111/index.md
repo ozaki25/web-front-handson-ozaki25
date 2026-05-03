@@ -300,7 +300,7 @@ npx biome init
   "$schema": "https://biomejs.dev/schemas/latest/schema.json",
   "files": {
     "ignoreUnknown": false,
-    "ignore": ["node_modules", "dist"]
+    "includes": ["**", "!node_modules", "!dist"]
   },
   "formatter": {
     "enabled": true,
@@ -400,7 +400,7 @@ export default function App() {
 
 - `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
 - `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
-- `linter.rules.style.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
+- `linter.rules.correctness.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
 
 ### 自分で書く（任意）
 
