@@ -166,9 +166,9 @@ const previousResults = computed(() => {
         </div>
         <div>
           <button
-            v-if="isCurrentAnswered"
             class="btn-next"
             type="button"
+            :disabled="!isCurrentAnswered"
             @click="next"
           >
             {{ currentIndex + 1 < orderedQuizzes.length ? '次の問題' : '結果を見る' }}
@@ -290,7 +290,19 @@ const previousResults = computed(() => {
   font-size: 0.9rem;
   font-weight: 600;
   cursor: pointer;
-  transition: background 0.15s;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.btn-next:disabled {
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-text-3);
+  cursor: default;
+  opacity: 0.6;
+}
+
+.dark .btn-next:disabled {
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-text-3);
 }
 
 .btn-next:hover,
