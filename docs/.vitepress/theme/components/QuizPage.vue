@@ -334,6 +334,17 @@ const previousResults = computed(() => {
   color: var(--vp-c-text-1);
 }
 
+.btn-prev:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.btn-next:focus-visible,
+.btn-restart:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
 .btn-next,
 .btn-restart {
   padding: 0.55rem 1.4rem;

@@ -206,6 +206,16 @@ const effectiveCorrect = computed(() => {
   border-color: var(--vp-c-brand-2);
 }
 
+.choice:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.btn-reset:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
 .choice:disabled {
   cursor: default;
 }

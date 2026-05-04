@@ -256,6 +256,21 @@ function resetProgress() {
   color: #fff;
 }
 
+.btn-action:focus-visible {
+  outline: 2px solid #93c5fd;
+  outline-offset: 2px;
+}
+
+.chapter-card:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.review-banner:focus-visible {
+  outline: 2px solid #b91c1c;
+  outline-offset: 2px;
+}
+
 .dark .btn-action:not(.btn-review) {
   background: #2563eb;
   color: #fff;
