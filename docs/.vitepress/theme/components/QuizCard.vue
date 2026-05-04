@@ -101,7 +101,7 @@ const effectiveCorrect = computed(() => {
     <div v-if="answered" class="quiz-result" role="status" aria-live="polite">
       <div class="result-header">
         <p class="result-badge" :data-correct="effectiveCorrect !== null ? String(effectiveCorrect) : undefined">
-          {{ effectiveCorrect ? '正解' : '不正解' }}
+          {{ effectiveCorrect ? '正解' : 'もう少し' }}
         </p>
         <button
           v-if="!props.initialAnswered"
