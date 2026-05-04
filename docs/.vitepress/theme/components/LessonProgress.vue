@@ -65,14 +65,19 @@ onUnmounted(() => {
 
 <template>
   <div class="lesson-progress" v-if="lessons.length > 0">
-    <div class="lesson-progress-summary">完了: {{ doneCount }} / {{ lessons.length }}</div>
-    <ul class="lesson-progress-list">
-      <li v-for="l in lessons" :key="l.link" :class="{ done: completions[l.id] }">
-        <span class="mark" aria-hidden="true">{{ completions[l.id] ? '✓' : '・' }}</span>
-        <a :href="l.link">{{ l.text }}</a>
-        <span class="group" v-if="l.group">（{{ l.group }}）</span>
-      </li>
-    </ul>
+    <details class="lesson-progress-details">
+      <summary class="lesson-progress-summary">
+        <span class="summary-text">完了: {{ doneCount }} / {{ lessons.length }}</span>
+        <span class="summary-hint">レッスン一覧</span>
+      </summary>
+      <ul class="lesson-progress-list">
+        <li v-for="l in lessons" :key="l.link" :class="{ done: completions[l.id] }">
+          <span class="mark" aria-hidden="true">{{ completions[l.id] ? '✓' : '・' }}</span>
+          <a :href="l.link">{{ l.text }}</a>
+          <span class="group" v-if="l.group">（{{ l.group }}）</span>
+        </li>
+      </ul>
+    </details>
   </div>
   <div v-else class="lesson-progress empty">
     まだレッスンがありません。
@@ -82,21 +87,58 @@ onUnmounted(() => {
 <style scoped>
 .lesson-progress {
   margin: 1.5rem 0;
-  padding: 1rem 1.25rem;
   background: var(--vp-c-bg-soft);
   border: 1px solid var(--vp-c-divider);
   border-radius: 8px;
 }
 
+.lesson-progress-details {
+  padding: 0;
+}
+
 .lesson-progress-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.85rem 1.25rem;
+  cursor: pointer;
+  list-style: none;
+  user-select: none;
+  border-radius: 8px;
+  transition: background 0.15s;
+}
+
+.lesson-progress-summary::-webkit-details-marker {
+  display: none;
+}
+
+.lesson-progress-summary:hover {
+  background: var(--vp-c-bg-mute);
+}
+
+.summary-text {
   font-weight: 600;
-  margin-bottom: 0.5rem;
+  color: var(--vp-c-text-1);
+}
+
+.summary-hint {
+  font-size: 0.85rem;
+  color: var(--vp-c-text-2);
+}
+
+.lesson-progress-details[open] .summary-hint::after {
+  content: ' ▲';
+}
+
+.lesson-progress-details:not([open]) .summary-hint::after {
+  content: ' ▼';
 }
 
 .lesson-progress-list {
   list-style: none;
-  padding: 0;
+  padding: 0 1.25rem 1rem;
   margin: 0;
+  border-top: 1px solid var(--vp-c-divider);
 }
 
 .lesson-progress-list li {
@@ -126,5 +168,6 @@ onUnmounted(() => {
 .lesson-progress.empty {
   color: var(--vp-c-text-2);
   font-size: 0.9em;
+  padding: 1rem 1.25rem;
 }
 </style>
