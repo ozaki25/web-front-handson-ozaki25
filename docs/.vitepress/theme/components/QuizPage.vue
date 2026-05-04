@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, useTemplateRef } from 'vue'
 import type { Quiz } from '../../../quiz/types'
 import { STORAGE_KEY } from '../../../quiz/types'
 import type { StoredAnswer, StoredAnswers } from '../../../quiz/types'
@@ -39,6 +39,12 @@ function shuffleArray<T>(arr: T[]): T[] {
     ;[a[i], a[j]] = [a[j], a[i]]
   }
   return a
+}
+
+const quizCardRef = useTemplateRef<{ focusFirstChoice: () => void }>('quizCard')
+
+function focusCard() {
+  nextTick(() => quizCardRef.value?.focusFirstChoice())
 }
 
 const orderedQuizzes = ref<Quiz[]>(
@@ -89,11 +95,15 @@ function next() {
     finished.value = true
   } else {
     currentIndex.value++
+    focusCard()
   }
 }
 
 function prev() {
-  if (currentIndex.value > 0) currentIndex.value--
+  if (currentIndex.value > 0) {
+    currentIndex.value--
+    focusCard()
+  }
 }
 
 function restart() {
@@ -164,6 +174,7 @@ const previousResults = computed(() => {
 
       <QuizCard
         v-if="currentQuiz"
+        ref="quizCard"
         :key="currentQuiz.id"
         :quiz="currentQuiz"
         :index="currentIndex"
