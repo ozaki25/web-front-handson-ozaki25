@@ -54,6 +54,7 @@ const orderedQuizzes = ref<Quiz[]>(
 const currentIndex = ref(0)
 const sessionAnswers = ref<Record<string, { correct: boolean; selectedIndex: number | null }>>({})
 const finished = ref(false)
+const resumedFrom = ref(0)
 
 const currentQuiz = computed<Quiz | null>(() => orderedQuizzes.value[currentIndex.value] ?? null)
 
@@ -134,6 +135,10 @@ onMounted(() => {
     if (firstUnanswered === -1) {
       // 全問回答済み → 即結果画面
       finished.value = true
+    } else if (firstUnanswered > 0) {
+      resumedFrom.value = firstUnanswered + 1
+      setTimeout(() => { resumedFrom.value = 0 }, 4000)
+      currentIndex.value = firstUnanswered
     } else {
       currentIndex.value = firstUnanswered
     }
@@ -162,6 +167,9 @@ const previousResults = computed(() => {
     <h2 class="quiz-page-title">{{ title }}</h2>
 
     <div v-if="!finished">
+      <div v-if="resumedFrom > 0" class="quiz-resume-toast" role="status">
+        前回の続き、{{ resumedFrom }} 問目から再開しました
+      </div>
       <div class="quiz-progress-bar-wrap" role="progressbar" aria-valuemin="0" :aria-valuenow="answeredCount" :aria-valuemax="orderedQuizzes.length">
         <div class="quiz-progress-bar" :style="{ width: progress + '%' }" />
       </div>
@@ -285,6 +293,16 @@ const previousResults = computed(() => {
   margin-bottom: 1rem;
   border-bottom: 2px solid var(--vp-c-divider);
   padding-bottom: 0.5rem;
+}
+
+.quiz-resume-toast {
+  margin-bottom: 0.75rem;
+  padding: 0.6rem 0.85rem;
+  background: var(--vp-c-brand-soft);
+  color: var(--vp-c-brand-1);
+  border-left: 3px solid var(--vp-c-brand-1);
+  border-radius: 4px;
+  font-size: 0.85rem;
 }
 
 .quiz-progress-bar-wrap {
