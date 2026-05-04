@@ -362,3 +362,9 @@ export default function App() {
 - `<Suspense fallback={...}>` は非同期な待ちの間にフォールバック UI を出す
 - 外側に ErrorBoundary、内側に Suspense、が定番の組み合わせ
 - Next.js App Router では、この 2 つが `error.tsx` / `loading.tsx` としてルート単位で使えるようになる
+
+---
+
+::: tip この章のドリルで力試し
+[4 章「React」のドリル →](/quiz/chapter4/) で、4 択問題で理解度を確認できます。回答履歴はブラウザに保存されるので、途中で閉じても続きから再開できます。
+:::

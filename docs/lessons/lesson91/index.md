@@ -140,3 +140,9 @@ GitHub にプッシュするだけで、Vercel が自動で検知して再デプ
   - 認証（NextAuth、Clerk など）を足してログインできるアプリにする
   - スタイリングを Tailwind CSS や CSS Modules に寄せる
   - React の他のフック（`useReducer`、`useContext`、`useMemo`）を触る
+
+---
+
+::: tip この章のドリルで力試し
+[5 章「Next.js」のドリル →](/quiz/chapter5/) で、4 択問題で理解度を確認できます。回答履歴はブラウザに保存されるので、途中で閉じても続きから再開できます。
+:::

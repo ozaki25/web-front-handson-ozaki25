@@ -106,14 +106,14 @@ const effectiveCorrect = computed(() => {
       <div class="result-header">
         <p class="result-badge" :data-correct="effectiveCorrect !== null ? String(effectiveCorrect) : undefined">
           {{ effectiveCorrect ? '正解' : '不正解' }}
+          <span v-if="props.initialAnswered" class="result-badge-prev">（前回の回答）</span>
         </p>
         <button
-          v-if="!props.initialAnswered"
           class="btn-reset"
           type="button"
           @click="resetAnswer"
         >
-          選び直す
+          {{ props.initialAnswered ? 'もう一度解く' : '選び直す' }}
         </button>
       </div>
       <p v-if="effectiveCorrect === false" class="quiz-after-wrong">
@@ -303,6 +303,13 @@ const effectiveCorrect = computed(() => {
   font-weight: 700;
   font-size: 0.9rem;
   margin: 0;
+}
+
+.result-badge-prev {
+  margin-left: 0.4em;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--vp-c-text-3);
 }
 
 .btn-reset {

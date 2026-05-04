@@ -494,3 +494,9 @@ import App from "@/App";
 - `noEmit: true` にして **型チェック専用** にし、変換はバンドラに任せるのが現代流
 - TypeScript 6 / 7 時代は `verbatimModuleSyntax` / `erasableSyntaxOnly` で **「型以外の独自構文を持たない」** 書き方が標準。Node.js のネイティブ TS 実行とも噛み合う
 - `extends` でベース設定を継承できる。`@tsconfig/strictest` などの公式バンドルもある
+
+---
+
+::: tip この章のドリルで力試し
+[3 章「TypeScript」のドリル →](/quiz/chapter3/) で、4 択問題で理解度を確認できます。回答履歴はブラウザに保存されるので、途中で閉じても続きから再開できます。
+:::

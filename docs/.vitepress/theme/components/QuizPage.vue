@@ -187,19 +187,13 @@ const encouragementMessage = computed(() => {
   return '解説で確認しながら、もう一度取り組んでみましょう。'
 })
 
-const previousResults = computed(() => {
-  const total = props.quizzes.length
-  if (total === 0) return null
-  const answered = props.quizzes.filter((q) => storedAnswers.value[q.id] !== undefined).length
-  if (answered === 0) return null
-  const correct = props.quizzes.filter((q) => storedAnswers.value[q.id]?.correct).length
-  return { total, answered, correct }
-})
 </script>
 
 <template>
   <div class="quiz-page">
-    <h2 class="quiz-page-title">{{ title }}</h2>
+    <p class="quiz-page-back">
+      <a href="/quiz/">← ドリル一覧へ</a>
+    </p>
 
     <div v-if="!finished">
       <div v-if="resumedFrom > 0" class="quiz-resume-toast" role="status">
@@ -319,12 +313,6 @@ const previousResults = computed(() => {
       </div>
     </div>
 
-    <div v-if="previousResults && !finished" class="quiz-prev-results">
-      <p>
-        過去の結果: {{ previousResults.answered }} / {{ previousResults.total }} 問回答済み
-        （正解 {{ previousResults.correct }} 問）
-      </p>
-    </div>
   </div>
 </template>
 
@@ -334,12 +322,19 @@ const previousResults = computed(() => {
   margin: 0 auto;
 }
 
-.quiz-page-title {
-  font-size: 1.25rem;
-  font-weight: 700;
-  margin-bottom: 1rem;
-  border-bottom: 2px solid var(--vp-c-divider);
-  padding-bottom: 0.5rem;
+.quiz-page-back {
+  margin: -0.5rem 0 1rem;
+  font-size: 0.85rem;
+}
+
+.quiz-page-back a {
+  color: var(--vp-c-text-2);
+  text-decoration: none;
+}
+
+.quiz-page-back a:hover {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
 }
 
 .quiz-saved-toast {
@@ -418,7 +413,7 @@ const previousResults = computed(() => {
   border-radius: 3px;
 }
 
-@media (hover: none) and (pointer: coarse) {
+@media (hover: none) and (pointer: coarse), (max-width: 640px) {
   .quiz-keyboard-hint {
     display: none;
   }

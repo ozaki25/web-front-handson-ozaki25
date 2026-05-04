@@ -170,9 +170,26 @@ function resetProgress() {
       </a>
     </div>
 
-    <div class="quiz-top-actions">
-      <a href="/quiz/random/" class="btn-action">ランダム出題（全問）</a>
-      <a href="/quiz/review/" class="btn-action btn-review">間違えた問題を復習</a>
+    <div class="quiz-top-actions-group">
+      <p class="quiz-top-actions-label">ランダム出題</p>
+      <div class="quiz-top-actions">
+        <a href="/quiz/random-5/" class="btn-action btn-action-secondary">5 問だけ</a>
+        <a href="/quiz/random-10/" class="btn-action btn-action-secondary">10 問だけ</a>
+        <a href="/quiz/random/" class="btn-action">全 {{ totalQuestions }} 問から</a>
+      </div>
+    </div>
+
+    <div class="quiz-top-actions-group">
+      <a
+        v-if="wrongCount > 0"
+        href="/quiz/review/"
+        class="btn-action btn-review"
+      >
+        間違えた問題を復習（{{ wrongCount }} 件）
+      </a>
+      <p v-else class="btn-action btn-review btn-review-disabled" aria-disabled="true">
+        間違えた問題を復習（0 件 — まずは章を解いてみましょう）
+      </p>
     </div>
 
     <div v-if="totalAnswered > 0" class="quiz-top-reset">
@@ -350,9 +367,19 @@ function resetProgress() {
   color: #fca5a5;
 }
 
+.quiz-top-actions-group {
+  margin-bottom: 1rem;
+}
+
+.quiz-top-actions-label {
+  font-size: 0.78rem;
+  color: var(--vp-c-text-3);
+  margin: 0 0 0.4rem;
+}
+
 .quiz-top-actions {
   display: flex;
-  gap: 0.75rem;
+  gap: 0.5rem;
   flex-wrap: wrap;
 }
 
@@ -387,14 +414,26 @@ function resetProgress() {
   outline-offset: 2px;
 }
 
-.dark .btn-action:not(.btn-review) {
+.dark .btn-action:not(.btn-review):not(.btn-action-secondary) {
   background: #2563eb;
   color: #fff;
 }
 
-.dark .btn-action:not(.btn-review):hover {
+.dark .btn-action:not(.btn-review):not(.btn-action-secondary):hover {
   background: #1d4ed8;
   color: #fff;
+}
+
+.btn-action.btn-action-secondary {
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  border: 1px solid var(--vp-c-divider);
+}
+
+.btn-action.btn-action-secondary:hover {
+  background: var(--vp-c-bg-mute);
+  border-color: var(--vp-c-brand-2);
+  color: var(--vp-c-text-1);
 }
 
 .btn-review {
@@ -407,6 +446,21 @@ function resetProgress() {
   background: var(--vp-c-bg-mute);
   border-color: var(--vp-c-brand-2);
   color: var(--vp-c-text-1);
+}
+
+.btn-review-disabled {
+  display: inline-block;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-3);
+  border: 1px dashed var(--vp-c-divider);
+  cursor: default;
+  margin: 0;
+}
+
+.btn-review-disabled:hover {
+  background: var(--vp-c-bg-soft);
+  border-color: var(--vp-c-divider);
+  color: var(--vp-c-text-3);
 }
 
 .continue-banner {
