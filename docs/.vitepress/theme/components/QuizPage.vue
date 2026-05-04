@@ -316,6 +316,18 @@ const previousResults = computed(() => {
   align-items: center;
 }
 
+@media (max-width: 640px) {
+  .quiz-nav {
+    position: sticky;
+    bottom: 0;
+    z-index: 5;
+    margin: 1rem -1rem 0;
+    padding: 0.75rem 1rem;
+    background: var(--vp-c-bg);
+    border-top: 1px solid var(--vp-c-divider);
+  }
+}
+
 .btn-prev {
   padding: 0.55rem 1.4rem;
   background: var(--vp-c-bg-soft);
