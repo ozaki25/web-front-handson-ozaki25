@@ -218,23 +218,40 @@ const previousResults = computed(() => {
         正答率 {{ orderedQuizzes.length > 0 ? Math.round((correctCount / orderedQuizzes.length) * 100) : 0 }}%
       </p>
 
-      <div class="finish-list">
-        <div
-          v-for="(q, i) in orderedQuizzes"
-          :key="q.id"
-          class="finish-row"
-          :data-correct="String(sessionAnswers[q.id]?.correct)"
-        >
-          <span class="finish-row-num">{{ i + 1 }}</span>
-          <span class="finish-row-mark">{{ sessionAnswers[q.id]?.correct ? '○' : '×' }}</span>
-          <span class="finish-row-body">
-            <span class="finish-row-q" v-html="renderText(q.question)" />
-            <span
-              v-if="sessionAnswers[q.id] !== undefined && !sessionAnswers[q.id]?.correct"
-              class="finish-row-answer"
-              v-html="`正解: ${renderText(q.choices[q.answer])}`"
-            />
-          </span>
+      <div v-if="correctCount < orderedQuizzes.length" class="finish-section">
+        <p class="finish-section-heading finish-section-wrong">不正解 {{ orderedQuizzes.length - correctCount }} 問</p>
+        <div class="finish-list">
+          <div
+            v-for="(q, i) in orderedQuizzes.filter(q => !sessionAnswers[q.id]?.correct)"
+            :key="q.id"
+            class="finish-row"
+            data-correct="false"
+          >
+            <span class="finish-row-num">{{ orderedQuizzes.indexOf(q) + 1 }}</span>
+            <span class="finish-row-mark">×</span>
+            <span class="finish-row-body">
+              <span class="finish-row-q" v-html="renderText(q.question)" />
+              <span class="finish-row-answer" v-html="`正解: ${renderText(q.choices[q.answer])}`" />
+            </span>
+          </div>
+        </div>
+      </div>
+
+      <div v-if="correctCount > 0" class="finish-section">
+        <p class="finish-section-heading finish-section-correct">正解 {{ correctCount }} 問</p>
+        <div class="finish-list">
+          <div
+            v-for="(q, i) in orderedQuizzes.filter(q => sessionAnswers[q.id]?.correct)"
+            :key="q.id"
+            class="finish-row"
+            data-correct="true"
+          >
+            <span class="finish-row-num">{{ orderedQuizzes.indexOf(q) + 1 }}</span>
+            <span class="finish-row-mark">○</span>
+            <span class="finish-row-body">
+              <span class="finish-row-q" v-html="renderText(q.question)" />
+            </span>
+          </div>
         </div>
       </div>
 
@@ -377,11 +394,36 @@ const previousResults = computed(() => {
   margin-bottom: 1.25rem;
 }
 
+.finish-section {
+  margin-bottom: 1.25rem;
+}
+
+.finish-section-heading {
+  font-size: 0.82rem;
+  font-weight: 700;
+  margin: 0 0 0.5rem;
+}
+
+.finish-section-wrong {
+  color: #dc2626;
+}
+
+.finish-section-correct {
+  color: #16a34a;
+}
+
+.dark .finish-section-wrong {
+  color: #fca5a5;
+}
+
+.dark .finish-section-correct {
+  color: #86efac;
+}
+
 .finish-list {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  margin-bottom: 1.5rem;
   max-height: 360px;
   overflow-y: auto;
 }
