@@ -76,6 +76,14 @@ function onAnswered(quizId: string, correct: boolean, selectedIndex: number) {
   saveAnswer(quizId, correct, selectedIndex)
 }
 
+function onReset(quizId: string) {
+  delete sessionAnswers.value[quizId]
+  const data = loadAnswers()
+  delete data[quizId]
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  storedAnswers.value = data
+}
+
 function next() {
   if (currentIndex.value + 1 >= orderedQuizzes.value.length) {
     finished.value = true
@@ -151,6 +159,7 @@ const previousResults = computed(() => {
         :initial-correct="currentAnswer?.correct ?? null"
         :initial-selected-index="currentAnswer?.selectedIndex ?? null"
         @answered="onAnswered"
+        @reset="onReset"
       />
 
       <div class="quiz-nav">

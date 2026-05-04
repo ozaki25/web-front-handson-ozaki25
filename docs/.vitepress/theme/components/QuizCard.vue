@@ -13,6 +13,7 @@ const props = defineProps<{
 
 const emit = defineEmits<{
   answered: [quizId: string, correct: boolean, selectedIndex: number]
+  reset: [quizId: string]
 }>()
 
 const selectedIndex = ref<number | null>(props.initialSelectedIndex ?? null)
@@ -42,6 +43,12 @@ const difficultyLabel: Record<string, string> = {
 function renderText(s: string): string {
   const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return escaped.replace(/`([^`]+)`/g, '<code>$1</code>')
+}
+
+function resetAnswer() {
+  answered.value = false
+  selectedIndex.value = null
+  emit('reset', props.quiz.id)
 }
 
 const effectiveCorrect = computed(() => {
@@ -78,9 +85,19 @@ const effectiveCorrect = computed(() => {
     </ol>
 
     <div v-if="answered" class="quiz-result" role="status" aria-live="polite">
-      <p class="result-badge" :data-correct="effectiveCorrect !== null ? String(effectiveCorrect) : undefined">
-        {{ effectiveCorrect ? '正解' : '不正解' }}
-      </p>
+      <div class="result-header">
+        <p class="result-badge" :data-correct="effectiveCorrect !== null ? String(effectiveCorrect) : undefined">
+          {{ effectiveCorrect ? '正解' : '不正解' }}
+        </p>
+        <button
+          v-if="!props.initialAnswered"
+          class="btn-reset"
+          type="button"
+          @click="resetAnswer"
+        >
+          やり直す
+        </button>
+      </div>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
     </div>
   </div>
@@ -237,10 +254,36 @@ const effectiveCorrect = computed(() => {
   border: 1px solid var(--vp-c-divider);
 }
 
+.result-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 0.5rem;
+}
+
 .result-badge {
   font-weight: 700;
   font-size: 0.9rem;
-  margin: 0 0 0.5rem;
+  margin: 0;
+}
+
+.btn-reset {
+  padding: 0.25rem 0.75rem;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-text-2);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  flex-shrink: 0;
+}
+
+.btn-reset:hover {
+  background: var(--vp-c-bg-mute);
+  border-color: var(--vp-c-text-2);
+  color: var(--vp-c-text-1);
 }
 
 .result-badge[data-correct='true'] {
