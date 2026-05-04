@@ -71,9 +71,11 @@ function resetProgress() {
         <span class="summary-label">回答済み</span>
         <span class="summary-value">{{ totalAnswered }} / {{ totalQuestions }}</span>
       </div>
-      <div class="summary-item">
+      <div class="summary-item summary-item-correct">
         <span class="summary-label">正解数</span>
-        <span class="summary-value">{{ totalCorrect }}</span>
+        <span class="summary-value">
+          {{ totalCorrect }}<span class="summary-value-sub">/ {{ totalQuestions }}</span>
+        </span>
       </div>
       <div class="summary-item">
         <span class="summary-label">正答率</span>
@@ -187,6 +189,21 @@ function resetProgress() {
   font-size: 1.3rem;
   font-weight: 700;
   color: var(--vp-c-text-1);
+}
+
+.summary-item-correct .summary-value {
+  color: #16a34a;
+}
+
+.dark .summary-item-correct .summary-value {
+  color: #86efac;
+}
+
+.summary-value-sub {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--vp-c-text-2);
+  margin-left: 0.25rem;
 }
 
 .chapter-grid {
