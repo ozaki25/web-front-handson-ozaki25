@@ -147,7 +147,12 @@ const previousResults = computed(() => {
       <div class="quiz-progress-bar-wrap" role="progressbar" aria-valuemin="0" :aria-valuenow="answeredCount" :aria-valuemax="orderedQuizzes.length">
         <div class="quiz-progress-bar" :style="{ width: progress + '%' }" />
       </div>
-      <p class="quiz-progress-text">{{ answeredCount }} / {{ orderedQuizzes.length }} 問回答済み</p>
+      <p class="quiz-progress-text">
+        {{ answeredCount }} / {{ orderedQuizzes.length }} 問回答済み
+        <span v-if="orderedQuizzes.length - answeredCount > 0" class="quiz-remaining">
+          （あと {{ orderedQuizzes.length - answeredCount }} 問）
+        </span>
+      </p>
 
       <QuizCard
         v-if="currentQuiz"
@@ -262,6 +267,10 @@ const previousResults = computed(() => {
   font-size: 0.8rem;
   color: var(--vp-c-text-2);
   margin-bottom: 1rem;
+}
+
+.quiz-remaining {
+  color: var(--vp-c-text-3);
 }
 
 .quiz-nav {
