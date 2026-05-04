@@ -93,7 +93,7 @@ const effectiveCorrect = computed(() => {
         >
           <span class="choice-label" aria-hidden="true">{{ String.fromCharCode(65 + i) }}</span>
           <span class="choice-text" v-html="renderText(choice)" />
-          <span v-if="answered && i === quiz.answer" class="choice-check" aria-hidden="true">正</span>
+          <span v-if="answered && i === quiz.answer" class="choice-check">正解</span>
         </button>
       </li>
     </ol>
@@ -227,7 +227,9 @@ const effectiveCorrect = computed(() => {
 .choice.correct {
   background: #f0fdf4;
   border-color: #16a34a;
+  border-width: 2px;
   color: #15803d;
+  font-weight: 600;
 }
 
 .choice.wrong {
@@ -266,12 +268,13 @@ const effectiveCorrect = computed(() => {
 .choice-check {
   font-size: 0.75rem;
   font-weight: 700;
-  padding: 0.1em 0.4em;
+  padding: 0.15em 0.55em;
   background: #16a34a;
   color: #fff;
   border-radius: 3px;
   flex-shrink: 0;
   align-self: center;
+  letter-spacing: 0.04em;
 }
 
 .quiz-result {
