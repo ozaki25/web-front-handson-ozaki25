@@ -75,6 +75,7 @@ function next() {
 }
 
 function restart() {
+  if (props.shuffle) orderedQuizzes.value = shuffleArray(props.quizzes)
   currentIndex.value = 0
   sessionAnswers.value = {}
   finished.value = false
@@ -90,6 +91,7 @@ const previousResults = computed(() => {
   const total = props.quizzes.length
   if (total === 0) return null
   const answered = props.quizzes.filter((q) => storedAnswers.value[q.id] !== undefined).length
+  if (answered === 0) return null
   const correct = props.quizzes.filter((q) => storedAnswers.value[q.id]?.correct).length
   return { total, answered, correct }
 })
