@@ -1,5 +1,7 @@
 ---
 title: ドリル — 2章 JavaScript
+prev: false
+next: false
 ---
 
 # 2章 JavaScript

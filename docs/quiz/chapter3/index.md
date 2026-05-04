@@ -1,5 +1,7 @@
 ---
 title: ドリル — 3章 TypeScript
+prev: false
+next: false
 ---
 
 # 3章 TypeScript

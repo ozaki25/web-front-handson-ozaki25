@@ -1,5 +1,7 @@
 ---
 title: ドリル
+prev: false
+next: false
 ---
 
 # ドリル

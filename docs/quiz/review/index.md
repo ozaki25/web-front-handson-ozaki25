@@ -1,5 +1,7 @@
 ---
 title: ドリル — 間違えた問題を復習
+prev: false
+next: false
 ---
 
 # 間違えた問題を復習

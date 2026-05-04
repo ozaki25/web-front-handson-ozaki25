@@ -1,5 +1,7 @@
 ---
 title: ドリル — 5章 Next.js
+prev: false
+next: false
 ---
 
 # 5章 Next.js

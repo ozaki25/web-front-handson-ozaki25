@@ -1,5 +1,7 @@
 ---
 title: ドリル — 6章 ブラウザの仕組み
+prev: false
+next: false
 ---
 
 # 6章 ブラウザの仕組み

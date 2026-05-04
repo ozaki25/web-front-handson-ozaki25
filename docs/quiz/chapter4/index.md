@@ -1,5 +1,7 @@
 ---
 title: ドリル — 4章 React
+prev: false
+next: false
 ---
 
 # 4章 React

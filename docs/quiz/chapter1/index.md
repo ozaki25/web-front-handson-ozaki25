@@ -1,5 +1,7 @@
 ---
 title: ドリル — 1章 HTML / CSS
+prev: false
+next: false
 ---
 
 # 1章 HTML / CSS

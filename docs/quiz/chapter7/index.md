@@ -1,5 +1,7 @@
 ---
 title: ドリル — 7章 実務で使う周辺知識
+prev: false
+next: false
 ---
 
 # 7章 実務で使う周辺知識

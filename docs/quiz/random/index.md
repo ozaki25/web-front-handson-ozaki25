@@ -1,5 +1,7 @@
 ---
 title: ドリル — ランダム出題
+prev: false
+next: false
 ---
 
 # ランダム出題
