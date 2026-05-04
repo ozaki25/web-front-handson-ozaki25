@@ -21,7 +21,8 @@ const chapterStats = computed(() =>
     const total = quizzes.length
     const answered = quizzes.filter((q) => stored.value[q.id] !== undefined).length
     const correct = quizzes.filter((q) => stored.value[q.id]?.correct).length
-    return { ...ch, total, answered, correct }
+    const wrong = answered - correct
+    return { ...ch, total, answered, correct, wrong }
   }),
 )
 
@@ -86,7 +87,8 @@ const wrongCount = computed(() =>
         </div>
         <div class="chapter-stats">
           <span>{{ ch.answered }} / {{ ch.total }} 問</span>
-          <span v-if="ch.answered > 0" class="chapter-rate">
+          <span v-if="ch.wrong > 0" class="chapter-wrong">要復習 {{ ch.wrong }}</span>
+          <span v-else-if="ch.answered > 0" class="chapter-rate">
             正解 {{ Math.round((ch.correct / ch.answered) * 100) }}%
           </span>
         </div>
@@ -209,6 +211,15 @@ const wrongCount = computed(() =>
 .chapter-rate {
   color: var(--vp-c-brand-1);
   font-weight: 600;
+}
+
+.chapter-wrong {
+  color: #dc2626;
+  font-weight: 600;
+}
+
+.dark .chapter-wrong {
+  color: #fca5a5;
 }
 
 .quiz-top-actions {
