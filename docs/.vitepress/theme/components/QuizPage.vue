@@ -186,7 +186,7 @@ const previousResults = computed(() => {
       <p class="quiz-progress-text">
         {{ answeredCount }} / {{ orderedQuizzes.length }} 問回答済み
         <span v-if="orderedQuizzes.length - answeredCount > 0" class="quiz-remaining">
-          （あと {{ orderedQuizzes.length - answeredCount }} 問）
+          （あと {{ orderedQuizzes.length - answeredCount }} 問・約 {{ Math.max(1, Math.ceil((orderedQuizzes.length - answeredCount) * 0.5)) }} 分）
         </span>
       </p>
       <p class="quiz-keyboard-hint">
