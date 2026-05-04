@@ -24,6 +24,7 @@ function saveAnswer(quizId: string, correct: boolean) {
   const data = loadAnswers()
   data[quizId] = { correct, ts: Date.now() }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+  storedAnswers.value = data
 }
 
 function shuffleArray<T>(arr: T[]): T[] {
