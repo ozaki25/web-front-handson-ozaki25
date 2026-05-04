@@ -154,7 +154,7 @@ p { margin-top: 12px; }
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` / `storage.js` の 3 ファイル構成で進めます。「import / export でモジュール化」で作った `storage.js` を出発点にして、壊れた JSON に強くする流れです。
+これまでのレッスンで作ったファイルがあればそのまま使えます。手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」を貼って揃えてください。本レッスンでは `index.html` / `main.js` / `storage.js` の 3 ファイル構成で進めます。「import / export でモジュール化」で作った `storage.js` を出発点にして、壊れた JSON に強くする流れです。
 
 <details>
 <summary>出発点のコード</summary>

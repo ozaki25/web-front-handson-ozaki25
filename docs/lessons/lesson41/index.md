@@ -10,7 +10,7 @@
 
 ### この章で使う環境
 
-この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開いてください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。
+この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。直リンク <https://stackblitz.com/edit/typescript> を開いてください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。
 
 テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の3 章 のレッスンでは、この `main.ts` を書き換えていきます。
 
@@ -91,11 +91,11 @@ Type 'string' is not assignable to type 'number'.
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/edit/typescript>）から始められます。
 
 ### 手順 1: テンプレートを開く
 
-1. 直リンク <https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript> を開く（TypeScript Vanilla テンプレートが立ち上がる）。
+1. 直リンク <https://stackblitz.com/edit/typescript> を開く（TypeScript Vanilla テンプレートが立ち上がる）。
 2. `src/main.ts` を開く。中身はサンプルが入っているので、すべて消す。
 3. プレビュー横のコンソールも見えるようにしておく（DevTools の Console、または StackBlitz 下部のターミナル）。
 

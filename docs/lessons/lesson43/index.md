@@ -127,7 +127,7 @@ type Todo = {
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）から始められます。
+このレッスンは独立した演習です。新規 StackBlitz の TypeScript（Vanilla TS）テンプレート（<https://stackblitz.com/edit/typescript>）から始められます。
 
 ### 手順 1: `User` 型を書く
 

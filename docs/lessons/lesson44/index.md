@@ -164,7 +164,7 @@ interface User {
 
 ### 途中から始める場合
 
-新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
+新規 StackBlitz の TypeScript テンプレート（<https://stackblitz.com/edit/typescript>）を開き、`src/types.ts` を以下の内容で作ってから始めてください。
 
 <details>
 <summary><code>src/types.ts</code>（これまでに育ててきた版）</summary>

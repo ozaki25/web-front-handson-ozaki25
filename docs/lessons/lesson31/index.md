@@ -141,7 +141,7 @@ pre { background: #f5f5f5; color: #222; padding: 12px; min-height: 6em; border-r
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。これまでのレッスンのファイルは使いません。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、`script.js` を下記の内容に書き換えてください。`index.html` は最初から `<script defer src="./script.js">` を読み込んでいるテンプレートそのままで構いません。
+このレッスンは独立した演習です。これまでのレッスンのファイルは使いません。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、`script.js` を下記の内容に書き換えてください。`index.html` は最初から `<script defer src="./script.js">` を読み込んでいるテンプレートそのままで構いません。
 
 ### ゴール
 

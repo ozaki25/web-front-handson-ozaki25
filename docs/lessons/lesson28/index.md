@@ -255,7 +255,7 @@ pre { background: #f5f5f5; color: #222; padding: 12px; border-radius: 4px; margi
 
 ### 途中から始める場合
 
-このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/fork/github/stackblitz/starters/tree/main/html>）を開き、`script.js` を下記の内容に書き換えてください。
+このレッスンは独立した演習です。新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、`script.js` を下記の内容に書き換えてください。
 
 ### ゴール
 
