@@ -20,9 +20,9 @@ function loadAnswers(): StoredAnswers {
   }
 }
 
-function saveAnswer(quizId: string, correct: boolean) {
+function saveAnswer(quizId: string, correct: boolean, selectedIndex: number) {
   const data = loadAnswers()
-  data[quizId] = { correct, ts: Date.now() }
+  data[quizId] = { correct, ts: Date.now(), selectedIndex }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
   storedAnswers.value = data
 }
@@ -73,7 +73,7 @@ const currentAnswer = computed(() =>
 
 function onAnswered(quizId: string, correct: boolean, selectedIndex: number) {
   sessionAnswers.value[quizId] = { correct, selectedIndex }
-  saveAnswer(quizId, correct)
+  saveAnswer(quizId, correct, selectedIndex)
 }
 
 function next() {
@@ -105,8 +105,10 @@ onMounted(() => {
   if (!props.shuffle) {
     for (const q of orderedQuizzes.value) {
       if (stored[q.id] !== undefined) {
-        // selectedIndex は前セッションには保存していないため null
-        sessionAnswers.value[q.id] = { correct: stored[q.id].correct, selectedIndex: null }
+        sessionAnswers.value[q.id] = {
+          correct: stored[q.id].correct,
+          selectedIndex: stored[q.id].selectedIndex ?? null,
+        }
       }
     }
     const firstUnanswered = orderedQuizzes.value.findIndex((q) => stored[q.id] === undefined)

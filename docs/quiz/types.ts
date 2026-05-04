@@ -14,7 +14,7 @@ export type Quiz = {
 
 export const STORAGE_KEY = "quiz-answers";
 
-export type StoredAnswer = { correct: boolean; ts: number };
+export type StoredAnswer = { correct: boolean; ts: number; selectedIndex?: number | null };
 export type StoredAnswers = Record<string, StoredAnswer>;
 
 export type ChapterMeta = {
