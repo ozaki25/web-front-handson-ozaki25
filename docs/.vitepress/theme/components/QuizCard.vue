@@ -312,6 +312,14 @@ const effectiveCorrect = computed(() => {
   flex-shrink: 0;
 }
 
+@media (max-width: 640px) {
+  .btn-reset {
+    min-height: 44px;
+    padding: 0.6rem 1rem;
+    font-size: 0.9rem;
+  }
+}
+
 .btn-reset:hover {
   background: var(--vp-c-bg-mute);
   border-color: var(--vp-c-text-2);
