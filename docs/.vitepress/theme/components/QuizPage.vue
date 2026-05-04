@@ -13,11 +13,63 @@ const props = defineProps<{
   randomSample?: number
 }>()
 
-function sampleQuizzes(): Quiz[] {
-  if (props.randomSample == null || props.randomSample <= 0) {
-    return props.shuffle ? shuffleArray(props.quizzes) : props.quizzes
+function sampleSessionKey(): string | null {
+  if (props.randomSample != null && props.randomSample > 0) {
+    return `quiz-sample-n${props.randomSample}`
   }
-  return shuffleArray(props.quizzes).slice(0, props.randomSample)
+  if (props.shuffle) {
+    return `quiz-sample-shuffle-${props.quizzes.length}`
+  }
+  return null
+}
+
+function loadSampleIds(): string[] | null {
+  const key = sampleSessionKey()
+  if (!key || typeof window === 'undefined') return null
+  try {
+    const raw = sessionStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveSampleIds(quizzes: Quiz[]) {
+  const key = sampleSessionKey()
+  if (!key || typeof window === 'undefined') return
+  try {
+    sessionStorage.setItem(key, JSON.stringify(quizzes.map((q) => q.id)))
+  } catch {
+    /* ignore quota errors */
+  }
+}
+
+function sampleQuizzes(force = false): Quiz[] {
+  // 同じタブ内で再マウントした場合は前回の抽選結果を復元する。
+  // 戻る操作やレッスン → 戻る、別ページ → 戻る でもセットが変わらない。
+  if (!force && (props.randomSample != null || props.shuffle)) {
+    const ids = loadSampleIds()
+    if (ids && ids.length > 0) {
+      const byId = new Map(props.quizzes.map((q) => [q.id, q]))
+      const restored = ids.map((id) => byId.get(id)).filter((q): q is Quiz => q != null)
+      const expected =
+        props.randomSample != null
+          ? Math.min(props.randomSample, props.quizzes.length)
+          : props.quizzes.length
+      if (restored.length === expected) return restored
+    }
+  }
+
+  let result: Quiz[]
+  if (props.randomSample != null && props.randomSample > 0) {
+    result = shuffleArray(props.quizzes).slice(0, props.randomSample)
+  } else if (props.shuffle) {
+    result = shuffleArray(props.quizzes)
+  } else {
+    return props.quizzes
+  }
+  saveSampleIds(result)
+  return result
 }
 
 function chapterIdFromLesson(lesson: string): ChapterId | null {
@@ -168,7 +220,7 @@ function prev() {
 
 function restart() {
   if (props.randomSample != null || props.shuffle) {
-    orderedQuizzes.value = sampleQuizzes()
+    orderedQuizzes.value = sampleQuizzes(true)
   }
   currentIndex.value = 0
   sessionAnswers.value = {}
@@ -322,7 +374,11 @@ const encouragementMessage = computed(() => {
             </summary>
             <p class="finish-row-explanation" v-html="renderText(q.explanation)" />
             <p v-if="q.lesson" class="finish-row-lesson-link">
-              <a :href="`/lessons/${q.lesson}/`">{{ q.lesson }} を読み直す →</a>
+              <a
+                :href="`/lessons/${q.lesson}/`"
+                target="_blank"
+                rel="noopener"
+              >{{ q.lesson }} を読み直す ↗</a>
             </p>
           </details>
         </div>

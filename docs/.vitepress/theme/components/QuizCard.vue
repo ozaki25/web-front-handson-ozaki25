@@ -95,7 +95,7 @@ const effectiveCorrect = computed(() => {
           @click="select(i)"
           type="button"
         >
-          <span class="choice-label" aria-hidden="true">{{ String.fromCharCode(65 + i) }}</span>
+          <span class="choice-label" aria-hidden="true">{{ i + 1 }}</span>
           <span class="choice-text" v-html="renderText(choice)" />
           <span v-if="answered && i === quiz.answer" class="choice-check">正解</span>
         </button>
@@ -121,7 +121,11 @@ const effectiveCorrect = computed(() => {
       </p>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
       <p v-if="quiz.lesson" class="quiz-lesson-link">
-        <a :href="`/lessons/${quiz.lesson}/`">{{ quiz.lesson }} を読み直す →</a>
+        <a
+          :href="`/lessons/${quiz.lesson}/`"
+          target="_blank"
+          rel="noopener"
+        >{{ quiz.lesson }} を読み直す ↗</a>
       </p>
     </div>
   </div>
