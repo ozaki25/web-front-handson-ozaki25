@@ -78,7 +78,7 @@ const effectiveCorrect = computed(() => {
     </ol>
 
     <div v-if="answered" class="quiz-result" role="status" aria-live="polite">
-      <p class="result-badge" :data-correct="effectiveCorrect ?? undefined">
+      <p class="result-badge" :data-correct="effectiveCorrect !== null ? String(effectiveCorrect) : undefined">
         {{ effectiveCorrect ? '正解' : '不正解' }}
       </p>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />

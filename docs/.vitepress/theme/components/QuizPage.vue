@@ -27,6 +27,11 @@ function saveAnswer(quizId: string, correct: boolean) {
   storedAnswers.value = data
 }
 
+function renderText(s: string): string {
+  const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return escaped.replace(/`([^`]+)`/g, '<code>$1</code>')
+}
+
 function shuffleArray<T>(arr: T[]): T[] {
   const a = [...arr]
   for (let i = a.length - 1; i > 0; i--) {
@@ -183,11 +188,18 @@ const previousResults = computed(() => {
           v-for="(q, i) in orderedQuizzes"
           :key="q.id"
           class="finish-row"
-          :data-correct="sessionAnswers[q.id]?.correct"
+          :data-correct="String(sessionAnswers[q.id]?.correct)"
         >
           <span class="finish-row-num">{{ i + 1 }}</span>
           <span class="finish-row-mark">{{ sessionAnswers[q.id]?.correct ? '○' : '×' }}</span>
-          <span class="finish-row-q">{{ q.question }}</span>
+          <span class="finish-row-body">
+            <span class="finish-row-q" v-html="renderText(q.question)" />
+            <span
+              v-if="sessionAnswers[q.id] !== undefined && !sessionAnswers[q.id]?.correct"
+              class="finish-row-answer"
+              v-html="`正解: ${renderText(q.choices[q.answer])}`"
+            />
+          </span>
         </div>
       </div>
 
@@ -361,11 +373,6 @@ const previousResults = computed(() => {
   text-align: center;
 }
 
-.finish-row-q {
-  flex: 1;
-  line-height: 1.5;
-}
-
 .finish-actions {
   display: flex;
   align-items: center;
@@ -396,5 +403,37 @@ const previousResults = computed(() => {
 
 .quiz-prev-results p {
   margin: 0;
+}
+
+.finish-row-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+}
+
+.finish-row-q {
+  flex: 1;
+  line-height: 1.5;
+}
+
+.finish-row-answer {
+  font-size: 0.78rem;
+  color: #b91c1c;
+  line-height: 1.4;
+}
+
+.dark .finish-row-answer {
+  color: #fca5a5;
+}
+
+.finish-row-q :deep(code),
+.finish-row-answer :deep(code) {
+  font-family: var(--vp-font-family-mono, monospace);
+  font-size: 0.875em;
+  background: var(--vp-c-bg-mute);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+  color: var(--vp-c-text-1);
 }
 </style>

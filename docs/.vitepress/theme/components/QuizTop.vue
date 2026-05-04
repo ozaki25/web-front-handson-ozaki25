@@ -50,7 +50,7 @@ const totalCorrect = computed(() =>
       <div class="summary-item">
         <span class="summary-label">正答率</span>
         <span class="summary-value">
-          {{ totalAnswered > 0 ? Math.round((totalCorrect / totalAnswered) * 100) : 0 }}%
+          {{ totalQuestions > 0 ? Math.round((totalCorrect / totalQuestions) * 100) : 0 }}%
         </span>
       </div>
     </div>
