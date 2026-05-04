@@ -39,6 +39,12 @@ const totalCorrect = computed(() =>
 const wrongCount = computed(() =>
   chapterStats.value.reduce((acc, c) => acc + (c.answered - c.correct), 0),
 )
+
+function resetProgress() {
+  if (!confirm('回答履歴をすべて削除しますか？この操作は元に戻せません。')) return
+  localStorage.removeItem(STORAGE_KEY)
+  stored.value = {}
+}
 </script>
 
 <template>
@@ -98,6 +104,12 @@ const wrongCount = computed(() =>
     <div class="quiz-top-actions">
       <a href="/quiz/random/" class="btn-action">ランダム出題（全問）</a>
       <a href="/quiz/review/" class="btn-action btn-review">間違えた問題を復習</a>
+    </div>
+
+    <div v-if="totalAnswered > 0" class="quiz-top-reset">
+      <button class="btn-reset-progress" type="button" @click="resetProgress">
+        回答履歴をリセット
+      </button>
     </div>
   </div>
 </template>
@@ -313,5 +325,31 @@ const wrongCount = computed(() =>
   background: #5a0f0f;
   border-color: #dc2626;
   color: #fca5a5;
+}
+
+.quiz-top-reset {
+  margin-top: 1.5rem;
+  text-align: right;
+}
+
+.btn-reset-progress {
+  padding: 0.35rem 0.8rem;
+  font-size: 0.78rem;
+  background: none;
+  color: var(--vp-c-text-3);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 4px;
+  cursor: pointer;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.btn-reset-progress:hover {
+  color: #dc2626;
+  border-color: #fca5a5;
+}
+
+.dark .btn-reset-progress:hover {
+  color: #fca5a5;
+  border-color: #b91c1c;
 }
 </style>
