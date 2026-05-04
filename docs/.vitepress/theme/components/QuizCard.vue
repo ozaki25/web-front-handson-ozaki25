@@ -113,6 +113,9 @@ const effectiveCorrect = computed(() => {
         </button>
       </div>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
+      <p v-if="quiz.lesson" class="quiz-lesson-link">
+        <a :href="`/lessons/${quiz.lesson}/`">{{ quiz.lesson }} を読み直す →</a>
+      </p>
     </div>
   </div>
 </template>
@@ -333,6 +336,17 @@ const effectiveCorrect = computed(() => {
   line-height: 1.6;
   color: var(--vp-c-text-1);
   margin: 0;
+}
+
+.quiz-lesson-link {
+  margin: 0.6rem 0 0;
+  font-size: 0.82rem;
+}
+
+.quiz-lesson-link a {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
 }
 
 /* v-html で挿入される <code> のスタイル */
