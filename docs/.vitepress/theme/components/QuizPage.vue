@@ -176,6 +176,17 @@ function handlePageKeydown(e: KeyboardEvent) {
 
 onUnmounted(() => window.removeEventListener('keydown', handlePageKeydown))
 
+const encouragementMessage = computed(() => {
+  const total = orderedQuizzes.value.length
+  if (total === 0) return ''
+  const rate = correctCount.value / total
+  if (rate === 1) return 'すべて正解しました。お疲れさまでした。'
+  if (rate >= 0.8) return 'よく解けています。間違えた問題だけ解説を読み直してみましょう。'
+  if (rate >= 0.5) return '半分以上が正解です。間違えた問題から学べることがあります。'
+  if (rate > 0) return '最後まで取り組めたのが何より大切です。解説を見ながら少しずつ覚えていきましょう。'
+  return '解説で確認しながら、もう一度取り組んでみましょう。'
+})
+
 const previousResults = computed(() => {
   const total = props.quizzes.length
   if (total === 0) return null
@@ -255,6 +266,7 @@ const previousResults = computed(() => {
       <p class="finish-rate">
         正答率 {{ orderedQuizzes.length > 0 ? Math.round((correctCount / orderedQuizzes.length) * 100) : 0 }}%
       </p>
+      <p class="finish-encouragement">{{ encouragementMessage }}</p>
 
       <div v-if="correctCount < orderedQuizzes.length" class="finish-section">
         <p class="finish-section-heading finish-section-wrong">不正解 {{ orderedQuizzes.length - correctCount }} 問</p>
@@ -519,7 +531,18 @@ const previousResults = computed(() => {
 .finish-rate {
   font-size: 0.9rem;
   color: var(--vp-c-text-2);
-  margin-bottom: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.finish-encouragement {
+  font-size: 0.9rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-1);
+  margin: 0 0 1.25rem;
+  padding: 0.65rem 0.85rem;
+  background: var(--vp-c-bg);
+  border-radius: 4px;
+  border-left: 3px solid var(--vp-c-brand-2);
 }
 
 .finish-section {
