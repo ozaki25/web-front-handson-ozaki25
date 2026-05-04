@@ -344,9 +344,18 @@ const effectiveCorrect = computed(() => {
 
 .quiz-explanation {
   font-size: 0.875rem;
-  line-height: 1.6;
+  line-height: 1.7;
   color: var(--vp-c-text-1);
   margin: 0;
+}
+
+.dark .quiz-explanation {
+  color: var(--vp-c-text-1);
+}
+
+.dark .quiz-result {
+  background: var(--vp-c-bg-soft);
+  border-color: var(--vp-c-divider);
 }
 
 .quiz-lesson-link {
