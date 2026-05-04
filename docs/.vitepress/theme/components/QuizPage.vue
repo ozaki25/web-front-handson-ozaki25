@@ -329,7 +329,8 @@ const previousResults = computed(() => {
 }
 
 .btn-prev {
-  padding: 0.55rem 1.4rem;
+  min-height: 44px;
+  padding: 0.65rem 1.4rem;
   background: var(--vp-c-bg-soft);
   color: var(--vp-c-text-1);
   border: 1px solid var(--vp-c-divider);
@@ -359,7 +360,8 @@ const previousResults = computed(() => {
 
 .btn-next,
 .btn-restart {
-  padding: 0.55rem 1.4rem;
+  min-height: 44px;
+  padding: 0.65rem 1.4rem;
   background: #1e3a8a;
   color: #fff;
   border: none;

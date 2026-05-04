@@ -189,7 +189,8 @@ const effectiveCorrect = computed(() => {
   align-items: flex-start;
   gap: 0.75rem;
   width: 100%;
-  padding: 0.65rem 0.9rem;
+  min-height: 44px;
+  padding: 0.75rem 0.9rem;
   background: var(--vp-c-bg-soft);
   border: 1px solid var(--vp-c-divider);
   border-radius: 6px;
@@ -292,8 +293,9 @@ const effectiveCorrect = computed(() => {
 }
 
 .btn-reset {
-  padding: 0.25rem 0.75rem;
-  font-size: 0.78rem;
+  min-height: 36px;
+  padding: 0.45rem 0.85rem;
+  font-size: 0.85rem;
   font-weight: 600;
   background: var(--vp-c-bg);
   color: var(--vp-c-text-2);
