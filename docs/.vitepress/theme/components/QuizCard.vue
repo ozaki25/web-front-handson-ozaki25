@@ -143,15 +143,15 @@ const effectiveCorrect = computed(() => {
 
 .quiz-difficulty[data-level='easy'] {
   background: #dcfce7;
-  color: #15803d;
+  color: #166534; /* #166534 on #dcfce7 ≈ 5.2:1 (WCAG AA pass) */
 }
 .quiz-difficulty[data-level='normal'] {
   background: #fef9c3;
-  color: #a16207;
+  color: #854d0e; /* #854d0e on #fef9c3 ≈ 5.1:1 (WCAG AA pass) */
 }
 .quiz-difficulty[data-level='hard'] {
   background: #fee2e2;
-  color: #b91c1c;
+  color: #991b1b; /* #991b1b on #fee2e2 ≈ 5.0:1 (WCAG AA pass) */
 }
 
 .dark .quiz-difficulty[data-level='easy'] {
