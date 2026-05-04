@@ -81,6 +81,7 @@ export default withPwa(
         { text: 'はじめに', link: '/introduction/' },
         {
           text: 'ドリル',
+          link: '/quiz/',
           collapsed: true,
           items: [
             { text: '一覧', link: '/quiz/' },
