@@ -116,6 +116,9 @@ const effectiveCorrect = computed(() => {
           選び直す
         </button>
       </div>
+      <p v-if="effectiveCorrect === false" class="quiz-after-wrong">
+        解説を読めば次は分かります。一緒に確認しましょう。
+      </p>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
       <p v-if="quiz.lesson" class="quiz-lesson-link">
         <a :href="`/lessons/${quiz.lesson}/`">{{ quiz.lesson }} を読み直す →</a>
@@ -358,6 +361,13 @@ const effectiveCorrect = computed(() => {
 
 .dark .result-badge[data-correct='false'] {
   color: #fca5a5;
+}
+
+.quiz-after-wrong {
+  margin: 0 0 0.75rem;
+  font-size: 0.85rem;
+  color: var(--vp-c-text-2);
+  font-style: italic;
 }
 
 .quiz-explanation {
