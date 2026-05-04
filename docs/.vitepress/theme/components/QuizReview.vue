@@ -1,9 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
+import { STORAGE_KEY } from '../../../quiz/types'
 import { allQuizzes } from '../../../quiz/data/index'
 import QuizPage from './QuizPage.vue'
-
-const STORAGE_KEY = 'quiz-answers'
 
 const loaded = ref(false)
 const wrongQuizzes = ref<typeof allQuizzes>([])

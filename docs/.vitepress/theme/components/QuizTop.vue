@@ -1,12 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { chapters } from '../../../quiz/types'
+import { chapters, STORAGE_KEY } from '../../../quiz/types'
+import type { StoredAnswers } from '../../../quiz/types'
 import { quizzesByChapter } from '../../../quiz/data/index'
-
-const STORAGE_KEY = 'quiz-answers'
-
-type StoredAnswer = { correct: boolean; ts: number }
-type StoredAnswers = Record<string, StoredAnswer>
 
 const stored = ref<StoredAnswers>({})
 

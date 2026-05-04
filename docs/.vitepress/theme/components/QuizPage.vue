@@ -1,6 +1,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import type { Quiz } from '../../../quiz/types'
+import { STORAGE_KEY } from '../../../quiz/types'
+import type { StoredAnswer, StoredAnswers } from '../../../quiz/types'
 import QuizCard from './QuizCard.vue'
 
 const props = defineProps<{
@@ -8,11 +10,6 @@ const props = defineProps<{
   title: string
   shuffle?: boolean
 }>()
-
-const STORAGE_KEY = 'quiz-answers'
-
-type StoredAnswer = { correct: boolean; ts: number }
-type StoredAnswers = Record<string, StoredAnswer>
 
 function loadAnswers(): StoredAnswers {
   if (typeof window === 'undefined') return {}
@@ -38,7 +35,7 @@ function shuffleArray<T>(arr: T[]): T[] {
   return a
 }
 
-const orderedQuizzes = computed<Quiz[]>(() =>
+const orderedQuizzes = ref<Quiz[]>(
   props.shuffle ? shuffleArray(props.quizzes) : props.quizzes,
 )
 

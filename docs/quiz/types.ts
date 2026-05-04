@@ -12,6 +12,11 @@ export type Quiz = {
   explanation: string;
 };
 
+export const STORAGE_KEY = "quiz-answers";
+
+export type StoredAnswer = { correct: boolean; ts: number };
+export type StoredAnswers = Record<string, StoredAnswer>;
+
 export type ChapterMeta = {
   id: ChapterId;
   title: string;
