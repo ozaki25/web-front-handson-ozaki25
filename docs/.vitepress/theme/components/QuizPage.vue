@@ -286,7 +286,7 @@ const previousResults = computed(() => {
       <p class="finish-encouragement">{{ encouragementMessage }}</p>
 
       <div v-if="correctCount < orderedQuizzes.length" class="finish-section">
-        <p class="finish-section-heading finish-section-wrong">不正解 {{ orderedQuizzes.length - correctCount }} 問</p>
+        <p class="finish-section-heading finish-section-wrong">これから覚えたい {{ orderedQuizzes.length - correctCount }} 問</p>
         <div class="finish-list">
           <details
             v-for="(q, i) in orderedQuizzes.filter(q => !sessionAnswers[q.id]?.correct)"
