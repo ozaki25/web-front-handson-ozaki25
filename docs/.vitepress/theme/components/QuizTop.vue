@@ -68,8 +68,11 @@ function resetProgress() {
 
     <a v-if="wrongCount > 0" href="/quiz/review/" class="review-banner">
       <span class="review-banner-icon">✗</span>
-      <span class="review-banner-text">
-        間違えた問題が <strong>{{ wrongCount }} 問</strong> あります — 復習する
+      <span class="review-banner-body">
+        <span class="review-banner-text">
+          間違えた問題が <strong>{{ wrongCount }} 問</strong> あります
+        </span>
+        <span class="review-banner-sub">不正解だった問題だけを集めて出題します</span>
       </span>
       <span class="review-banner-arrow">→</span>
     </a>
@@ -343,8 +346,21 @@ function resetProgress() {
   flex-shrink: 0;
 }
 
-.review-banner-text {
+.review-banner-body {
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.review-banner-text {
+  font-weight: 600;
+}
+
+.review-banner-sub {
+  font-size: 0.78rem;
+  font-weight: 400;
+  opacity: 0.85;
 }
 
 .review-banner-arrow {
