@@ -223,7 +223,7 @@ const previousResults = computed(() => {
 .btn-next,
 .btn-restart {
   padding: 0.55rem 1.4rem;
-  background: var(--vp-c-brand-1);
+  background: #1e3a8a;
   color: #fff;
   border: none;
   border-radius: 6px;
@@ -235,7 +235,19 @@ const previousResults = computed(() => {
 
 .btn-next:hover,
 .btn-restart:hover {
-  background: var(--vp-c-brand-2);
+  background: #1e40af;
+  color: #fff;
+}
+
+.dark .btn-next,
+.dark .btn-restart {
+  background: #2563eb;
+}
+
+.dark .btn-next:hover,
+.dark .btn-restart:hover {
+  background: #1d4ed8;
+  color: #fff;
 }
 
 .quiz-finish {

@@ -207,7 +207,7 @@ const totalCorrect = computed(() =>
 
 .btn-action {
   padding: 0.6rem 1.3rem;
-  background: var(--vp-c-brand-1);
+  background: #1e3a8a;
   color: #fff;
   border-radius: 6px;
   text-decoration: none;
@@ -217,7 +217,18 @@ const totalCorrect = computed(() =>
 }
 
 .btn-action:hover {
-  background: var(--vp-c-brand-2);
+  background: #1e40af;
+  color: #fff;
+}
+
+.dark .btn-action {
+  background: #2563eb;
+  color: #fff;
+}
+
+.dark .btn-action:hover {
+  background: #1d4ed8;
+  color: #fff;
 }
 
 .btn-review {
