@@ -74,6 +74,8 @@ const finished = ref(false)
 const resumedFrom = ref(0)
 const savedToastShown = ref(false)
 const showSavedToast = ref(false)
+const consecutiveWrong = ref(0)
+const showStreakBreakHelp = ref(false)
 
 const currentQuiz = computed<Quiz | null>(() => orderedQuizzes.value[currentIndex.value] ?? null)
 
@@ -104,6 +106,15 @@ function onAnswered(quizId: string, correct: boolean, selectedIndex: number) {
     savedToastShown.value = true
     showSavedToast.value = true
     setTimeout(() => { showSavedToast.value = false }, 2500)
+  }
+  if (correct) {
+    consecutiveWrong.value = 0
+    showStreakBreakHelp.value = false
+  } else {
+    consecutiveWrong.value++
+    if (consecutiveWrong.value >= 3) {
+      showStreakBreakHelp.value = true
+    }
   }
 }
 
@@ -207,6 +218,12 @@ const previousResults = computed(() => {
       </div>
       <div v-if="showSavedToast" class="quiz-saved-toast" role="status">
         ✓ 回答を自動保存しました（途中で閉じても続きから再開できます）
+      </div>
+      <div v-if="showStreakBreakHelp" class="quiz-streak-help" role="status">
+        <p>連続して間違えても大丈夫です。解説を読み返すと一気に分かることがあります。</p>
+        <p class="quiz-streak-help-actions">
+          <button type="button" class="quiz-streak-help-close" @click="showStreakBreakHelp = false">閉じる</button>
+        </p>
       </div>
       <div class="quiz-progress-bar-wrap" role="progressbar" aria-valuemin="0" :aria-valuenow="answeredCount" :aria-valuemax="orderedQuizzes.length">
         <div class="quiz-progress-bar" :style="{ width: progress + '%' }" />
@@ -340,6 +357,46 @@ const previousResults = computed(() => {
   margin-bottom: 1rem;
   border-bottom: 2px solid var(--vp-c-divider);
   padding-bottom: 0.5rem;
+}
+
+.quiz-streak-help {
+  margin-bottom: 0.75rem;
+  padding: 0.75rem 0.85rem;
+  background: #fffbeb;
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 0.85rem;
+  color: #78350f;
+}
+
+.dark .quiz-streak-help {
+  background: #422006;
+  color: #fde68a;
+  border-left-color: #fbbf24;
+}
+
+.quiz-streak-help p {
+  margin: 0;
+}
+
+.quiz-streak-help-actions {
+  margin-top: 0.5rem !important;
+  text-align: right;
+}
+
+.quiz-streak-help-close {
+  padding: 0.25rem 0.6rem;
+  font-size: 0.78rem;
+  background: transparent;
+  color: inherit;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.quiz-streak-help-close:hover {
+  opacity: 1;
 }
 
 .quiz-saved-toast {
