@@ -85,7 +85,24 @@ function restart() {
 const storedAnswers = ref<StoredAnswers>({})
 
 onMounted(() => {
-  storedAnswers.value = loadAnswers()
+  const stored = loadAnswers()
+  storedAnswers.value = stored
+
+  // シャッフルモード以外は途中から再開する
+  if (!props.shuffle) {
+    for (const q of orderedQuizzes.value) {
+      if (stored[q.id] !== undefined) {
+        sessionAnswers.value[q.id] = stored[q.id].correct
+      }
+    }
+    const firstUnanswered = orderedQuizzes.value.findIndex((q) => stored[q.id] === undefined)
+    if (firstUnanswered === -1) {
+      // 全問回答済み → 即結果画面
+      finished.value = true
+    } else {
+      currentIndex.value = firstUnanswered
+    }
+  }
 })
 
 const previousResults = computed(() => {

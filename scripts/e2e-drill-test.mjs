@@ -736,6 +736,96 @@ console.log('\n[19] ページタイトル')
   await ctx.close()
 }
 
+// ── 20. 途中再開 ─────────────────────────────────────────────────
+console.log('\n[20] 途中再開（chapter6: 13問）')
+{
+  // chapter6 の最初の 5 問だけ回答して離脱し、戻ったときに続きから始まるか確認
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+
+  await page.goto(BASE + '/quiz/chapter6/')
+  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+
+  // 5 問回答して離脱
+  for (let i = 0; i < 5; i++) {
+    await page.locator('.choice').first().click()
+    await page.waitForSelector('.quiz-result', { timeout: 5000 })
+    await page.locator('.btn-next').click()
+    await page.waitForFunction(() => !document.querySelector('.quiz-result'), { timeout: 5000 })
+  }
+
+  await assert('5問回答後にプログレスが "5 / 13" になっている', async () => {
+    const text = await page.locator('.quiz-progress-text').textContent()
+    if (!text.startsWith('5 /')) throw new Error(text)
+  })
+
+  // ページを再読み込みして再開確認
+  await page.reload()
+  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+
+  await assert('リロード後も "5 / 13 問回答済み" から再開される', async () => {
+    const text = await page.locator('.quiz-progress-text').textContent()
+    if (!text.startsWith('5 /')) throw new Error(`再開失敗: "${text}"`)
+  })
+
+  await assert('リロード後に 6 問目（index=5）から開始される', async () => {
+    const numText = await page.locator('.quiz-num').textContent()
+    // "6 / 13" のような表示になるはず
+    if (!numText.trim().startsWith('6')) throw new Error(`quiz-num: "${numText}"`)
+  })
+
+  // 別ページへ移動してから戻っても再開されるか
+  await page.goto(BASE + '/quiz/')
+  await page.waitForSelector('.quiz-top', { timeout: 5000 })
+  await page.goto(BASE + '/quiz/chapter6/')
+  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+
+  await assert('別ページ経由で戻っても "5 / 13" から再開される', async () => {
+    const text = await page.locator('.quiz-progress-text').textContent()
+    if (!text.startsWith('5 /')) throw new Error(`再開失敗: "${text}"`)
+  })
+
+  // 残り 8 問を回答して全問完了
+  await answerAllQuestions(page, 20)
+  await page.waitForSelector('.quiz-finish', { timeout: 5000 })
+
+  await assert('残り問題を回答後に結果画面が表示される', async () => {
+    const score = await page.locator('.finish-score').textContent()
+    if (!score.includes('問正解')) throw new Error(score)
+  })
+
+  await assert('結果リストが 13 行ある（全問分）', async () => {
+    const rows = await page.locator('.finish-row').count()
+    if (rows !== 13) throw new Error(`rows=${rows}`)
+  })
+
+  // 全問回答済みの状態でリロードすると即結果画面になるか
+  await page.reload()
+  await page.waitForSelector('.quiz-finish', { timeout: 8000 })
+
+  await assert('全問回答済み状態でリロードすると即結果画面が表示される', async () => {
+    const finish = await page.locator('.quiz-finish').count()
+    if (finish === 0) throw new Error('result screen not shown')
+  })
+
+  // 「もう一度挑戦」で最初から
+  await page.locator('.btn-restart').click()
+  await page.waitForSelector('.quiz-card', { timeout: 3000 })
+
+  await assert('"もう一度挑戦" 後は最初（1 / 13）から始まる', async () => {
+    const numText = await page.locator('.quiz-num').textContent()
+    if (!numText.trim().startsWith('1')) throw new Error(`quiz-num: "${numText}"`)
+  })
+
+  await assert('"もう一度挑戦" 後のプログレスは "0 / 13 問回答済み"', async () => {
+    const text = await page.locator('.quiz-progress-text').textContent()
+    if (!text.startsWith('0 /')) throw new Error(text)
+  })
+
+  await ctx.close()
+}
+
 // ── 結果サマリー ─────────────────────────────────────────────────
 await browser.close()
 console.log(`\n${'─'.repeat(50)}`)
