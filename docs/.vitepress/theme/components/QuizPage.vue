@@ -171,6 +171,9 @@ const previousResults = computed(() => {
           （あと {{ orderedQuizzes.length - answeredCount }} 問）
         </span>
       </p>
+      <p class="quiz-keyboard-hint">
+        キーボード: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>で選択 / <kbd>Enter</kbd>で次へ
+      </p>
 
       <QuizCard
         v-if="currentQuiz"
@@ -307,6 +310,31 @@ const previousResults = computed(() => {
 
 .quiz-remaining {
   color: var(--vp-c-text-3);
+}
+
+.quiz-keyboard-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.75rem;
+  color: var(--vp-c-text-3);
+  margin: 0 0 1rem;
+}
+
+.quiz-keyboard-hint kbd {
+  display: inline-block;
+  padding: 0.05rem 0.35rem;
+  font-family: var(--vp-font-family-mono, monospace);
+  font-size: 0.7rem;
+  background: var(--vp-c-bg-soft);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 3px;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .quiz-keyboard-hint {
+    display: none;
+  }
 }
 
 .quiz-nav {
