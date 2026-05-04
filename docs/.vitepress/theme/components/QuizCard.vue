@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { Quiz } from '../../../quiz/types'
 
 const props = defineProps<{
@@ -44,6 +44,16 @@ function renderText(s: string): string {
   const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
   return escaped.replace(/`([^`]+)`/g, '<code>$1</code>')
 }
+
+function handleKeydown(e: KeyboardEvent) {
+  const n = parseInt(e.key)
+  if (n >= 1 && n <= props.quiz.choices.length) {
+    select(n - 1)
+  }
+}
+
+onMounted(() => window.addEventListener('keydown', handleKeydown))
+onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 
 function resetAnswer() {
   answered.value = false

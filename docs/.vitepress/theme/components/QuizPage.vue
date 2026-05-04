@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { Quiz } from '../../../quiz/types'
 import { STORAGE_KEY } from '../../../quiz/types'
 import type { StoredAnswer, StoredAnswers } from '../../../quiz/types'
@@ -106,6 +106,7 @@ function restart() {
 const storedAnswers = ref<StoredAnswers>({})
 
 onMounted(() => {
+  window.addEventListener('keydown', handlePageKeydown)
   const stored = loadAnswers()
   storedAnswers.value = stored
 
@@ -128,6 +129,13 @@ onMounted(() => {
     }
   }
 })
+
+function handlePageKeydown(e: KeyboardEvent) {
+  if (finished.value) return
+  if (e.key === 'Enter' && isCurrentAnswered.value) next()
+}
+
+onUnmounted(() => window.removeEventListener('keydown', handlePageKeydown))
 
 const previousResults = computed(() => {
   const total = props.quizzes.length
