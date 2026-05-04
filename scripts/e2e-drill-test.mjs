@@ -777,6 +777,290 @@ async function group20(browser) {
   await ctx.close()
 }
 
+// ── 21. 回答後の選択肢ハイライト（choice.correct / choice-check） ──
+async function group21(browser) {
+  console.log('\n[21] 選択肢ハイライト')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+  await page.goto(BASE + '/quiz/chapter1/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+
+  await assert('回答後に .choice.correct が 1 つだけ存在する', async () => {
+    const count = await page.locator('.choice.correct').count()
+    if (count !== 1) throw new Error(`count=${count}`)
+  })
+  await assert('正解選択肢に .choice-check バッジ（"正"）が表示される', async () => {
+    const count = await page.locator('.choice-check').count()
+    if (count !== 1) throw new Error(`choice-check count=${count}`)
+    const text = await page.locator('.choice-check').textContent()
+    if (text.trim() !== '正') throw new Error(`text="${text}"`)
+  })
+  await assert('回答後に dim 選択肢が存在する（未選択・不正解の残り）', async () => {
+    const dimCount = await page.locator('.choice.dim').count()
+    // 4択のうち correct=1, wrong=0 or 1, dim=2 or 3
+    if (dimCount < 2) throw new Error(`dim count=${dimCount} (expected ≥ 2)`)
+  })
+
+  await ctx.close()
+}
+
+// ── 22. result-badge の data-correct 属性の整合性 ─────────────────
+async function group22(browser) {
+  console.log('\n[22] result-badge data-correct 整合性')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+  await page.goto(BASE + '/quiz/chapter1/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+
+  await assert('result-badge の data-correct 属性がバッジテキストと一致する', async () => {
+    const badgeText = (await page.locator('.result-badge').textContent()).trim()
+    const dataCorrect = await page.locator('.result-badge').getAttribute('data-correct')
+    const isCorrect = badgeText === '正解'
+    if (isCorrect && dataCorrect !== 'true')
+      throw new Error(`text="正解" だが data-correct="${dataCorrect}"`)
+    if (!isCorrect && dataCorrect !== 'false')
+      throw new Error(`text="不正解" だが data-correct="${dataCorrect}"`)
+  })
+
+  await ctx.close()
+}
+
+// ── 23. 不正解フロー — choice.wrong クラスの確認 ─────────────────
+async function group23(browser) {
+  console.log('\n[23] 不正解フロー — choice.wrong クラス')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+  await page.goto(BASE + '/quiz/chapter2/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+
+  // 最後の選択肢（index 3）をクリック
+  const choices = page.locator('.choice')
+  const choiceCount = await choices.count()
+  await choices.nth(choiceCount - 1).click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+
+  const badgeText = (await page.locator('.result-badge').textContent()).trim()
+  const isWrong = badgeText === '不正解'
+
+  // 正解選択肢は常に .choice.correct でハイライトされる
+  await assert('正解の選択肢が常に .choice.correct でハイライトされる', async () => {
+    const count = await page.locator('.choice.correct').count()
+    if (count !== 1) throw new Error(`correct choices: ${count}`)
+  })
+
+  if (isWrong) {
+    await assert('不正解選択時に選択した肢が .choice.wrong になる', async () => {
+      const count = await page.locator('.choice.wrong').count()
+      if (count !== 1) throw new Error(`wrong choices: ${count}`)
+    })
+    await assert('不正解時に dim 選択肢が 2 つある', async () => {
+      const count = await page.locator('.choice.dim').count()
+      if (count !== 2) throw new Error(`dim choices: ${count}`)
+    })
+  } else {
+    // たまたま正解だった場合
+    await assert('正解選択時に .choice.wrong は存在しない', async () => {
+      const count = await page.locator('.choice.wrong').count()
+      if (count !== 0) throw new Error(`unexpected wrong choices: ${count}`)
+    })
+  }
+
+  await ctx.close()
+}
+
+// ── 24. プログレスバー width の変化 ──────────────────────────────
+async function group24(browser) {
+  console.log('\n[24] プログレスバー width 更新')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+  await page.goto(BASE + '/quiz/chapter1/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+
+  await assert('初期状態のプログレスバー width は 0%', async () => {
+    const style = await page.locator('.quiz-progress-bar').getAttribute('style')
+    if (!style?.includes('width: 0%')) throw new Error(`style: "${style}"`)
+  })
+
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+  await page.locator('.btn-next').click()
+  await page.waitForFunction(() => !document.querySelector('.quiz-result'), {
+    timeout: 3000,
+    polling: 50,
+  })
+
+  await assert('1 問回答後のプログレスバー width が 0% でなくなる', async () => {
+    const style = await page.locator('.quiz-progress-bar').getAttribute('style')
+    if (!style || style.includes('width: 0%')) throw new Error(`style: "${style}"`)
+  })
+
+  await ctx.close()
+}
+
+// ── 25. quiz-num カウンターの更新 ────────────────────────────────
+async function group25(browser) {
+  console.log('\n[25] quiz-num カウンター更新')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+  await page.goto(BASE + '/quiz/chapter1/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+
+  await assert('1 問目の quiz-num が "1 / N" 形式', async () => {
+    const text = await page.locator('.quiz-num').textContent()
+    if (!text.trim().startsWith('1 /')) throw new Error(`quiz-num: "${text}"`)
+  })
+
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+  await page.locator('.btn-next').click()
+  await page.waitForFunction(() => !document.querySelector('.quiz-result'), {
+    timeout: 3000,
+    polling: 50,
+  })
+
+  await assert('次の問題に進むと quiz-num が "2 / N" になる', async () => {
+    const text = await page.locator('.quiz-num').textContent()
+    if (!text.trim().startsWith('2 /')) throw new Error(`quiz-num: "${text}"`)
+  })
+
+  await ctx.close()
+}
+
+// ── 26. もう一度挑戦後の localStorage 保持 ───────────────────────
+async function group26(browser) {
+  console.log('\n[26] もう一度挑戦後の localStorage 保持')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+
+  // ch6 全 13 問を回答して結果画面へ
+  await page.goto(BASE + '/quiz/chapter6/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+  await answerAllQuestions(page, 20)
+  await page.waitForSelector('.quiz-finish', { timeout: 5000 })
+
+  const storedBefore = await page.evaluate(() => localStorage.getItem('quiz-answers'))
+  const keysBefore = Object.keys(JSON.parse(storedBefore || '{}'))
+
+  await page.locator('.btn-restart').click()
+  await page.waitForSelector('.quiz-card', { timeout: 3000 })
+
+  await assert('restart 後も localStorage にデータが残る', async () => {
+    const stored = await page.evaluate(() => localStorage.getItem('quiz-answers'))
+    if (!stored || Object.keys(JSON.parse(stored)).length === 0)
+      throw new Error('localStorage cleared on restart')
+  })
+  await assert('restart 後も元の回答記録が消えていない', async () => {
+    const stored = JSON.parse(
+      (await page.evaluate(() => localStorage.getItem('quiz-answers'))) || '{}',
+    )
+    for (const k of keysBefore) {
+      if (stored[k] === undefined) throw new Error(`key ${k} lost after restart`)
+    }
+  })
+  await assert('restart 後はセッションがリセットされ "0 / 13 問回答済み"', async () => {
+    const text = await page.locator('.quiz-progress-text').textContent()
+    if (!text.startsWith('0 /')) throw new Error(text)
+  })
+  await assert('restart 後も "過去の結果" セクションが表示される', async () => {
+    await page.waitForSelector('.quiz-prev-results', { timeout: 3000 })
+  })
+
+  await ctx.close()
+}
+
+// ── 27. 別章（chapter4）の基本動作 ──────────────────────────────
+async function group27(browser) {
+  console.log('\n[27] chapter4（React）の基本動作')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+  await page.goto(BASE + '/quiz/chapter4/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+
+  await assert('chapter4 で問題文が表示される', async () => {
+    const q = await page.locator('.quiz-question').textContent()
+    if (!q || q.trim().length === 0) throw new Error('empty question')
+  })
+  await assert('chapter4 で選択肢が 4 つある', async () => {
+    const count = await page.locator('.choice').count()
+    if (count !== 4) throw new Error(`count=${count}`)
+  })
+
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+
+  await assert('chapter4 で回答後に 正解/不正解 バッジが出る', async () => {
+    const badge = (await page.locator('.result-badge').textContent()).trim()
+    if (badge !== '正解' && badge !== '不正解') throw new Error(`badge: "${badge}"`)
+  })
+  await assert('chapter4 で回答後に解説が出る', async () => {
+    const expl = await page.locator('.quiz-explanation').textContent()
+    if (!expl || expl.trim().length === 0) throw new Error('empty explanation')
+  })
+
+  await ctx.close()
+}
+
+// ── 28. 複数章回答後の QuizTop 統計集計 ──────────────────────────
+async function group28(browser) {
+  console.log('\n[28] 複数章回答後の QuizTop 統計集計')
+  const ctx = await browser.newContext()
+  const page = await ctx.newPage()
+  page.on('pageerror', (err) => console.error('  [page error]', err.message))
+
+  // ch4 で 1 問回答
+  await page.goto(BASE + '/quiz/chapter4/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+
+  // ch5 で 1 問回答
+  await page.goto(BASE + '/quiz/chapter5/')
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
+  await page.locator('.choice').first().click()
+  await page.waitForSelector('.quiz-result', { timeout: 5000 })
+
+  // quiz トップへ
+  await page.goto(BASE + '/quiz/')
+  await page.waitForSelector('.quiz-top', { timeout: 5000 })
+
+  await assert('複数章回答後に "回答済み" が 2 以上になる', async () => {
+    const text = await page.locator('.summary-value').first().textContent()
+    const answered = parseInt(text?.split('/')[0]?.trim() || '0', 10)
+    if (answered < 2) throw new Error(`answered=${answered}`)
+  })
+
+  for (const title of ['React', 'Next.js']) {
+    await assert(`${title} 章カードの進捗バーが 0% でなくなる`, async () => {
+      const cards = await page.locator('.chapter-card').all()
+      let bar = null
+      for (const card of cards) {
+        if ((await card.textContent()).includes(title)) {
+          bar = card.locator('.chapter-bar')
+          break
+        }
+      }
+      if (!bar) throw new Error(`card "${title}" not found`)
+      const style = await bar.getAttribute('style')
+      if (!style || style.includes('width: 0%')) throw new Error(`bar style: "${style}"`)
+    })
+  }
+
+  await ctx.close()
+}
+
 // ── 全グループを並列実行 ────────────────────────────────────────
 await Promise.all([
   group1(browser),
@@ -799,6 +1083,14 @@ await Promise.all([
   group18(browser),
   group19(browser),
   group20(browser),
+  group21(browser),
+  group22(browser),
+  group23(browser),
+  group24(browser),
+  group25(browser),
+  group26(browser),
+  group27(browser),
+  group28(browser),
 ])
 
 // ── 結果サマリー ─────────────────────────────────────────────────
