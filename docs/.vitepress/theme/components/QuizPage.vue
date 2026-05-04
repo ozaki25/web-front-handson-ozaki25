@@ -248,8 +248,10 @@ const previousResults = computed(() => {
         </div>
       </div>
 
-      <div v-if="correctCount > 0" class="finish-section">
-        <p class="finish-section-heading finish-section-correct">正解 {{ correctCount }} 問</p>
+      <details v-if="correctCount > 0" class="finish-section finish-section-collapsible">
+        <summary class="finish-section-heading finish-section-correct">
+          正解 {{ correctCount }} 問を表示
+        </summary>
         <div class="finish-list">
           <div
             v-for="(q, i) in orderedQuizzes.filter(q => sessionAnswers[q.id]?.correct)"
@@ -264,7 +266,7 @@ const previousResults = computed(() => {
             </span>
           </div>
         </div>
-      </div>
+      </details>
 
       <div class="finish-actions">
         <button class="btn-restart" type="button" @click="restart">もう一度挑戦</button>
@@ -481,6 +483,16 @@ const previousResults = computed(() => {
 
 .finish-section-correct {
   color: #16a34a;
+}
+
+.finish-section-collapsible summary {
+  cursor: pointer;
+  user-select: none;
+  margin-bottom: 0.5rem;
+}
+
+.finish-section-collapsible[open] summary {
+  margin-bottom: 0.75rem;
 }
 
 .dark .finish-section-wrong {
