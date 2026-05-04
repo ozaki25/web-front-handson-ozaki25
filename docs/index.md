@@ -1,27 +1,21 @@
 # Web フロントエンド入門
 
-Web フロントエンドをこれから学ぶ人が、手を動かしながら基礎をゼロから積み上げられる学習コンテンツです。
+Web フロントエンドをゼロから積み上げられる学習コンテンツです。
 
 はじめての方は[はじめに](/introduction/)を読んでください。
 
 ## カリキュラム
 
-1. HTML / CSS
-2. JavaScript
-3. TypeScript
-4. React
-5. Next.js
-6. ブラウザの仕組み
-7. 実務で使う周辺知識
-
-## ドリルで確認
-
-各章の内容を 4 択問題で確認できます。回答履歴はブラウザのローカルストレージに保存されます。
-
-[ドリル一覧へ](/quiz/)
+1. [HTML / CSS](/lessons/lesson01/)
+2. [JavaScript](/lessons/lesson18/)
+3. [TypeScript](/lessons/lesson41/)
+4. [React](/lessons/lesson52/)
+5. [Next.js](/lessons/lesson70/)
+6. [ブラウザの仕組み](/lessons/lesson92/)
+7. [実務で使う周辺知識](/lessons/lesson98/)
 
 ## 進捗
 
-完了状態はブラウザのローカルストレージに保存されます。端末をまたぐと共有されません。
-
 <LessonProgress />
+
+各章を終えたら[ドリル](/quiz/)で確認できます。
