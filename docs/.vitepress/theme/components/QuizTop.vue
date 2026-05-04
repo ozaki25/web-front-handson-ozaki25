@@ -44,10 +44,7 @@ const chapterStats = computed(() =>
     const answered = quizzes.filter((q) => stored.value[q.id] !== undefined).length
     const correct = quizzes.filter((q) => stored.value[q.id]?.correct).length
     const wrong = answered - correct
-    const easy = quizzes.filter((q) => q.difficulty === 'easy').length
-    const normal = quizzes.filter((q) => q.difficulty === 'normal').length
-    const hard = quizzes.filter((q) => q.difficulty === 'hard').length
-    return { ...ch, total, answered, correct, wrong, easy, normal, hard }
+    return { ...ch, total, answered, correct, wrong }
   }),
 )
 
@@ -153,10 +150,6 @@ function resetProgress() {
             class="chapter-complete"
             aria-label="全問正解"
           >達成</span>
-          <span
-            v-else-if="ch.total > 0 && ch.answered === 0"
-            class="chapter-fresh"
-          >はじめよう</span>
         </div>
         <div class="chapter-bar-wrap">
           <div
@@ -173,11 +166,6 @@ function resetProgress() {
         </div>
         <div v-if="ch.answered < ch.total" class="chapter-time">
           目安 約 {{ Math.max(1, Math.ceil((ch.total - ch.answered) * 0.5)) }} 分
-        </div>
-        <div v-if="ch.total > 0" class="chapter-difficulty-mix">
-          <span v-if="ch.easy > 0" class="diff-mix easy">やさしい {{ ch.easy }}</span>
-          <span v-if="ch.normal > 0" class="diff-mix normal">ふつう {{ ch.normal }}</span>
-          <span v-if="ch.hard > 0" class="diff-mix hard">むずかしい {{ ch.hard }}</span>
         </div>
       </a>
     </div>
@@ -320,16 +308,6 @@ function resetProgress() {
   color: #86efac;
 }
 
-.chapter-fresh {
-  flex-shrink: 0;
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.15em 0.5em;
-  background: var(--vp-c-bg-soft);
-  color: var(--vp-c-brand-1);
-  border: 1px solid var(--vp-c-brand-2);
-  border-radius: 3px;
-}
 
 .chapter-bar-wrap {
   height: 5px;
@@ -356,50 +334,6 @@ function resetProgress() {
   margin-top: 0.25rem;
   font-size: 0.72rem;
   color: var(--vp-c-text-3);
-}
-
-.chapter-difficulty-mix {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.3rem;
-  margin-top: 0.45rem;
-}
-
-.diff-mix {
-  font-size: 0.7rem;
-  font-weight: 600;
-  padding: 0.1em 0.45em;
-  border-radius: 3px;
-}
-
-.diff-mix.easy {
-  background: #dcfce7;
-  color: #166534;
-}
-
-.diff-mix.normal {
-  background: #fef9c3;
-  color: #854d0e;
-}
-
-.diff-mix.hard {
-  background: #fee2e2;
-  color: #991b1b;
-}
-
-.dark .diff-mix.easy {
-  background: #14532d;
-  color: #86efac;
-}
-
-.dark .diff-mix.normal {
-  background: #422006;
-  color: #fde047;
-}
-
-.dark .diff-mix.hard {
-  background: #450a0a;
-  color: #fca5a5;
 }
 
 .chapter-rate {
