@@ -232,19 +232,25 @@ const previousResults = computed(() => {
       <div v-if="correctCount < orderedQuizzes.length" class="finish-section">
         <p class="finish-section-heading finish-section-wrong">不正解 {{ orderedQuizzes.length - correctCount }} 問</p>
         <div class="finish-list">
-          <div
+          <details
             v-for="(q, i) in orderedQuizzes.filter(q => !sessionAnswers[q.id]?.correct)"
             :key="q.id"
-            class="finish-row"
+            class="finish-row finish-row-detail"
             data-correct="false"
           >
-            <span class="finish-row-num">{{ orderedQuizzes.indexOf(q) + 1 }}</span>
-            <span class="finish-row-mark">×</span>
-            <span class="finish-row-body">
-              <span class="finish-row-q" v-html="renderText(q.question)" />
-              <span class="finish-row-answer" v-html="`正解: ${renderText(q.choices[q.answer])}`" />
-            </span>
-          </div>
+            <summary class="finish-row-summary">
+              <span class="finish-row-num">{{ orderedQuizzes.indexOf(q) + 1 }}</span>
+              <span class="finish-row-mark">×</span>
+              <span class="finish-row-body">
+                <span class="finish-row-q" v-html="renderText(q.question)" />
+                <span class="finish-row-answer" v-html="`正解: ${renderText(q.choices[q.answer])}`" />
+              </span>
+            </summary>
+            <p class="finish-row-explanation" v-html="renderText(q.explanation)" />
+            <p v-if="q.lesson" class="finish-row-lesson-link">
+              <a :href="`/lessons/${q.lesson}/`">{{ q.lesson }} を読み直す →</a>
+            </p>
+          </details>
         </div>
       </div>
 
@@ -519,6 +525,47 @@ const previousResults = computed(() => {
   padding: 0.4rem 0.6rem;
   border-radius: 4px;
   background: var(--vp-c-bg);
+}
+
+.finish-row-detail {
+  display: block;
+  padding: 0;
+}
+
+.finish-row-summary {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.6rem;
+  padding: 0.55rem 0.6rem;
+  cursor: pointer;
+  list-style: none;
+}
+
+.finish-row-summary::-webkit-details-marker {
+  display: none;
+}
+
+.finish-row-detail[open] .finish-row-summary {
+  border-bottom: 1px solid var(--vp-c-divider);
+}
+
+.finish-row-explanation {
+  margin: 0;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--vp-c-text-1);
+}
+
+.finish-row-lesson-link {
+  margin: 0;
+  padding: 0 0.8rem 0.6rem;
+  font-size: 0.78rem;
+}
+
+.finish-row-lesson-link a {
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
 }
 
 .finish-row[data-correct='true'] .finish-row-mark {
