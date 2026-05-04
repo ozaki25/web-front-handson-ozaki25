@@ -1,5 +1,5 @@
 ---
-title: クイズ — 5章 Next.js
+title: ドリル — 5章 Next.js
 ---
 
 # 5章 Next.js

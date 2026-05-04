@@ -1,5 +1,5 @@
 ---
-title: クイズ — 4章 React
+title: ドリル — 4章 React
 ---
 
 # 4章 React

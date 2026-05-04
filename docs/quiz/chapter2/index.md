@@ -1,5 +1,5 @@
 ---
-title: クイズ — 2章 JavaScript
+title: ドリル — 2章 JavaScript
 ---
 
 # 2章 JavaScript

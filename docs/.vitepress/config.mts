@@ -74,13 +74,13 @@ export default withPwa(
     themeConfig: {
       nav: [
         { text: 'ホーム', link: '/' },
-        { text: 'クイズ', link: '/quiz/' },
+        { text: 'ドリル', link: '/quiz/' },
       ],
       sidebar: [
         { text: 'トップ', link: '/' },
         { text: 'はじめに', link: '/introduction/' },
         {
-          text: 'クイズ',
+          text: 'ドリル',
           collapsed: true,
           items: [
             { text: '一覧', link: '/quiz/' },

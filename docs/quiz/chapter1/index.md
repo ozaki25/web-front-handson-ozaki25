@@ -1,5 +1,5 @@
 ---
-title: クイズ — 1章 HTML / CSS
+title: ドリル — 1章 HTML / CSS
 ---
 
 # 1章 HTML / CSS

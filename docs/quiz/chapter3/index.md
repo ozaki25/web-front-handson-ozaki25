@@ -1,5 +1,5 @@
 ---
-title: クイズ — 3章 TypeScript
+title: ドリル — 3章 TypeScript
 ---
 
 # 3章 TypeScript

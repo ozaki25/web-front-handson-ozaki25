@@ -103,7 +103,7 @@ const previousResults = computed(() => {
     <h2 class="quiz-page-title">{{ title }}</h2>
 
     <div v-if="!finished">
-      <div class="quiz-progress-bar-wrap" role="progressbar" :aria-valuenow="answeredCount" :aria-valuemax="orderedQuizzes.length">
+      <div class="quiz-progress-bar-wrap" role="progressbar" aria-valuemin="0" :aria-valuenow="answeredCount" :aria-valuemax="orderedQuizzes.length">
         <div class="quiz-progress-bar" :style="{ width: progress + '%' }" />
       </div>
       <p class="quiz-progress-text">{{ answeredCount }} / {{ orderedQuizzes.length }} 問回答済み</p>

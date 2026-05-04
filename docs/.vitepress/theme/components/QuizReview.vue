@@ -30,8 +30,8 @@ const hasWrong = computed(() => wrongQuizzes.value.length > 0)
   <div v-else-if="!hasWrong" class="review-empty">
     <p>間違えた問題はありません。</p>
     <p>
-      各章のクイズを解くと、間違えた問題がここに集まります。
-      <a href="/quiz/">クイズ一覧へ</a>
+      各章のドリルを解くと、間違えた問題がここに集まります。
+      <a href="/quiz/">ドリル一覧へ</a>
     </p>
   </div>
 
