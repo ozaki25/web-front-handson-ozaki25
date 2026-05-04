@@ -37,9 +37,9 @@ function choiceClass(i: number): string {
 }
 
 const difficultyLabel: Record<string, string> = {
-  easy: '易',
-  normal: '普',
-  hard: '難',
+  easy: 'やさしい',
+  normal: 'ふつう',
+  hard: 'むずかしい',
 }
 
 // `` `foo` `` → <code>foo</code>（クイズデータは固定値なので v-html で安全）
