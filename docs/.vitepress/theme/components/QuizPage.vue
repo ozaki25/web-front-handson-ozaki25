@@ -107,6 +107,7 @@ const previousResults = computed(() => {
 
       <QuizCard
         v-if="currentQuiz"
+        :key="currentQuiz.id"
         :quiz="currentQuiz"
         :index="currentIndex"
         :total="orderedQuizzes.length"
