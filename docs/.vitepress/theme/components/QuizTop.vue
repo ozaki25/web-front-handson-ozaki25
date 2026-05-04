@@ -84,6 +84,11 @@ function resetProgress() {
         <div class="chapter-card-header">
           <span class="chapter-num">{{ ch.id }}</span>
           <span class="chapter-title">{{ ch.title }}</span>
+          <span
+            v-if="ch.total > 0 && ch.answered === ch.total && ch.wrong === 0"
+            class="chapter-complete"
+            aria-label="全問正解"
+          >達成</span>
         </div>
         <div class="chapter-bar-wrap">
           <div
@@ -197,6 +202,23 @@ function resetProgress() {
 .chapter-title {
   font-weight: 600;
   font-size: 0.9rem;
+  flex: 1;
+}
+
+.chapter-complete {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.15em 0.5em;
+  background: #16a34a;
+  color: #fff;
+  border-radius: 3px;
+  letter-spacing: 0.04em;
+}
+
+.dark .chapter-complete {
+  background: #166534;
+  color: #86efac;
 }
 
 .chapter-bar-wrap {
