@@ -40,6 +40,23 @@ const wrongCount = computed(() =>
   chapterStats.value.reduce((acc, c) => acc + (c.answered - c.correct), 0),
 )
 
+const continueChapter = computed(() => {
+  let latestTs = 0
+  let latestChapterId: number | null = null
+  for (const ch of chapterStats.value) {
+    if (ch.answered === 0 || ch.answered === ch.total) continue
+    const quizzes = quizzesByChapter[ch.id] ?? []
+    const maxTs = Math.max(...quizzes.map((q) => stored.value[q.id]?.ts ?? 0))
+    if (maxTs > latestTs) {
+      latestTs = maxTs
+      latestChapterId = ch.id
+    }
+  }
+  return latestChapterId != null
+    ? chapterStats.value.find((c) => c.id === latestChapterId) ?? null
+    : null
+})
+
 function resetProgress() {
   if (!confirm('回答履歴をすべて削除しますか？この操作は元に戻せません。')) return
   localStorage.removeItem(STORAGE_KEY)
@@ -65,6 +82,17 @@ function resetProgress() {
         </span>
       </div>
     </div>
+
+    <a v-if="continueChapter" :href="`/quiz/chapter${continueChapter.id}/`" class="continue-banner">
+      <span class="continue-banner-label">続きから</span>
+      <span class="continue-banner-body">
+        <span class="continue-banner-title">{{ continueChapter.title }}</span>
+        <span class="continue-banner-sub">
+          {{ continueChapter.answered }} / {{ continueChapter.total }} 問 — 残り {{ continueChapter.total - continueChapter.answered }} 問
+        </span>
+      </span>
+      <span class="continue-banner-arrow">→</span>
+    </a>
 
     <a v-if="wrongCount > 0" href="/quiz/review/" class="review-banner">
       <span class="review-banner-icon">✗</span>
@@ -325,6 +353,56 @@ function resetProgress() {
   background: var(--vp-c-bg-mute);
   border-color: var(--vp-c-brand-2);
   color: var(--vp-c-text-1);
+}
+
+.continue-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-bottom: 1rem;
+  padding: 0.85rem 1rem;
+  background: var(--vp-c-brand-soft);
+  border: 1px solid var(--vp-c-brand-2);
+  border-radius: 8px;
+  text-decoration: none;
+  color: var(--vp-c-brand-1);
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.continue-banner:hover {
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-brand-1);
+}
+
+.continue-banner-label {
+  flex-shrink: 0;
+  padding: 0.25em 0.6em;
+  background: var(--vp-c-brand-1);
+  color: #fff;
+  border-radius: 4px;
+  font-size: 0.75rem;
+  font-weight: 700;
+}
+
+.continue-banner-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+}
+
+.continue-banner-title {
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+
+.continue-banner-sub {
+  font-size: 0.78rem;
+  opacity: 0.85;
+}
+
+.continue-banner-arrow {
+  flex-shrink: 0;
 }
 
 .review-banner {
