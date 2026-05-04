@@ -82,6 +82,10 @@ const effectiveCorrect = computed(() => {
 
     <p class="quiz-question" v-html="renderText(quiz.question)" />
 
+    <p v-if="quiz.difficulty === 'hard' && !answered" class="quiz-hard-hint">
+      むずかしい問題です。時間をかけて考えてみましょう。
+    </p>
+
     <ol class="quiz-choices" aria-label="選択肢">
       <li v-for="(choice, i) in quiz.choices" :key="i">
         <button
@@ -176,6 +180,20 @@ const effectiveCorrect = computed(() => {
   line-height: 1.6;
   margin: 0 0 1rem;
   color: var(--vp-c-text-1);
+}
+
+.quiz-hard-hint {
+  margin: -0.5rem 0 1rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--vp-c-bg-soft);
+  border-left: 3px solid #f59e0b;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  color: var(--vp-c-text-2);
+}
+
+.dark .quiz-hard-hint {
+  border-left-color: #fbbf24;
 }
 
 .quiz-choices {
