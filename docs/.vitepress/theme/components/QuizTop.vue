@@ -106,6 +106,9 @@ function resetProgress() {
             正解 {{ Math.round((ch.correct / ch.answered) * 100) }}%
           </span>
         </div>
+        <div v-if="ch.answered < ch.total" class="chapter-time">
+          目安 約 {{ Math.max(1, Math.ceil((ch.total - ch.answered) * 0.5)) }} 分
+        </div>
       </a>
     </div>
 
@@ -243,6 +246,12 @@ function resetProgress() {
   justify-content: space-between;
   font-size: 0.78rem;
   color: var(--vp-c-text-2);
+}
+
+.chapter-time {
+  margin-top: 0.25rem;
+  font-size: 0.72rem;
+  color: var(--vp-c-text-3);
 }
 
 .chapter-rate {
