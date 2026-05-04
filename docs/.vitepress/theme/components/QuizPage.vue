@@ -55,6 +55,8 @@ const currentIndex = ref(0)
 const sessionAnswers = ref<Record<string, { correct: boolean; selectedIndex: number | null }>>({})
 const finished = ref(false)
 const resumedFrom = ref(0)
+const savedToastShown = ref(false)
+const showSavedToast = ref(false)
 
 const currentQuiz = computed<Quiz | null>(() => orderedQuizzes.value[currentIndex.value] ?? null)
 
@@ -81,6 +83,11 @@ const currentAnswer = computed(() =>
 function onAnswered(quizId: string, correct: boolean, selectedIndex: number) {
   sessionAnswers.value[quizId] = { correct, selectedIndex }
   saveAnswer(quizId, correct, selectedIndex)
+  if (!savedToastShown.value) {
+    savedToastShown.value = true
+    showSavedToast.value = true
+    setTimeout(() => { showSavedToast.value = false }, 2500)
+  }
 }
 
 function onReset(quizId: string) {
@@ -169,6 +176,9 @@ const previousResults = computed(() => {
     <div v-if="!finished">
       <div v-if="resumedFrom > 0" class="quiz-resume-toast" role="status">
         前回の続き、{{ resumedFrom }} 問目から再開しました
+      </div>
+      <div v-if="showSavedToast" class="quiz-saved-toast" role="status">
+        ✓ 回答を自動保存しました（途中で閉じても続きから再開できます）
       </div>
       <div class="quiz-progress-bar-wrap" role="progressbar" aria-valuemin="0" :aria-valuenow="answeredCount" :aria-valuemax="orderedQuizzes.length">
         <div class="quiz-progress-bar" :style="{ width: progress + '%' }" />
@@ -301,6 +311,28 @@ const previousResults = computed(() => {
   margin-bottom: 1rem;
   border-bottom: 2px solid var(--vp-c-divider);
   padding-bottom: 0.5rem;
+}
+
+.quiz-saved-toast {
+  margin-bottom: 0.75rem;
+  padding: 0.5rem 0.85rem;
+  background: #f0fdf4;
+  color: #166534;
+  border-left: 3px solid #16a34a;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  animation: fadeIn 0.2s ease-out;
+}
+
+.dark .quiz-saved-toast {
+  background: #052e16;
+  color: #86efac;
+  border-left-color: #16a34a;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
 .quiz-resume-toast {
