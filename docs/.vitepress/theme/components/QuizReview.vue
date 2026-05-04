@@ -27,10 +27,10 @@ const hasWrong = computed(() => wrongQuizzes.value.length > 0)
   <div v-if="!loaded" class="review-loading">読み込み中...</div>
 
   <div v-else-if="!hasWrong" class="review-empty">
-    <p>間違えた問題はありません。</p>
-    <p>
-      各章のドリルを解くと、間違えた問題がここに集まります。
-      <a href="/quiz/">ドリル一覧へ</a>
+    <p class="review-empty-title">復習する問題はありません</p>
+    <p class="review-empty-sub">
+      まだドリルを解いていないか、解いた問題はすべて正解しています。<br>
+      <a href="/quiz/">ドリル一覧から挑戦する</a>
     </p>
   </div>
 
@@ -46,7 +46,19 @@ const hasWrong = computed(() => wrongQuizzes.value.length > 0)
 .review-loading,
 .review-empty {
   padding: 2rem 1rem;
+}
+
+.review-empty-title {
+  font-size: 1rem;
+  font-weight: 700;
+  color: var(--vp-c-text-1);
+  margin-bottom: 0.5rem;
+}
+
+.review-empty-sub {
+  font-size: 0.875rem;
   color: var(--vp-c-text-2);
+  line-height: 1.6;
 }
 
 .review-empty a {
