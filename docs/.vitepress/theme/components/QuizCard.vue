@@ -109,7 +109,7 @@ const effectiveCorrect = computed(() => {
           type="button"
           @click="resetAnswer"
         >
-          やり直す
+          選び直す
         </button>
       </div>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
