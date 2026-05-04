@@ -335,14 +335,14 @@ renderTodos(list, todos);
 ### 変える
 
 - `main.js` のサンプルデータの中身を好きな TODO に変える → 一度 Local Storage の `module-todos` を削除してからリロードすると、新しいサンプルが表示される
-- `renderTodos` の `textContent` を `textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
+- `renderTodos` の `textContent` を ``textContent = `・${todo.text}`` に変える → 各行の頭に `・` が付く
 - `main.js` で `renderTodos(list, todos)` を呼ばないようにコメントアウト → `<ul>` が空のまま
 
 ### 自分で書く
 
 - `storage.js` に `clearTodos()` という関数を追加して export する。中身は `localStorage.removeItem(STORAGE_KEY)` だけ。`main.js` から import して、ページ読み込み時に 1 回呼んでみる（動作確認したら外す）
 - `render.js` を **デフォルト export** に書き換える（`export default function renderTodos(...) { ... }`）。`main.js` 側の import を `import renderTodos from "./render.js";` に変えて、同じ動きをすることを確認する
-- 新しいファイル `format.js` を作り、`export function formatTodo(todo) { return `[${todo.id}] ${todo.text}`; }` を書く。`render.js` の中で import して、`<li>` に整形後の文字列を表示する
+- 新しいファイル `format.js` を作り、``export function formatTodo(todo) { return `[${todo.id}] ${todo.text}`; }`` を書く。`render.js` の中で import して、`<li>` に整形後の文字列を表示する
 
 ## まとめ
 
