@@ -221,12 +221,12 @@ const totalCorrect = computed(() =>
   color: #fff;
 }
 
-.dark .btn-action {
+.dark .btn-action:not(.btn-review) {
   background: #2563eb;
   color: #fff;
 }
 
-.dark .btn-action:hover {
+.dark .btn-action:not(.btn-review):hover {
   background: #1d4ed8;
   color: #fff;
 }
@@ -240,5 +240,6 @@ const totalCorrect = computed(() =>
 .btn-review:hover {
   background: var(--vp-c-bg-mute);
   border-color: var(--vp-c-brand-2);
+  color: var(--vp-c-text-1);
 }
 </style>
