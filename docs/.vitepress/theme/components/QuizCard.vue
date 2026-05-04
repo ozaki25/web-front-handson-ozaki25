@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, useTemplateRef } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import type { Quiz } from '../../../quiz/types'
 
 const props = defineProps<{
@@ -18,9 +18,13 @@ const emit = defineEmits<{
 
 const selectedIndex = ref<number | null>(props.initialSelectedIndex ?? null)
 const answered = ref(props.initialAnswered ?? false)
-const firstChoiceRef = useTemplateRef<HTMLButtonElement>('firstChoice')
+const firstChoiceEl = ref<HTMLButtonElement | null>(null)
 
-defineExpose({ focusFirstChoice: () => firstChoiceRef.value?.focus() })
+function setFirstChoiceRef(el: unknown, i: number) {
+  if (i === 0) firstChoiceEl.value = (el as HTMLButtonElement) ?? null
+}
+
+defineExpose({ focusFirstChoice: () => firstChoiceEl.value?.focus() })
 
 function select(i: number) {
   if (answered.value) return
@@ -85,7 +89,7 @@ const effectiveCorrect = computed(() => {
     <ol class="quiz-choices" aria-label="選択肢">
       <li v-for="(choice, i) in quiz.choices" :key="i">
         <button
-          :ref="i === 0 ? 'firstChoice' : undefined"
+          :ref="(el) => setFirstChoiceRef(el, i)"
           :class="choiceClass(i)"
           :disabled="answered"
           @click="select(i)"

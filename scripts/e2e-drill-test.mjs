@@ -119,9 +119,10 @@ async function group3(browser) {
     const choices = await page.locator('.choice').count()
     if (choices !== 4) throw new Error(`count=${choices}`)
   })
-  await assert('"次の問題" ボタンは回答前に非表示', async () => {
-    const btn = await page.locator('.btn-next').count()
-    if (btn !== 0) throw new Error('button visible before answering')
+  await assert('"次の問題" ボタンは回答前は disabled', async () => {
+    const btn = page.locator('.btn-next')
+    if ((await btn.count()) !== 1) throw new Error('button not visible')
+    if (!(await btn.isDisabled())) throw new Error('button is not disabled')
   })
 
   await page.locator('.choice').first().click()
@@ -527,9 +528,9 @@ async function group15(browser) {
   await page.goto(BASE + '/quiz/chapter1/')
   await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
-  await assert('難易度バッジ（易/普/難）が表示される', async () => {
+  await assert('難易度バッジ（やさしい/ふつう/むずかしい）が表示される', async () => {
     const badge = await page.locator('.quiz-difficulty').textContent()
-    if (!['易', '普', '難'].includes(badge.trim())) throw new Error(`badge: "${badge}"`)
+    if (!['やさしい', 'ふつう', 'むずかしい'].includes(badge.trim())) throw new Error(`badge: "${badge}"`)
   })
 
   await assert('難易度バッジの data-level が easy/normal/hard のいずれか', async () => {
@@ -793,11 +794,11 @@ async function group21(browser) {
     const count = await page.locator('.choice.correct').count()
     if (count !== 1) throw new Error(`count=${count}`)
   })
-  await assert('正解選択肢に .choice-check バッジ（"正"）が表示される', async () => {
+  await assert('正解選択肢に .choice-check バッジ（"正解"）が表示される', async () => {
     const count = await page.locator('.choice-check').count()
     if (count !== 1) throw new Error(`choice-check count=${count}`)
     const text = await page.locator('.choice-check').textContent()
-    if (text.trim() !== '正') throw new Error(`text="${text}"`)
+    if (text.trim() !== '正解') throw new Error(`text="${text}"`)
   })
   await assert('回答後に dim 選択肢が存在する（未選択・不正解の残り）', async () => {
     const dimCount = await page.locator('.choice.dim').count()
