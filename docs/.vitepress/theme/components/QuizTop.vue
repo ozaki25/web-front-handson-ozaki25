@@ -34,6 +34,10 @@ const totalQuestions = computed(() =>
 const totalCorrect = computed(() =>
   chapterStats.value.reduce((acc, c) => acc + c.correct, 0),
 )
+
+const wrongCount = computed(() =>
+  chapterStats.value.reduce((acc, c) => acc + (c.answered - c.correct), 0),
+)
 </script>
 
 <template>
@@ -54,6 +58,14 @@ const totalCorrect = computed(() =>
         </span>
       </div>
     </div>
+
+    <a v-if="wrongCount > 0" href="/quiz/review/" class="review-banner">
+      <span class="review-banner-icon">✗</span>
+      <span class="review-banner-text">
+        間違えた問題が <strong>{{ wrongCount }} 問</strong> あります — 復習する
+      </span>
+      <span class="review-banner-arrow">→</span>
+    </a>
 
     <div class="chapter-grid">
       <a
@@ -241,5 +253,54 @@ const totalCorrect = computed(() =>
   background: var(--vp-c-bg-mute);
   border-color: var(--vp-c-brand-2);
   color: var(--vp-c-text-1);
+}
+
+.review-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin-bottom: 1.25rem;
+  padding: 0.75rem 1rem;
+  background: #fef2f2;
+  border: 1px solid #fca5a5;
+  border-radius: 8px;
+  text-decoration: none;
+  color: #b91c1c;
+  font-size: 0.9rem;
+  font-weight: 600;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.review-banner:hover {
+  background: #fee2e2;
+  border-color: #f87171;
+  color: #b91c1c;
+}
+
+.review-banner-icon {
+  font-weight: 900;
+  font-size: 1rem;
+  flex-shrink: 0;
+}
+
+.review-banner-text {
+  flex: 1;
+}
+
+.review-banner-arrow {
+  flex-shrink: 0;
+  font-size: 1rem;
+}
+
+.dark .review-banner {
+  background: #450a0a;
+  border-color: #b91c1c;
+  color: #fca5a5;
+}
+
+.dark .review-banner:hover {
+  background: #5a0f0f;
+  border-color: #dc2626;
+  color: #fca5a5;
 }
 </style>
