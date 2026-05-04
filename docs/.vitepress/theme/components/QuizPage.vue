@@ -41,13 +41,13 @@ const orderedQuizzes = ref<Quiz[]>(
 )
 
 const currentIndex = ref(0)
-const sessionAnswers = ref<Record<string, boolean>>({})
+const sessionAnswers = ref<Record<string, { correct: boolean; selectedIndex: number | null }>>({})
 const finished = ref(false)
 
 const currentQuiz = computed<Quiz | null>(() => orderedQuizzes.value[currentIndex.value] ?? null)
 
 const correctCount = computed(
-  () => Object.values(sessionAnswers.value).filter((v) => v).length,
+  () => Object.values(sessionAnswers.value).filter((v) => v.correct).length,
 )
 
 const answeredCount = computed(() => Object.keys(sessionAnswers.value).length)
@@ -62,8 +62,12 @@ const isCurrentAnswered = computed(
   () => currentQuiz.value != null && sessionAnswers.value[currentQuiz.value.id] !== undefined,
 )
 
-function onAnswered(quizId: string, correct: boolean) {
-  sessionAnswers.value[quizId] = correct
+const currentAnswer = computed(() =>
+  currentQuiz.value != null ? sessionAnswers.value[currentQuiz.value.id] ?? null : null,
+)
+
+function onAnswered(quizId: string, correct: boolean, selectedIndex: number) {
+  sessionAnswers.value[quizId] = { correct, selectedIndex }
   saveAnswer(quizId, correct)
 }
 
@@ -73,6 +77,10 @@ function next() {
   } else {
     currentIndex.value++
   }
+}
+
+function prev() {
+  if (currentIndex.value > 0) currentIndex.value--
 }
 
 function restart() {
@@ -92,7 +100,8 @@ onMounted(() => {
   if (!props.shuffle) {
     for (const q of orderedQuizzes.value) {
       if (stored[q.id] !== undefined) {
-        sessionAnswers.value[q.id] = stored[q.id].correct
+        // selectedIndex は前セッションには保存していないため null
+        sessionAnswers.value[q.id] = { correct: stored[q.id].correct, selectedIndex: null }
       }
     }
     const firstUnanswered = orderedQuizzes.value.findIndex((q) => stored[q.id] === undefined)
@@ -131,18 +140,33 @@ const previousResults = computed(() => {
         :quiz="currentQuiz"
         :index="currentIndex"
         :total="orderedQuizzes.length"
+        :initial-answered="currentAnswer != null"
+        :initial-correct="currentAnswer?.correct ?? null"
+        :initial-selected-index="currentAnswer?.selectedIndex ?? null"
         @answered="onAnswered"
       />
 
       <div class="quiz-nav">
-        <button
-          v-if="isCurrentAnswered"
-          class="btn-next"
-          type="button"
-          @click="next"
-        >
-          {{ currentIndex + 1 < orderedQuizzes.length ? '次の問題' : '結果を見る' }}
-        </button>
+        <div>
+          <button
+            v-if="currentIndex > 0"
+            class="btn-prev"
+            type="button"
+            @click="prev"
+          >
+            前の問題
+          </button>
+        </div>
+        <div>
+          <button
+            v-if="isCurrentAnswered"
+            class="btn-next"
+            type="button"
+            @click="next"
+          >
+            {{ currentIndex + 1 < orderedQuizzes.length ? '次の問題' : '結果を見る' }}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -159,15 +183,18 @@ const previousResults = computed(() => {
           v-for="(q, i) in orderedQuizzes"
           :key="q.id"
           class="finish-row"
-          :data-correct="sessionAnswers[q.id]"
+          :data-correct="sessionAnswers[q.id]?.correct"
         >
           <span class="finish-row-num">{{ i + 1 }}</span>
-          <span class="finish-row-mark">{{ sessionAnswers[q.id] ? '○' : '×' }}</span>
+          <span class="finish-row-mark">{{ sessionAnswers[q.id]?.correct ? '○' : '×' }}</span>
           <span class="finish-row-q">{{ q.question }}</span>
         </div>
       </div>
 
-      <button class="btn-restart" type="button" @click="restart">もう一度挑戦</button>
+      <div class="finish-actions">
+        <button class="btn-restart" type="button" @click="restart">もう一度挑戦</button>
+        <a href="/quiz/" class="btn-list">ドリル一覧へ</a>
+      </div>
     </div>
 
     <div v-if="previousResults && !finished" class="quiz-prev-results">
@@ -217,7 +244,26 @@ const previousResults = computed(() => {
 .quiz-nav {
   margin-top: 1rem;
   display: flex;
-  justify-content: flex-end;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.btn-prev {
+  padding: 0.55rem 1.4rem;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-text-1);
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 6px;
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+
+.btn-prev:hover {
+  background: var(--vp-c-bg-mute);
+  border-color: var(--vp-c-brand-2);
+  color: var(--vp-c-text-1);
 }
 
 .btn-next,
@@ -318,6 +364,24 @@ const previousResults = computed(() => {
 .finish-row-q {
   flex: 1;
   line-height: 1.5;
+}
+
+.finish-actions {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.btn-list {
+  font-size: 0.9rem;
+  color: var(--vp-c-brand-1);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.dark .btn-list {
+  color: var(--vp-c-brand-1);
 }
 
 .quiz-prev-results {

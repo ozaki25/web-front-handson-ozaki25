@@ -1,31 +1,34 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { ref, computed } from 'vue'
 import type { Quiz } from '../../../quiz/types'
 
 const props = defineProps<{
   quiz: Quiz
   index: number
   total: number
+  initialAnswered?: boolean
+  initialCorrect?: boolean | null
+  initialSelectedIndex?: number | null
 }>()
 
 const emit = defineEmits<{
-  answered: [quizId: string, correct: boolean]
+  answered: [quizId: string, correct: boolean, selectedIndex: number]
 }>()
 
-const selectedIndex = ref<number | null>(null)
-const answered = ref(false)
+const selectedIndex = ref<number | null>(props.initialSelectedIndex ?? null)
+const answered = ref(props.initialAnswered ?? false)
 
 function select(i: number) {
   if (answered.value) return
   selectedIndex.value = i
   answered.value = true
-  emit('answered', props.quiz.id, i === props.quiz.answer)
+  emit('answered', props.quiz.id, i === props.quiz.answer, i)
 }
 
 function choiceClass(i: number): string {
   if (!answered.value) return 'choice'
   if (i === props.quiz.answer) return 'choice correct'
-  if (i === selectedIndex.value) return 'choice wrong'
+  if (selectedIndex.value !== null && i === selectedIndex.value) return 'choice wrong'
   return 'choice dim'
 }
 
@@ -34,6 +37,18 @@ const difficultyLabel: Record<string, string> = {
   normal: '普',
   hard: '難',
 }
+
+// `` `foo` `` → <code>foo</code>（クイズデータは固定値なので v-html で安全）
+function renderText(s: string): string {
+  const escaped = s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  return escaped.replace(/`([^`]+)`/g, '<code>$1</code>')
+}
+
+const effectiveCorrect = computed(() => {
+  if (!answered.value) return null
+  if (selectedIndex.value !== null) return selectedIndex.value === props.quiz.answer
+  return props.initialCorrect ?? null
+})
 </script>
 
 <template>
@@ -45,7 +60,7 @@ const difficultyLabel: Record<string, string> = {
       </span>
     </div>
 
-    <p class="quiz-question">{{ quiz.question }}</p>
+    <p class="quiz-question" v-html="renderText(quiz.question)" />
 
     <ol class="quiz-choices" aria-label="選択肢">
       <li v-for="(choice, i) in quiz.choices" :key="i">
@@ -56,17 +71,17 @@ const difficultyLabel: Record<string, string> = {
           type="button"
         >
           <span class="choice-label" aria-hidden="true">{{ String.fromCharCode(65 + i) }}</span>
-          <span class="choice-text">{{ choice }}</span>
+          <span class="choice-text" v-html="renderText(choice)" />
           <span v-if="answered && i === quiz.answer" class="choice-check" aria-hidden="true">正</span>
         </button>
       </li>
     </ol>
 
     <div v-if="answered" class="quiz-result" role="status" aria-live="polite">
-      <p class="result-badge" :data-correct="selectedIndex === quiz.answer">
-        {{ selectedIndex === quiz.answer ? '正解' : '不正解' }}
+      <p class="result-badge" :data-correct="effectiveCorrect ?? undefined">
+        {{ effectiveCorrect ? '正解' : '不正解' }}
       </p>
-      <p class="quiz-explanation">{{ quiz.explanation }}</p>
+      <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
     </div>
   </div>
 </template>
@@ -249,5 +264,15 @@ const difficultyLabel: Record<string, string> = {
   line-height: 1.6;
   color: var(--vp-c-text-1);
   margin: 0;
+}
+
+/* v-html で挿入される <code> のスタイル */
+.quiz-card :deep(code) {
+  font-family: var(--vp-font-family-mono, monospace);
+  font-size: 0.875em;
+  background: var(--vp-c-bg-mute);
+  padding: 0.15em 0.35em;
+  border-radius: 3px;
+  color: var(--vp-c-text-1);
 }
 </style>
