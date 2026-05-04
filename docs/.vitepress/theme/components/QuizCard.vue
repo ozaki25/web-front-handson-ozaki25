@@ -251,9 +251,9 @@ const effectiveCorrect = computed(() => {
 }
 
 .choice.wrong {
-  background: #fef2f2;
-  border-color: #dc2626;
-  color: #b91c1c;
+  background: #fef7f7;
+  border-color: #f87171;
+  color: #991b1b;
 }
 
 .choice.dim {
@@ -349,7 +349,7 @@ const effectiveCorrect = computed(() => {
 }
 
 .result-badge[data-correct='false'] {
-  color: #dc2626;
+  color: #ea580c;
 }
 
 .dark .result-badge[data-correct='true'] {
