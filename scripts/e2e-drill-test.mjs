@@ -2,6 +2,7 @@
  * Drill feature E2E test using Playwright
  * Tests: navigation, answering questions, score, restart, review page,
  *        localStorage persistence, stats, shuffle, accessibility, keyboard, titles
+ * Optimized: all 20 independent groups run in parallel via Promise.all
  */
 import { chromium } from '/opt/node22/lib/node_modules/playwright/index.mjs'
 
@@ -46,7 +47,10 @@ async function answerAllQuestions(page, maxQuestions = 100) {
     const btnText = await page.locator('.btn-next').textContent()
     await page.locator('.btn-next').click()
     if (btnText.includes('結果を見る')) break
-    await page.waitForFunction(() => !document.querySelector('.quiz-result'), { timeout: 5000 })
+    await page.waitForFunction(() => !document.querySelector('.quiz-result'), {
+      timeout: 5000,
+      polling: 50,
+    })
     count++
   }
 }
@@ -54,8 +58,8 @@ async function answerAllQuestions(page, maxQuestions = 100) {
 const browser = await chromium.launch({ headless: true })
 
 // ── 1. トップページからドリルへのリンク ──────────────────────────────
-console.log('\n[1] トップページ → ドリルリンク')
-{
+async function group1(browser) {
+  console.log('\n[1] トップページ → ドリルリンク')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
@@ -74,13 +78,13 @@ console.log('\n[1] トップページ → ドリルリンク')
 }
 
 // ── 2. ドリルトップページ ──────────────────────────────────────────
-console.log('\n[2] ドリルトップ (/quiz/)')
-{
+async function group2(browser) {
+  console.log('\n[2] ドリルトップ (/quiz/)')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/')
-  await page.waitForSelector('.quiz-top', { timeout: 8000 })
+  await page.waitForSelector('.quiz-top', { timeout: 5000 })
   await assert('h1 が "ドリル" を含む', async () => {
     const h1 = await page.locator('h1').textContent()
     if (!h1.includes('ドリル')) throw new Error(h1)
@@ -99,13 +103,13 @@ console.log('\n[2] ドリルトップ (/quiz/)')
 }
 
 // ── 3. 1章ドリル: 正解フロー ──────────────────────────────────────
-console.log('\n[3] 1章ドリル — 正解フロー')
-{
+async function group3(browser) {
+  console.log('\n[3] 1章ドリル — 正解フロー')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   await assert('問題文が表示される', async () => {
     const q = await page.locator('.quiz-question').textContent()
@@ -146,17 +150,20 @@ console.log('\n[3] 1章ドリル — 正解フロー')
 }
 
 // ── 4. 次の問題への遷移: 状態リセット確認 ──────────────────────────
-console.log('\n[4] 次の問題への遷移')
-{
+async function group4(browser) {
+  console.log('\n[4] 次の問題への遷移')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await page.locator('.choice').first().click()
   await page.waitForSelector('.quiz-result', { timeout: 5000 })
   await page.locator('.btn-next').click()
-  await page.waitForFunction(() => !document.querySelector('.quiz-result'), { timeout: 3000 })
+  await page.waitForFunction(() => !document.querySelector('.quiz-result'), {
+    timeout: 3000,
+    polling: 50,
+  })
 
   await assert('遷移後に .quiz-result が非表示（前の回答状態がリセットされる）', async () => {
     const result = await page.locator('.quiz-result').count()
@@ -178,13 +185,13 @@ console.log('\n[4] 次の問題への遷移')
 }
 
 // ── 5. 全問を回答して結果画面に到達 ──────────────────────────────────
-console.log('\n[5] 最短ルートで全問回答 → 結果画面')
-{
+async function group5(browser) {
+  console.log('\n[5] 最短ルートで全問回答 → 結果画面')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await answerAllQuestions(page, 50)
 
   await assert('結果画面が表示される', async () => {
@@ -210,13 +217,13 @@ console.log('\n[5] 最短ルートで全問回答 → 結果画面')
 }
 
 // ── 6. もう一度挑戦 (restart) ──────────────────────────────────────
-console.log('\n[6] もう一度挑戦')
-{
+async function group6(browser) {
+  console.log('\n[6] もう一度挑戦')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await answerAllQuestions(page, 50)
   await page.waitForSelector('.quiz-finish', { timeout: 5000 })
   await page.locator('.btn-restart').click()
@@ -242,13 +249,13 @@ console.log('\n[6] もう一度挑戦')
 }
 
 // ── 7. ランダム出題ページ ──────────────────────────────────────────
-console.log('\n[7] ランダム出題 (/quiz/random/)')
-{
+async function group7(browser) {
+  console.log('\n[7] ランダム出題 (/quiz/random/)')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/random/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await assert('quiz-card が表示される', async () => {
     const card = await page.locator('.quiz-card').count()
     if (card === 0) throw new Error('no quiz-card')
@@ -261,13 +268,13 @@ console.log('\n[7] ランダム出題 (/quiz/random/)')
 }
 
 // ── 8. 復習ページ (まだ間違いなし) ──────────────────────────────────
-console.log('\n[8] 復習ページ — 初回（間違いなし想定）')
-{
+async function group8(browser) {
+  console.log('\n[8] 復習ページ — 初回（間違いなし想定）')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/review/')
-  await page.waitForSelector('.review-empty, .quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.review-empty, .quiz-card', { timeout: 5000 })
   const hasEmpty = await page.locator('.review-empty').count()
   const hasCard = await page.locator('.quiz-card').count()
   await assert('review ページが表示される（空状態か問題表示のどちらか）', async () => {
@@ -277,13 +284,13 @@ console.log('\n[8] 復習ページ — 初回（間違いなし想定）')
 }
 
 // ── 9. サイドバーのドリルセクション ──────────────────────────────────
-console.log('\n[9] ナビゲーション')
-{
+async function group9(browser) {
+  console.log('\n[9] ナビゲーション')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await assert('ページタイトルが "ドリル" を含む', async () => {
     const title = await page.title()
     if (!title.includes('ドリル')) throw new Error(title)
@@ -292,15 +299,15 @@ console.log('\n[9] ナビゲーション')
 }
 
 // ── 10. 過去の結果セクション: 回答後に表示 ───────────────────────────
-console.log('\n[10] 過去の結果セクション')
-{
+async function group10(browser) {
+  console.log('\n[10] 過去の結果セクション')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
   // chapter2 は未回答なので過去の結果が非表示
   await page.goto(BASE + '/quiz/chapter2/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await assert('未回答チャプターでは "過去の結果" が非表示', async () => {
     const prev = await page.locator('.quiz-prev-results').count()
     if (prev !== 0) throw new Error('"過去の結果" が表示されている')
@@ -308,12 +315,11 @@ console.log('\n[10] 過去の結果セクション')
 
   // chapter1 を全問回答してから過去の結果を確認
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await answerAllQuestions(page, 50)
   await page.waitForSelector('.quiz-finish', { timeout: 5000 })
 
-  // chapter1 に再度アクセス → quiz-finish 後は .quiz-prev-results が表示されない
-  // (finished=true のとき非表示なので、restart してから確認)
+  // restart してから .quiz-prev-results を確認
   await page.locator('.btn-restart').click()
   await page.waitForSelector('.quiz-card', { timeout: 3000 })
   await assert('回答済みチャプターでは "過去の結果" が表示される', async () => {
@@ -323,19 +329,17 @@ console.log('\n[10] 過去の結果セクション')
 }
 
 // ── 11. localStorage の永続化 ─────────────────────────────────────
-console.log('\n[11] localStorage の永続化')
-{
+async function group11(browser) {
+  console.log('\n[11] localStorage の永続化')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
-  // chapter1 で 1 問回答して localStorage にデータを入れる
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await page.locator('.choice').first().click()
   await page.waitForSelector('.quiz-result', { timeout: 5000 })
 
-  // localStorage に値が入ったことを確認
   const storedBeforeReload = await page.evaluate(() => localStorage.getItem('quiz-answers'))
   const parsedBefore = JSON.parse(storedBeforeReload || '{}')
   const keysBefore = Object.keys(parsedBefore)
@@ -344,9 +348,8 @@ console.log('\n[11] localStorage の永続化')
     if (keysBefore.length === 0) throw new Error('localStorage empty after answering')
   })
 
-  // ページリロード
   await page.reload()
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   const storedAfterReload = await page.evaluate(() => localStorage.getItem('quiz-answers'))
   const parsedAfter = JSON.parse(storedAfterReload || '{}')
@@ -361,11 +364,10 @@ console.log('\n[11] localStorage の永続化')
     }
   })
 
-  // 別の章に移動して戻っても保持
   await page.goto(BASE + '/quiz/chapter2/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   const storedAfterNav = await page.evaluate(() => localStorage.getItem('quiz-answers'))
   const parsedAfterNav = JSON.parse(storedAfterNav || '{}')
@@ -380,28 +382,24 @@ console.log('\n[11] localStorage の永続化')
 }
 
 // ── 12. QuizTop の統計表示 ────────────────────────────────────────
-console.log('\n[12] QuizTop 統計表示')
-{
+async function group12(browser) {
+  console.log('\n[12] QuizTop 統計表示')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
-  // まず /quiz/ トップの初期状態を確認
   await page.goto(BASE + '/quiz/')
-  await page.waitForSelector('.quiz-top', { timeout: 8000 })
+  await page.waitForSelector('.quiz-top', { timeout: 5000 })
   const initialAnsweredText = await page.locator('.summary-value').first().textContent()
   const initialAnswered = parseInt(initialAnsweredText?.split('/')[0]?.trim() || '0', 10)
 
-  // chapter6 で 1 問だけ回答（localstorage 直接書き込みで確実に）
-  // 正規のフローで chapter6 の 1 問目に回答
   await page.goto(BASE + '/quiz/chapter6/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await page.locator('.choice').first().click()
   await page.waitForSelector('.quiz-result', { timeout: 5000 })
 
-  // /quiz/ トップに戻る
   await page.goto(BASE + '/quiz/')
-  await page.waitForSelector('.quiz-top', { timeout: 8000 })
+  await page.waitForSelector('.quiz-top', { timeout: 5000 })
 
   const afterAnsweredText = await page.locator('.summary-value').first().textContent()
   const afterAnswered = parseInt(afterAnsweredText?.split('/')[0]?.trim() || '0', 10)
@@ -412,8 +410,6 @@ console.log('\n[12] QuizTop 統計表示')
     }
   })
 
-  // chapter6 カードの進捗バーが 0% でなくなること
-  // chapter6 は7番目（index 5）のカード
   const cards = await page.locator('.chapter-card').all()
   let chapter6Bar = null
   for (const card of cards) {
@@ -434,52 +430,21 @@ console.log('\n[12] QuizTop 統計表示')
 }
 
 // ── 13. 復習ページ（review）に間違いが入るケース ─────────────────────
-console.log('\n[13] 復習ページ — 間違い問題の表示')
-{
+async function group13(browser) {
+  console.log('\n[13] 復習ページ — 間違い問題の表示')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
-  // chapter6 の全問題ID を取得してすべて不正解で localStorage に書き込む
-  // chapter6 は q問題のIDを直接書き込む（q001などの形式は不明なので quiz page経由で取得）
-  // まず chapter6 ページを開いて問題IDを取得
   await page.goto(BASE + '/quiz/chapter6/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
-
-  // Vue コンポーネントから問題数を確認（プログレステキストから）
-  const progressText = await page.locator('.quiz-progress-text').textContent()
-  const totalMatch = progressText.match(/\/\s*(\d+)/)
-  const total = totalMatch ? parseInt(totalMatch[1], 10) : 13
-
-  // chapter6 の全問を localStorage に不正解として書き込む
-  // QuizPage の quizzes から id を取得するには JS 実行
-  await page.evaluate((total) => {
-    const existing = JSON.parse(localStorage.getItem('quiz-answers') || '{}')
-    // chapter6 の問題ID は連番。data から特定できないため
-    // page の Vue インスタンスから取得を試みる
-    // 代替: quiz-card の data 属性や DOM から取得するのが確実
-    return total
-  }, total)
-
-  // 実際に全問回答（最初の選択肢を選んで間違えることを想定しないため、
-  // localStorage へ直接書き込む）
-  // QuizPage の orderedQuizzes を JavaScript 経由で取得
-  // VitePress の SPA なので Vue app から取得できる場合がある
-  // 確実な方法: 全問を最初の選択肢でクリックして答えてから、
-  // 正解でないものを不正解として確認する
-
-  // より確実な方法: localStorage を直接操作
-  // chapter6 の問題は 13 問で ID は quiz data から来るので
-  // まず全問に回答して、その後 localStorage を確認して不正解に書き換える
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await page.evaluate(() => localStorage.clear())
 
-  // chapter6 全問を素早く回答
   await page.goto(BASE + '/quiz/chapter6/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await answerAllQuestions(page, 20)
   await page.waitForSelector('.quiz-finish', { timeout: 5000 })
 
-  // 回答後の localStorage を取得して全問を不正解に書き換える
   const stored = await page.evaluate(() => {
     const data = JSON.parse(localStorage.getItem('quiz-answers') || '{}')
     return data
@@ -490,7 +455,6 @@ console.log('\n[13] 復習ページ — 間違い問題の表示')
     if (keys.length !== 13) throw new Error(`recorded=${keys.length}, expected=13`)
   })
 
-  // 全問を不正解に書き換える
   await page.evaluate((keys) => {
     const data = {}
     for (const k of keys) {
@@ -499,9 +463,8 @@ console.log('\n[13] 復習ページ — 間違い問題の表示')
     localStorage.setItem('quiz-answers', JSON.stringify(data))
   }, keys)
 
-  // /quiz/review/ を開く
   await page.goto(BASE + '/quiz/review/')
-  await page.waitForSelector('.review-empty, .quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.review-empty, .quiz-card', { timeout: 5000 })
 
   await assert('/quiz/review/ で quiz-card が表示される（空でない）', async () => {
     const cardCount = await page.locator('.quiz-card').count()
@@ -513,7 +476,6 @@ console.log('\n[13] 復習ページ — 間違い問題の表示')
     if (!text.includes('13')) throw new Error(`progress text: ${text}`)
   })
 
-  // 復習で全問回答して結果画面を確認
   await answerAllQuestions(page, 20)
 
   await assert('復習全問回答後に結果画面が表示される', async () => {
@@ -524,26 +486,22 @@ console.log('\n[13] 復習ページ — 間違い問題の表示')
 }
 
 // ── 14. シャッフルの再実行 ────────────────────────────────────────
-console.log('\n[14] シャッフルの再実行')
-{
+async function group14(browser) {
+  console.log('\n[14] シャッフルの再実行')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
-  // まずページを読み込んでから localStorage を操作する
   await page.goto(BASE + '/quiz/random/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
-  // 5回試みて1回でも異なる順序が出ればOK
   let shuffleTestPassed = false
   for (let attempt = 0; attempt < 5; attempt++) {
-    // 最初の問題文を記録
     const firstQuestion1 = await page.locator('.quiz-question').textContent()
 
-    // ページをリロードして再シャッフル
     await page.evaluate(() => localStorage.clear())
     await page.goto(BASE + '/quiz/random/')
-    await page.waitForSelector('.quiz-card', { timeout: 8000 })
+    await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
     const firstQuestion2 = await page.locator('.quiz-question').textContent()
 
@@ -561,13 +519,13 @@ console.log('\n[14] シャッフルの再実行')
 }
 
 // ── 15. 難易度バッジ ──────────────────────────────────────────────
-console.log('\n[15] 難易度バッジ')
-{
+async function group15(browser) {
+  console.log('\n[15] 難易度バッジ')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   await assert('難易度バッジ（易/普/難）が表示される', async () => {
     const badge = await page.locator('.quiz-difficulty').textContent()
@@ -583,8 +541,8 @@ console.log('\n[15] 難易度バッジ')
 }
 
 // ── 16. 各章ページの問題数 ────────────────────────────────────────
-console.log('\n[16] 各章ページの問題数')
-{
+async function group16(browser) {
+  console.log('\n[16] 各章ページの問題数')
   const chapterCounts = [
     { chapter: 1, count: 37 },
     { chapter: 2, count: 50 },
@@ -595,30 +553,32 @@ console.log('\n[16] 各章ページの問題数')
     { chapter: 7, count: 88 },
   ]
 
-  for (const { chapter, count } of chapterCounts) {
-    const ctx = await browser.newContext()
-    const page = await ctx.newPage()
-    page.on('pageerror', (err) => console.error('  [page error]', err.message))
-    await page.goto(BASE + `/quiz/chapter${chapter}/`)
-    await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await Promise.all(
+    chapterCounts.map(async ({ chapter, count }) => {
+      const ctx = await browser.newContext()
+      const page = await ctx.newPage()
+      page.on('pageerror', (err) => console.error('  [page error]', err.message))
+      await page.goto(BASE + `/quiz/chapter${chapter}/`)
+      await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
-    await assert(`chapter${chapter} のプログレステキストに ${count} 問が表示される`, async () => {
-      const text = await page.locator('.quiz-progress-text').textContent()
-      if (!text.includes(`/ ${count}`)) throw new Error(`progress text: "${text}"`)
-    })
+      await assert(`chapter${chapter} のプログレステキストに ${count} 問が表示される`, async () => {
+        const text = await page.locator('.quiz-progress-text').textContent()
+        if (!text.includes(`/ ${count}`)) throw new Error(`progress text: "${text}"`)
+      })
 
-    await ctx.close()
-  }
+      await ctx.close()
+    }),
+  )
 }
 
 // ── 17. アクセシビリティ属性 ─────────────────────────────────────
-console.log('\n[17] アクセシビリティ属性')
-{
+async function group17(browser) {
+  console.log('\n[17] アクセシビリティ属性')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   await assert('プログレスバーに role="progressbar" がある', async () => {
     const role = await page.locator('[role="progressbar"]').count()
@@ -648,7 +608,6 @@ console.log('\n[17] アクセシビリティ属性')
     if (el === 0) throw new Error('aria-label="選択肢" not found')
   })
 
-  // 回答後の result area には role="status" と aria-live="polite"
   await page.locator('.choice').first().click()
   await page.waitForSelector('.quiz-result', { timeout: 5000 })
 
@@ -666,16 +625,15 @@ console.log('\n[17] アクセシビリティ属性')
 }
 
 // ── 18. キーボード操作（Tab フォーカス） ─────────────────────────
-console.log('\n[18] キーボード操作（Tab フォーカス）')
-{
+async function group18(browser) {
+  console.log('\n[18] キーボード操作（Tab フォーカス）')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   const pageErrors = []
   page.on('pageerror', (err) => pageErrors.push(err.message))
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
-  // Tab を 10 回押す
   for (let i = 0; i < 10; i++) {
     await page.keyboard.press('Tab')
   }
@@ -685,8 +643,6 @@ console.log('\n[18] キーボード操作（Tab フォーカス）')
   })
 
   await assert('選択肢ボタンにフォーカスが当たる（focusable）', async () => {
-    // フォーカスが当たった要素を確認（Tab を押してフォーカスが choice になるまで試みる）
-    // VitePress のナビバーやサイドバーには多数のフォーカス可能要素があるため多めに試みる
     let focusedOnChoice = false
     for (let i = 0; i < 80; i++) {
       const focused = await page.evaluate(() => {
@@ -706,28 +662,28 @@ console.log('\n[18] キーボード操作（Tab フォーカス）')
 }
 
 // ── 19. ページタイトル（title タグ） ─────────────────────────────
-console.log('\n[19] ページタイトル')
-{
+async function group19(browser) {
+  console.log('\n[19] ページタイトル')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
   await page.goto(BASE + '/quiz/chapter1/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await assert('/quiz/chapter1/ のタイトルが "ドリル" を含む', async () => {
     const title = await page.title()
     if (!title.includes('ドリル')) throw new Error(`title: "${title}"`)
   })
 
   await page.goto(BASE + '/quiz/random/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
   await assert('/quiz/random/ のタイトルが "ランダム出題" を含む', async () => {
     const title = await page.title()
     if (!title.includes('ランダム出題')) throw new Error(`title: "${title}"`)
   })
 
   await page.goto(BASE + '/quiz/review/')
-  await page.waitForSelector('.review-empty, .quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.review-empty, .quiz-card', { timeout: 5000 })
   await assert('/quiz/review/ のタイトルが "復習" を含む', async () => {
     const title = await page.title()
     if (!title.includes('復習')) throw new Error(`title: "${title}"`)
@@ -737,22 +693,23 @@ console.log('\n[19] ページタイトル')
 }
 
 // ── 20. 途中再開 ─────────────────────────────────────────────────
-console.log('\n[20] 途中再開（chapter6: 13問）')
-{
-  // chapter6 の最初の 5 問だけ回答して離脱し、戻ったときに続きから始まるか確認
+async function group20(browser) {
+  console.log('\n[20] 途中再開（chapter6: 13問）')
   const ctx = await browser.newContext()
   const page = await ctx.newPage()
   page.on('pageerror', (err) => console.error('  [page error]', err.message))
 
   await page.goto(BASE + '/quiz/chapter6/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
-  // 5 問回答して離脱
   for (let i = 0; i < 5; i++) {
     await page.locator('.choice').first().click()
     await page.waitForSelector('.quiz-result', { timeout: 5000 })
     await page.locator('.btn-next').click()
-    await page.waitForFunction(() => !document.querySelector('.quiz-result'), { timeout: 5000 })
+    await page.waitForFunction(() => !document.querySelector('.quiz-result'), {
+      timeout: 5000,
+      polling: 50,
+    })
   }
 
   await assert('5問回答後にプログレスが "5 / 13" になっている', async () => {
@@ -760,9 +717,8 @@ console.log('\n[20] 途中再開（chapter6: 13問）')
     if (!text.startsWith('5 /')) throw new Error(text)
   })
 
-  // ページを再読み込みして再開確認
   await page.reload()
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   await assert('リロード後も "5 / 13 問回答済み" から再開される', async () => {
     const text = await page.locator('.quiz-progress-text').textContent()
@@ -771,22 +727,19 @@ console.log('\n[20] 途中再開（chapter6: 13問）')
 
   await assert('リロード後に 6 問目（index=5）から開始される', async () => {
     const numText = await page.locator('.quiz-num').textContent()
-    // "6 / 13" のような表示になるはず
     if (!numText.trim().startsWith('6')) throw new Error(`quiz-num: "${numText}"`)
   })
 
-  // 別ページへ移動してから戻っても再開されるか
   await page.goto(BASE + '/quiz/')
   await page.waitForSelector('.quiz-top', { timeout: 5000 })
   await page.goto(BASE + '/quiz/chapter6/')
-  await page.waitForSelector('.quiz-card', { timeout: 8000 })
+  await page.waitForSelector('.quiz-card', { timeout: 5000 })
 
   await assert('別ページ経由で戻っても "5 / 13" から再開される', async () => {
     const text = await page.locator('.quiz-progress-text').textContent()
     if (!text.startsWith('5 /')) throw new Error(`再開失敗: "${text}"`)
   })
 
-  // 残り 8 問を回答して全問完了
   await answerAllQuestions(page, 20)
   await page.waitForSelector('.quiz-finish', { timeout: 5000 })
 
@@ -800,16 +753,14 @@ console.log('\n[20] 途中再開（chapter6: 13問）')
     if (rows !== 13) throw new Error(`rows=${rows}`)
   })
 
-  // 全問回答済みの状態でリロードすると即結果画面になるか
   await page.reload()
-  await page.waitForSelector('.quiz-finish', { timeout: 8000 })
+  await page.waitForSelector('.quiz-finish', { timeout: 5000 })
 
   await assert('全問回答済み状態でリロードすると即結果画面が表示される', async () => {
     const finish = await page.locator('.quiz-finish').count()
     if (finish === 0) throw new Error('result screen not shown')
   })
 
-  // 「もう一度挑戦」で最初から
   await page.locator('.btn-restart').click()
   await page.waitForSelector('.quiz-card', { timeout: 3000 })
 
@@ -825,6 +776,30 @@ console.log('\n[20] 途中再開（chapter6: 13問）')
 
   await ctx.close()
 }
+
+// ── 全グループを並列実行 ────────────────────────────────────────
+await Promise.all([
+  group1(browser),
+  group2(browser),
+  group3(browser),
+  group4(browser),
+  group5(browser),
+  group6(browser),
+  group7(browser),
+  group8(browser),
+  group9(browser),
+  group10(browser),
+  group11(browser),
+  group12(browser),
+  group13(browser),
+  group14(browser),
+  group15(browser),
+  group16(browser),
+  group17(browser),
+  group18(browser),
+  group19(browser),
+  group20(browser),
+])
 
 // ── 結果サマリー ─────────────────────────────────────────────────
 await browser.close()
