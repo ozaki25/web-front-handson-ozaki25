@@ -153,6 +153,10 @@ function resetProgress() {
             class="chapter-complete"
             aria-label="全問正解"
           >達成</span>
+          <span
+            v-else-if="ch.total > 0 && ch.answered === 0"
+            class="chapter-fresh"
+          >はじめよう</span>
         </div>
         <div class="chapter-bar-wrap">
           <div
@@ -314,6 +318,17 @@ function resetProgress() {
 .dark .chapter-complete {
   background: #166534;
   color: #86efac;
+}
+
+.chapter-fresh {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 600;
+  padding: 0.15em 0.5em;
+  background: var(--vp-c-bg-soft);
+  color: var(--vp-c-brand-1);
+  border: 1px solid var(--vp-c-brand-2);
+  border-radius: 3px;
 }
 
 .chapter-bar-wrap {
