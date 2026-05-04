@@ -77,7 +77,7 @@ export default withPwa(
         { text: 'ドリル', link: '/quiz/' },
       ],
       sidebar: [
-        { text: 'トップ', link: '/' },
+        { text: 'ホーム', link: '/' },
         { text: 'はじめに', link: '/introduction/' },
         {
           text: '1. HTML / CSS',

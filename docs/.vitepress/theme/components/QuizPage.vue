@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, useTemplateRef } from 'vue'
+import { ref, computed, onMounted, onUnmounted, nextTick, useTemplateRef, watch } from 'vue'
 import type { Quiz, ChapterId } from '../../../quiz/types'
 import { STORAGE_KEY, STREAK_KEY, chapters } from '../../../quiz/types'
 import type { StoredAnswer, StoredAnswers } from '../../../quiz/types'
@@ -218,23 +218,98 @@ function prev() {
   }
 }
 
+function stateSessionKey(): string | null {
+  if (typeof window === 'undefined') return null
+  return `quiz-state-${window.location.pathname}`
+}
+
+function loadState(): { currentIndex: number; finished: boolean } | null {
+  const key = stateSessionKey()
+  if (!key) return null
+  try {
+    const raw = sessionStorage.getItem(key)
+    return raw ? JSON.parse(raw) : null
+  } catch {
+    return null
+  }
+}
+
+function saveState() {
+  const key = stateSessionKey()
+  if (!key) return
+  try {
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        currentIndex: currentIndex.value,
+        finished: finished.value,
+      }),
+    )
+  } catch {
+    /* ignore */
+  }
+}
+
 function restart() {
   if (props.randomSample != null || props.shuffle) {
     orderedQuizzes.value = sampleQuizzes(true)
+  } else {
+    // 章モードの「同じ問題でもう一度」: localStorage の回答記録もリセット
+    // （そうしないと別ページに移動して戻ったとき再び結果画面になる）
+    const data = loadAnswers()
+    let changed = false
+    for (const q of orderedQuizzes.value) {
+      if (data[q.id] !== undefined) {
+        delete data[q.id]
+        changed = true
+      }
+    }
+    if (changed) {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+      storedAnswers.value = data
+    }
   }
   currentIndex.value = 0
   sessionAnswers.value = {}
   finished.value = false
+  // watch で自動的に saveState される
 }
 
 const storedAnswers = ref<StoredAnswers>({})
+
+// state を sessionStorage に保存し、戻る操作で view 位置が保たれるようにする
+watch([currentIndex, finished], () => saveState())
 
 onMounted(() => {
   window.addEventListener('keydown', handlePageKeydown)
   const stored = loadAnswers()
   storedAnswers.value = stored
 
-  // シャッフルモード以外は途中から再開する
+  const savedState = loadState()
+  if (savedState != null) {
+    // 同じタブで戻ってきた: 最後の view 位置を復元する
+    for (const q of orderedQuizzes.value) {
+      if (stored[q.id] !== undefined) {
+        sessionAnswers.value[q.id] = {
+          correct: stored[q.id].correct,
+          selectedIndex: stored[q.id].selectedIndex ?? null,
+        }
+      }
+    }
+    if (
+      typeof savedState.currentIndex === 'number' &&
+      savedState.currentIndex >= 0 &&
+      savedState.currentIndex < orderedQuizzes.value.length
+    ) {
+      currentIndex.value = savedState.currentIndex
+    }
+    if (typeof savedState.finished === 'boolean') {
+      finished.value = savedState.finished
+    }
+    return
+  }
+
+  // 新規セッション: 既存の "前回の続き" 再開ロジック
   if (!props.shuffle) {
     for (const q of orderedQuizzes.value) {
       if (stored[q.id] !== undefined) {
@@ -301,7 +376,7 @@ const encouragementMessage = computed(() => {
         </span>
       </p>
       <p class="quiz-keyboard-hint">
-        キーボード: <kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>で選択 / <kbd>Enter</kbd>で次へ
+        キーボード: <kbd>A</kbd><kbd>B</kbd><kbd>C</kbd><kbd>D</kbd>または<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>で選択 / <kbd>Enter</kbd>で次へ
       </p>
 
       <QuizCard
@@ -374,11 +449,7 @@ const encouragementMessage = computed(() => {
             </summary>
             <p class="finish-row-explanation" v-html="renderText(q.explanation)" />
             <p v-if="q.lesson" class="finish-row-lesson-link">
-              <a
-                :href="`/lessons/${q.lesson}/`"
-                target="_blank"
-                rel="noopener"
-              >{{ q.lesson }} を読み直す ↗</a>
+              <a :href="`/lessons/${q.lesson}/`">{{ q.lesson }} を読み直す →</a>
             </p>
           </details>
         </div>

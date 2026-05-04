@@ -53,9 +53,21 @@ function renderText(s: string): string {
 }
 
 function handleKeydown(e: KeyboardEvent) {
+  // 修飾キー押下時は無視（⌘+R などを奪わない）
+  if (e.metaKey || e.ctrlKey || e.altKey) return
+  // 1〜4 の数字キー
   const n = parseInt(e.key)
   if (n >= 1 && n <= props.quiz.choices.length) {
     select(n - 1)
+    return
+  }
+  // A〜D（小文字も許容）
+  if (e.key.length === 1) {
+    const code = e.key.toLowerCase().charCodeAt(0)
+    const idx = code - 'a'.charCodeAt(0)
+    if (idx >= 0 && idx < props.quiz.choices.length) {
+      select(idx)
+    }
   }
 }
 
@@ -95,7 +107,7 @@ const effectiveCorrect = computed(() => {
           @click="select(i)"
           type="button"
         >
-          <span class="choice-label" aria-hidden="true">{{ i + 1 }}</span>
+          <span class="choice-label" aria-hidden="true">{{ String.fromCharCode(65 + i) }}</span>
           <span class="choice-text" v-html="renderText(choice)" />
           <span v-if="answered && i === quiz.answer" class="choice-check">正解</span>
         </button>
@@ -121,11 +133,7 @@ const effectiveCorrect = computed(() => {
       </p>
       <p class="quiz-explanation" v-html="renderText(quiz.explanation)" />
       <p v-if="quiz.lesson" class="quiz-lesson-link">
-        <a
-          :href="`/lessons/${quiz.lesson}/`"
-          target="_blank"
-          rel="noopener"
-        >{{ quiz.lesson }} を読み直す ↗</a>
+        <a :href="`/lessons/${quiz.lesson}/`">{{ quiz.lesson }} を読み直す →</a>
       </p>
     </div>
   </div>

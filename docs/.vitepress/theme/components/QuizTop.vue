@@ -86,6 +86,19 @@ function resetProgress() {
   if (!confirm('回答履歴をすべて削除しますか？この操作は元に戻せません。')) return
   localStorage.removeItem(STORAGE_KEY)
   localStorage.removeItem(STREAK_KEY)
+  // ドリル各ページに残っている sessionStorage 上の view 位置・抽選結果も
+  // 一掃する。残しておくと、リセット直後に章ページへ行ったとき
+  // 「全問正解の finish 画面」がそのまま見えてしまう
+  try {
+    for (let i = sessionStorage.length - 1; i >= 0; i--) {
+      const key = sessionStorage.key(i)
+      if (key && (key.startsWith('quiz-state-') || key.startsWith('quiz-sample-'))) {
+        sessionStorage.removeItem(key)
+      }
+    }
+  } catch {
+    /* ignore */
+  }
   stored.value = {}
   studyDates.value = []
 }
