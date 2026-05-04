@@ -44,7 +44,10 @@ const chapterStats = computed(() =>
     const answered = quizzes.filter((q) => stored.value[q.id] !== undefined).length
     const correct = quizzes.filter((q) => stored.value[q.id]?.correct).length
     const wrong = answered - correct
-    return { ...ch, total, answered, correct, wrong }
+    const easy = quizzes.filter((q) => q.difficulty === 'easy').length
+    const normal = quizzes.filter((q) => q.difficulty === 'normal').length
+    const hard = quizzes.filter((q) => q.difficulty === 'hard').length
+    return { ...ch, total, answered, correct, wrong, easy, normal, hard }
   }),
 )
 
@@ -163,6 +166,11 @@ function resetProgress() {
           <span v-else-if="ch.answered > 0" class="chapter-rate">
             正解 {{ Math.round((ch.correct / ch.answered) * 100) }}%
           </span>
+        </div>
+        <div class="chapter-difficulty">
+          <span class="diff-chip diff-easy" :title="`やさしい ${ch.easy} 問`">易 {{ ch.easy }}</span>
+          <span class="diff-chip diff-normal" :title="`ふつう ${ch.normal} 問`">中 {{ ch.normal }}</span>
+          <span class="diff-chip diff-hard" :title="`むずかしい ${ch.hard} 問`">難 {{ ch.hard }}</span>
         </div>
         <div v-if="ch.answered < ch.total" class="chapter-time">
           目安 約 {{ Math.max(1, Math.ceil((ch.total - ch.answered) * 0.5)) }} 分
@@ -351,6 +359,50 @@ function resetProgress() {
   margin-top: 0.25rem;
   font-size: 0.72rem;
   color: var(--vp-c-text-3);
+}
+
+.chapter-difficulty {
+  display: flex;
+  gap: 0.3rem;
+  margin-top: 0.4rem;
+}
+
+.diff-chip {
+  font-size: 0.68rem;
+  font-weight: 600;
+  padding: 0.05em 0.4em;
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+.diff-easy {
+  background: #dcfce7;
+  color: #166534;
+}
+
+.diff-normal {
+  background: #fef9c3;
+  color: #854d0e;
+}
+
+.diff-hard {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.dark .diff-easy {
+  background: #14532d;
+  color: #86efac;
+}
+
+.dark .diff-normal {
+  background: #422006;
+  color: #fde047;
+}
+
+.dark .diff-hard {
+  background: #450a0a;
+  color: #fca5a5;
 }
 
 .chapter-rate {

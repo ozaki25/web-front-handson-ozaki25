@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, nextTick, useTemplateRef } from 'vue'
-import type { Quiz } from '../../../quiz/types'
-import { STORAGE_KEY, STREAK_KEY } from '../../../quiz/types'
+import type { Quiz, ChapterId } from '../../../quiz/types'
+import { STORAGE_KEY, STREAK_KEY, chapters } from '../../../quiz/types'
 import type { StoredAnswer, StoredAnswers } from '../../../quiz/types'
 import QuizCard from './QuizCard.vue'
 
@@ -9,7 +9,44 @@ const props = defineProps<{
   quizzes: Quiz[]
   title: string
   shuffle?: boolean
+  chapter?: ChapterId
+  randomSample?: number
 }>()
+
+function sampleQuizzes(): Quiz[] {
+  if (props.randomSample == null || props.randomSample <= 0) {
+    return props.shuffle ? shuffleArray(props.quizzes) : props.quizzes
+  }
+  return shuffleArray(props.quizzes).slice(0, props.randomSample)
+}
+
+function chapterIdFromLesson(lesson: string): ChapterId | null {
+  const m = lesson.match(/lesson(\d+)/)
+  if (!m) return null
+  const n = parseInt(m[1], 10)
+  for (const ch of chapters) {
+    const start = parseInt(ch.lessonRange[0].replace('lesson', ''), 10)
+    const end = parseInt(ch.lessonRange[1].replace('lesson', ''), 10)
+    if (n >= start && n <= end) return ch.id
+  }
+  return null
+}
+
+function chapterLabel(lesson: string): string {
+  const id = chapterIdFromLesson(lesson)
+  if (id == null) return ''
+  return `${id}章`
+}
+
+const nextChapter = computed(() => {
+  if (props.chapter == null) return null
+  const next = chapters.find((c) => c.id === (props.chapter as number) + 1)
+  return next ?? null
+})
+
+const wrongQuizCount = computed(
+  () => orderedQuizzes.value.length - correctCount.value,
+)
 
 function loadAnswers(): StoredAnswers {
   if (typeof window === 'undefined') return {}
@@ -64,9 +101,7 @@ function focusCard() {
   nextTick(() => quizCardRef.value?.focusFirstChoice())
 }
 
-const orderedQuizzes = ref<Quiz[]>(
-  props.shuffle ? shuffleArray(props.quizzes) : props.quizzes,
-)
+const orderedQuizzes = ref<Quiz[]>(sampleQuizzes())
 
 const currentIndex = ref(0)
 const sessionAnswers = ref<Record<string, { correct: boolean; selectedIndex: number | null }>>({})
@@ -132,7 +167,9 @@ function prev() {
 }
 
 function restart() {
-  if (props.shuffle) orderedQuizzes.value = shuffleArray(props.quizzes)
+  if (props.randomSample != null || props.shuffle) {
+    orderedQuizzes.value = sampleQuizzes()
+  }
   currentIndex.value = 0
   sessionAnswers.value = {}
   finished.value = false
@@ -276,8 +313,12 @@ const encouragementMessage = computed(() => {
               <span class="finish-row-mark">×</span>
               <span class="finish-row-body">
                 <span class="finish-row-q" v-html="renderText(q.question)" />
-                <span class="finish-row-answer" v-html="`正解: ${renderText(q.choices[q.answer])}`" />
+                <span class="finish-row-meta">
+                  <span v-if="q.lesson" class="finish-row-chapter">{{ chapterLabel(q.lesson) }}</span>
+                  <span class="finish-row-answer" v-html="`正解: ${renderText(q.choices[q.answer])}`" />
+                </span>
               </span>
+              <span class="finish-row-toggle" aria-hidden="true"></span>
             </summary>
             <p class="finish-row-explanation" v-html="renderText(q.explanation)" />
             <p v-if="q.lesson" class="finish-row-lesson-link">
@@ -288,7 +329,7 @@ const encouragementMessage = computed(() => {
       </div>
 
       <details v-if="correctCount > 0" class="finish-section finish-section-collapsible">
-        <summary class="finish-section-heading finish-section-correct">
+        <summary class="finish-section-heading finish-section-correct finish-section-toggle">
           正解 {{ correctCount }} 問を表示
         </summary>
         <div class="finish-list">
@@ -302,13 +343,32 @@ const encouragementMessage = computed(() => {
             <span class="finish-row-mark">○</span>
             <span class="finish-row-body">
               <span class="finish-row-q" v-html="renderText(q.question)" />
+              <span v-if="q.lesson" class="finish-row-chapter finish-row-chapter-correct">{{ chapterLabel(q.lesson) }}</span>
             </span>
           </div>
         </div>
       </details>
 
       <div class="finish-actions">
-        <button class="btn-restart" type="button" @click="restart">もう一度挑戦</button>
+        <a
+          v-if="wrongQuizCount > 0"
+          href="/quiz/review/"
+          class="btn-restart btn-review-cta"
+        >
+          間違えた {{ wrongQuizCount }} 問だけ復習する →
+        </a>
+        <button class="btn-restart" type="button" @click="restart">
+          {{
+            props.randomSample != null
+              ? `別の ${orderedQuizzes.length} 問でもう一度`
+              : props.shuffle
+                ? '順番をシャッフルしてもう一度'
+                : '同じ問題でもう一度'
+          }}
+        </button>
+        <a v-if="nextChapter" :href="`/quiz/chapter${nextChapter.id}/`" class="btn-restart btn-next-chapter">
+          次の章へ（{{ nextChapter.id }}章 {{ nextChapter.title }}）→
+        </a>
         <a href="/quiz/" class="btn-list">ドリル一覧へ</a>
       </div>
     </div>
@@ -562,10 +622,28 @@ const encouragementMessage = computed(() => {
   cursor: pointer;
   user-select: none;
   margin-bottom: 0.5rem;
+  list-style: none;
+}
+
+.finish-section-collapsible summary::-webkit-details-marker {
+  display: none;
+}
+
+.finish-section-collapsible[open] > summary {
+  /* swap ▼ to ▲ when open */
 }
 
 .finish-section-collapsible[open] summary {
   margin-bottom: 0.75rem;
+}
+
+.finish-section-toggle::before {
+  content: '▼ ';
+  font-size: 0.75rem;
+}
+
+.finish-section-collapsible[open] .finish-section-toggle::before {
+  content: '▲ ';
 }
 
 .dark .finish-section-wrong {
@@ -675,6 +753,83 @@ const encouragementMessage = computed(() => {
   color: var(--vp-c-brand-1);
   text-decoration: underline;
   text-underline-offset: 2px;
+}
+
+.btn-review-cta {
+  display: inline-block;
+  text-decoration: none;
+  background: #b91c1c;
+}
+
+.btn-review-cta:hover {
+  background: #991b1b;
+  color: #fff;
+}
+
+.dark .btn-review-cta {
+  background: #b91c1c;
+}
+
+.dark .btn-review-cta:hover {
+  background: #dc2626;
+  color: #fff;
+}
+
+.btn-next-chapter {
+  display: inline-block;
+  text-decoration: none;
+  background: var(--vp-c-bg);
+  color: var(--vp-c-brand-1);
+  border: 1px solid var(--vp-c-brand-2);
+}
+
+.btn-next-chapter:hover {
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-brand-1);
+}
+
+.finish-row-meta {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.15rem;
+}
+
+.finish-row-chapter {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1em 0.45em;
+  background: var(--vp-c-bg-mute);
+  color: var(--vp-c-text-2);
+  border-radius: 3px;
+  letter-spacing: 0.02em;
+}
+
+.finish-row-chapter-correct {
+  margin-left: 0.4rem;
+  align-self: center;
+}
+
+.finish-row-toggle {
+  flex-shrink: 0;
+  font-size: 0.72rem;
+  color: var(--vp-c-text-3);
+  align-self: center;
+  margin-left: auto;
+}
+
+.finish-row-toggle::before {
+  content: '▼ 解説を読む';
+}
+
+.finish-row-detail[open] .finish-row-toggle {
+  color: var(--vp-c-text-2);
+}
+
+.finish-row-detail[open] .finish-row-toggle::before {
+  content: '▲ 閉じる';
 }
 
 .dark .btn-list {

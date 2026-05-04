@@ -6,19 +6,10 @@ next: false
 
 # ランダム 5 問
 
-全問からランダムに 5 問だけ出題します。最初に試したいときや、すきま時間にどうぞ。
+全 7 章・全難易度（やさしい〜むずかしい）からランダムに 5 問出題します。**特定の章で力試しをしたい場合は、左サイドバーの「N 章 〇〇」のドリルから選んでください**。
 
 <script setup>
-import { ref } from 'vue'
 import { allQuizzes } from '../data/index'
-
-const sample = ref(
-  [...allQuizzes]
-    .map((q) => ({ q, k: Math.random() }))
-    .sort((a, b) => a.k - b.k)
-    .slice(0, 5)
-    .map((x) => x.q),
-)
 </script>
 
-<QuizPage :quizzes="sample" title="ランダム 5 問" :shuffle="false" />
+<QuizPage :quizzes="allQuizzes" :random-sample="5" title="ランダム 5 問" />

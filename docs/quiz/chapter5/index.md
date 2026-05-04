@@ -11,4 +11,4 @@ import { quizzesByChapter } from '../data/index'
 const quizzes = quizzesByChapter[5]
 </script>
 
-<QuizPage :quizzes="quizzes" title="5章 Next.js" />
+<QuizPage :quizzes="quizzes" :chapter="5" title="5章 Next.js" />

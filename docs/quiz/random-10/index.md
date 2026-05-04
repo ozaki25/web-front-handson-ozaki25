@@ -6,19 +6,10 @@ next: false
 
 # ランダム 10 問
 
-全問からランダムに 10 問だけ出題します。少しまとまった時間で、章をまたいで力試ししたいときに。
+全 7 章・全難易度（やさしい〜むずかしい）からランダムに 10 問出題します。**特定の章で力試しをしたい場合は、左サイドバーの「N 章 〇〇」のドリルから選んでください**。
 
 <script setup>
-import { ref } from 'vue'
 import { allQuizzes } from '../data/index'
-
-const sample = ref(
-  [...allQuizzes]
-    .map((q) => ({ q, k: Math.random() }))
-    .sort((a, b) => a.k - b.k)
-    .slice(0, 10)
-    .map((x) => x.q),
-)
 </script>
 
-<QuizPage :quizzes="sample" title="ランダム 10 問" :shuffle="false" />
+<QuizPage :quizzes="allQuizzes" :random-sample="10" title="ランダム 10 問" />
