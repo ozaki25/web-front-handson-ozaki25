@@ -11,6 +11,7 @@ const props = defineProps<{
   shuffle?: boolean
   chapter?: ChapterId
   randomSample?: number
+  hideReviewCta?: boolean
 }>()
 
 function sampleSessionKey(): string | null {
@@ -466,7 +467,7 @@ onUnmounted(() => window.removeEventListener('keydown', handlePageKeydown))
 
       <div class="finish-actions">
         <a
-          v-if="wrongQuizCount > 0"
+          v-if="wrongQuizCount > 0 && !props.hideReviewCta"
           href="/quiz/review/"
           class="btn-restart btn-review-cta"
         >

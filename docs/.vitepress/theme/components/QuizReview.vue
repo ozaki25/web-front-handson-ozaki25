@@ -39,6 +39,7 @@ const hasWrong = computed(() => wrongQuizzes.value.length > 0)
     :quizzes="wrongQuizzes"
     :title="`間違えた問題を復習（${wrongQuizzes.length} 問）`"
     :shuffle="true"
+    :hide-review-cta="true"
   />
 </template>
 
