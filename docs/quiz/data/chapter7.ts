@@ -233,16 +233,16 @@ export const chapter7: Quiz[] = [
     id: "q228",
     lesson: "lesson104",
     difficulty: "normal",
-    question: "Playwright でページ上のボタンをクリックするコードとして正しいのはどれですか？",
+    question: "Playwright で「保存」ラベルのボタンをクリックするコードとして公式が推奨する書き方はどれですか？",
     choices: [
       "page.find('button').click()",
-      "await page.click('button')",
-      "browser.clickButton('button')",
+      "await page.getByRole('button', { name: '保存' }).click()",
+      "browser.clickButton('保存')",
       "page.query('button').trigger('click')",
     ],
     answer: 1,
     explanation:
-      "Playwright の `page.click(selector)` は指定したセレクターの要素をクリックします。非同期なので `await` が必要です。",
+      "Playwright 公式は **Locator API**（`page.getByRole` / `getByLabel` / `getByText` など）を推奨しています。`getByRole('button', { name: '保存' })` のようにロール + アクセシブルネームで指す書き方は、見た目に依存せず、a11y も自然に意識できるのが利点です。非同期 API なので `await` を忘れずに。",
   },
 
   // lesson105: Core Web Vitals
@@ -666,16 +666,16 @@ export const chapter7: Quiz[] = [
     id: "q256",
     lesson: "lesson118",
     difficulty: "normal",
-    question: "Zod の `z.string().min(1).email()` の意味はどれですか？",
+    question: "Zod v4 で「1 文字以上のメールアドレス形式の文字列」を表すスキーマの推奨形はどれですか？",
     choices: [
-      "1 文字以上かつメールアドレス形式の文字列を期待する",
-      "空文字またはメールアドレスを許可する",
-      "数値のみ許可する",
-      "省略可能なメールフィールドを定義する",
+      "z.email().min(1)",
+      "z.text({ email: true, minLength: 1 })",
+      "z.input.email().notEmpty()",
+      "string.email().required()",
     ],
     answer: 0,
     explanation:
-      "`.min(1)` は 1 文字以上、`.email()` はメールアドレス形式の検証を追加します。両方のバリデーションを通過した文字列のみ受け入れます。",
+      "Zod v4 では `z.email()` がトップレベル API として推奨形になっており、`.min(1)` をチェーンして「1 文字以上」を加えます。v3 まで一般的だった `z.string().email()` も互換のため動きますが、v4 ではトップレベル `z.email()` が推奨です。",
   },
 
   // lesson119: 状態管理の地図
