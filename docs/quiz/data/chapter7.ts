@@ -478,7 +478,7 @@ export const chapter7: Quiz[] = [
     ],
     answer: 1,
     explanation:
-      "Rolldown は Rollup 互換の API を持ちながら Rust で実装されているため、バンドル速度が大幅に向上します。Vite の将来のバンドラーとして開発されています。",
+      "Rolldown は Rollup 互換の API を持ちながら Rust で実装されているため、バンドル速度が大幅に向上します。Vite 8 から開発・本番ビルドの両方を担うバンドラーとして採用されています。",
   },
   {
     id: "q244",
