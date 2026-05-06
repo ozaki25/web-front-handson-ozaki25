@@ -125,7 +125,7 @@ const effectiveCorrect = computed(() => {
           type="button"
           @click="resetAnswer"
         >
-          {{ props.initialAnswered ? 'もう一度解く' : '選び直す' }}
+          もう一度解く
         </button>
       </div>
       <p v-if="effectiveCorrect === false" class="quiz-after-wrong">

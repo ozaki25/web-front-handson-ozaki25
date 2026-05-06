@@ -329,16 +329,16 @@ export const chapter7: Quiz[] = [
     id: "q234",
     lesson: "lesson107",
     difficulty: "normal",
-    question: "フォントの「FOUT（Flash of Unstyled Text）」を防ぐためにどうすればよいですか？",
+    question: "Web フォントの読み込みによる「FOUT（Flash of Unstyled Text）」をできるだけ短く抑える、最も一般的な対策はどれですか？",
     choices: [
-      "フォントを読み込まない",
-      "フォントの `font-display: swap` を `font-display: optional` に変えてフォールバックを許容する",
-      "フォントを preload してブロッキングを最小化する",
+      "フォントの URL を JavaScript の `import` で読み込む",
+      "`@font-face` の中で `font-weight: bold` を指定する",
+      "`<link rel='preload' as='font' crossorigin>` でフォントファイルを事前読み込みする",
       "すべてのテキストを画像にする",
     ],
     answer: 2,
     explanation:
-      "`<link rel='preload'>` でフォントを事前に読み込むと、レンダリング前にフォントが用意されます。`font-display: optional` はフォールバックを使いますが、FOUT ではなく FOIT になります。",
+      "`<link rel='preload' as='font' crossorigin>` でフォントを HTML パース直後から並行ダウンロードさせると、ファーストペイントまでに本フォントが間に合いやすくなり、フォールバック → 本フォントへの切替（FOUT）の発生時間を短縮できます。`font-display` の値（swap / optional など）は描画の挙動を切り替える設定で、ローディング自体を早めるものではないので preload と組み合わせるのが一般的です。",
   },
 
   // lesson108: package.json と npm スクリプト
@@ -1324,16 +1324,16 @@ export const chapter7: Quiz[] = [
     id: "q298",
     lesson: "lesson137",
     difficulty: "hard",
-    question: "Claude Code の Skills（スラッシュコマンド）の説明として正しいのはどれですか？",
+    question: "Claude Code の「カスタムスラッシュコマンド」の説明として正しいのはどれですか？",
     choices: [
       "CSS のクラスを自動生成する機能",
-      "繰り返す作業手順をファイルに定義し、`/スキル名` で呼び出して実行できる再利用可能なワークフロー",
+      "繰り返す作業手順を Markdown で定義し、`/コマンド名` で手動呼び出しできる再利用可能なワークフロー",
       "npm パッケージを検索する機能",
       "ブラウザの DevTools と連携する機能",
     ],
     answer: 1,
     explanation:
-      "Skills は `.claude/commands/` に Markdown で手順を記述し、`/コマンド名` で呼び出せます。定型的な作業（リファクタリング手順など）をチーム間で共有できます。",
+      "カスタムスラッシュコマンドは `.claude/commands/` に Markdown を置くと、ユーザーが `/コマンド名` と入力して **手動で** 呼び出せるようになります。定型作業（リファクタリング手順など）をチーム間で共有できます。よく似た仕組みに「Skills」がありますが、こちらは `.claude/skills/<name>/SKILL.md` に置くと Claude が **自動で発見して自律的に** 呼び出すという別機能です。",
   },
   {
     id: "q299",
