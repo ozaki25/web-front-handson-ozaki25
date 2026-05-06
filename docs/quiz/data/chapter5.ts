@@ -319,16 +319,16 @@ export const chapter5: Quiz[] = [
     id: "q172",
     lesson: "lesson79",
     difficulty: "normal",
-    question: "動的ルート `app/posts/[id]/page.tsx` でパラメータ `id` を取得するには？",
+    question: "動的ルート `app/posts/[id]/page.tsx` でパラメータ `id` を取得するには？（Server Component / Next.js 16）",
     choices: [
       "useRouter().query.id を使う",
-      "props.params.id を使う（Server Component の場合）",
+      "`const { id } = await props.params` で取り出す",
       "window.location.pathname を解析する",
       "getServerSideProps の context.params.id を使う",
     ],
     answer: 1,
     explanation:
-      "App Router の Server Component では `props.params` にルートパラメータが入ります。`const { id } = await props.params` でアクセスできます。",
+      "Next.js 15+ から Server Component に渡される `props.params` は **Promise** になっており、`await` してから値を取り出す必要があります（`const { id } = await props.params`）。`await` 無しで `props.params.id` と書くと型エラーになります。",
   },
 
   // lesson80: エラーと見つからないページ

@@ -85,7 +85,7 @@ export const chapter6: Quiz[] = [
     id: "q206",
     lesson: "lesson94",
     difficulty: "hard",
-    question: "ブラウザが `ETag` を使った弱キャッシュ検証をするとき、送るリクエストヘッダーはどれですか？",
+    question: "ブラウザが `ETag` を使って **キャッシュの再検証（条件付きリクエスト）** をするとき、送るリクエストヘッダーはどれですか？",
     choices: [
       "Cache-Control: no-cache",
       "If-None-Match: <ETagの値>",
@@ -94,7 +94,7 @@ export const chapter6: Quiz[] = [
     ],
     answer: 1,
     explanation:
-      "`ETag` を使った検証では、ブラウザは `If-None-Match` ヘッダーに前回受け取った ETag 値を付けてリクエストします。変更がなければサーバーは 304 を返します。",
+      "ETag を使った再検証では、ブラウザは `If-None-Match` ヘッダーに前回受け取った ETag 値を付けてリクエストします。サーバー側のリソースが変わっていなければ `304 Not Modified` が返り、ボディは送られません。",
   },
 
   // lesson95: CDN

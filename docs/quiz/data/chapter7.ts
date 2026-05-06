@@ -297,7 +297,7 @@ export const chapter7: Quiz[] = [
     id: "q232",
     lesson: "lesson106",
     difficulty: "hard",
-    question: "Next.js / React で動的インポートを使ってコード分割するときの書き方はどれですか？",
+    question: "React で重いコンポーネントを動的インポートし、`<Suspense>` と組み合わせて使う **標準的な書き方** はどれですか？",
     choices: [
       "import('./HeavyComponent') を useEffect 内で呼ぶ",
       "const HeavyComponent = React.lazy(() => import('./HeavyComponent'))",
@@ -306,7 +306,7 @@ export const chapter7: Quiz[] = [
     ],
     answer: 1,
     explanation:
-      "`React.lazy(() => import('./HeavyComponent'))` で動的インポートしてコード分割できます。`<Suspense>` とセットで使います。",
+      "`React.lazy(() => import('./HeavyComponent'))` で遅延ロード可能なコンポーネントを作り、`<Suspense fallback={...}>` で囲って描画します。これで初回バンドルからこのコンポーネントが切り出され、必要なときだけ読み込まれます。",
   },
 
   // lesson107: 画像とフォントの最適化
