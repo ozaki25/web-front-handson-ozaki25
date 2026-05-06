@@ -420,11 +420,16 @@ export const chapter7: Quiz[] = [
     id: "q240",
     lesson: "lesson110",
     difficulty: "hard",
-    question: "Vite の本番ビルドで使われるバンドラーはどれですか？",
-    choices: ["esbuild（開発と本番どちらも）", "Rollup / Rolldown", "Webpack", "Parcel"],
+    question: "Vite 8 のビルドで使われる主要バンドラーはどれですか？",
+    choices: [
+      "esbuild（開発・本番どちらも）",
+      "Rolldown（Rust 製。開発・本番ともに使う）",
+      "Webpack",
+      "Parcel",
+    ],
     answer: 1,
     explanation:
-      "Vite は開発時に esbuild（高速変換）、本番ビルドに Rollup（または次世代の Rolldown）を使います。Rollup の豊富なプラグインエコシステムを活用するためです。",
+      "Vite 8 から、開発時のオンデマンド変換と本番ビルドの両方を Rust 製の Rolldown が担います。Vite 7 までは「開発: esbuild、本番: Rollup」の 2 段構成でしたが、v8 で Rolldown 単体に統一されました。Rolldown は Rollup 互換 API を持つため、既存プラグインの多くはそのまま動きます。",
   },
 
   // lesson111: ESLint / Prettier / Biome
@@ -506,16 +511,16 @@ export const chapter7: Quiz[] = [
     id: "q246",
     lesson: "lesson113",
     difficulty: "normal",
-    question: "Git でブランチを新しく作成して切り替えるコマンドはどれですか？",
+    question: "Git で新しいブランチを作成して、そのブランチに切り替えるコマンドはどれですか？",
     choices: [
       "git new feature-branch",
-      "git checkout -b feature-branch",
+      "git checkout feature-branch",
       "git branch -m feature-branch",
-      "git switch --create feature-branch（または git checkout -b でも可）",
+      "git switch -c feature-branch（または古い書き方で git checkout -b でも可）",
     ],
     answer: 3,
     explanation:
-      "`git switch --create <branch>` または `git checkout -b <branch>` でブランチ作成と切り替えを同時に行えます。現在では `git switch -c` が推奨されます。",
+      "新規ブランチ作成と切り替えを同時に行うには、Git 2.23 以降の推奨形 `git switch -c <branch>` を使います。歴史的に広く使われてきた `git checkout -b <branch>` も今でも動くので併記しています。`git checkout feature-branch`（`-b` なし）は **既存の** ブランチへの切り替えで、新規作成はしません。",
   },
 
   // lesson114: GitHub の PR とコードレビュー
