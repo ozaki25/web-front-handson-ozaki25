@@ -157,6 +157,32 @@ docs/rejected/       ← 却下したレッスン案
 - `:js` に外部 URL の `fetch` を書くこと（CORS で失敗する。外部 API 連携は StackBlitz で扱う）
 - `:html` 等の値で **HTML 属性を `&quot;` のような HTML エンティティでエスケープする**こと。テンプレートリテラル内では **シングルクォート** を使う（`<input type='text'>`）。エンティティを使うと VitePress の build で実体に展開されて壊れる。
 
+## 12.5 全ページ共通の Repl（`docs/.vitepress/theme/components/Repl.vue`）
+
+`/lessons/**` のレッスンページ下部に常設される、HTML / CSS / JS / TS 4 タブのインライン実行環境。読者は本文を読みながら `▲ REPL` を開いて手を動かせる。
+
+### 設置範囲
+
+- `docs/.vitepress/theme/index.ts` の `layout-bottom` スロットに、`route.path.startsWith('/lessons/')` のときだけ描画する。
+- トップ / `introduction/` / `quiz/` などレッスン以外では出ない。
+
+### `LiveDemo` との使い分け
+
+| | 本文埋め込み | 全ページ共通スクラッチ |
+|---|---|---|
+| 用途 | 「この場で見せたい最小例」 | 「読者が自分で書き換えて試す」 |
+| コンポーネント | `<LiveDemo>` | `Repl`（テーマ側で自動配置） |
+| 編集可否 | 不可（読むだけ） | 可（CodeMirror で編集 → 実行 / Prettier 整形） |
+| 永続化 | なし | localStorage（key: `wfh-repl-v1`） |
+
+- レッスン本文に `Repl` を**直接書かない**。テーマで自動配置されるため。
+- レッスン本文中で「下部の ▲REPL を開いて〜」のような誘導文を**書かない**（読者の自由なスクラッチ用途を制限しないため）。
+
+### 触ってはいけないこと
+
+- `Repl.vue` の `STORAGE_KEY` (`wfh-repl-v1`) と `postMessage` の type (`wfh-repl-log`) は他デプロイと干渉しないよう固定。変更時は学習者の保存内容が消える点に留意。
+- iframe sandbox から `allow-same-origin` を外している（親 origin に触れない）。緩めない。
+
 ## 13. 図は SVG で置く（Mermaid プラグインは使わない）
 
 本文に図を入れたいときは、**`docs/public/diagrams/*.svg`** に静的 SVG を置いて `<img src="/diagrams/<name>.svg" alt="..." class="diagram" />` で参照する。

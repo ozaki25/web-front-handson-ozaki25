@@ -11,6 +11,7 @@ import QuizCard from './components/QuizCard.vue'
 import QuizPage from './components/QuizPage.vue'
 import QuizTop from './components/QuizTop.vue'
 import QuizReview from './components/QuizReview.vue'
+import Repl from './components/Repl.vue'
 import './custom.css'
 
 export default {
@@ -19,6 +20,8 @@ export default {
     const route = useRoute()
     return h(DefaultTheme.Layout, null, {
       'doc-after': () => h(LessonComplete, { key: route.path }),
+      'layout-bottom': () =>
+        route.path.startsWith('/lessons/') ? h(Repl) : null,
     })
   },
   enhanceApp({ app }: EnhanceAppContext) {
