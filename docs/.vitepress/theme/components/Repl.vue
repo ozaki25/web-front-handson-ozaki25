@@ -275,37 +275,107 @@ function getTsEnv(): Promise<TsEnv> {
   if (tsEnvPromise) return tsEnvPromise;
   const p = (async () => {
     const ts = (await import("typescript")).default;
-    const vfs = await import("@typescript/vfs");
-    const compilerOptions = {
+    const compilerOptions: any = {
       target: ts.ScriptTarget.ESNext,
       module: ts.ModuleKind.ESNext,
-      strict: false,
+      strict: true,
       allowJs: true,
       checkJs: false,
       noEmit: true,
-      lib: ["esnext", "dom"],
+      lib: ["esnext"],
     };
-    const fsMap = await vfs.createDefaultMapFromCDN(
-      compilerOptions as any,
-      ts.version,
-      true,
-      ts,
-      undefined,
-      undefined,
-      typeof localStorage !== "undefined" ? (localStorage as any) : undefined,
-    );
-    fsMap.set("/repl.ts", "");
-    fsMap.set("/repl.js", "");
-    const system = vfs.createSystem(fsMap);
-    const env = vfs.createVirtualTypeScriptEnvironment(
-      system,
-      ["/repl.ts", "/repl.js"],
-      ts,
-      compilerOptions as any,
-    );
+    const domStub = `/dom-stub.d.ts`;
+    const domStubText = `
+declare var console: { log(...args: any[]): void; error(...args: any[]): void; warn(...args: any[]): void; info(...args: any[]): void; dir(...args: any[]): void; table(...args: any[]): void; };
+declare var setTimeout: (fn: (...args: any[]) => void, ms?: number) => number;
+declare var setInterval: (fn: (...args: any[]) => void, ms?: number) => number;
+declare var clearTimeout: (id: number) => void;
+declare var clearInterval: (id: number) => void;
+declare var alert: (msg?: any) => void;
+declare var prompt: (msg?: string, defaultVal?: string) => string | null;
+declare function fetch(url: string | URL, init?: any): Promise<Response>;
+interface Response { ok: boolean; status: number; json(): Promise<any>; text(): Promise<string>; }
+declare var document: any;
+declare var window: any;
+declare var globalThis: any;
+`;
+    const libNames = [
+      "lib.es5.d.ts", "lib.es2015.d.ts", "lib.es2016.d.ts",
+      "lib.es2017.d.ts", "lib.es2018.d.ts", "lib.es2019.d.ts",
+      "lib.es2020.d.ts", "lib.es2021.d.ts", "lib.es2022.d.ts",
+      "lib.es2023.d.ts", "lib.es2024.d.ts", "lib.esnext.d.ts",
+      "lib.es2015.collection.d.ts", "lib.es2015.core.d.ts",
+      "lib.es2015.generator.d.ts", "lib.es2015.iterable.d.ts",
+      "lib.es2015.promise.d.ts", "lib.es2015.proxy.d.ts",
+      "lib.es2015.reflect.d.ts", "lib.es2015.symbol.d.ts",
+      "lib.es2015.symbol.wellknown.d.ts",
+      "lib.es2017.object.d.ts", "lib.es2017.string.d.ts",
+      "lib.es2018.asyncgenerator.d.ts", "lib.es2018.asynciterable.d.ts",
+      "lib.es2018.promise.d.ts",
+      "lib.es2019.array.d.ts", "lib.es2019.object.d.ts",
+      "lib.es2019.string.d.ts", "lib.es2019.symbol.d.ts",
+      "lib.es2020.bigint.d.ts", "lib.es2020.promise.d.ts",
+      "lib.es2020.string.d.ts", "lib.es2020.symbol.wellknown.d.ts",
+      "lib.es2021.promise.d.ts", "lib.es2021.string.d.ts",
+      "lib.es2021.weakref.d.ts",
+      "lib.es2022.array.d.ts", "lib.es2022.error.d.ts",
+      "lib.es2022.object.d.ts", "lib.es2022.string.d.ts",
+      "lib.es2023.array.d.ts", "lib.es2023.collection.d.ts",
+      "lib.decorators.d.ts", "lib.decorators.legacy.d.ts",
+    ];
+    const cdnTsVersion = "5.9.3";
+    const cdn = `https://cdn.jsdelivr.net/npm/typescript@${cdnTsVersion}/lib/`;
+    const storage = typeof localStorage !== "undefined" ? localStorage : null;
+    const cacheKey = `ts-lib-${cdnTsVersion}`;
+    let libFiles: Record<string, string> = {};
+    const cached = storage?.getItem(cacheKey);
+    if (cached) {
+      try { libFiles = JSON.parse(cached); } catch {}
+    }
+    if (!Object.keys(libFiles).length) {
+      const results = await Promise.allSettled(
+        libNames.map(async (name) => {
+          const res = await fetch(cdn + name);
+          if (!res.ok) return;
+          libFiles["/" + name] = await res.text();
+        }),
+      );
+      if (Object.keys(libFiles).length > 0) {
+        try { storage?.setItem(cacheKey, JSON.stringify(libFiles)); } catch {}
+      }
+    }
+    libFiles[domStub] = domStubText;
+    const files: Record<string, { text: string; version: number }> = {
+      [domStub]: { text: domStubText, version: 0 },
+      "/repl.ts": { text: "", version: 0 },
+      "/repl.js": { text: "", version: 0 },
+    };
+    const hasLibs = Object.keys(libFiles).length > 1;
+    const opts = hasLibs ? compilerOptions : { ...compilerOptions, lib: undefined, noLib: true };
+    const host: any = {
+      getScriptFileNames: () => Object.keys(files),
+      getScriptVersion: (name: string) => String(files[name]?.version ?? 0),
+      getScriptSnapshot: (name: string) => {
+        const f = files[name];
+        if (f) return ts.ScriptSnapshot.fromString(f.text);
+        if (libFiles[name]) return ts.ScriptSnapshot.fromString(libFiles[name]);
+        return undefined;
+      },
+      getCurrentDirectory: () => "/",
+      getCompilationSettings: () => opts,
+      getDefaultLibFileName: () => hasLibs ? "/lib.es5.d.ts" : "",
+      fileExists: (name: string) => name in files || name in libFiles,
+      readFile: (name: string) => files[name]?.text ?? libFiles[name],
+    };
+    const languageService = ts.createLanguageService(host);
     return {
-      languageService: env.languageService,
-      updateFile: (name, text) => env.updateFile(name, text),
+      languageService,
+      updateFile: (name: string, text: string) => {
+        if (files[name]) {
+          files[name].text = text;
+          files[name].version++;
+        }
+      },
       __ts: ts,
     };
   })();
@@ -398,7 +468,7 @@ async function ensureEditor() {
       import("@codemirror/lint"),
     ]);
     const cssLang = (cssMod as any).css;
-    const { linter } = lintMod as any;
+    const { linter, lintGutter } = lintMod as any;
 
     const getLang = (t: Tab) => {
       if (t === "HTML") return html();
@@ -425,6 +495,30 @@ async function ensureEditor() {
         ".cm-selectionBackground": {
           backgroundColor: "var(--vp-c-brand-soft) !important",
         },
+        ".cm-lintRange-error": {
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 3 l2 -2 l1 0 l2 2 l1 0' stroke='%23d11' fill='none' stroke-width='.7'/%3E%3C/svg%3E\")",
+          backgroundRepeat: "repeat-x",
+          backgroundPosition: "bottom",
+          paddingBottom: "0.7px",
+        },
+        ".cm-lintRange-warning": {
+          backgroundImage:
+            "url(\"data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='6' height='3'%3E%3Cpath d='m0 3 l2 -2 l1 0 l2 2 l1 0' stroke='%23e90' fill='none' stroke-width='.7'/%3E%3C/svg%3E\")",
+          backgroundRepeat: "repeat-x",
+          backgroundPosition: "bottom",
+          paddingBottom: "0.7px",
+        },
+        ".cm-diagnostic-error": {
+          borderLeft: "3px solid #d11",
+          padding: "4px 8px",
+          marginLeft: "0",
+        },
+        ".cm-diagnostic-warning": {
+          borderLeft: "3px solid #e90",
+          padding: "4px 8px",
+          marginLeft: "0",
+        },
       });
 
     const tsLinter = async (view: any) => {
@@ -437,12 +531,11 @@ async function ensureEditor() {
         const fname = isTS ? "/repl.ts" : "/repl.js";
         env.updateFile(fname, text);
         const ls = env.languageService;
-        const diags = [
-          ...ls.getSyntacticDiagnostics(fname),
-          ...ls.getSemanticDiagnostics(fname),
-        ];
+        const syntactic = ls.getSyntacticDiagnostics(fname);
+        const semantic = ls.getSemanticDiagnostics(fname);
+        const diags = [...syntactic, ...semantic];
         const ts = env.__ts;
-        return diags
+        const results = diags
           .filter((d: any) => typeof d.start === "number")
           .map((d: any) => ({
             from: d.start,
@@ -455,6 +548,7 @@ async function ensureEditor() {
                   : "info",
             message: ts.flattenDiagnosticMessageText(d.messageText, "\n"),
           }));
+        return results;
       } catch {
         return [];
       }
@@ -473,6 +567,7 @@ async function ensureEditor() {
       doc: code[tab.value],
       extensions: [
         basicSetup,
+        lintGutter(),
         langCompartment.of(getLang(tab.value)),
         wrapCompartment.of(wrap.value ? EditorView.lineWrapping : []),
         fontCompartment.of(fontTheme(fontSize.value)),
@@ -901,6 +996,8 @@ function startResize(e: PointerEvent) {
   background: var(--vp-c-bg-soft);
   flex-shrink: 0;
   gap: 0;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
 }
 .repl-tabs button {
   padding: 8px 14px;
