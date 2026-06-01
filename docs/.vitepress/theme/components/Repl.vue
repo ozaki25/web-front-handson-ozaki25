@@ -146,7 +146,7 @@
           ref="frame"
           class="repl-preview"
           :style="{ flexGrow: previewRatio }"
-          sandbox="allow-scripts"
+          sandbox="allow-scripts allow-same-origin"
           title="プレビュー"
         ></iframe>
         <div
@@ -671,6 +671,9 @@ function setFontSize(v: number) {
 }
 
 onMounted(() => {
+  mql = window.matchMedia("(max-width: 720px)");
+  onMql(mql);
+  mql.addEventListener("change", onMql);
   try {
     const saved = localStorage.getItem(STORAGE_KEY);
     if (saved) {
@@ -702,9 +705,6 @@ onMounted(() => {
   }
   window.addEventListener("message", onMessage);
   window.addEventListener("beforeunload", saveNow);
-  mql = window.matchMedia("(max-width: 720px)");
-  onMql(mql);
-  mql.addEventListener("change", onMql);
   if (open.value) {
     nextTick(() => ensureEditor());
   }
@@ -773,7 +773,16 @@ function onMessage(e: MessageEvent) {
 
 async function transpileTS(src: string): Promise<string> {
   const { transform } = await import("sucrase");
-  return transform(src, { transforms: ["typescript"] }).code;
+  const hasJSX = /<[A-Z]|<[a-z]+[\s>]/.test(src) || src.includes("React");
+  const hasImports = /\bimport\s/.test(src);
+  const transforms: string[] = ["typescript"];
+  if (hasJSX) transforms.push("jsx");
+  if (hasImports) transforms.push("imports");
+  return transform(src, {
+    transforms: transforms as any,
+    jsxRuntime: "automatic",
+    production: true,
+  }).code;
 }
 
 function escapeForStyle(s: string) {
@@ -798,8 +807,48 @@ async function run() {
   const safeCss = escapeForStyle(code.CSS || "");
   const safeJs = escapeForScript(js);
   const targetOrigin = JSON.stringify(location.origin);
+  const hasJSX = /<[A-Z]|<[a-z]+[\s>]/.test(code.TS) || /\bReact\b|\buseState\b|\bimport\b.*['"]react/.test(code.TS);
+  // ソースから大文字始まりのコンポーネント名を抽出（最後に定義されたものを優先）
+  const compNames: string[] = [];
+  const compRe = /(?:function|const|class)\s+([A-Z]\w*)/g;
+  let m: RegExpExecArray | null;
+  while ((m = compRe.exec(code.TS))) compNames.push(m[1]);
+  const renderCandidates = JSON.stringify([...compNames].reverse());
+  const reactScripts = hasJSX
+    ? `<script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js"><\/script>
+<script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js"><\/script>
+<script>
+var jsxRuntime = { jsx: function(t,p,k){return React.createElement(t,p)}, jsxs: function(t,p,k){return React.createElement(t,p)}, Fragment: React.Fragment };
+<\/script>`
+    : "";
+  const autoRender = hasJSX
+    ? `\ntry {
+  var _default = (typeof exports !== 'undefined' && exports.default) ? exports.default : null;
+  if (!_default) {
+    var _names = ${renderCandidates};
+    for (var i=0;i<_names.length;i++) { try { var _c = eval(_names[i]); if (typeof _c === 'function') { _default = _c; break; } } catch(e){} }
+  }
+  if (_default) {
+    var _root = document.getElementById('root') || document.body.appendChild(document.createElement('div'));
+    _root.id = 'root';
+    ReactDOM.createRoot(_root).render(React.createElement(_default));
+  }
+} catch(e) { console.error(e.message); }`
+    : "";
+  const jsxImportShim = hasJSX
+    ? `var _require = function(m) {
+  if (m === 'react') return React;
+  if (m === 'react-dom/client') return ReactDOM;
+  if (m === 'react/jsx-runtime') return jsxRuntime;
+  throw new Error('Module not found: ' + m);
+};
+var require = _require;
+var exports = {};
+var module = { exports: exports };
+`
+    : "";
   const html = `<!doctype html>
-<html><head><meta charset="utf-8"><style>${safeCss}</style></head>
+<html><head><meta charset="utf-8"><style>${safeCss}</style>${reactScripts}</head>
 <body>${code.HTML}
 <script>
 (function(){
@@ -813,7 +862,7 @@ async function run() {
   window.addEventListener('error',function(e){send('error',[e.message])});
   window.addEventListener('unhandledrejection',function(e){send('error',['Unhandled: '+(e.reason&&e.reason.message||e.reason)])});
 })();
-${safeJs}
+${jsxImportShim}${safeJs}${autoRender}
 <\/script>
 </body></html>`;
   if (frame.value) frame.value.srcdoc = html;
