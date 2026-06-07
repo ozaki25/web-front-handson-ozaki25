@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, nextTick, useTemplateRef, watch } from 'vue'
+import { ref, computed, onMounted, nextTick, useTemplateRef, watch } from 'vue'
 import type { Quiz, ChapterId } from '../../../quiz/types'
 import { STORAGE_KEY, STREAK_KEY, chapters } from '../../../quiz/types'
 import type { StoredAnswer, StoredAnswers } from '../../../quiz/types'
@@ -282,7 +282,6 @@ const storedAnswers = ref<StoredAnswers>({})
 watch([currentIndex, finished], () => saveState())
 
 onMounted(() => {
-  window.addEventListener('keydown', handlePageKeydown)
   const stored = loadAnswers()
   storedAnswers.value = stored
 
@@ -334,16 +333,6 @@ onMounted(() => {
   }
 })
 
-function handlePageKeydown(e: KeyboardEvent) {
-  if (finished.value) return
-  if (e.key === 'Enter' && isCurrentAnswered.value) {
-    e.preventDefault()
-    next()
-  }
-}
-
-onUnmounted(() => window.removeEventListener('keydown', handlePageKeydown))
-
 </script>
 
 <template>
@@ -369,7 +358,7 @@ onUnmounted(() => window.removeEventListener('keydown', handlePageKeydown))
         </span>
       </p>
       <p class="quiz-keyboard-hint">
-        キーボード: <kbd>A</kbd><kbd>B</kbd><kbd>C</kbd><kbd>D</kbd>または<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>で選択 / <kbd>Enter</kbd>で次へ
+        キーボード: <kbd>A</kbd><kbd>B</kbd><kbd>C</kbd><kbd>D</kbd>または<kbd>1</kbd><kbd>2</kbd><kbd>3</kbd><kbd>4</kbd>で選択
       </p>
 
       <QuizCard
