@@ -336,7 +336,10 @@ onMounted(() => {
 
 function handlePageKeydown(e: KeyboardEvent) {
   if (finished.value) return
-  if (e.key === 'Enter' && isCurrentAnswered.value) next()
+  if (e.key === 'Enter' && isCurrentAnswered.value) {
+    e.preventDefault()
+    next()
+  }
 }
 
 onUnmounted(() => window.removeEventListener('keydown', handlePageKeydown))
