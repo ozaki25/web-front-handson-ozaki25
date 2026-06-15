@@ -26,17 +26,44 @@ function setFirstChoiceRef(el: unknown, i: number) {
 
 defineExpose({ focusFirstChoice: () => firstChoiceEl.value?.focus() })
 
-function select(i: number) {
-  if (answered.value) return
-  selectedIndex.value = i
-  answered.value = true
-  emit('answered', props.quiz.id, i === props.quiz.answer, i)
+// 表示順(displayIndex) -> 元の選択肢順(originalIndex) のマッピング。
+// 表示のたびに Fisher-Yates でシャッフルし、選択肢順を覚えて当てる学習を防ぐ。
+// emit や localStorage には元の index を渡すため、保存形式の互換性は保たれる。
+function shuffleOrder(length: number): number[] {
+  const arr = Array.from({ length }, (_, i) => i)
+  for (let i = arr.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1))
+    ;[arr[i], arr[j]] = [arr[j], arr[i]]
+  }
+  return arr
 }
 
-function choiceClass(i: number): string {
+const displayOrder = ref<number[]>(shuffleOrder(props.quiz.choices.length))
+
+const displayChoices = computed(() =>
+  displayOrder.value.map((origIdx) => props.quiz.choices[origIdx])
+)
+const displayAnswerIndex = computed(() =>
+  displayOrder.value.indexOf(props.quiz.answer)
+)
+const selectedDisplayIndex = computed(() => {
+  if (selectedIndex.value === null) return null
+  const idx = displayOrder.value.indexOf(selectedIndex.value)
+  return idx >= 0 ? idx : null
+})
+
+function select(displayI: number) {
+  if (answered.value) return
+  const originalI = displayOrder.value[displayI]
+  selectedIndex.value = originalI
+  answered.value = true
+  emit('answered', props.quiz.id, originalI === props.quiz.answer, originalI)
+}
+
+function choiceClass(displayI: number): string {
   if (!answered.value) return 'choice'
-  if (i === props.quiz.answer) return 'choice correct'
-  if (selectedIndex.value !== null && i === selectedIndex.value) return 'choice wrong'
+  if (displayI === displayAnswerIndex.value) return 'choice correct'
+  if (selectedDisplayIndex.value !== null && displayI === selectedDisplayIndex.value) return 'choice wrong'
   return 'choice dim'
 }
 
@@ -55,17 +82,17 @@ function renderText(s: string): string {
 function handleKeydown(e: KeyboardEvent) {
   // 修飾キー押下時は無視（⌘+R などを奪わない）
   if (e.metaKey || e.ctrlKey || e.altKey) return
-  // 1〜4 の数字キー
+  // 1〜4 の数字キー（表示順）
   const n = parseInt(e.key)
-  if (n >= 1 && n <= props.quiz.choices.length) {
+  if (n >= 1 && n <= displayChoices.value.length) {
     select(n - 1)
     return
   }
-  // A〜D（小文字も許容）
+  // A〜D（小文字も許容、表示順）
   if (e.key.length === 1) {
     const code = e.key.toLowerCase().charCodeAt(0)
     const idx = code - 'a'.charCodeAt(0)
-    if (idx >= 0 && idx < props.quiz.choices.length) {
+    if (idx >= 0 && idx < displayChoices.value.length) {
       select(idx)
     }
   }
@@ -77,6 +104,8 @@ onUnmounted(() => window.removeEventListener('keydown', handleKeydown))
 function resetAnswer() {
   answered.value = false
   selectedIndex.value = null
+  // もう一度解くときは並びも変える（答えの位置で覚えてしまうのを防ぐ）
+  displayOrder.value = shuffleOrder(props.quiz.choices.length)
   emit('reset', props.quiz.id)
 }
 
@@ -99,7 +128,7 @@ const effectiveCorrect = computed(() => {
     <p class="quiz-question" v-html="renderText(quiz.question)" />
 
     <ol class="quiz-choices" aria-label="選択肢">
-      <li v-for="(choice, i) in quiz.choices" :key="i">
+      <li v-for="(choice, i) in displayChoices" :key="displayOrder[i]">
         <button
           :ref="(el) => setFirstChoiceRef(el, i)"
           :class="choiceClass(i)"
@@ -109,7 +138,7 @@ const effectiveCorrect = computed(() => {
         >
           <span class="choice-label" aria-hidden="true">{{ String.fromCharCode(65 + i) }}</span>
           <span class="choice-text" v-html="renderText(choice)" />
-          <span v-if="answered && i === quiz.answer" class="choice-check">正解</span>
+          <span v-if="answered && i === displayAnswerIndex" class="choice-check">正解</span>
         </button>
       </li>
     </ol>
