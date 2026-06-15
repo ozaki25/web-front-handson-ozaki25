@@ -59,7 +59,23 @@ export default withPwa(
       workbox: {
         // VitePress のビルド成果物は総量が大きいのでファイルサイズ上限を上げる。
         maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
-        globPatterns: ['**/*.{js,css,html,woff2,png,svg,ico,webp,json}'],
+        // HTML を precache から外し、navigation request だけは NetworkFirst で
+        // 常に最新を取得する。デプロイ後のキャッシュ事故を抑えつつ、
+        // 静的アセット（hashed JS/CSS/画像等）はオフライン用に precache を維持。
+        globPatterns: ['**/*.{js,css,woff2,png,svg,ico,webp,json}'],
+        navigateFallback: null,
+        runtimeCaching: [
+          {
+            urlPattern: ({ request }) => request.mode === 'navigate',
+            handler: 'NetworkFirst',
+            options: {
+              cacheName: 'wfh-html',
+              networkTimeoutSeconds: 5,
+              expiration: { maxEntries: 50, maxAgeSeconds: 60 * 60 * 24 * 7 },
+              cacheableResponse: { statuses: [0, 200] },
+            },
+          },
+        ],
       },
     },
     head: [
