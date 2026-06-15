@@ -251,6 +251,17 @@ function saveState() {
   }
 }
 
+function dismissResumeToast() {
+  resumedFrom.value = 0
+}
+
+function restartFromBeginning() {
+  // 再開通知から「1問目から始める」: restart() を流用して章の localStorage を
+  // クリアし、resume トーストも消す
+  restart()
+  resumedFrom.value = 0
+}
+
 function restart() {
   if (props.randomSample != null || props.shuffle) {
     orderedQuizzes.value = sampleQuizzes(true)
@@ -325,7 +336,6 @@ onMounted(() => {
       finished.value = true
     } else if (firstUnanswered > 0) {
       resumedFrom.value = firstUnanswered + 1
-      setTimeout(() => { resumedFrom.value = 0 }, 4000)
       currentIndex.value = firstUnanswered
     } else {
       currentIndex.value = firstUnanswered
@@ -342,8 +352,21 @@ onMounted(() => {
     </p>
 
     <div v-if="!finished">
-      <div v-if="resumedFrom > 0" class="quiz-resume-toast" role="status">
-        前回の続き、{{ resumedFrom }} 問目から再開しました
+      <div v-if="resumedFrom > 0" class="quiz-resume-toast" role="status" aria-live="polite">
+        <span class="quiz-resume-toast-text">前回の続き、{{ resumedFrom }} 問目から再開しました</span>
+        <div class="quiz-resume-toast-actions">
+          <button
+            type="button"
+            class="quiz-resume-toast-restart"
+            @click="restartFromBeginning"
+          >1問目から始める</button>
+          <button
+            type="button"
+            class="quiz-resume-toast-close"
+            aria-label="通知を閉じる"
+            @click="dismissResumeToast"
+          >×</button>
+        </div>
       </div>
       <div v-if="showSavedToast" class="quiz-saved-toast" role="status">
         ✓ 回答を自動保存しました（途中で閉じても続きから再開できます）
@@ -528,13 +551,78 @@ onMounted(() => {
 }
 
 .quiz-resume-toast {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
   margin-bottom: 0.75rem;
   padding: 0.6rem 0.85rem;
   background: var(--vp-c-brand-soft);
   color: var(--vp-c-brand-1);
   border-left: 3px solid var(--vp-c-brand-1);
   border-radius: 4px;
-  font-size: 0.85rem;
+  font-size: 0.88rem;
+}
+
+.quiz-resume-toast-text {
+  flex: 1;
+  min-width: 0;
+}
+
+.quiz-resume-toast-actions {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-shrink: 0;
+}
+
+.quiz-resume-toast-restart {
+  min-height: 32px;
+  padding: 0.3rem 0.7rem;
+  background: var(--vp-c-brand-1);
+  color: #ffffff;
+  border: none;
+  border-radius: 4px;
+  font-size: 0.82rem;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.quiz-resume-toast-restart:hover,
+.quiz-resume-toast-restart:focus-visible {
+  background: var(--vp-c-brand-2);
+}
+
+.quiz-resume-toast-restart:focus-visible {
+  outline: 2px solid var(--vp-c-brand-1);
+  outline-offset: 2px;
+}
+
+.quiz-resume-toast-close {
+  flex-shrink: 0;
+  min-width: 32px;
+  min-height: 32px;
+  padding: 0.1rem 0.5rem;
+  background: transparent;
+  border: 1px solid currentColor;
+  border-radius: 4px;
+  color: inherit;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  cursor: pointer;
+  opacity: 0.7;
+}
+
+.quiz-resume-toast-close:hover,
+.quiz-resume-toast-close:focus-visible {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.1);
+}
+
+.quiz-resume-toast-close:focus-visible {
+  outline: 2px solid currentColor;
+  outline-offset: 2px;
 }
 
 .quiz-progress-bar-wrap {
