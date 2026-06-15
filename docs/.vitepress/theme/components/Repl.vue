@@ -756,11 +756,21 @@ function saveNow() {
     saveTimer = null;
   }
   try {
+    // モバイル時は open を保存しない（PC で保存した前回状態をモバイルから上書きしないため）
+    let savedOpen = open.value;
+    if (isMobile.value) {
+      const prev = localStorage.getItem(STORAGE_KEY);
+      if (prev) {
+        try { savedOpen = !!JSON.parse(prev).open; } catch { /* ignore */ }
+      } else {
+        savedOpen = false;
+      }
+    }
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
         code: { ...code },
-        open: open.value,
+        open: savedOpen,
         panelHeight: panelHeight.value,
         previewRatio: previewRatio.value,
         editorRatio: editorRatio.value,

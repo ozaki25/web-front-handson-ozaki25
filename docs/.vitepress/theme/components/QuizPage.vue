@@ -263,23 +263,22 @@ function restartFromBeginning() {
 }
 
 function restart() {
+  // 現在表示中の問題セットの localStorage 回答記録を削除
+  // （別画面から戻ったとき復元される / 結果画面に再表示されるのを防ぐ）
+  const data = loadAnswers()
+  let changed = false
+  for (const q of orderedQuizzes.value) {
+    if (data[q.id] !== undefined) {
+      delete data[q.id]
+      changed = true
+    }
+  }
+  if (changed) {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
+    storedAnswers.value = data
+  }
   if (props.randomSample != null || props.shuffle) {
     orderedQuizzes.value = sampleQuizzes(true)
-  } else {
-    // 章モードの「同じ問題でもう一度」: localStorage の回答記録もリセット
-    // （そうしないと別ページに移動して戻ったとき再び結果画面になる）
-    const data = loadAnswers()
-    let changed = false
-    for (const q of orderedQuizzes.value) {
-      if (data[q.id] !== undefined) {
-        delete data[q.id]
-        changed = true
-      }
-    }
-    if (changed) {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(data))
-      storedAnswers.value = data
-    }
   }
   currentIndex.value = 0
   sessionAnswers.value = {}
