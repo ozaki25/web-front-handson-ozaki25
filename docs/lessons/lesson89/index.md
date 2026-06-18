@@ -162,7 +162,7 @@ export const metadata: Metadata = {
 
 実務では `app/opengraph-image.tsx` で **動的に OG 画像を生成** したり、`app/sitemap.ts` で **サイトマップを自動生成** したりもできます。
 
-### favicon / apple-touch-icon は **ファイル配置だけで OK**
+### favicon / apple-touch-icon は **ファイル配置だけで反映される**
 
 Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
 

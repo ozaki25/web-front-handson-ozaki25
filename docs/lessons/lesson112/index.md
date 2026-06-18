@@ -46,7 +46,7 @@ npx biome init
 - 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
 - **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
 
-Biome は「lint + format を 1 ツールにまとめたい」ケースに向く。ただし **lint の速度と ESLint プラグイン互換性では oxlint が上**、フォーマットでも oxfmt（beta）が後から追いかけている。Oxc 系の成熟とともに「統合」という Biome の優位は縮小していく見込み。
+Biome は「lint + format を 1 ツールにまとめたい」ケースに向きます。ただし **lint の速度と ESLint プラグイン互換性では oxlint が上**で、フォーマットでも oxfmt（beta）が後から追いかけています。Oxc 系の成熟とともに「統合」という Biome の優位は縮小していくと見られます。
 
 ### Oxc / oxlint
 
