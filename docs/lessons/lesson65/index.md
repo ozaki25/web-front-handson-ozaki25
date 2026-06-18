@@ -211,7 +211,7 @@ export default App;
 - 「multiplier +1」ボタンを押すたびに Console に `computing total...` が出る（依存配列に `multiplier` が入っているため）
 - 「色を切り替え」ボタンを何度押しても Console には `computing total...` が **出ない**（依存配列に `color` は入っていないため）
 
-これが `useMemo` の効果です。`color` の変更では再レンダリングは起きますが、`total` の計算はスキップされます。
+`useMemo` を入れると、`color` の変更では再レンダリングは起きますが、`total` の計算はスキップされます。
 
 ### 変える
 
