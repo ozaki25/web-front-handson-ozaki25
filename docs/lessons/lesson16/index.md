@@ -279,7 +279,7 @@ button.addEventListener('click', () => {
 #### Safari / Firefox の状況
 
 - 同一ページ内: Chrome / Safari / Firefox で対応
-- ページ間: Chrome 系で先行。Safari は段階的、Firefox は対応中（2026 年現在）
+- ページ間: Chrome 系が先行している。Safari は段階的、Firefox は対応中（2026 年現在）
 
 未対応ブラウザでは **遷移なしで普通に動く** だけなので、Progressive Enhancement として安心して書けます。
 

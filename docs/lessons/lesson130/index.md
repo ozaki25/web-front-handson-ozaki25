@@ -189,7 +189,7 @@ const data = await client.query({
 
 ### tRPC
 
-「**TypeScript の関数を、そのままクライアントから呼ぶ**」発想。Next.js / TypeScript 専用と言って良い構造。
+「**TypeScript の関数を、そのままクライアントから呼ぶ**」発想。Next.js / TypeScript 専用と言って良い構造です。
 
 特徴:
 
@@ -364,7 +364,7 @@ export default async function Page() {
 }
 ```
 
-REST は **クライアント側で型** を別途定義するのがネック（ずれると壊れる）。
+REST は **クライアント側で型** を別途定義する必要があり、ずれると壊れるのがネックです。
 
 ### 手順 3: tRPC 版
 

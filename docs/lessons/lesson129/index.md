@@ -230,7 +230,7 @@ Next.js の Route Handler は **Node.js Runtime / Edge Runtime** の 2 種類が
 - **Edge Runtime (Vercel Edge)**: WebSocket サーバー側はホストできない。SSE の配信は OK
 - **Cloudflare Workers**: 単体の Worker でも `WebSocketPair` で WebSocket Upgrade を受け付けられる（接続待機中は CPU を消費しない）。複数接続の協調（チャットルームなど）が必要なら **Durable Objects** で 1 部屋 = 1 オブジェクトのステートフル構成にする
 - **Node.js Runtime + 通常の Node プロセス**（`next start` 等）: 実験的な「Route Handler の WebSocket Upgrade」サポートが入りつつあるが、Vercel の **サーバーレス関数では長時間接続を保てない** ため実運用は不向き
-- **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実解
+- **WebSocket 本格運用**: 別途 **専用の Node サーバー**（`server.ts` / 別サービス）、**PartyKit / Cloudflare Durable Objects**、**Pusher / Ably / Supabase Realtime** の SaaS が現実的な選択肢になる
 
 SSE（一方向ストリーミング）は Vercel の Route Handler でも動きますが、Edge / Node どちらでも **接続時間の上限** に注意します（Vercel Hobby は 10〜60 秒程度）。
 

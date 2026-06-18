@@ -14,7 +14,7 @@
 
 エラーを画面に出すには、**アクションの戻り値** を UI 側に伝える仕組みが必要です。そのための React 19 のフックが **`useActionState`** です。
 
-### `useActionState` のシグネチャ
+### `useActionState` のシグネチャを押さえる
 
 **import 元に注意**: `useActionState` は **`react`** から import します。`react-dom` ではありません。逆にすると「そんな export はない」というエラーになります。
 

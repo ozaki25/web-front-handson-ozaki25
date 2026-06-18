@@ -59,7 +59,7 @@ Git では変更が次の 3 段階を辿ります。
 git status
 ```
 
-未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。**迷ったらまず `git status`** が鉄則です。
+未追跡ファイル（Untracked）/ 変更されたファイル（Modified）/ ステージングされたファイル（Staged）が表示されます。困ったらまず `git status` を打つ習慣にすると迷いません。
 
 #### `git add`: ステージングに追加
 

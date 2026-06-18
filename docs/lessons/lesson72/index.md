@@ -384,5 +384,5 @@ export default function TodosPage() {
 
 - `app/layout.tsx` は全ページ共通の外側の枠。`<html>` / `<body>` はここだけに書く
 - `children` には現在の URL に対応する `page.tsx` の中身が、Next.js によって自動で差し込まれる
-- ルートレイアウトは何もしなければ Server Component。ナビや文字を並べるだけなら `"use client"` は不要
+- ルートレイアウトは何もしなければ Server Component として動く。ナビや文字を並べるだけなら `"use client"` は不要
 - 共通部分を 1 箇所にまとめたので、ページが増えても繰り返しコードが増えない

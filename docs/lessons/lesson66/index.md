@@ -38,10 +38,10 @@ const Memoed = React.memo(Child);
 
 3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
 
-- **書き忘れ**でパフォーマンス劣化
-- **依存配列のミス**でバグ
+- **書き忘れ**でパフォーマンスが劣化する
+- **依存配列のミス**でバグが入る
 - **過度なメモ化**で逆に遅くなる
-- 読みづらいコード
+- コードが読みづらくなる
 
 これを **コンパイラが自動でやる** のが React Compiler の役割です。
 
@@ -203,7 +203,7 @@ function ProductCard({ product, onClick }: CardProps) {
 
 #### 変わるもの
 
-- **`useMemo` / `useCallback` の手動記述が不要** に
+- **`useMemo` / `useCallback` の手動記述が不要** になる
 - **`React.memo` で囲う必要がない**（依存があれば自動でメモ化される）
 - 依存配列の書き間違いミスが消える
 
@@ -211,13 +211,13 @@ function ProductCard({ product, onClick }: CardProps) {
 
 - `useEffect` / `useState` / `useRef` などの Hook は **そのまま** 使う
 - **データ取得** や **副作用** の責務は変わらない
-- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題
+- **大きな計算は別ワーカーへ** 等、本質的な最適化は別問題として残る
 
 ### Rules of React
 
 Compiler が動くには **コードが React のルールに従っている** ことが前提です。
 
-#### Components / Hooks は **純粋**
+#### Components / Hooks は **純粋** に保つ
 
 - レンダリング中に副作用を起こさない（DOM 直接操作 / API 呼び出し / setState）
 - 同じ入力からは同じ出力を返す（**ピュア**）
@@ -316,9 +316,9 @@ function LegacyComponent() {
 
 ### `useMemo` を残すべき場面
 
-- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替え。Compiler が判断しても明示する方が読みやすい
-- **deep compare** が必要な場合: lodash の `isEqual` で比較したい時など
-- **API 互換**: 公開ライブラリ（コンパイラ前提に強制できない）
+- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替えなど。Compiler が判断しても明示する方が読みやすくなります
+- **deep compare** が必要な場合: lodash の `isEqual` で比較したいときなどに残します
+- **API 互換**: 公開ライブラリではコンパイラ前提を強制できないため残します
 
 ### React 19 / Next.js 16 / React Compiler の関係
 
@@ -332,9 +332,9 @@ function LegacyComponent() {
 
 ### よくある誤解
 
-- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけ。本質的なボトルネックは別
-- 「**全 useMemo を消すべき**」→ Compiler 任せでも動くが、**読みやすさのために残す** のはアリ
-- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要
+- 「**React Compiler を使うと速くなる**」→ 速くなる **可能性が高い** だけです。本質的なボトルネックは別のところにあります
+- 「**全 useMemo を消すべき**」→ Compiler 任せでも動きますが、**読みやすさのために残す** 選択もあります
+- 「**eslint-plugin-react-hooks は不要になる**」→ いいえ、引き続き必要です
 
 ## 演習
 
@@ -483,12 +483,12 @@ export default function CompiledComponent() { /* ... */ }
 
 ## まとめ
 
-- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラ
-- **2025 年 10 月に 1.0 安定版** がリリース、Meta 大規模で実戦投入済み
-- **Next.js 16** で `reactCompiler: true` の設定が stable に
-- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加
-- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提
-- **`eslint-plugin-react-compiler`** で違反を検出 → 直すか `"use no memo"` で対象外に
-- 段階導入は **`compilationMode: "annotation"`** から
-- 「すべて速くなる魔法」ではないが、**保守性の向上は確実**
-- 既存の `useMemo` を **残すか消すか** は判断次第、急いで全削除しなくてよい
+- **React Compiler** は `useMemo` / `useCallback` / `React.memo` を **自動化** する Babel コンパイラである
+- **2025 年 10 月に 1.0 安定版** がリリースされ、Meta 大規模で実戦投入済み
+- **Next.js 16** で `reactCompiler: true` の設定が stable になった
+- Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加する
+- 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提となる
+- **`eslint-plugin-react-compiler`** で違反を検出し、直すか `"use no memo"` で対象外にする
+- 段階導入は **`compilationMode: "annotation"`** から始める
+- 「すべて速くなる魔法」ではないが、**保守性は確実に向上する**
+- 既存の `useMemo` を **残すか消すか** は判断次第で、急いで全削除しなくてよい

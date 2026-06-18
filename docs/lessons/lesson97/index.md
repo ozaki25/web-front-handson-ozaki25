@@ -249,8 +249,8 @@ document.cookie
 
 ## まとめ
 
-- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値。セッション維持の本命
-- 属性の黄金律: `HttpOnly; Secure; SameSite=Lax`。セッション Cookie はこれを最低ラインに
+- Cookie はサーバーが発行してブラウザが **自動で付けて送る** 値で、セッション維持に向く
+- 属性の組み合わせは `HttpOnly; Secure; SameSite=Lax` を最低ラインにする
 - XSS は「サイトに悪意 JS を混入される」攻撃。`textContent` / エスケープ / `HttpOnly` / CSP で防ぐ
 - CSRF は「ログイン中のユーザーに意図しないリクエストを送らせる」攻撃。`SameSite` / CSRF トークンで防ぐ
 - HTTPS + HSTS は前提。平文 HTTP は現代の Web ではほぼ使わない

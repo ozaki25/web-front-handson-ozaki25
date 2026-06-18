@@ -60,7 +60,7 @@ export function TodoForm() {
 
 このレッスンでは見通しと再利用性のために `app/todos/SubmitButton.tsx` という別ファイルに切り出します。「別ファイルにしないと動かない」と誤解しないように。
 
-### import 元の違い
+### import 元が異なる
 
 | フック | import 元 | 用途 |
 |---|---|---|
@@ -179,4 +179,4 @@ button:disabled {
 - `useActionState`（`react`）は状態管理、`useFormStatus`（`react-dom`）は送信中ステータスの取得と、役割が異なる
 - `SubmitButton` を切り出すことで `useFormStatus` が正しく動き、再利用もしやすくなる
 
-ここまでで Server Actions（`<form action={...}>` でフォーム送信を Server Component に直結する仕組み）は一区切り。次は同じバックエンド処理を **外部から `fetch` で叩く形** にした「Route Handlers の基本」のレッスンに進みます。
+ここまでで Server Actions（`<form action={...}>` でフォーム送信を Server Component に直結する仕組み）はいったん区切りとなります。次は同じバックエンド処理を **外部から `fetch` で叩く形** にした「Route Handlers の基本」のレッスンに進みます。

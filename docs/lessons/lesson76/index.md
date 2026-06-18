@@ -137,7 +137,7 @@ const res = await fetch(url, { next: { tags: ["posts"] } });
 
 `"next/cache"` からインポートする関数は 4 つあります。
 
-#### `updateTag` — Server Action からの即時無効化（推奨）
+#### `updateTag` — Server Action から即時に無効化する（推奨）
 
 Next.js 16 で追加された API です。**Server Action の中からのみ** 呼べます。
 
@@ -152,7 +152,7 @@ updateTag("posts");
 - ユーザーが操作して「今すぐ結果を見たい」場面に向きます（**read-your-own-writes**）。
 - Route Handler からは使えません。
 
-#### `revalidateTag` — タグ単位の stale-while-revalidate
+#### `revalidateTag` — タグ単位で stale-while-revalidate する
 
 `updateTag` と似ていますが、**stale-while-revalidate** 動作です。一度古いデータを返しながら、バックグラウンドで新しいデータを取り直します。
 
@@ -166,7 +166,7 @@ revalidateTag("posts", "max"); // "max" で stale-while-revalidate
 - Server Action と Route Handler の両方から使えます。
 - webhook や管理者操作など、ユーザーが結果ページに即遷移しないバックグラウンド更新に向きます。
 
-#### `revalidatePath` — パス単位の stale-while-revalidate
+#### `revalidatePath` — パス単位で stale-while-revalidate する
 
 特定の URL パス全体を無効化します。タグを付け忘れたときや、パス単位でまとめてクリアしたいときに使います。
 
@@ -176,7 +176,7 @@ import { revalidatePath } from "next/cache";
 revalidatePath("/posts");
 ```
 
-#### `refresh` — Server Action からの Router Cache 更新
+#### `refresh` — Server Action から Router Cache を更新する
 
 `refresh()` は **Data Cache ではなく Router Cache** を更新します。Server Action の中からブラウザ側のページキャッシュをクリアして、現在のルートを再取得させます。
 
@@ -211,7 +211,7 @@ refresh();
 「投稿できていない？」とユーザーが困惑する
 ```
 
-**DB やストレージにデータを書き込んだら、対応するタグまたはパスを必ず無効化する** — これが基本ルールです。
+**DB やストレージにデータを書き込んだら、対応するタグまたはパスを必ず無効化する** — これを基本ルールとして覚えておきましょう。
 
 #### Server Action との組み合わせのイメージ
 

@@ -62,7 +62,7 @@ export default defineConfig({
 | 画像を JS にバンドル | `public/` 配下の静的アセットに移す |
 | アイコンライブラリ（fa-icons 等）の全アイコン | 個別アイコンを named import |
 
-「困ったらまず Visualizer」を口癖にすると、肥大化の発見が早まります。
+困ったらまず Visualizer を回してみる、と覚えておくと、肥大化の発見が早まります。
 
 ### コード分割（Code Splitting）
 
@@ -335,7 +335,7 @@ dist/
 
 ## まとめ
 
-- バンドルサイズは LCP / INP に直結する。「送らないコードが最速」
+- バンドルサイズは LCP / INP に直結する。送らないコードが最も速いという発想で削る
 - **rollup-plugin-visualizer** でバンドルの中身を木構造で可視化
 - 肥大化の典型（lodash 全部 import / moment / `motion/react` 全部 / 画像 JS バンドル）を覚える
 - **動的 `import()`** + **`React.lazy`** + **`<Suspense>`** でコード分割

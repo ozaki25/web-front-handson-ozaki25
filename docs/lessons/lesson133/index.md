@@ -20,11 +20,11 @@
 - **検索 / インデックスがない**
 - **トランザクションがない**
 
-「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージには弱い。
+「**オフラインで作業 + 復帰時に同期**」のような **本格的な** クライアント側ストレージの用途には力不足です。
 
 ### IndexedDB とは
 
-ブラウザに組み込まれた **NoSQL のキー / バリュー DB**。
+IndexedDB はブラウザに組み込まれた **NoSQL のキー / バリュー DB** です。
 
 - **容量は数十 MB 〜 GB クラス**（ブラウザによる）
 - **オブジェクトをそのまま** 保存（structured clone）
@@ -76,7 +76,7 @@ open.onsuccess = (event) => {
 
 ### `idb`（Promise ラッパー）
 
-[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパー。
+[`idb`](https://github.com/jakearchibald/idb)（Jake Archibald 製）は **生 API を Promise 化** した薄いラッパーです。
 
 ```bash
 npm install idb
@@ -109,7 +109,7 @@ const byAlice = await db.getAllFromIndex("posts", "by-author", "Alice");
 
 ### `Dexie.js`（クラス指向）
 
-[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリ。クエリの書き味が SQL に近い。
+[Dexie.js](https://dexie.org/) は IndexedDB を **「JS の DB」っぽく書ける** ライブラリで、クエリの書き味が SQL に近いのが特徴です。
 
 ```bash
 npm install dexie
@@ -179,7 +179,7 @@ function PostList() {
 | API レスポンスのキャッシュ | **IndexedDB** + Service Worker |
 | ゲーム / ノートアプリの完全オフライン | **IndexedDB** |
 
-「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB、それ以外は `localStorage` で十分。
+「**容量大 / 非同期 / 構造化 / 検索**」が要るなら IndexedDB を選び、それ以外は `localStorage` で足ります。
 
 ### 容量とクォータ
 
@@ -197,7 +197,7 @@ const granted = await navigator.storage.persist();
 if (granted) console.log("永続化 OK");
 ```
 
-ただしユーザーの Bookmark / インストール等の条件次第。
+ただし許可されるかはユーザーの Bookmark / インストール等の条件次第です。
 
 ### `Cache API` との違い
 

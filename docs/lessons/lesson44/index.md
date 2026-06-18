@@ -127,7 +127,7 @@ type AdminUser = User & {
     type TodoDraft = Partial<Todo>;
     ```
 
-このあたりは「`interface` はオブジェクトの形の宣言専用。それ以外の型操作は `type` で」と覚えておくとよいです。
+このあたりは「`interface` はオブジェクトの形の宣言に使い、それ以外の型操作は `type` で書く」と覚えておくとよいです。
 
 ### 使い分けの指針
 

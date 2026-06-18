@@ -42,7 +42,7 @@
 
 ### MCP（Model Context Protocol）
 
-[MCP](https://modelcontextprotocol.io/) は Anthropic が公開した「**AI に外部ツールを繋ぐ標準プロトコル**」。OpenAI / Google などが採用し、2025〜2026 年で共通規格として定着しました。
+[MCP](https://modelcontextprotocol.io/) は Anthropic が公開した「**AI に外部ツールを繋ぐ標準プロトコル**」です。OpenAI / Google などが採用し、2025〜2026 年で共通規格として定着しました。
 
 #### 全体構造
 
@@ -99,7 +99,7 @@ Claude Code では `~/.claude/settings.json`（グローバル）またはプロ
 
 #### 設定ファイル: `claude_desktop_config.json`（Claude Desktop）
 
-デスクトップアプリ版は `~/Library/Application Support/Claude/claude_desktop_config.json`（macOS）に書きます。フォーマットは Claude Code と同じ。
+デスクトップアプリ版は `~/Library/Application Support/Claude/claude_desktop_config.json`（macOS）に書きます。フォーマットは Claude Code と同じです。
 
 #### MCP サーバーを自作する
 

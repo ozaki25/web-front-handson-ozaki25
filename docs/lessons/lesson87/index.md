@@ -174,7 +174,7 @@ export function ClientView() {
   - `NEXT_PUBLIC_APP_NAME = 私の TODO アプリ`
   - `APP_SECRET = (undefined)` ← **ここが重要**
 
-`APP_SECRET` は Client 側では読めません。これが「サーバー専用の変数」と「クライアントに公開される変数」の違いを体感する瞬間です。
+`APP_SECRET` は Client 側では読めません。ここで「サーバー専用の変数」と「クライアントに公開される変数」の違いを実際に体感できます。
 
 ### さらに確認: ブラウザのソースを見る
 

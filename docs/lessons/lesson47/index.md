@@ -395,8 +395,8 @@ if (o.status !== "open" && o.status !== "done" && o.status !== "archived") {
 
 ## まとめ
 
-- 型ガードは「**実行時の確認を通して、TS に型を絞り込ませる**」仕組み。
-- `typeof`: プリミティブ（`string` / `number` / `boolean` など）の判定。`typeof null === "object"` の落とし穴に注意。
-- `Array.isArray`: 配列かどうかの専用判定。
-- `in`: オブジェクトに特定のプロパティがあるかで判定。
+- 型ガードは「**実行時の確認を通して、TS に型を絞り込ませる**」ための仕組みです。
+- `typeof` はプリミティブ（`string` / `number` / `boolean` など）を判定します。`typeof null === "object"` の落とし穴に注意してください。
+- `Array.isArray` は配列かどうかを専用に判定します。
+- `in` はオブジェクトに特定のプロパティがあるかで判定します。
 - **ユーザー定義型ガード** `function isX(x: unknown): x is X` は、複雑な型を一箇所にまとめて検証するのに便利。「`unknown` と `never`」で受けた `unknown` を、ここでようやく実用的に絞り込めるようになる。

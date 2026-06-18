@@ -423,7 +423,7 @@ export default function Home() {
 npm run dev
 ```
 
-ブラウザの DevTools で **Network** タブを開き、`google-analytics.com/g/collect` へのリクエストが飛ぶことを確認します（GA4 のイベント送信）。`vitals.vercel-insights.com` への送信も Speed Insights のもの。
+ブラウザの DevTools で **Network** タブを開き、`google-analytics.com/g/collect` へのリクエストが飛ぶことを確認します（GA4 のイベント送信）。`vitals.vercel-insights.com` への送信も併せて出ていれば、それが Speed Insights によるものです。
 
 ### 期待出力
 

@@ -268,7 +268,7 @@ app.use(
 - **`<img>` / `<script>` / `<link>` での読み込み**（こちらは元から CORS で制限されない。代わりに **`crossorigin` 属性** で読み取り権限が変わる）
 - **サーバー → サーバー**（fetch がブラウザを通らない）
 
-「**バックエンドプロキシ経由にすれば CORS 不要**」も実用解。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く。
+「**バックエンドプロキシ経由にすれば CORS 不要**」も実用的な選択肢です。Next.js なら `app/api/...` で **自分のオリジンに薄いラッパー** を置く形になります。
 
 ### CORB / CORP / COEP / COOP
 
@@ -282,7 +282,7 @@ app.use(
 | **COEP**（`Cross-Origin-Embedder-Policy`） | 自ページが埋め込む素材に **CORP / CORS の表明** を強制 |
 | **COOP**（`Cross-Origin-Opener-Policy`） | window.opener 経由のクロスオリジン操作を制限 |
 
-通常のアプリで気にするのは **CORS だけ**。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
+通常のアプリで気にするのは **CORS だけ** で済みます。SharedArrayBuffer / WebAssembly Threads を使う高度なケースで COEP/COOP/CORP が必要になります。
 
 ## 演習
 

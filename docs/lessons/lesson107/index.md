@@ -183,7 +183,7 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
 | Self-host（自サーバーから配信） | 同一オリジンで速い、プライバシーに有利 | 自分でファイルを用意する必要 |
 | `next/font/google` | Google Fonts を自動 self-host 化（両方の良いとこ取り） | Next.js 環境限定 |
 
-2026 年の主流は **Self-host または `next/font`**。Google Fonts の `<link>` 直貼りはレガシー扱いです。
+2026 年の主流は Self-host または `next/font` で、Google Fonts の `<link>` 直貼りはレガシー扱いになっています。
 
 ### サブセット化
 
@@ -319,7 +319,7 @@ Network タブの **Type** 列で:
 
 ## まとめ
 
-- 画像が **LCP の最重要要因**。最適化が CWV を一気に改善する
+- 画像は **LCP の最重要要因** であり、最適化を進めると CWV が一気に改善する
 - 5 つの技: **フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`**
 - **`next/image`** がこれら 5 つを自動でやる。Next.js 以外は手作業
 - フォントは **CLS と LCP** に効く。FOIT / FOUT を理解する

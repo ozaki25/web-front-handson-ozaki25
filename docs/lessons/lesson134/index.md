@@ -26,7 +26,7 @@
 
 ### Sentry の位置付け
 
-[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつ。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
+[Sentry](https://sentry.io/) は **エラートラッキングのデファクト** のひとつです。OSS で、**Hosted（SaaS）と self-hosted** の両方が選べます。
 
 特徴:
 
@@ -255,7 +255,7 @@ CI / CD でデプロイ時に Sentry CLI を使ってリリースを通知する
 
 ### Breadcrumbs
 
-エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs。
+エラー発生 **直前のユーザー操作** を自動で記録するのが Breadcrumbs です。
 
 - ボタンクリック / フォーム送信
 - ページ遷移

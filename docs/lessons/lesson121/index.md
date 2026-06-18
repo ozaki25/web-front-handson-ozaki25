@@ -324,7 +324,7 @@ class MyCard extends LitElement {
 customElements.define("my-card", MyCard);
 ```
 
-Web Components を本格的に書くなら Lit が現在のデファクト。Google / Adobe / Shopify も使っています。
+Web Components を本格的に書くなら Lit が現在のデファクトになっており、Google / Adobe / Shopify も採用しています。
 
 ## 演習
 

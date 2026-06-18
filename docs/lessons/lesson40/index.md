@@ -206,7 +206,7 @@ words.sort(new Intl.Collator("de").compare);
 
 ### `Intl.ListFormat`
 
-「A、B、C」のようなリスト整形。
+「A、B、C」のようなリスト形式の連結文字列を整形します。
 
 ```js
 const lf = new Intl.ListFormat("ja", { style: "long", type: "conjunction" });

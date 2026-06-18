@@ -22,7 +22,7 @@ for (const todo of todos) {
 }
 ```
 
-「1 件ずつ DOM を作って `appendChild`」。数が増えても手順は同じです。
+1 件ずつ DOM を作って `appendChild` する書き方で、数が増えても手順は変わりません。
 
 React では、**配列を JSX の配列に変換するだけ**です。`return` に書いた JSX を見て、React が前回のツリーとの差分を計算し、必要な DOM だけを更新してくれます。
 
@@ -45,7 +45,7 @@ const numbers = [1, 2, 3];
 const doubled = numbers.map((n) => n * 2); // [2, 4, 6]
 ```
 
-React の配列描画は、この `map` で **JSX の要素に変換する** ことに他なりません。
+React の配列描画も、この `map` で **JSX の要素に変換する** という同じ考え方で書きます。
 
 ```tsx
 const items = ["りんご", "みかん", "ぶどう"];
