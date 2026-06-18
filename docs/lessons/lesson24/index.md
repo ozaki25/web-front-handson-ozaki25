@@ -135,7 +135,7 @@ console.log(counterA()); // 3
 console.log(counterB()); // 2
 ```
 
-`counterA` と `counterB` は、それぞれ自分専用の `count` を抱えています。これが「関数が状態を閉じ込める」しくみです。
+`counterA` と `counterB` は、それぞれ自分専用の `count` を抱えており、関数が状態を閉じ込めるしくみとして機能しています。
 
 下のデモで、独立したカウンタ 2 つがそれぞれ別の `count` を持っている様子を体感できます。`counterA` を 3 回呼んでも `counterB` は影響を受けません。
 

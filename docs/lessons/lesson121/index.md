@@ -30,7 +30,7 @@
 - 会社共通のデザインシステムを **React 依存にせず** 配布したい
 - マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
 
-React コンポーネントは React の中でしか動きません。Web Components は **どこでも動く**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
+React コンポーネントは React の中でしか動かないのに対し、Web Components は **どこでも動きます**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
 
 ### Custom Elements の最小形
 

@@ -36,7 +36,7 @@
 - **`.cursor/rules/`**: Cursor 用（YAML / Markdown 形式）
 - **`.github/copilot-instructions.md`**: GitHub Copilot 用
 
-「**良いプロンプト** ではなく、**良いコンテキスト**」が結果を決めます。
+プロンプトの巧拙よりも、AI に渡すコンテキストの質が結果を大きく左右します。
 
 ---
 

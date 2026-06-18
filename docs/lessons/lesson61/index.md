@@ -20,7 +20,7 @@ props はコンポーネント間で値を渡す仕組みですが、**基本は
 
 ### コールバック props
 
-答えは「親から子に **関数を渡し**、子はその関数を呼ぶ」です。親が渡した関数を子がコールバックする、という形で、**関数が値として props を流れる**点がポイントです。
+このようなケースでは「親から子に **関数を渡し**、子はその関数を呼ぶ」という形を取ります。親が渡した関数を子がコールバックする、という形で、**関数が値として props を流れる**点がポイントです。
 
 ```
 親 (App)  --- onAdd (関数) ---> 子 (TodoInput)
@@ -85,9 +85,7 @@ function TodoInput({ onAdd }: TodoInputProps) {
 
 ### state lifting（状態の持ち上げ）
 
-上の例で、なぜ `todos`（一覧）の state を **親**（App） に置いたのでしょうか。一覧を描画するのは `TodoList` コンポーネントです。一見 `TodoList` に state を置いてもよさそうです。
-
-理由: **`todos` は「子の TodoInput」と「子の TodoList」の両方が関わる** からです。TodoInput は追加する側、TodoList は表示する側。2 つが同じ state を共有する必要があります。
+上の例では `todos`（一覧）の state を **親**（App） に置いています。一覧を描画するのは `TodoList` コンポーネントなので、一見 `TodoList` に state を置いてもよさそうに見えます。それでも親に置いているのは、**`todos` を「子の TodoInput」と「子の TodoList」の両方が関わる** ためです。TodoInput は追加する側、TodoList は表示する側で、2 つが同じ state を共有する必要があります。
 
 兄弟どうしの子コンポーネントは、直接 props で値を送れません。`App → TodoInput → App → TodoList` のように、**共通の親** を経由する必要があります。そのため、共通の親（App）に state を持たせます。
 
