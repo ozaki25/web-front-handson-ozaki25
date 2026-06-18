@@ -165,7 +165,7 @@ function PostList() {
 }
 ```
 
-`useLiveQuery` は DB の変更を **監視** して自動再描画。state 管理が簡単になります。
+`useLiveQuery` は DB の変更を監視して自動再描画するため、state 管理が簡単になります。
 
 ### `localStorage` / `sessionStorage` / IndexedDB の使い分け
 
@@ -228,7 +228,7 @@ Service Worker と一緒に出てくる **`Cache API`**（「Service Worker と 
 - バックグラウンドで **サーバー同期**（Background Sync / 起動時にチェック）
 - 競合があれば **最終書き込み勝ち** / **マージ** / **CRDT**（Yjs / Automerge）
 
-ノートアプリ / Todo アプリ / メーラーで定番のパターン。
+ノートアプリ / Todo アプリ / メーラーで定番のパターンです。
 
 ### よくある罠
 

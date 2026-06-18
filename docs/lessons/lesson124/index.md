@@ -14,7 +14,7 @@
 
 ## 解説
 
-### CSP は最後の防衛線
+### CSP の位置付け
 
 XSS の理想は「**そもそも入力をエスケープして XSS を起こさない**」こと（「Cookie と Web セキュリティ」）。けれど、ライブラリのバグ / Markdown のレンダリング / 古い jQuery など、**完璧に守るのは難しい**。
 
@@ -450,7 +450,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
 ## まとめ
 
-- CSP は **XSS の最後の砦**。攻撃 script が混入しても **読み込ませない**
+- CSP は XSS 対策の二重目の防衛線で、攻撃 script が混入してもブラウザに読み込ませない
 - `default-src 'self'` を起点に、必要に応じてディレクティブを追加
 - inline は **`'unsafe-inline'` を避け、nonce / hash + `'strict-dynamic'`** で許可
 - **`Content-Security-Policy-Report-Only`** で本番前に違反ログを集める

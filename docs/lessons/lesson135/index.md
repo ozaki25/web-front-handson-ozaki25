@@ -32,7 +32,7 @@
 | **Plausible / Fathom / Simple Analytics** | PV / 流入元 | プライバシー重視、料金固定 |
 | **PostHog / Mixpanel / Amplitude** | プロダクト分析（イベント深掘り） | 機能フラグ / セッション再生も統合 |
 
-「Vercel Analytics + Sentry」だけで小規模サイトは十分。**ユーザー行動の深掘り** が要るなら GA4 / PostHog などを追加します。
+「Vercel Analytics + Sentry」だけで小規模サイトには十分で、**ユーザー行動の深掘り** が必要なら GA4 / PostHog などを追加します。
 
 ### Vercel Analytics（Next.js）
 
@@ -89,7 +89,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 }
 ```
 
-これで Lighthouse の合成指標ではなく **本物のユーザー体験** が記録されます。「LCP が悪化したのは○月○日のリリース後」のような診断ができる。
+これで Lighthouse の合成指標ではなく **本物のユーザー体験** が記録され、「LCP が悪化したのは○月○日のリリース後」のような診断ができます。
 
 ### Google Analytics 4（GA4）
 
@@ -329,7 +329,7 @@ export function ConsentBanner({ gaId }: { gaId: string }) {
 
 > **`aria-modal` と focus 制御の最小三点**: バナー / モーダルとして読み上げてもらうには `aria-modal="true"` と **アクセシブルな名前**（`aria-labelledby` / `aria-label`）の指定、**初期フォーカスを内部の操作対象に当てる**（上の例では「同意する」ボタン）、**Esc で閉じる** の三点が最小ラインです。複雑な focus trap（背後にフォーカスを移さない厳密な実装）まで自前で書くより、本格的な要件は次に説明する CMP に任せるのが現実的です。
 
-実運用では地域判定 / 拒否時の挙動 / 設定リンクなど追加要件があるので、**プロダクションでは CMP を使う** のが現実的。
+実運用では地域判定 / 拒否時の挙動 / 設定リンクなど追加要件があるので、**プロダクションでは CMP を使う** のが現実的です。
 
 ## 演習
 

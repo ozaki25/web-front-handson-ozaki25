@@ -67,7 +67,7 @@ resetBtn.addEventListener('click', () => {
 - 「**画面に入った瞬間**」を取るには毎回 `getBoundingClientRect()` を呼ぶ → レイアウト再計算（reflow）が走る
 - 結果としてスクロールがガクつく
 
-監視系 API は **ブラウザ内部で効率よく判定** し、変化があった時だけ JS にコールバックを返します。**スクロールがスムーズになる** のが最大の利点です。
+監視系 API は **ブラウザ内部で効率よく判定** し、変化があった時だけ JS にコールバックを返すので、スクロール処理を JS 側で毎フレーム動かさずに済みます。
 
 ### Intersection Observer
 
@@ -90,7 +90,7 @@ const target = document.querySelector(".target");
 observer.observe(target);
 ```
 
-`IntersectionObserver` のコンストラクタにコールバックを渡し、`observe(element)` で監視対象を登録します。**何も起きないとコールバックは呼ばれない**（CPU 消費がない）のがポイント。
+`IntersectionObserver` のコンストラクタにコールバックを渡し、`observe(element)` で監視対象を登録します。交差状態に変化がない限りコールバックは呼ばれないため、待機中の CPU 消費はありません。
 
 #### オプション
 
@@ -194,7 +194,7 @@ const observer = new IntersectionObserver((entries) => {
 document.querySelectorAll(".fade-in").forEach((el) => observer.observe(el));
 ```
 
-スクロールアニメーションの定番パターン。
+スクロール連動のアニメーションでよく使われるパターンです。
 
 下のデモでスクロール領域を下に動かしてください。各カードがビューポートに 30% 入ったタイミングでフェードインします。`unobserve` しているので一度フェードしたカードは再観測されません。
 
@@ -346,7 +346,7 @@ window.addEventListener("scroll", () => {
 3. `throttle` / `debounce` で対処できるが、**反応が遅れる**
 4. メモリリークの温床（`removeEventListener` 忘れ）
 
-Intersection Observer は **必要な時だけ** コールバックを呼ぶので、すべて解決します。**現代のコードでは Observer を選ぶ** が定石。
+Intersection Observer は **必要な時だけ** コールバックを呼ぶので、上記の問題をまとめて回避できます。現代のコードでは、こうした要素の交差判定は Observer で書くのが標準的です。
 
 ### React で使う
 

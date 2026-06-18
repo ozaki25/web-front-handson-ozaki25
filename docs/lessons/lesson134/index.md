@@ -12,7 +12,7 @@
 
 ### なぜエラートラッキングが必要か
 
-開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾わない。
+開発中はブラウザの DevTools にエラーが出ます。けれど **本番** ではユーザーが「動かない」と言うまで何も分かりません。サーバーサイドなら CloudWatch / Datadog にログが貯まりますが、**ブラウザの中で起きたエラー** は誰も拾ってくれません。
 
 エラートラッキングサービスは:
 
@@ -160,7 +160,7 @@ export default withSentryConfig(nextConfig, {
 });
 ```
 
-**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強み。
+**Next.js / React Server Components / Server Actions / API Route / Edge Middleware の全部が 1 つの SDK でカバー** されるのが Sentry Next.js SDK の強みです。
 
 ### Source Map とは
 
@@ -298,7 +298,7 @@ Sentry.init({
 | **LogRocket** | セッションリプレイが強み |
 | **Honeybadger** | 開発者にやさしい価格 |
 
-「**まず Sentry を入れる**」が安全な選択。後から Datadog 等に統合したくなった時の移行も可能。
+まずは Sentry を入れておくのが安全な選択で、後から Datadog 等に統合したくなった場合も移行できます。
 
 ### Edge / Worker 環境での扱い
 

@@ -54,7 +54,7 @@ Next.js には重要なルールがあります。
 > **`NEXT_PUBLIC_` で始まる変数だけが、Client Component からも読める。**
 > **それ以外の変数は、Server Component・Route Handlers・Server Actions からしか読めない。**
 
-なぜか:
+この仕組みの目的は次の 2 つです。
 
 - **サーバー側のみ** = ブラウザに配信される JS に値が入らない。シークレットを隠せる
 - **`NEXT_PUBLIC_` 付き** = ビルド時にクライアント JS に値が埋め込まれる。公開しても構わない値だけ付ける

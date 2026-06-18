@@ -206,7 +206,7 @@ export function Nav() {
 }
 ```
 
-`Nav` はテーマのことを知りません。`ThemeToggle` を置くだけです。
+`Nav` はテーマのことを知らず、`ThemeToggle` を置くだけになっています。
 
 ### `src/Header.tsx`
 

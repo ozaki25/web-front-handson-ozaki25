@@ -118,7 +118,7 @@ type Status = "open" | "done" | "archived" | "deleted";
 Type '"deleted"' is not assignable to type 'never'.
 ```
 
-TS が `label` 関数の中で「`"deleted"` ケースを書き忘れている」と教えてくれます。新しい状態を追加したときに処理漏れを防ぐ、強力な仕組みです。
+TS が `label` 関数の中で「`"deleted"` ケースを書き忘れている」と教えてくれます。新しい状態を追加したときの処理漏れを、コンパイル時点で検出できる仕組みです。
 
 ### このレッスンで扱わないこと
 

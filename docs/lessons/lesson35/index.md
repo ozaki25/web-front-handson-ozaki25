@@ -80,7 +80,7 @@ resetBtn.addEventListener('click', () => {
 
 ブラウザの DevTools の Elements（または「要素」）タブを開くと、まさにこのツリーが左端に展開されて表示されます。手元の Chrome で F12 を押して Elements タブを眺めてみてください。タグをクリックするたびに、ツリーの枝が開いたり閉じたりします。
 
-これまでは Console に出すだけでしたが、本レッスンからは **この木に JS で手を入れて、画面を書き換える** 世界に入ります。
+これまでは Console に出すだけでしたが、本レッスンからは **JS で DOM を書き換えて画面を更新する** 方法を扱います。
 
 ### 要素を取得する: `querySelector` / `getElementById` / `querySelectorAll`
 

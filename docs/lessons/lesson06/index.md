@@ -379,5 +379,5 @@ button { padding: 6px 14px; font: inherit; cursor: pointer; }
 ## まとめ
 
 - フォームは `<form>` の中に `<input>` / `<textarea>` / `<button>` を並べて作る。
-- `name` 属性は送信のキー、`required` はブラウザに必須チェックを頼む合図。
+- `name` 属性は送信時のキーになり、`required` を付けるとブラウザが必須チェックをしてくれる。
 - `<label for>` を入力の `id` と合わせると、ラベルクリックで入力にフォーカスが移る。アクセシビリティにも効く。

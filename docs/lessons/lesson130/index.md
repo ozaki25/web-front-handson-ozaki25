@@ -292,7 +292,7 @@ const { data } = useQuery(trpc.hello.queryOptions({ name: "world" }));
 - 公開 API は REST / GraphQL
 - 自社の Next.js 内部は tRPC
 
-「**外向き / 内向きで分ける**」のは現実的な解。
+外向きと内向きで API スタイルを分ける構成は、現実的な解として広く採用されています。
 
 ### Server Components 時代の API
 
@@ -301,7 +301,7 @@ Next.js の App Router では **Server Component が直接 DB を叩ける**（`
 - 初期表示は **Server Component が直接 DB / 外部 API**
 - 動的なクライアント操作は **Server Actions** または **API**（tRPC / GraphQL / REST）
 
-「Web 用なら **API ですらない**」が選択肢として加わったのが 2026 年の現代です。
+2026 年現在では、Web 用途であれば「そもそも API を作らずに Server Component から直接データ層を呼ぶ」という選択肢も加わっています。
 
 ### よくある質問
 

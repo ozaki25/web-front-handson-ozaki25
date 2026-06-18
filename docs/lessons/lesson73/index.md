@@ -438,7 +438,7 @@ export default function AppLayout({ children }: LayoutProps<"/todos">) {
 
 1. `(app)/layout.tsx` のサイドバーに「新規作成」のリンク（仮に `/todos/new`）を足してみましょう（リンク先のページはまだ作らなくて構いません）。
 2. `(public)/layout.tsx` を新規作成して、`/` と `/about` にだけ「Welcome!」と書かれた小さなバナーを上に出してみましょう。`/todos` には出ないことを確認します。
-3. 試しに `(app)` を一時的に `app2`（括弧なし）にリネームしてみると、`/todos` が `/app2/todos` に変わる（= ディレクトリ名が URL に反映されてしまう）ことが確認できます。確認したら `(app)` に戻します。括弧で囲むことで URL から消える、というのが Route Groups の核心です。
+3. 試しに `(app)` を一時的に `app2`（括弧なし）にリネームしてみると、`/todos` が `/app2/todos` に変わる（= ディレクトリ名が URL に反映されてしまう）ことが確認できます。確認したら `(app)` に戻します。Route Groups の働きは、括弧で囲むとそのディレクトリ名が URL から消える、という 1 点に尽きます。
 
 ### 自分で書く
 

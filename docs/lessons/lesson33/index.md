@@ -197,7 +197,7 @@ console.log(posts);
 console.log(posts.length);
 ```
 
-Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これが「Promise をそのまま使ってしまった状態」です。`await` を忘れると値がおかしい、という失敗の形を体験しておきます。
+Console には `Promise { ... }` のような表示が出て、`posts.length` は `undefined` になります。これは Promise オブジェクトをそのまま値として使ってしまっている状態で、`await` を忘れたときに起きる典型的な失敗の形です。
 
 ### 自分で書く
 

@@ -197,7 +197,7 @@ function ProductCard({ product, onClick }: CardProps) {
 }
 ```
 
-「**普通に書いた JSX** が、コンパイル後は **十分にメモ化された** コードに変換される」のが Compiler の価値。
+**普通に書いた JSX** がコンパイル後に **十分にメモ化された** コードへ変換される、というのが Compiler のもたらす効果です。
 
 ### 何が変わるか / 変わらないか
 
@@ -245,7 +245,7 @@ function Counter() {
 }
 ```
 
-イベントハンドラはレンダリング中ではないので **副作用 OK**。Compiler はこれを区別します。
+イベントハンドラはレンダリング中ではないので **副作用を書いても OK** で、Compiler はこれを区別します。
 
 #### `eslint-plugin-react-compiler` で違反を検出
 
@@ -267,7 +267,7 @@ export default [
 ];
 ```
 
-このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint でコードの問題を修正しておくのが安全。
+このルールは「**Compiler が変換できない場面**」を警告してくれます。Compiler を入れる前にまず ESLint でコードの問題を修正しておくと安全です。
 
 ### 「Compile されない」コードへの対処
 
@@ -328,7 +328,7 @@ function LegacyComponent() {
 - **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
 - **Next.js 16**: Turbopack 標準、Cache Components、`reactCompiler` 設定が stable
 
-3 つは **独立に進化** していて、組み合わせは選択可能。
+3 つは **独立に進化** していて、組み合わせは選択できます。
 
 ### よくある誤解
 

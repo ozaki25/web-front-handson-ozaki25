@@ -48,7 +48,7 @@ function area(shape: Shape): number {
 - `case "square":` の中では `shape.side`、`case "rectangle":` の中では `shape.width` / `shape.height` が使える。
 - `in` 演算子も `typeof` もカスタム型ガードも書いていないのに、TS が `kind` の値から自動で絞り込む。
 
-`switch` の条件に「**判別用プロパティ**」を指定するだけで、各 `case` が局所的な型付けになる。これが判別共用体を使う一番大きな動機です。
+`switch` の条件に「**判別用プロパティ**」を指定するだけで、各 `case` が局所的な型付けになる。判別共用体を使う一番大きな動機は、この自動絞り込みを得られる点にあります。
 
 ### 網羅性チェックとの組み合わせ
 
@@ -115,7 +115,7 @@ function describe(state: TodoState): string {
 - `case "success":` のブロックでは `state.todos` だけある。`state.message` と書くと赤線が出る。
 - `case "error":` のブロックでは `state.message` だけある。
 
-**存在しないプロパティにアクセスしようとすると TS が止めてくれる**。これが判別共用体の安全性です。
+**存在しないプロパティにアクセスしようとすると TS が止めてくれる**ため、各ケースで触れるプロパティが型レベルで保証される。
 
 ### 2 章 の JS との違い（オブジェクトリテラル辞書ではなく型で）
 

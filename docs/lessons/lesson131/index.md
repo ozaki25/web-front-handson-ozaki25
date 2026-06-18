@@ -39,7 +39,7 @@ PWA の柱:
 
 #### `install`
 
-「**最初にインストールされた時** に呼ばれる」イベント。**事前キャッシュ** を作るタイミング。
+最初にインストールされた時に呼ばれるイベントで、事前キャッシュを作るタイミングです。
 
 `event.waitUntil(promise)` は、この Promise が解決するまでライフサイクルの遷移を保留する API です。キャッシュ保存が終わる前に SW がアクティブにならないよう制御するために使います。
 
@@ -55,7 +55,7 @@ self.addEventListener("install", (event) => {
 
 #### `activate`
 
-「**install が完了して制御を取る時**」のイベント。**古いキャッシュの削除** をするタイミング。
+install が完了して制御を取る時のイベントで、古いキャッシュの削除をするタイミングです。
 
 ```js
 self.addEventListener("activate", (event) => {
@@ -69,7 +69,7 @@ self.addEventListener("activate", (event) => {
 
 #### `fetch`
 
-「**ページからの fetch を横取り**」するイベント。ここがキャッシュ戦略の本丸。
+ページからの fetch を横取りするイベントで、ここでキャッシュ戦略を実装します。
 
 ```js
 self.addEventListener("fetch", (event) => {

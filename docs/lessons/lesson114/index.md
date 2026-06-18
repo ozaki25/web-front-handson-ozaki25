@@ -321,7 +321,7 @@ git branch -d feature/colors    # ローカルブランチも削除
 
 ## まとめ
 
-- **Git は道具、GitHub はホスティングサービス**
+- **Git** はバージョン管理ツール、**GitHub** はそれをホスティングする SaaS という別物
 - 現代の開発は **PR ベース**: ブランチ作業 → push → PR → レビュー → マージ
 - コミットメッセージは **Why を中心に** 1 行 50 文字以内 + 詳細。Conventional Commits も人気
 - マージ戦略 3 種: **Merge commit（履歴残す） / Squash（1 commit に圧縮、現代の主流） / Rebase**（線形）

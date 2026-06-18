@@ -131,7 +131,7 @@ export default async function OG({ params }: { params: Promise<{ slug: string }>
 }
 ```
 
-これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動き、軽量。
+これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動くので軽量に処理されます。
 
 ### `sitemap.xml`
 
@@ -307,7 +307,7 @@ export const metadata: Metadata = {
 
 ### Core Web Vitals と SEO
 
-Google は **Core Web Vitals**（**パフォーマンス計測のレッスン**で扱う指標）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せない**。
+Google は **Core Web Vitals**（**パフォーマンス計測のレッスン**で扱う指標）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せません**。
 
 ### よくある事故
 

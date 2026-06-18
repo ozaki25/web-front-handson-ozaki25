@@ -79,7 +79,7 @@ function first<T>(arr: T[]): T | undefined {
 Property 'toUpperCase' does not exist on type 'T'.
 ```
 
-「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。この「中身に触らず通すだけの関数」が、ジェネリクスが最も活きる形です。
+「`T` が何かは分からないので、その型にしかない操作は呼べない」という TS の警告です。「中身に触らず通すだけの関数」を書く場面で、ジェネリクスは特に役立ちます。
 
 ### `Array.prototype.map` もジェネリクス
 

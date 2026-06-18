@@ -148,7 +148,7 @@ if (isTodo(raw)) {
 - `if (isTodo(raw))` の中では `raw` の型が `unknown` から `Todo` に絞られている。`.text` や `.id` に安全にアクセスできる。
 - `else` 側では絞り込みが成立していないので、`raw` は `unknown` のまま。
 
-これが「`unknown` と `never`」で予告した「`unknown` を絞り込む具体的な方法」です。
+「`unknown` と `never`」で予告した「`unknown` を絞り込む具体的な方法」は、この型ガードを使う形になる。
 
 ## 演習
 

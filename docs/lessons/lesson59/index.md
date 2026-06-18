@@ -57,7 +57,7 @@ function NameInput() {
 - `onChange={(e) => setName(e.target.value)}` で「入力されたら state を更新」
 - これで `<input>` と `name` state がつねに一致する
 
-ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。つまり、**見た目の真実は state 側にある**。
+ブラウザの DevTools で `<input>` の value 属性を手で書き換えても、画面の表示は `name` の値で上書きされます。**表示される値は常に state 側で決まる** という挙動です。
 
 ### `e.target.value`
 

@@ -288,7 +288,7 @@ export default function AboutPage() {
 
 1. ブラウザで `/about` を開きます。見た目は「ページを増やしてリンクで移動する」時点とほぼ同じです（カード 3 枚にプレースホルダ画像）。
 2. **DevTools → Network タブ** を開いて再読み込みします。
-3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。これが自動最適化の証拠です。
+3. `placehold.co/300x200.png` がそのまま落ちてくるのではなく、`/_next/image?url=...&w=...&q=...` のような Next.js 内部の URL 経由で画像が配信されているのが見えます。この URL を経由しているということは、Next.js が間に入って自動で最適化していることを意味します。
 4. Response の Content-Type が `image/webp` や `image/avif` になっているはずです（ブラウザが対応している場合）。
 5. `next.config.ts` から `remotePatterns` を一時的に削除して保存すると、`/about` を開いたときにコンソールや画面に「hostname is not configured」のエラーが出ます（確認したら戻します）。
 

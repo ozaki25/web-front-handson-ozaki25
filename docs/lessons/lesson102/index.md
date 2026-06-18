@@ -245,7 +245,7 @@ expect(element).toHaveClass("active");      // CSS クラス付き
 expect(element).toHaveAttribute("href", "/about");
 ```
 
-これらは **読みやすさが大幅に上がる** ので、入れない理由はないです。
+これらを使うとアサーションの読みやすさが大幅に上がるので、コンポーネントテストでは併用するのが定番です。
 
 ### テスト間で DOM / タイマーが漏れる落とし穴
 
