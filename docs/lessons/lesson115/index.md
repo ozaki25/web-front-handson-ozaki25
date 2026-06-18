@@ -161,7 +161,7 @@ YAML やコードに **直接書くと公開されてしまう** ので絶対に
 [![CI](https://github.com/your-name/your-repo/actions/workflows/ci.yml/badge.svg)](https://github.com/your-name/your-repo/actions/workflows/ci.yml)
 ```
 
-緑なら通っている、赤なら壊れている。OSS では事実上の必須記号です。
+緑のチェックは通過、赤は失敗していることを一目で示すアイコンで、OSS では事実上の必須記号として扱われます。
 
 ### ブランチ保護と CI 必須
 
