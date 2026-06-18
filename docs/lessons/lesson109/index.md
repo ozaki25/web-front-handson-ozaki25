@@ -37,7 +37,7 @@
 
 #### 第 0 世代: 〜2014 年「ツール以前」
 
-JS は `<script>` タグで読み込み、CSS は `<link>` で読み込むだけ。複数ファイルを連結したければ `cat a.js b.js > bundle.js` のような手作業。
+JS は `<script>` タグで読み込み、CSS は `<link>` で読み込むだけでした。複数ファイルを連結したければ `cat a.js b.js > bundle.js` のような手作業で済ませていました。
 
 - **Grunt**（2012）/ **Gulp**（2013）: タスクランナー。「concat → minify → upload」の手順を自動化
 - **Browserify**（2011）: Node.js の `require()` をブラウザでも動かす最初のバンドラ
