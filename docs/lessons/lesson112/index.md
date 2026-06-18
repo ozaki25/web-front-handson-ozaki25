@@ -151,7 +151,7 @@ npm install -D dprint
 - Prettier より少し古めの設計だが速い
 - Deno / 一部 Rust エコシステムで採用
 
-「Biome に注目が集まる中、**Prettier の代替として地味に使える**」位置付け。
+Biome に注目が集まる中、Prettier の代替として地味に使えるツール、という位置付けになっています。
 
 ### 「Rust 製で速い」の意味するもの
 
@@ -213,7 +213,7 @@ TypeScript 公式の Go 移植は **preview build が公開**されており、`
 - **Vite 系 vs Vercel 系** のシェア
 - **WebAssembly 化したツール**（IDE / ブラウザでの実行）
 
-VoidZero（oxlint / oxfmt / Rolldown / Vite）が 1 社で同方向に進んでいる点で、**Oxc 系ツールチェインへの収束**が最も蓋然性が高い。Biome は「統合 1 ツール」の利便性で独自路線を維持しようとしているが、Oxc 系が揃えば優位性は薄れる。
+VoidZero（oxlint / oxfmt / Rolldown / Vite）が 1 社で同方向に進めている点を踏まえると、Oxc 系ツールチェインへの収束が最も蓋然性が高いと考えられます。Biome は「統合 1 ツール」の利便性で独自路線を維持しようとしていますが、Oxc 系が揃えば優位性は薄れていくと見られます。
 
 ## 演習
 
