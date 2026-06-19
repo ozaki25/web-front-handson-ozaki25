@@ -1,98 +1,197 @@
-# lesson128: JWT の構造とセキュリティ
+# lesson128: OAuth / OIDC の概念
 
 ## ゴール
 
-- JWT の Header / Payload / Signature の 3 部構成を説明できる
-- JWS（署名のみ）と JWE（暗号化あり）の違いを区別できる
-- HS256 と RS256 の違い（共有鍵 vs 公開鍵）を説明できる
-- `alg: none` 攻撃とその対策を知っている
-- セッション Cookie vs JWT の比較で、それぞれの使い所を判断できる
+- 「**認証**」と「**認可**」の違いを言える
+- OAuth 2.0 の **登場人物（Role）** を説明できる
+- OpenID Connect（OIDC）が「OAuth に **認証** を載せた拡張」だと分かる
+- Auth.js / NextAuth.js・Firebase Auth などの選択肢を把握している
+
+::: tip このレッスンの方針
+認証は「自前で実装すると事故りやすい」分野です。本講座では概念の地図 + 既存 SaaS / ライブラリの選び方に絞ります。実装は SaaS のドキュメントと併せて行うのが現実的です。
+:::
 
 ## 解説
 
-lesson127 で学んだ OIDC は、認証情報を **JWT（JSON Web Token）** 形式のトークンで返します。Auth.js が発行するセッション Cookie も JWT の一種です。このレッスンでは JWT の内部構造とセキュリティ上の注意点を掘り下げます。
+### 認証 と 認可
 
-### JWT の 3 部構成
+最初に区別すべき言葉が 2 つあります。
 
-JWT は **`.`（ドット）で区切られた 3 つのパーツ** を繋げた文字列です。
-
-<img src="/diagrams/jwt-structure.svg" alt="JWT の文字列は Header・Payload・Signature の 3 部構成。Header と Payload は Base64url エンコードのみで暗号化されておらず誰でも読める。Signature は秘密鍵で署名して改ざんを検知する。" class="diagram" />
-
-各パーツはそれぞれ **Base64url エンコード** されています（暗号化ではない）。
-
-#### Header
-
-トークンの種類と署名アルゴリズムを示します。
-
-```json
-{
-  "alg": "RS256",
-  "typ": "JWT",
-  "kid": "key-id-1"
-}
-```
-
-- `alg`: 署名アルゴリズム（`RS256`、`HS256` など）
-- `typ`: トークン種別（`JWT` 固定）
-- `kid`: 鍵の識別子。OIDC プロバイダ側で鍵をローテーションする時に使う（Auth.js 利用者は今は気にしなくて構いません）
-
-#### Payload
-
-実際のデータ（クレーム）が入ります。
-
-```json
-{
-  "sub": "user-123",
-  "name": "山田太郎",
-  "email": "yamada@example.com",
-  "iat": 1713999000,
-  "exp": 1714002600
-}
-```
-
-標準クレーム:
-
-| クレーム | 意味 |
+| 用語 | 意味 |
 |---|---|
-| `sub` | Subject（ユーザー ID） |
-| `iss` | Issuer（発行者の URL） |
-| `aud` | Audience（受け取り手のクライアント ID） |
-| `iat` | Issued At（発行日時、Unix 秒） |
-| `exp` | Expiration（有効期限、Unix 秒） |
+| **認証**（Authentication, AuthN） | **誰** か（あなたは本当に山田さんか？） |
+| **認可**（Authorization, AuthZ） | **何ができる** か（山田さんはこのファイルを編集できるか？） |
 
-> **Unix 秒** は 1970 年 1 月 1 日 0 時 UTC からの経過秒数。ブラウザの `new Date(1714002600 * 1000)` で人間が読める日時に変換できます（JavaScript の `Date` はミリ秒なので 1000 倍する）。
+ID + パスワードでログインするのが認証で、「管理者だけ /admin にアクセス可」が認可です。**OAuth は本来 認可** で、**OIDC は 認証** を扱うため、混乱しないよう地図を頭に置いておきます。
 
-**重要**: Payload は Base64url でエンコードされているだけで、**暗号化されていません**。誰でもデコードして中身を読めます。パスワードやクレジットカード番号などの秘密情報は絶対に入れないでください。
+### OAuth 2.0
 
-#### Signature
+「**ユーザーがパスワードを渡さずに、第三者アプリに自分のリソースへのアクセスを認可** する」プロトコル。
 
-Header と Payload を秘密鍵で署名したもの。
+例: 「**Spotify に Google フォトの写真を読ませる**」と言われた時、Spotify に Google パスワードを渡すのは危険。OAuth なら Google 上で認可するだけで、Spotify は **アクセストークン** を受け取って Google フォト API を叩けます。
+
+#### 登場する役割（Role）
+
+Auth.js を使う実装では、この 4 役を理解しておくと「どこで何が起きているか」が掴みやすくなります。
+
+| 役 | 例 |
+|---|---|
+| **Resource Owner** | エンドユーザー（あなた） |
+| **Client** | アクセスするアプリ（Spotify） |
+| **Authorization Server** | 認可するサーバー（Google） |
+| **Resource Server** | API サーバー（Google フォト API） |
+
+<details>
+<summary>OAuth / OIDC の内部フロー（深掘り）</summary>
+
+#### 認可コードフロー（推奨）
+
+OAuth 2.0 で最も使われ、安全とされるフロー。**Client の種類** によって `client_secret` の扱いが変わるので、2 つに分けて図解します。
+
+##### A. Confidential Client（サーバーアプリ / BFF）
+
+サーバーが安全に `client_secret` を保持できる場合（Next.js の Route Handler など）。
+
+<img src="/diagrams/oauth-confidential-flow.svg" alt="Confidential Client の認可コードフロー: ユーザーがログインボタンを押すと Client がAuthorizationServerに/authorizeリダイレクト、ユーザーが認可すると認可コードが返り、ClientはそのコードとclientSecretで/tokenを叩きaccessTokenを取得する" class="diagram" />
+
+##### B. Public Client（ブラウザの SPA / ネイティブアプリ）
+
+`client_secret` を保持できない場合。代わりに **PKCE**（後述）を必ず使います。
+
+<img src="/diagrams/oauth-pkce-flow.svg" alt="PKCE を使った Public Client の認可コードフロー: SPA が verifier と challenge を生成し code_challenge 付きで/authorizeを呼ぶ、認可コードを受け取ったら verifier と一緒に/tokenを叩く。client_secret は不要" class="diagram" />
+
+ポイント:
+
+- **認可コード**（短命）→ アクセストークンに **サーバー側で交換**（A） / **PKCE で偽装防止**（B）
+- ブラウザに **直接トークン** を渡さない（漏洩リスクが下がる）
+- 現代の Web では **Auth.js / Clerk / Auth0 がこれを内部で組み立てる**
+
+#### Implicit Flow は非推奨
+
+ブラウザに直接トークンを返す **Implicit Flow** は古いやり方。**現代は使わない**。SPA であっても **Authorization Code Flow with PKCE** が推奨。
+
+#### PKCE（Proof Key for Code Exchange）
+
+「**認可コードが盗まれてもトークンに交換できない**」を実現する仕組み。
+
+1. クライアントが **ランダムな verifier** を生成
+2. その **ハッシュ**（challenge） を `/authorize` に渡す
+3. 認可コードを **/token に送る時に verifier を一緒に送る**
+4. 認可サーバーが challenge と一致するかを検証
+
+ネイティブアプリ / SPA で必須。Auth0 / Clerk などの SaaS は自動でやってくれます。
+
+</details>
+
+### OpenID Connect（OIDC）
+
+OAuth 2.0 は **認可** のフレームワーク。**「誰がログインしたか」** を扱う仕組みが標準化されていなかった。OIDC は OAuth 2.0 の上に **認証情報の規格** を載せたものです。
+
+OIDC は次を追加:
+
+- **`openid` スコープ**: OIDC を有効化
+- **ID Token**: 「**この人がログインした**」を表す JWT
+- **`/userinfo` エンドポイント**: ユーザープロフィール取得
+
+#### ID Token の中身
+
+```json
+{
+  "iss": "https://accounts.google.com",   // 発行者
+  "sub": "user-123",                        // ユーザー ID
+  "aud": "my-client-id",                    // クライアント ID
+  "exp": 1714000000,                        // 有効期限
+  "iat": 1713999000,                        // 発行時刻
+  "email": "user@example.com",
+  "name": "山田太郎"
+}
+```
+
+これに **署名** が付き、クライアントが **公開鍵で検証** することで「**確かに Google が発行した本物**」を確認できます。ID Token のフォーマットが **JWT** で、その構造とセキュリティは「JWT の構造とセキュリティ」のレッスンで詳しく扱います。
+
+### 既存 SaaS / ライブラリの位置付け
+
+「**自前実装は避ける**」が現代の標準になっています。代表的な選択肢を挙げます。
+
+| サービス / ライブラリ | 特徴 |
+|---|---|
+| **Auth0** | エンタープライズ標準。フロー / IdP 連携 / カスタムが豊富 |
+| **Clerk** | React / Next.js 専用、UI コンポーネントが秀逸。スタートアップで人気 |
+| **NextAuth.js**（Auth.js） | Next.js 用 OSS。OAuth プロバイダ多数、自前で動かせる |
+| **Supabase Auth** | DB + 認証セット。Postgres ベース |
+| **Firebase Authentication** | Google エコシステム。設定が簡単 |
+| **AWS Cognito** | AWS 系インフラと統合 |
+| **WorkOS** | エンタープライズ向け SAML / SSO |
+| **Lucia / better-auth** | より軽量、自前で書きたい時の OSS |
+
+選び方:
+
+- **すぐ使いたい**: Clerk / Supabase
+- **エンタープライズ要件**（SAML / SCIM）: Auth0 / WorkOS
+- **OSS / ホストせず手元で**: NextAuth / better-auth
+- **既存インフラに揃える**: Cognito / Firebase
+
+### Passkeys（パスワードレス）
+
+2024 年以降、Apple / Google / Microsoft が **Passkeys**（FIDO2 / WebAuthn）の普及を進めています。**パスワードを使わず、デバイスの生体認証で OIDC ログイン** できる仕組み。
+
+```html
+<!-- 簡略 -->
+<script>
+const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
+</script>
+```
+
+主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
+
+### よくある事故
+
+- **JWT の検証を skip** していて偽造を許す → **必ず署名検証**
+- **localStorage にトークン** を入れて XSS で持ち出される → **HttpOnly Cookie** に
+- **Refresh Token が無期限** → 短命 + ローテートを徹底
+- **CORS で `Allow-Origin: *` + `Allow-Credentials: true`** → 仕様違反、CORS エラー
+- **redirect_uri が緩い**（`*` 許可）→ open redirect で攻撃可能
+- **state パラメータを検証していない** → CSRF 成立
+
+これらが起きやすいので、**SaaS の SDK** に従うのが安全です。
+
+## 演習
+
+### ゴール
+
+- NextAuth.js（Auth.js）で Google ログインを最小実装する
+- Auth.js が発行するセッション Cookie（JWE）を DevTools で確認する
+
+### 手順 1: 新規 Next.js
+
+```bash
+npx create-next-app@latest auth-sample --ts --app
+cd auth-sample
+npm install next-auth
+```
+
+### 手順 2: Google OAuth クライアント作成
+
+[Google Cloud Console](https://console.cloud.google.com/) で:
+
+1. プロジェクトを作成
+2. APIs & Services → Credentials → OAuth 2.0 Client ID
+3. Authorized redirect URI: `http://localhost:3000/api/auth/callback/google`
+4. Client ID と Secret を控える
+
+### 手順 3: NextAuth の設定
+
+`.env.local`:
 
 ```
-RSASHA256(
-  base64urlEncode(header) + "." + base64urlEncode(payload),
-  privateKey
-)
+GOOGLE_CLIENT_ID=...
+GOOGLE_CLIENT_SECRET=...
+AUTH_SECRET=（任意のランダム文字列）
 ```
 
-受信側は公開鍵（または共有鍵）で検証し、**Header / Payload が改ざんされていないこと** を確認します。Signature を破ることなく Payload を書き換えることはできません。
+> **補足: 環境変数名は v5 で `AUTH_*` に変わった**: Auth.js v5（旧 NextAuth.js）では `NEXTAUTH_SECRET` / `NEXTAUTH_URL` が **`AUTH_SECRET` / `AUTH_URL` にエイリアス** （v4 名はそのままも動く）されました。v5 で本番に必須なのは `AUTH_SECRET` だけで、`AUTH_URL` は **多くの環境で不要**（リクエストヘッダから自動検出されます。リバースプロキシ越し等で誤検出する場合に明示するくらい）です。`AUTH_SECRET` は `npx auth secret` でランダム生成できます。
 
-### JWS と JWE の違い
-
-JWT には大きく 2 つのバリアントがあります。
-
-| | **JWS**（JSON Web Signature） | **JWE**（JSON Web Encryption） |
-|---|---|---|
-| Payload | Base64url のまま（誰でも読める） | 暗号化されている（秘密鍵がないと読めない） |
-| 目的 | **改ざん検知** | **改ざん検知 + 機密保護** |
-| jwt.io | デコードできる | デコードできない（暗号化されているため） |
-| Auth.js の既定 | `strategy: "jwt"` を明示した場合 | **v5 の既定**（`authjs.session-token` は JWE） |
-
-lesson127 の演習で `jwt.io` に貼ってもデコードできなかったのは、Auth.js v5 が既定で **JWE** を使っているためです。「JWT の Payload は誰でも読める」という説明は JWS の話であり、JWE は暗号化されているため jwt.io でデコードできません。
-
-**Auth.js で JWS に切り替える**（学習・デバッグ用）:
-
-`auth.ts` に以下を追加すると、暗号化なしの JWS セッションに切り替わります（本番環境では JWE 推奨）。
+`auth.ts`:
 
 ```ts
 import NextAuth from "next-auth";
@@ -105,206 +204,83 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
       clientSecret: process.env.GOOGLE_CLIENT_SECRET!,
     }),
   ],
-  session: {
-    strategy: "jwt",
-  },
-  jwt: {
-    // 暗号化を無効化（学習目的のみ。本番非推奨）
-    encode: async ({ token, secret }) => {
-      const { encode } = await import("next-auth/jwt");
-      return encode({ token, secret, salt: "authjs.session-token" });
-    },
-  },
 });
 ```
 
-### 署名アルゴリズム: HS256 と RS256
+`app/api/auth/[...nextauth]/route.ts`:
 
-| 種類 | `alg` 値 | 鍵の種類 | 典型的な用途 |
-|---|---|---|---|
-| **HMAC-SHA256** | `HS256` | **共有鍵**（同じ鍵で署名・検証） | 自前のサーバー内で発行・検証する場合 |
-| **RSA-SHA256** | `RS256` | **秘密鍵**で署名 / **公開鍵**で検証 | OIDC プロバイダ（Google / GitHub など） |
-| **ECDSA-SHA256** | `ES256` | 楕円曲線（RSA より短く速い） | モバイル向けや高パフォーマンス要件 |
-
-OIDC プロバイダ（Google / Auth0 など）は `RS256` を使い、公開鍵（JWKS）を次の URL で配布します。クライアントはこれを取得して署名を検証します。
-
-```
-https://<issuer>/.well-known/jwks.json
+```ts
+import { handlers } from "@/auth";
+export const { GET, POST } = handlers;
 ```
 
-**HS256 の注意点**: 署名鍵と検証鍵が同じなので、**検証側が署名も偽造できます**。マイクロサービス間でトークンを共有する場合は RS256 を選ぶのが安全です。
+`app/page.tsx`:
 
-### `alg: none` 攻撃
+```tsx
+import { signIn, signOut, auth } from "@/auth";
 
-JWT 仕様には `alg: none`（署名なし）という値が存在します。Header を書き換えて `alg` を `none` にし、Signature 部分を空にしたトークンを送ると、**署名検証をスキップするライブラリでは任意の Payload が通ってしまいます**。
+export default async function Home() {
+  const session = await auth();
 
-攻撃の流れ:
+  if (!session) {
+    return (
+      <main style={{ padding: 24 }}>
+        <form action={async () => { "use server"; await signIn("google"); }}>
+          <button>Google でログイン</button>
+        </form>
+      </main>
+    );
+  }
 
-```
-// 正規の Header
-{ "alg": "RS256", "typ": "JWT" }
-
-// 攻撃者が書き換えた Header
-{ "alg": "none", "typ": "JWT" }
-
-// Signature を空にしたトークン
-eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiJ9.
-```
-
-対策:
-
-- **ライブラリで `alg` の許可リスト（allowlist）を設定**し、`none` を受け付けない
-- `jose`・`jsonwebtoken` などの主要ライブラリは既定で `none` を拒否しているが、設定を確認する
-
-### Refresh Token
-
-アクセストークンは **短命**（15 分〜1 時間）にして、万が一漏れても被害を最小化します。期限切れになったら **Refresh Token** で新しいアクセストークンを取得します。
-
-| トークン | 有効期限 | 役割 | 漏れたときのリスク |
-|---|---|---|---|
-| **Access Token** | 短い（15 分〜1 時間） | API 呼び出し | 短時間だけ悪用可能 |
-| **Refresh Token** | 長い（数日〜数週間） | Access Token を更新 | 長期間悪用される可能性 |
-
-Refresh Token は **HttpOnly + Secure な Cookie** に保存し、`/token` エンドポイント経由でのみ交換します。
-
-### セッション Cookie vs JWT
-
-ログイン後の状態維持で **どちらを使うか** がよく議論されます。先に結論を書くと、**Web アプリ単独なら Cookie ベース、API 連携なら JWT** が大まかな目安です。詳しい根拠は表の後の「攻撃面」「一般的な指針」で説明するので、今は概観として眺めてください。
-
-| | セッション Cookie（DB セッション） | JWT |
-|---|---|---|
-| 保存場所 | サーバー側（DB / Redis）+ Cookie に ID | クライアント側（保存先は **Cookie / localStorage の選択** 次第） |
-| 取り消し | DB から消すだけ（即時無効化） | 短命にする / Blacklist で対処（即時は難しい） |
-| ステートレス性 | サーバー状態あり | サーバー状態なし |
-| サイズ | 小さい（ID だけ） | 大きい（ペイロード分） |
-| クロスドメイン | 工夫が必要 | 渡すだけ |
-
-**攻撃面は保存場所で決まる**:
-
-- **Cookie**（`HttpOnly` + `Secure` + `SameSite=Lax` か `Strict`）: XSS で **盗めない**。ただし CSRF が要対策（SameSite + CSRF トークンで防御）
-- **localStorage**: XSS で **JS から盗まれる**。CSRF はそもそも該当しない（ブラウザが自動付与しない）
-
-**一般的な指針**（2026 年）:
-
-- **Web アプリ単独**: **セッション Cookie**（HttpOnly / Secure / SameSite）が最も安全
-- **マイクロサービス間 / SPA + 別ドメイン API**: JWT のアクセストークン
-- **モバイル / SPA で OIDC 利用**: ID Token を JWT で取得
-
-「**Cookie に JWT を入れる**」のもよくある折衷案（Cookie の保護 + JWT の検証性）。Auth.js / Clerk / Lucia などの既定もこれに近い構成です。
-
-## 演習
-
-### ゴール
-
-- jwt.io でサンプルトークンをデコードし、3 部構成を目で確認する
-- `alg: none` の危険性を理解する
-- JWT の `exp`（有効期限）の意味を確認する
-
-### 手順 1: jwt.io でトークンを確認する
-
-[jwt.io](https://jwt.io/) を開き、左側の Encoded 欄に次のサンプルトークン（JWS）を貼ってください。
-
-```
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiJ1c2VyLTEyMyIsIm5hbWUiOiLlsbHnlKjlpKnpg44iLCJpYXQiOjE3MTM5OTkwMDAsImV4cCI6MTcxNDAwMjYwMH0.pWe5TtmHHHQgCIGDCMiWp-1Y-8dJCDAG8CYaD-nYKNA
-```
-
-右側に Header / Payload / Signature の 3 つが表示されます。
-
-```json
-// Header
-{
-  "alg": "HS256",
-  "typ": "JWT"
-}
-
-// Payload
-{
-  "sub": "user-123",
-  "name": "山田太郎",
-  "iat": 1713999000,
-  "exp": 1714002600
+  return (
+    <main style={{ padding: 24 }}>
+      <p>ようこそ {session.user?.name} さん</p>
+      <pre>{JSON.stringify(session, null, 2)}</pre>
+      <form action={async () => { "use server"; await signOut(); }}>
+        <button>ログアウト</button>
+      </form>
+    </main>
+  );
 }
 ```
+
+### 手順 4: 起動
+
+```bash
+npm run dev
+```
+
+`http://localhost:3000` で Google ログインを試します。
+
+### 手順 5: セッション Cookie を覗く
+
+ブラウザの DevTools → Application → Cookies で **`authjs.session-token`** を確認。Auth.js v5 の既定では **JWE（暗号化 JWT）** で発行されるため、[jwt.io](https://jwt.io/) に貼っても **デコードできません**（暗号化されている）。これは「Cookie が盗まれても中身を読めない」セキュリティ目的です。
+
+JWT の構造（JWS と JWE の違い・署名アルゴリズム）は「JWT の構造とセキュリティ」のレッスンで詳しく扱います。
 
 ### 期待出力
 
-jwt.io に JWS トークンを貼ると、Header・Payload・Signature の 3 パーツがデコードされて表示されます。`exp` の値が Unix 秒であることを確認しましょう（`1714002600` → 2024 年 4 月 25 日頃）。
+- Google ログインが成立し、セッション情報が表示される
+- Cookie に **`authjs.session-token`**（JWE）が入っている
+- jwt.io で **デコードできず警告** が出る（暗号化されているため正常）
 
-### 手順 2: `alg: none` の危険性を確認する
+### 変える
 
-次のトークンは `alg: none` で署名なしのトークンです（Signature 部分が空）。
+- `Email` プロバイダ（マジックリンク）を追加
+- 複数プロバイダ（GitHub / Discord）を追加
+- ログイン後にしかアクセスできないルートを **Middleware で保護** する
 
-```
-eyJhbGciOiJub25lIiwidHlwIjoiSldUIn0.eyJzdWIiOiJhZG1pbiIsIm5hbWUiOiLnrqHnkIblkqQiLCJyb2xlIjoiYWRtaW4ifQ.
-```
+### 自分で書く（任意）
 
-jwt.io に貼ってデコードしてみてください。
-
-期待出力:
-
-- Header に `"alg": "none"` が表示される
-- Payload に `"sub": "admin"` / `"role": "admin"` が表示される
-- Signature 欄は空のまま
-- jwt.io の表示は **Invalid Signature**（署名検証に失敗したことを示す）になるが、Payload は問題なくデコードされて読める
-
-つまり、署名がないため Payload を自由に書き換えて送り込める状態です。受け取るライブラリが `alg` の許可リストを設定していなければ、誰でも管理者になりすませてしまいます。
-
-### 手順 3（自分で書く）: `exp` を設定してみる
-
-`jose` ライブラリを使って、有効期限付きの JWT を発行するコードを書きます。**Node.js を直接動かせる StackBlitz テンプレート** を新規に開いてください: <https://stackblitz.com/fork/node>
-
-開いたら以下を実行します:
-
-1. ターミナルで `npm install jose`
-2. `index.js` を `index.ts` にリネーム（`tsx` がプリインストール済み）
-3. 下のコードを貼って `npm start`
-
-```ts
-import { SignJWT, jwtVerify } from "jose";
-
-const secret = new TextEncoder().encode("my-secret-key");
-
-// JWT を発行（有効期限 1 時間）
-const token = await new SignJWT({ sub: "user-123", name: "山田太郎" })
-  .setProtectedHeader({ alg: "HS256" })
-  .setIssuedAt()
-  .setExpirationTime("1h")
-  .sign(secret);
-
-console.log("token:", token);
-
-// JWT を検証
-const { payload } = await jwtVerify(token, secret);
-console.log("payload:", payload);
-// payload.exp が現在時刻 + 3600 秒になっていることを確認
-
-// 期限切れを試す: setExpirationTime("1s") にして 2 秒後に jwtVerify を呼ぶと
-// JWTExpired エラーが発生する
-```
-
-期待出力:
-
-- `token:` の右に 3 つの Base64url パートが `.` で連結された文字列が出る
-- `payload:` の右に `{ sub: "user-123", name: "山田太郎", iat: <unix秒>, exp: <unix秒> }` が出る
-- `payload.exp - payload.iat` がちょうど `3600` になっている
-
-<details>
-<summary>Auth.js で session strategy を切り替えて JWS を確認する（上級）</summary>
-
-Auth.js のセッションストア戦略を `strategy: "database"` にすると、Cookie に入るのは DB のセッション ID だけになります（DB セッション方式）。`strategy: "jwt"` にすると JWT 形式でクライアント側に保存されます。
-
-Auth.js v5 の既定では JWT を JWE として暗号化するため、`jwt.io` でデコードできません。学習目的で JWS に切り替える場合は、`解説` セクションのコードを参照してください。
-
-JWS に切り替えた状態でログインし、Cookie の `authjs.session-token` の値を jwt.io に貼ると、Header / Payload / Signature が表示されます。Payload にはユーザー名やメールアドレスが含まれているはずです（秘密情報は入っていないことを確認）。
-
-</details>
+- Clerk に置き換えて UI コンポーネントの体験を比較
+- Supabase Auth を試して DB / 認証統合の体験
+- Passkey 対応プロバイダ（WebAuthn）を有効にしてパスワードなしログイン
 
 ## まとめ
 
-- **JWT は Header / Payload / Signature の 3 部構成**。`.` で連結した Base64url 文字列
-- **Payload は暗号化されていない**（JWS の場合）。誰でも読めるため秘密情報を入れてはいけない
-- **JWS**: 署名のみ。jwt.io でデコード可能。**JWE**: 暗号化あり。jwt.io でデコード不可。Auth.js v5 の既定は JWE
-- 署名アルゴリズム: **HS256**（共有鍵）は自前発行・検証向け、**RS256**（公開鍵）は OIDC の標準
-- **`alg: none` を絶対許可しない**。ライブラリの許可リスト設定を確認する
-- **Refresh Token** でアクセストークンを短命に保ち、漏れ時の被害を最小化する
-- **Web 単独はセッション Cookie**、API 呼び出しや OIDC では JWT が定石
+- **認証**（誰か） と **認可**（何ができるか） を区別する。OAuth は認可、OIDC は認証
+- **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準（Auth.js 等が内部で処理）
+- **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
+- **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
+- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
+- JWT の構造とセキュリティは「JWT の構造とセキュリティ」のレッスンで扱います

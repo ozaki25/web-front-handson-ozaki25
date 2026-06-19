@@ -227,7 +227,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q229",
-    lesson: "lesson105",
+    lesson: "lesson106",
     difficulty: "normal",
     question: "Core Web Vitals の 3 指標として正しい組み合わせはどれですか？",
     choices: [
@@ -241,7 +241,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q230",
-    lesson: "lesson105",
+    lesson: "lesson106",
     difficulty: "hard",
     question: "CLS（Cumulative Layout Shift）を改善するために最も効果的な対策はどれですか？",
     choices: [
@@ -255,7 +255,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q231",
-    lesson: "lesson106",
+    lesson: "lesson107",
     difficulty: "normal",
     question: "コード分割（Code Splitting）の主なメリットはどれですか？",
     choices: [
@@ -269,7 +269,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q232",
-    lesson: "lesson106",
+    lesson: "lesson107",
     difficulty: "hard",
     question: "React で重いコンポーネントを動的インポートし、`<Suspense>` と組み合わせて使う **標準的な書き方** はどれですか？",
     choices: [
@@ -283,7 +283,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q233",
-    lesson: "lesson107",
+    lesson: "lesson108",
     difficulty: "easy",
     question: "Web パフォーマンスにおいて画像を最適化する方法として正しいのはどれですか？",
     choices: [
@@ -297,7 +297,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q234",
-    lesson: "lesson107",
+    lesson: "lesson108",
     difficulty: "normal",
     question: "Web フォントの読み込みによる「FOUT（Flash of Unstyled Text）」をできるだけ短く抑える、最も一般的な対策はどれですか？",
     choices: [
@@ -311,7 +311,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q235",
-    lesson: "lesson108",
+    lesson: "lesson109",
     difficulty: "easy",
     question: "`package.json` の `scripts` フィールドに定義されたコマンドを実行するには何を使いますか？",
     choices: [
@@ -325,7 +325,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q236",
-    lesson: "lesson108",
+    lesson: "lesson109",
     difficulty: "normal",
     question: "`package.json` の `devDependencies` と `dependencies` の違いはどれですか？",
     choices: [
@@ -339,7 +339,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q237",
-    lesson: "lesson109",
+    lesson: "lesson110",
     difficulty: "easy",
     question: "JavaScript のパッケージマネージャーとして広く使われているツールはどれですか？",
     choices: [
@@ -353,7 +353,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q238",
-    lesson: "lesson109",
+    lesson: "lesson110",
     difficulty: "normal",
     question: "モジュールバンドラーの主な役割はどれですか？",
     choices: [
@@ -367,7 +367,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q239",
-    lesson: "lesson110",
+    lesson: "lesson111",
     difficulty: "normal",
     question: "Vite が開発サーバーを高速に起動できる主な理由はどれですか？",
     choices: [
@@ -381,7 +381,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q240",
-    lesson: "lesson110",
+    lesson: "lesson111",
     difficulty: "hard",
     question: "Vite 8 のビルドで使われる主要バンドラーはどれですか？",
     choices: [
@@ -395,7 +395,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q241",
-    lesson: "lesson111",
+    lesson: "lesson112",
     difficulty: "easy",
     question: "ESLint の主な役割はどれですか？",
     choices: [
@@ -409,7 +409,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q242",
-    lesson: "lesson111",
+    lesson: "lesson112",
     difficulty: "normal",
     question: "Biome がツールチェインとして提供するものはどれですか？",
     choices: [
@@ -423,7 +423,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q243",
-    lesson: "lesson112",
+    lesson: "lesson113",
     difficulty: "normal",
     question: "Rolldown が Rollup と比べて優れているとされる点はどれですか？",
     choices: [
@@ -437,7 +437,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q244",
-    lesson: "lesson112",
+    lesson: "lesson113",
     difficulty: "hard",
     question: "Turbopack が Next.js でデフォルトの開発サーバーになっている利点はどれですか？",
     choices: [
@@ -451,7 +451,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q245",
-    lesson: "lesson113",
+    lesson: "lesson114",
     difficulty: "easy",
     question: "Git でファイルの変更をステージングエリアに追加するコマンドはどれですか？",
     choices: [
@@ -465,7 +465,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q246",
-    lesson: "lesson113",
+    lesson: "lesson114",
     difficulty: "normal",
     question: "Git で新しいブランチを作成して、そのブランチに切り替えるコマンドはどれですか？",
     choices: [
@@ -479,7 +479,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q247",
-    lesson: "lesson114",
+    lesson: "lesson115",
     difficulty: "easy",
     question: "GitHub の Pull Request（PR）の主な目的はどれですか？",
     choices: [
@@ -493,7 +493,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q248",
-    lesson: "lesson114",
+    lesson: "lesson115",
     difficulty: "normal",
     question: "GitHub でコードレビュー中に「Request Changes」を選ぶとどうなりますか？",
     choices: [
@@ -507,7 +507,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q249",
-    lesson: "lesson115",
+    lesson: "lesson116",
     difficulty: "easy",
     question: "GitHub Actions のワークフローファイルを置く場所はどこですか？",
     choices: [
@@ -521,7 +521,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q250",
-    lesson: "lesson115",
+    lesson: "lesson116",
     difficulty: "normal",
     question: "GitHub Actions で PR への push 時にワークフローをトリガーするイベントはどれですか？",
     choices: [
@@ -535,7 +535,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q251",
-    lesson: "lesson116",
+    lesson: "lesson117",
     difficulty: "normal",
     question: "CI（Continuous Integration）の主な目的はどれですか？",
     choices: [
@@ -549,7 +549,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q252",
-    lesson: "lesson116",
+    lesson: "lesson117",
     difficulty: "hard",
     question: "CD（Continuous Delivery）と Continuous Deployment の違いはどれですか？",
     choices: [
@@ -563,7 +563,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q253",
-    lesson: "lesson117",
+    lesson: "lesson118",
     difficulty: "easy",
     question: "React Hook Form の `register` 関数の役割はどれですか？",
     choices: [
@@ -577,7 +577,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q254",
-    lesson: "lesson117",
+    lesson: "lesson118",
     difficulty: "normal",
     question: "React Hook Form が useState を使ったフォームより優れている点はどれですか？",
     choices: [
@@ -591,7 +591,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q255",
-    lesson: "lesson118",
+    lesson: "lesson119",
     difficulty: "easy",
     question: "Zod を使う主なメリットはどれですか？",
     choices: [
@@ -605,7 +605,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q256",
-    lesson: "lesson118",
+    lesson: "lesson119",
     difficulty: "normal",
     question: "Zod v4 で「1 文字以上のメールアドレス形式の文字列」を表すスキーマの推奨形はどれですか？",
     choices: [
@@ -619,7 +619,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q257",
-    lesson: "lesson119",
+    lesson: "lesson120",
     difficulty: "normal",
     question: "状態管理において「サーバーキャッシュ状態」の管理に最も適したライブラリはどれですか？",
     choices: [
@@ -633,7 +633,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q258",
-    lesson: "lesson119",
+    lesson: "lesson120",
     difficulty: "hard",
     question: "Zustand が Redux より「軽量」と言われる理由はどれですか？",
     choices: [
@@ -647,7 +647,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q259",
-    lesson: "lesson120",
+    lesson: "lesson121",
     difficulty: "normal",
     question: "TanStack Query の `useQuery` が提供する主な機能はどれですか？",
     choices: [
@@ -661,7 +661,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q260",
-    lesson: "lesson120",
+    lesson: "lesson121",
     difficulty: "hard",
     question: "TanStack Query でデータを変更（POST / PUT / DELETE）するために使うフックはどれですか？",
     choices: [
@@ -675,7 +675,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q261",
-    lesson: "lesson121",
+    lesson: "lesson122",
     difficulty: "normal",
     question: "Web Components の主な 3 技術として正しい組み合わせはどれですか？",
     choices: [
@@ -689,7 +689,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q262",
-    lesson: "lesson121",
+    lesson: "lesson122",
     difficulty: "hard",
     question: "Shadow DOM を使う主な目的はどれですか？",
     choices: [
@@ -703,7 +703,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q263",
-    lesson: "lesson122",
+    lesson: "lesson123",
     difficulty: "easy",
     question: "API キーなどの秘密情報を安全に管理する方法として正しいのはどれですか？",
     choices: [
@@ -717,7 +717,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q264",
-    lesson: "lesson122",
+    lesson: "lesson123",
     difficulty: "normal",
     question: "GitHub Actions でシークレットを安全に使う方法はどれですか？",
     choices: [
@@ -731,7 +731,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q265",
-    lesson: "lesson123",
+    lesson: "lesson124",
     difficulty: "normal",
     question: "フィーチャーフラグ（Feature Flag）を使う主な目的はどれですか？",
     choices: [
@@ -745,7 +745,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q266",
-    lesson: "lesson123",
+    lesson: "lesson124",
     difficulty: "hard",
     question: "フィーチャーフラグを使った「カナリアリリース」の説明として正しいのはどれですか？",
     choices: [
@@ -759,7 +759,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q267",
-    lesson: "lesson124",
+    lesson: "lesson125",
     difficulty: "normal",
     question: "Content-Security-Policy（CSP）の主な目的はどれですか？",
     choices: [
@@ -773,7 +773,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q268",
-    lesson: "lesson124",
+    lesson: "lesson125",
     difficulty: "hard",
     question: "`Content-Security-Policy: script-src 'self'` の意味はどれですか？",
     choices: [
@@ -787,7 +787,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q269",
-    lesson: "lesson125",
+    lesson: "lesson126",
     difficulty: "normal",
     question: "CORS（Cross-Origin Resource Sharing）のプリフライトリクエストが発生する条件はどれですか？",
     choices: [
@@ -801,7 +801,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q270",
-    lesson: "lesson125",
+    lesson: "lesson126",
     difficulty: "hard",
     question: "サーバーが `Access-Control-Allow-Origin: *` を返すとき、できないことはどれですか？",
     choices: [
@@ -815,7 +815,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q271",
-    lesson: "lesson126",
+    lesson: "lesson127",
     difficulty: "easy",
     question: "`npm audit` を実行する目的はどれですか？",
     choices: [
@@ -829,7 +829,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q272",
-    lesson: "lesson126",
+    lesson: "lesson127",
     difficulty: "normal",
     question: "GitHub Dependabot の役割はどれですか？",
     choices: [
@@ -843,7 +843,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q273",
-    lesson: "lesson127",
+    lesson: "lesson128",
     difficulty: "normal",
     question: "OAuth 2.0 の主な用途はどれですか？",
     choices: [
@@ -857,7 +857,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q274",
-    lesson: "lesson127",
+    lesson: "lesson128",
     difficulty: "hard",
     question: "OIDC（OpenID Connect）が OAuth 2.0 に追加するものはどれですか？",
     choices: [
@@ -871,7 +871,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q275",
-    lesson: "lesson128",
+    lesson: "lesson129",
     difficulty: "normal",
     question: "JWT（JSON Web Token）の構造として正しいのはどれですか？",
     choices: [
@@ -885,7 +885,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q276",
-    lesson: "lesson128",
+    lesson: "lesson129",
     difficulty: "hard",
     question: "JWT の Payload（クレーム）に含める情報として適切でないものはどれですか？",
     choices: [
@@ -899,7 +899,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q277",
-    lesson: "lesson129",
+    lesson: "lesson130",
     difficulty: "normal",
     question: "WebSocket と HTTP の主な違いはどれですか？",
     choices: [
@@ -913,7 +913,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q278",
-    lesson: "lesson129",
+    lesson: "lesson130",
     difficulty: "hard",
     question: "Server-Sent Events（SSE）と WebSocket の使い分けとして正しいのはどれですか？",
     choices: [
@@ -927,7 +927,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q279",
-    lesson: "lesson130",
+    lesson: "lesson131",
     difficulty: "normal",
     question: "GraphQL が REST と比べて優れている点はどれですか？",
     choices: [
@@ -941,7 +941,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q280",
-    lesson: "lesson130",
+    lesson: "lesson131",
     difficulty: "hard",
     question: "tRPC を使う主なメリットはどれですか？",
     choices: [
@@ -955,7 +955,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q281",
-    lesson: "lesson131",
+    lesson: "lesson132",
     difficulty: "normal",
     question: "Service Worker の主な役割はどれですか？",
     choices: [
@@ -969,7 +969,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q282",
-    lesson: "lesson131",
+    lesson: "lesson132",
     difficulty: "hard",
     question: "Service Worker の「Cache First」キャッシュ戦略の説明として正しいのはどれですか？",
     choices: [
@@ -983,7 +983,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q283",
-    lesson: "lesson132",
+    lesson: "lesson133",
     difficulty: "easy",
     question: "PWA（Progressive Web App）の Web App Manifest ファイルの主な役割はどれですか？",
     choices: [
@@ -997,7 +997,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q284",
-    lesson: "lesson132",
+    lesson: "lesson133",
     difficulty: "normal",
     question: "PWA がネイティブアプリに近い体験を提供できる理由として正しいのはどれですか？",
     choices: [
@@ -1011,7 +1011,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q285",
-    lesson: "lesson133",
+    lesson: "lesson134",
     difficulty: "easy",
     question: "IndexedDB と localStorage の主な違いはどれですか？",
     choices: [
@@ -1025,7 +1025,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q286",
-    lesson: "lesson133",
+    lesson: "lesson134",
     difficulty: "normal",
     question: "IndexedDB を操作するとき、`idb` などのライブラリを使う主な理由はどれですか？",
     choices: [
@@ -1039,7 +1039,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q287",
-    lesson: "lesson134",
+    lesson: "lesson135",
     difficulty: "easy",
     question: "Sentry のようなエラートラッキングツールを導入する主なメリットはどれですか？",
     choices: [
@@ -1053,7 +1053,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q288",
-    lesson: "lesson134",
+    lesson: "lesson135",
     difficulty: "normal",
     question: "Sentry でエラーが発生したときに「どのソースコードの何行目か」を特定するために必要なものはどれですか？",
     choices: [
@@ -1067,7 +1067,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q289",
-    lesson: "lesson135",
+    lesson: "lesson136",
     difficulty: "easy",
     question: "Web Analytics（アナリティクス）を導入する主な目的はどれですか？",
     choices: [
@@ -1081,7 +1081,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q290",
-    lesson: "lesson135",
+    lesson: "lesson136",
     difficulty: "normal",
     question: "Vercel Analytics が Google Analytics と異なる特徴はどれですか？",
     choices: [
@@ -1095,7 +1095,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q291",
-    lesson: "lesson136",
+    lesson: "lesson137",
     difficulty: "easy",
     question: "OGP（Open Graph Protocol）の `og:image` を設定すると何が変わりますか？",
     choices: [
@@ -1109,7 +1109,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q292",
-    lesson: "lesson136",
+    lesson: "lesson137",
     difficulty: "normal",
     question: "Next.js App Router で動的な OGP 画像を生成するために使えるものはどれですか？",
     choices: [
@@ -1123,7 +1123,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q293",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "easy",
     question: "Claude Code が提供する主な機能はどれですか？",
     choices: [
@@ -1137,7 +1137,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q294",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "normal",
     question: "MCP（Model Context Protocol）の主な目的はどれですか？",
     choices: [
@@ -1151,7 +1151,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q295",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "normal",
     question: "Claude Code の Hooks 機能の主な用途はどれですか？",
     choices: [
@@ -1165,7 +1165,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q296",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "hard",
     question: "AI と協調した開発において「CLAUDE.md」ファイルを置く目的はどれですか？",
     choices: [
@@ -1179,7 +1179,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q297",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "normal",
     question: "AI が生成したコードをそのままコミットすることのリスクとして正しいのはどれですか？",
     choices: [
@@ -1193,7 +1193,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q298",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "hard",
     question: "Claude Code の「カスタムスラッシュコマンド」の説明として正しいのはどれですか？",
     choices: [
@@ -1207,7 +1207,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q299",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "normal",
     question: "AI を使った開発で「コンテキストウィンドウ」を意識する理由はどれですか？",
     choices: [
@@ -1221,7 +1221,7 @@ export const chapter7: Quiz[] = [
   },
   {
     id: "q300",
-    lesson: "lesson137",
+    lesson: "lesson138",
     difficulty: "hard",
     question: "Claude Code の Sub-agent（サブエージェント）機能の主なメリットはどれですか？",
     choices: [

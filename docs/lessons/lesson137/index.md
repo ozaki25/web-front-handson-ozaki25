@@ -1,377 +1,498 @@
-# lesson137: AI を前提にした開発（Claude Code / MCP / Hooks / Skills）
+# lesson137: OGP と SEO 実践
 
 ## ゴール
 
-- Claude Code の主要な拡張機構（**MCP / Hooks / Skills / CLAUDE.md**）を説明できる
-- MCP の仕組み（transport / サーバー構成 / 設定）を把握する
-- Hooks でツール呼び出しの前後に任意のシェルコマンドを割り込ませられる
-- Skills（スラッシュコマンド）を作成・呼び出しできる
+- OGP（Open Graph）タグと Twitter Card で **シェアされた時の見栄え** を制御できる
+- Next.js の Metadata API で OGP を動的に生成できる
+- `sitemap.xml` と `robots.txt` の役割と Next.js での生成方法を知る
+- JSON-LD（構造化データ）でリッチリザルトを狙える
+- Google Search Console の使い方が分かる
 
 ## 解説
 
-### コンテキストを渡す仕組み: `CLAUDE.md`
+### OGP（Open Graph Protocol）
 
-リポジトリのルートに置く `CLAUDE.md` は、プロジェクトの方針を Claude に伝える定型ファイルです。「読んでいないと分からないこと」を書きます。
+Twitter（X）/ Facebook / LINE / Slack / Discord などで URL を共有した時、**タイトル + 説明 + 画像** がカード形式で表示されます。これを制御するのが OGP です。
 
-```markdown
-# CLAUDE.md
+```html
+<head>
+  <title>記事のタイトル</title>
+  <meta property="og:title" content="記事のタイトル" />
+  <meta property="og:description" content="この記事は OGP の使い方について書きます" />
+  <meta property="og:image" content="https://example.com/og.png" />
+  <meta property="og:url" content="https://example.com/post/1" />
+  <meta property="og:type" content="article" />
+  <meta property="og:site_name" content="My Blog" />
 
-## プロジェクト概要
-- Next.js 16 (App Router) + TypeScript strict
-- パッケージマネージャ: pnpm
-
-## コーディング規約
-- React Server Components を優先
-- `any` は禁止
-- API は tRPC（公開 API は OpenAPI）
-
-## してはいけない
-- グローバル CSS の追加
-- `git push --force` を main に
-- `useMemo` の手動記述（React Compiler に任せる）
+  <meta name="twitter:card" content="summary_large_image" />
+  <meta name="twitter:site" content="@my_handle" />
+</head>
 ```
 
-他のツールにも同等のファイルがあります:
+ポイント:
 
-- **`.cursor/rules/`**: Cursor 用（YAML / Markdown 形式）
-- **`.github/copilot-instructions.md`**: GitHub Copilot 用
+- `og:image` は **絶対 URL** を渡す（相対パスは効かない）
+- 画像サイズは **1200 x 630px** が推奨（Twitter / Facebook 共通）
+- `og:type` は `website` / `article` / `book` / `profile` などから選ぶ
+- Twitter Card は OGP を補完する。`summary_large_image` で大きく表示
 
-プロンプトの巧拙よりも、AI に渡すコンテキストの質が結果を大きく左右します。
+### Next.js の Metadata API（おさらい + 発展）
 
----
-
-### MCP（Model Context Protocol）
-
-[MCP](https://modelcontextprotocol.io/) は Anthropic が公開した「**AI に外部ツールを繋ぐ標準プロトコル**」です。OpenAI / Google などが採用し、2025〜2026 年で共通規格として定着しました。
-
-#### 全体構造
-
-```
-[ Claude Code / Cursor / VS Code Copilot ]
-          ↕ MCP プロトコル
-  [ MCP サーバー（外部システムごとに 1 つ）]
-          ↕
-    [ GitHub / Slack / Datadog / 自社 DB / API ]
-```
-
-Claude Code などのクライアントと外部システムの間に **MCP サーバーが橋渡し** します。クライアント側は「どんな外部システムか」を知らず、MCP の API だけを呼びます。
-
-#### MCP が提供するもの
-
-| 種類 | 内容 |
-|---|---|
-| **Tools** | 外部サービスを呼ぶ関数（例: `github__create_pull_request`） |
-| **Resources** | コンテキストとして読み込めるデータ（ファイル / DB 行） |
-| **Prompts** | 再利用可能なプロンプトテンプレート |
-
-#### transport（通信方式）
-
-| transport | 起動形態 | 向いている用途 |
-|---|---|---|
-| **stdio** | クライアントが `npm exec` や `uvx` で子プロセスとして起動 | ローカル完結のツール（ファイルシステム / Git / DB） |
-| **Streamable HTTP** | HTTP サーバーとして常駐 | リモート API・複数クライアントで共有するサーバー |
-
-stdio が最も単純で「コマンドを叩くと JSON を返す」だけの実装で済みます。
-
-#### 設定ファイル: `settings.json`（Claude Code）
-
-Claude Code では `~/.claude/settings.json`（グローバル）またはプロジェクト直下の `.claude/settings.json`（ローカル）に MCP サーバーを登録します。
-
-```json
-{
-  "mcpServers": {
-    "github": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-github"],
-      "env": {
-        "GITHUB_PERSONAL_ACCESS_TOKEN": "ghp_..."
-      }
-    },
-    "filesystem": {
-      "type": "stdio",
-      "command": "npx",
-      "args": ["-y", "@modelcontextprotocol/server-filesystem", "/home/user/projects"]
-    }
-  }
-}
-```
-
-#### 設定ファイル: `claude_desktop_config.json`（Claude Desktop）
-
-デスクトップアプリ版は `~/Library/Application Support/Claude/claude_desktop_config.json`（macOS）に書きます。フォーマットは Claude Code と同じです。
-
-#### MCP サーバーを自作する
-
-最小の stdio MCP サーバーは Node.js で次のように書けます。
+**Metadata API のレッスン** で `metadata` を export する書き方を扱いました。OGP も同じ仕組みで書けます。
 
 ```ts
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { z } from "zod";
+// app/blog/[slug]/page.tsx
+import type { Metadata } from "next";
 
-const server = new McpServer({ name: "my-server", version: "1.0.0" });
+type Props = { params: Promise<{ slug: string }> };
 
-server.tool(
-  "get_weather",
-  "現在の天気を取得する",
-  { city: z.string() },
-  async ({ city }) => ({
-    content: [{ type: "text", text: `${city} は晴れです` }],
-  }),
-);
-
-const transport = new StdioServerTransport();
-await server.connect(transport);
-```
-
-Claude Code がこの MCP サーバーを使えるように `settings.json` に登録します。以降、`get_weather` ツールを自然言語で呼べるようになります。
-
----
-
-### Hooks（フック）
-
-Hooks は **Claude Code のイベントに合わせてシェルコマンドを実行する** 仕組みです。
-
-#### Hooks の種類
-
-| イベント名 | タイミング |
-|---|---|
-| `PreToolUse` | Claude がツール（Bash / Edit / Write 等）を呼ぶ **直前** |
-| `PostToolUse` | ツールが完了した **直後** |
-| `Stop` | Claude が応答を終えた時 |
-| `Notification` | Claude Code からの通知イベント |
-| `SessionStart` | セッションが開始した時 |
-| `SubagentStop` | サブエージェントが停止した時 |
-
-#### 設定（`settings.json`）
-
-```json
-{
-  "hooks": {
-    "PostToolUse": [
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "echo 'Bash tool used' >> /tmp/claude.log"
-          }
-        ]
-      }
-    ],
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/my-stop-hook.sh"
-          }
-        ]
-      }
-    ]
-  }
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { slug } = await params;
+  const post = await getPost(slug);
+  return {
+    title: post.title,
+    description: post.excerpt,
+    openGraph: {
+      title: post.title,
+      description: post.excerpt,
+      url: `https://example.com/blog/${slug}`,
+      siteName: "My Blog",
+      images: [
+        {
+          url: post.coverImage,
+          width: 1200,
+          height: 630,
+          alt: post.title,
+        },
+      ],
+      type: "article",
+      publishedTime: post.publishedAt,
+    },
+    twitter: {
+      card: "summary_large_image",
+      title: post.title,
+      description: post.excerpt,
+      images: [post.coverImage],
+      creator: "@my_handle",
+    },
+  };
 }
 ```
 
-`matcher` にツール名や正規表現を指定してフィルタリングできます。
+### `metadataBase` を必ず指定
 
-#### Hooks のユースケース
+OGP の画像 URL を相対パスで書きたい時は、**ルートで `metadataBase`** を指定します。
 
-- **コミット漏れ検知**: Stop フックで `git status` を走らせ、未コミットがあれば Claude に通知
-- **フォーマット自動適用**: PostToolUse(Edit) で `prettier --write` を実行
-- **セキュリティチェック**: PreToolUse(Bash) で危険なコマンドを検出してブロック
-- **ログ収集**: 各ツール呼び出しを監査ログに記録
-
-PreToolUse フックでツール呼び出しをブロックする **正式な方法** は、stdout に `{"hookSpecificOutput": {"permissionDecision": "deny", ...}}` の JSON を返すことです（`allow` / `deny` / `ask` の 3 値）。簡易的には **exit code `2`** で stderr に出したメッセージを Claude に渡してブロックする書き方も使えます（PreToolUse 系イベント全般で動きます）。exit code `1` はエラー通知のみで、ブロックはしません。
-
----
-
-### カスタムスラッシュコマンドと Skills
-
-Claude Code には、繰り返し作業を自動化する 2 つの仕組みがあります。
-
-#### カスタムスラッシュコマンド（`.claude/commands/`）
-
-`.claude/commands/` ディレクトリに Markdown ファイルを置くと、ユーザーが **`/コマンド名` と入力して手動で呼び出せる** コマンドになります。
-
-```
-.claude/
-└── commands/
-    ├── review-curriculum.md   → /review-curriculum
-    ├── new-lesson.md          → /new-lesson
-    └── renumber-lessons.md    → /renumber-lessons
+```ts
+// app/layout.tsx
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+};
 ```
 
-ファイルの構造:
+これがないと相対パスが効かず、開発時のローカル URL（`http://localhost:3000`）が混入する事故が起きます。
 
-```markdown
----
-description: このコマンドが何をするかの 1 行説明
----
+### 動的 OGP 画像（`opengraph-image.tsx`）
 
-# コマンドのタイトル
+Next.js 13.3+ から、**ファイルベースで OGP 画像を生成** できます。
 
-引数: `$ARGUMENTS`
+```tsx
+// app/blog/[slug]/opengraph-image.tsx
+import { ImageResponse } from "next/og";
 
-## 手順
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
 
-1. やること 1
-2. やること 2
+export default async function OG({ params }: { params: Promise<{ slug: string }> }) {
+  const { slug } = await params;
+  const post = await getPost(slug);
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          flexDirection: "column",
+          justifyContent: "center",
+          padding: 60,
+          background: "linear-gradient(135deg, #1e3a8a, #06b6d4)",
+          color: "white",
+        }}
+      >
+        <div style={{ fontSize: 64, fontWeight: 700 }}>{post.title}</div>
+        <div style={{ fontSize: 32, marginTop: 24, opacity: 0.85 }}>
+          {post.excerpt}
+        </div>
+      </div>
+    ),
+    { ...size },
+  );
+}
 ```
 
-`$ARGUMENTS` プレースホルダーに呼び出し時の引数が入ります。
+これで **記事ごとに違う OGP 画像** が自動生成されます。Vercel 上では Edge Runtime で動くので軽量に処理されます。
 
+### `sitemap.xml`
+
+検索エンジンに「**このサイトにこういう URL があるよ**」と教えるファイル。Google は基本クロールで見つけてくれますが、**サイトが大きい / 内部リンクが少ない** 場合は sitemap が大事です。
+
+#### Next.js の `app/sitemap.ts`
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
+  const posts = await getAllPosts();
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "daily",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+    ...posts.map((p) => ({
+      url: `https://example.com/blog/${p.slug}`,
+      lastModified: p.updatedAt,
+      changeFrequency: "weekly" as const,
+      priority: 0.7,
+    })),
+  ];
+}
 ```
-/review-curriculum docs/lessons/lesson83/index.md
-→ $ARGUMENTS = "docs/lessons/lesson83/index.md"
+
+ビルド時に `/sitemap.xml` が自動生成されます。
+
+#### 巨大サイトでは分割
+
+URL が 50,000 件 / 50MB を超える場合は **sitemap index** に分割します。Next.js では `app/sitemap.ts` を `[id]/sitemap.ts` 配列で複数 export することで対応できます。
+
+### `robots.txt`
+
+クローラーへ指示を出すファイルです。`/admin` などをクロールから除外します。
+
+#### Next.js の `app/robots.ts`
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [
+      {
+        userAgent: "*",
+        allow: "/",
+        disallow: ["/admin/", "/api/"],
+      },
+    ],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
 ```
 
-#### Skills（`.claude/skills/<name>/SKILL.md`）
+ビルドで `/robots.txt` が自動生成されます。
 
-Skills は Claude Code が **自動的に発見**し、必要に応じて自律的に呼び出せる再利用可能なプロンプトです。スラッシュコマンドと異なり、ユーザーが明示的に起動しなくても Claude がタスクに応じて選択・実行できます。
+::: warning robots.txt は「お願い」
+robots.txt は **善意のクローラーが従う** だけで、強制力はありません。本当に隠したい URL は **認証で守る** / **`X-Robots-Tag: noindex` ヘッダ** / **`<meta name="robots" content="noindex">`** を使います。
+:::
 
+### 構造化データ（JSON-LD）
+
+検索結果に **リッチリザルト**（評価星 / レシピ写真 / FAQ アコーディオンなど）を出すための仕組みです。Schema.org のスキーマを **JSON-LD** で埋め込みます。
+
+#### 記事（Article）
+
+```tsx
+// app/blog/[slug]/page.tsx
+export default async function Page({ params }: Props) {
+  const { slug } = await params;
+  const post = await getPost(slug);
+
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "Article",
+    headline: post.title,
+    description: post.excerpt,
+    image: post.coverImage,
+    datePublished: post.publishedAt,
+    dateModified: post.updatedAt,
+    author: { "@type": "Person", name: post.author },
+  };
+
+  return (
+    <article>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>{post.title}</h1>
+      {/* ... */}
+    </article>
+  );
+}
 ```
-.claude/
-└── skills/
-    └── my-skill/
-        └── SKILL.md   ← 自動 discover される
+
+#### よく使うスキーマ
+
+| `@type` | 用途 |
+|---|---|
+| `Article` / `BlogPosting` / `NewsArticle` | 記事 |
+| `Product` | EC 商品（価格 / 在庫） |
+| `Recipe` | レシピ |
+| `FAQPage` | よくある質問（手風琴 UI で出る） |
+| `Organization` | 会社情報 |
+| `BreadcrumbList` | パンくず |
+
+#### 検証
+
+[Google リッチリザルトテスト](https://search.google.com/test/rich-results) で URL を入れると、認識される構造化データが見られます。
+
+### Google Search Console
+
+「Google の目線で自分のサイトがどう見えているか」を確認できるツールです。
+
+#### できること
+
+- どの検索クエリで何位に出ているか
+- どのページがインデックスされているか / エラーがあるか
+- Core Web Vitals の実フィールドデータ
+- `sitemap.xml` の登録 / クロール状況確認
+- モバイルユーザビリティの問題検出
+
+#### 設定
+
+1. Search Console にプロパティを追加（ドメインまたは URL プレフィックス）
+2. 所有権の確認（DNS TXT レコード / HTML タグ / Google Analytics アカウント連携）
+3. **`sitemap.xml` を登録**
+4. 数日待つとデータが集まり始める
+
+### canonical URL
+
+「同じ内容のページが複数 URL で見える」場合、検索エンジンに **正規 URL** を伝えるのが `<link rel="canonical">` です。
+
+```ts
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/blog/post-1",
+  },
+};
 ```
 
-`SKILL.md` の **YAML frontmatter** は次の形を取ります。`description` が **起動条件のキー** で、ここにユーザーが実際に言いそうなフレーズを具体的に並べておくと、Claude が「このスキルを使うべき場面」を正しく認識できます。曖昧な説明（例: 「フックの開発を支援します」）にすると一切起動しないことがあるので注意します。
+クエリパラメータ違い / 大文字小文字違いで重複インデックスされないように設定します。
 
-```yaml
----
-name: Hook Management Skill
-description: This skill should be used when the user asks to "create a hook", "add a PreToolUse hook", "validate tool use", or mentions hook events (PreToolUse, PostToolUse, Stop).
----
+### hreflang（多言語サイト）
+
+同じコンテンツを複数言語で出す場合に使う指定です。
+
+```ts
+export const metadata: Metadata = {
+  alternates: {
+    canonical: "https://example.com/en/about",
+    languages: {
+      "en": "https://example.com/en/about",
+      "ja": "https://example.com/ja/about",
+      "x-default": "https://example.com/en/about",
+    },
+  },
+};
 ```
 
-#### ユースケース
+これがあると Google が「英語ユーザーには英語版、日本語ユーザーには日本語版」を出してくれます。
 
-- **コードレビュー**: `/review` でリポジトリを特定の観点でレビュー
-- **ドキュメント生成**: `/gen-docs` でファイルから README を自動生成
-- **テスト追加**: `/add-tests` でカバレッジが低いファイルにテストを追加
-- **定型作業**: `/deploy` でデプロイ手順を自動実行
+### Core Web Vitals と SEO
 
-このコースの執筆プロセスでは `/review-curriculum`・`/new-lesson`・`/renumber-lessons` の 3 つを活用しています（実装は `.claude/commands/` を参照）。
+Google は **Core Web Vitals**（**パフォーマンス計測のレッスン**で扱う指標）を **ランキング要因** に組み込んでいます。LCP / INP / CLS が悪いと検索順位が下がる可能性があるので、**SEO は速度と切り離せません**。
+
+### よくある事故
+
+- `og:image` が **相対パス** で実体が読めない → `metadataBase` を設定する
+- `noindex` を本番に持ち込んでしまう → 環境変数で制御する習慣を
+- `sitemap.xml` に **404 の URL** が残る → 動的生成にする
+- 構造化データにスキーマと合わない値を入れる → リッチリザルトテストで検証
+- `canonical` が **自分自身を指していない** → 正しい URL に揃える
 
 ## 演習
 
 ### ゴール
 
-- `CLAUDE.md` を書いてプロジェクトの方針を AI に伝えられる
-- カスタムスラッシュコマンドを 1 つ作り `/コマンド名` で呼び出せる
-- Stop フックを追加して未コミット変更を検知できる
+- Next.js プロジェクトに OGP / sitemap / robots / JSON-LD を一通り入れる
+- リッチリザルトテストで構造化データが認識されるところまで持っていく
 
-### 手順 1: プロジェクトを用意する
-
-これまでのレッスンで作成した Next.js プロジェクト、または新規プロジェクトを使います。
+### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest ai-dev-sample --ts --app --no-eslint --no-tailwind
-cd ai-dev-sample
+npx create-next-app@latest seo-sample --ts --app
+cd seo-sample
 ```
 
-### 手順 2: `CLAUDE.md` を書く
+### 手順 2: ルートに metadataBase と OGP
 
-プロジェクト直下に `CLAUDE.md` を作成します。
+`app/layout.tsx`:
 
-```markdown
-# CLAUDE.md
+```tsx
+import type { Metadata } from "next";
 
-## プロジェクト概要
-- Next.js (App Router) + TypeScript
-- パッケージマネージャ: npm
+export const metadata: Metadata = {
+  metadataBase: new URL("https://example.com"),
+  title: { default: "Demo Blog", template: "%s | Demo Blog" },
+  description: "Next.js Metadata API の演習",
+  openGraph: {
+    type: "website",
+    siteName: "Demo Blog",
+    locale: "ja_JP",
+  },
+  twitter: { card: "summary_large_image" },
+};
 
-## コーディング規約
-- React Server Components を優先する
-- `any` は使わない
-- コンポーネントは `app/` 以下に配置する
-
-## してはいけない
-- `git push --force` を main に
-- `console.log` を本番コードに残す
-```
-
-Claude Code でこのプロジェクトを開くと、`CLAUDE.md` が自動で読み込まれ、コンテキストとして使われます。
-
-### 手順 3: カスタムスラッシュコマンドを作る
-
-`.claude/commands/` ディレクトリを作り、`check-types.md` を追加します。
-
-```bash
-mkdir -p .claude/commands
-```
-
-`.claude/commands/check-types.md`:
-
-```markdown
----
-description: TypeScript の型チェックを実行してエラーを報告する
----
-
-# 型チェック実行
-
-以下のコマンドを実行して TypeScript のエラーを確認し、エラーがあれば一覧で報告してください。
-
-\`\`\`bash
-npx tsc --noEmit
-\`\`\`
-
-エラーがなければ「型エラーなし」と報告してください。
-```
-
-Claude Code で `/check-types` と入力すると、このプロンプトが実行されます。
-
-### 手順 4: Stop フックを追加する
-
-`.claude/settings.json` を作成します（既にある場合は `hooks` キーを追加）。
-
-`.claude/settings.json`:
-
-```json
-{
-  "hooks": {
-    "Stop": [
-      {
-        "hooks": [
-          {
-            "type": "command",
-            "command": "if [ -n \"$(git status --porcelain 2>/dev/null)\" ]; then echo '{\"systemMessage\": \"未コミットの変更があります。コミットを忘れずに。\"}'; fi"
-          }
-        ]
-      }
-    ]
-  }
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return <html lang="ja"><body>{children}</body></html>;
 }
 ```
 
+### 手順 3: 動的 OGP 画像
+
+`app/opengraph-image.tsx`:
+
+```tsx
+import { ImageResponse } from "next/og";
+
+export const size = { width: 1200, height: 630 };
+export const contentType = "image/png";
+
+export default function OG() {
+  return new ImageResponse(
+    (
+      <div
+        style={{
+          fontSize: 64,
+          background: "linear-gradient(135deg,#1e3a8a,#06b6d4)",
+          color: "white",
+          width: "100%",
+          height: "100%",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+        }}
+      >
+        Demo Blog
+      </div>
+    ),
+    { ...size },
+  );
+}
+```
+
+### 手順 4: sitemap と robots
+
+`app/sitemap.ts`:
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function sitemap(): MetadataRoute.Sitemap {
+  return [
+    {
+      url: "https://example.com",
+      lastModified: new Date(),
+      changeFrequency: "weekly",
+      priority: 1,
+    },
+    {
+      url: "https://example.com/about",
+      lastModified: new Date(),
+      changeFrequency: "monthly",
+      priority: 0.5,
+    },
+  ];
+}
+```
+
+`app/robots.ts`:
+
+```ts
+import type { MetadataRoute } from "next";
+
+export default function robots(): MetadataRoute.Robots {
+  return {
+    rules: [{ userAgent: "*", allow: "/", disallow: "/admin/" }],
+    sitemap: "https://example.com/sitemap.xml",
+  };
+}
+```
+
+### 手順 5: JSON-LD
+
+`app/page.tsx`:
+
+```tsx
+export default function Home() {
+  const jsonLd = {
+    "@context": "https://schema.org",
+    "@type": "WebSite",
+    name: "Demo Blog",
+    url: "https://example.com",
+  };
+
+  return (
+    <main style={{ padding: 24 }}>
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
+      />
+      <h1>Demo Blog</h1>
+      <p>SEO 演習</p>
+    </main>
+  );
+}
+```
+
+### 手順 6: 確認
+
+```bash
+npm run dev
+```
+
+ブラウザで以下にアクセス:
+
+- `http://localhost:3000/sitemap.xml` → XML が出る
+- `http://localhost:3000/robots.txt` → robots テキストが出る
+- `http://localhost:3000/opengraph-image` → 画像が出る
+- ページのソースを表示すると `<meta property="og:image" content="..." />` や `<script type="application/ld+json">` が含まれている
+
 ### 期待出力
 
-- `/check-types` と入力すると `npx tsc --noEmit` が実行され、型エラーの有無が報告される
-- Claude が応答を終えた後、未コミットの変更があれば「未コミットの変更があります」と通知が出る
+| パス | 内容 |
+|---|---|
+| `/sitemap.xml` | 2 URL を含む sitemap |
+| `/robots.txt` | `Disallow: /admin/` を含む |
+| `/opengraph-image` | 1200x630 の PNG |
+| ページソース | OGP / Twitter Card / JSON-LD のタグが入る |
 
 ### 変える
 
-- `PreToolUse` フックで `Bash` ツール呼び出しのたびにコマンドをログに記録する
-- Stop フックの条件を変えて「`main` ブランチへの直接コミットを検知して警告する」を実装する
+- `app/blog/[slug]/page.tsx` を作って `generateMetadata` で記事ごとに OGP を変える
+- 動的 OGP 画像で記事タイトルを反映する
+- JSON-LD を `Article` に変えて、リッチリザルトテストで認識されるか試す
 
-### 自分で書く
+### 自分で書く（任意）
 
-- このコースを通じて作ってきた Next.js アプリに `CLAUDE.md` を追加し、自分のコーディング規約・禁止事項を書く
-- よく繰り返す作業（テスト実行・Lint 修正・デプロイ確認）をスラッシュコマンドにまとめる
+- `BreadcrumbList` の JSON-LD を作って、検索結果のパンくずを狙う
+- `FAQPage` を作って、よくある質問アコーディオンの表示を狙う
+- 多言語サイトを `hreflang` で構成し、Search Console で確認する
 
 ## まとめ
 
-- **CLAUDE.md** はプロジェクトのルール・規約を AI に伝える最も効果的な手段
-- **MCP** は「AI と外部システムを繋ぐ標準プロトコル」。stdio（子プロセス）と Streamable HTTP（常駐サーバー）の 2 種類の transport がある
-- MCP サーバーは **Tools / Resources / Prompts** の 3 種を提供できる
-- **Hooks** は Claude Code のイベント（PreToolUse / PostToolUse / Stop など）に合わせてシェルコマンドを実行する仕組み。フォーマット自動化・セキュリティチェック・ログ収集に使う
-- **カスタムスラッシュコマンド**は `.claude/commands/*.md` に Markdown を置くだけで `/コマンド名` で手動呼び出せる。**Skills** は `.claude/skills/<name>/SKILL.md` に置くと Claude が自動 discover して自律的に選択・実行できる
-
----
-
-::: tip この章のドリルで力試し
-[7 章「実務で使う周辺知識」のドリル →](/quiz/chapter7/) で、4 択問題で理解度を確認できます。回答履歴はブラウザに保存されるので、途中で閉じても続きから再開できます。
-:::
+- **OGP / Twitter Card** で SNS シェア時の見栄えを制御。`og:image` は **絶対 URL / 1200x630**
+- Next.js は **Metadata API** に OGP / Twitter Card / canonical / hreflang が揃っている
+- **`metadataBase`** を必ず設定する（相対パス事故防止）
+- `app/opengraph-image.tsx` で **動的 OGP 画像** を JSX で生成
+- `app/sitemap.ts` / `app/robots.ts` でファイルベースに `sitemap.xml` / `robots.txt` を生成
+- **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
+- **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
+- Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない

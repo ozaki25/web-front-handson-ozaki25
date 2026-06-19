@@ -1,150 +1,431 @@
-# lesson109: フロントエンドツールの全体像と歴史
+# lesson109: package.json と npm スクリプト
 
 ## ゴール
 
-- フロントエンドのビルド系ツールを **5 つの役割** で分類できる
-- なぜツールがこんなに多いのか、世代交代の流れを説明できる
-- 2026 年時点のデファクトを役割ごとに 1 つずつ挙げられる
-- なぜ Rust / Go 製のツールが増えているかを理解する
+- `dependencies` / `devDependencies` / `peerDependencies` の違いを言える
+- セマンティックバージョニング（`^` / `~` / 固定）の意味を読める
+- `package-lock.json` がなぜ必要か説明できる
+- npm / pnpm / yarn / Bun の違いを把握する
+- `scripts` の書き方と `npm run` の仕組みを理解する
 
 ## 解説
 
-### 道具が多すぎる問題
+### `package.json` はプロジェクトの「目次」
 
-現代の `package.json` を開くと、`devDependencies` に 20〜30 個のパッケージが並びます。Vite / TypeScript / ESLint / Prettier / Vitest / Playwright / SWC / Babel / esbuild / ... と覚えきれない量です。
+Node.js / フロントのプロジェクトには必ず `package.json` があります。役割は次の 4 つ。
 
-この章では次のレッスン以降で個別ツールを深掘りしますが、その前に「**何をするツールがあるか**」「**なぜこれだけ種類があるか**」の見取り図を共有します。
+1. **メタ情報**（プロジェクト名 / バージョン / 作者など）
+2. **依存パッケージ** の宣言
+3. **スクリプト** の登録（`npm run dev` など）
+4. **ツール設定** の置き場（lint-staged / browserslist / 各種 CLI の設定）
 
-### 役割別: 5 つのカテゴリ
+最小例:
 
-ほとんどのツールは次の 5 つのどれかに分類できます。
+```json
+{
+  "name": "my-app",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "vite": "^8.0.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^6.0.0"
+  }
+}
+```
 
-| 役割 | 何をする | 代表ツール |
+### 依存の 3 つの種類
+
+#### `dependencies`
+
+「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要がある。
+
+#### `devDependencies`
+
+「**開発時だけ必要** な依存」。`typescript` / `vite` / `eslint` / `vitest` など、ビルド済みコードを動かすには不要なもの。本番のサーバーで `npm install --omit=dev` すると **dev は入らず、容量が減る** メリットがあります。
+
+#### `peerDependencies`
+
+「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言する。
+
+例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示。
+
+普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
+
+#### `optionalDependencies` / `bundledDependencies`
+
+たまに見かけますが、めったに使いません。`optionalDependencies` は「入らなくても続行」、`bundledDependencies` は「自分のパッケージに同梱」。
+
+### セマンティックバージョニング（semver）
+
+`react: ^19.2.0` の数字は **3 つに区切られた意味** を持ちます。
+
+```
+19.2.0
+│ │ │
+│ │ └── PATCH（バグ修正）
+│ └──── MINOR（後方互換のある機能追加）
+└────── MAJOR（破壊的変更）
+```
+
+ルール:
+
+- **PATCH を上げる** → 既存のコードは動き続けるはず
+- **MINOR を上げる** → 既存のコードは動き、新機能が増える
+- **MAJOR を上げる** → 既存のコードが動かなくなる可能性あり
+
+#### 範囲指定の記号
+
+| 書き方 | 意味 | 例: `^1.2.3` の許容範囲 |
 |---|---|---|
-| **モジュールバンドラ** | 多数の JS / CSS / 画像をブラウザが読める形にまとめる | webpack / Rollup / esbuild / Vite / Turbopack / Rspack / Rolldown |
-| **トランスパイラ** | TS → JS、JSX → JS、新しい構文 → 古い構文 | Babel / TypeScript / SWC / Oxc |
-| **リンター** | コードの「臭い」を検出（バグの種・アンチパターン） | ESLint / Biome / oxlint |
-| **フォーマッタ** | コードのスタイルを揃える（インデント・改行など） | Prettier / Biome / dprint |
-| **テストランナー** | テストを実行する | Jest / Vitest / Playwright |
+| `^1.2.3` | MAJOR は固定。MINOR / PATCH は上げて OK | `>= 1.2.3 < 2.0.0` |
+| `~1.2.3` | MINOR も固定。PATCH のみ上げて OK | `>= 1.2.3 < 1.3.0` |
+| `1.2.3` | 完全固定 | `1.2.3` のみ |
+| `>=1.2.3` | これ以上 | `1.2.3` 以降すべて |
+| `1.x` / `1.*` | MAJOR だけ固定 | `>= 1.0.0 < 2.0.0` |
 
-これに加えて、**開発サーバー**（Vite dev server / webpack-dev-server）と **パッケージマネージャ**（npm / pnpm / yarn / Bun）も道具です。
+新規プロジェクトのデフォルトは `^` が使われます。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
 
-ややこしいのは、1 つのツールが **複数の役割を兼ねる** ことです。Vite はバンドラだが内部で Rolldown / Oxc を使ってトランスパイルもする（Vite 8 以前は esbuild）。Biome はリンタとフォーマッタを兼ねる。Oxc は将来的にバンドラ以外のすべてを統合する目標を持っています。
+ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用も。
 
-### 歴史: 4 つの世代
+### `package-lock.json` の役割
 
-なぜこれだけ種類が増えたかは、**世代を追うと整理しやすい** です。
+`package.json` に `^19.2.0` と書いてあっても、**実際にインストールされる版は `npm install` 実行時の最新** です。チームで開発していると「**人によって入る版が違う**」事態が起きます。
 
-#### 第 0 世代: 〜2014 年「ツール以前」
+`package-lock.json` は「**実際に入った全パッケージの正確なバージョン**」を記録するファイル。
 
-JS は `<script>` タグで読み込み、CSS は `<link>` で読み込むだけでした。複数ファイルを連結したければ `cat a.js b.js > bundle.js` のような手作業で済ませていました。
+```json
+// package-lock.json の中身（抜粋）
+{
+  "node_modules/react": {
+    "version": "19.2.0",
+    "resolved": "https://registry.npmjs.org/react/-/react-19.2.0.tgz",
+    "integrity": "sha512-..."
+  }
+}
+```
 
-- **Grunt**（2012）/ **Gulp**（2013）: タスクランナー。「concat → minify → upload」の手順を自動化
-- **Browserify**（2011）: Node.js の `require()` をブラウザでも動かす最初のバンドラ
+これにより:
 
-#### 第 1 世代: 2015〜2019 年「webpack + Babel」
+- **再現可能なインストール** が保証される
+- 直接の依存だけでなく、**間接の依存**（dependency の dependency） まで固定される
+- セキュリティ的にも `integrity` でファイルの完全性が確認される
 
-ES2015 の登場で言語が大きく変わり、ブラウザ対応がバラバラになり、トランスパイルが必須に。
+ルール:
 
-- **webpack**（2014〜）: `import` を解決し、CSS / 画像も「モジュール」として扱う。コード分割もできる
-- **Babel**（2014〜）: ES2015+ を ES5 に変換。JSX も Babel が変換
-- **Rollup**（2015〜）: ライブラリ向けのバンドラ。tree-shaking の概念を広めた
-- **Parcel**（2017〜）: 設定ゼロを売りに
+- **`package-lock.json` は必ず Git にコミット** する
+- 競合が起きたら片側を採用して `npm install` を再実行する（手動マージはしない）
+- pnpm なら `pnpm-lock.yaml`、yarn なら `yarn.lock`、Bun なら `bun.lock`（旧 `bun.lockb`）が同じ役割
 
-webpack + Babel が圧倒的な標準になった時代です。代わりに `webpack.config.js` が数百行に膨らみ、ビルドが分単位で遅くなる問題が表面化しました。
+### npm / pnpm / yarn / Bun
 
-#### 第 2 世代: 2020〜2022 年「ESM + ネイティブ速度」
+2026 年の選択肢は 4 つ。それぞれ「**仕事は同じだが内部の効率と機能が違う**」と理解します。
 
-ブラウザの ESM サポートが普及し、「開発時はバンドルしない」選択肢が現実的に。さらに JS 製ツールの遅さを Go / Rust で解決する流れが始まりました。
+| | 速度 | ディスク効率 | 安定性 | モノレポ |
+|---|---|---|---|---|
+| npm | 標準 | 普通 | 抜群 | workspaces 対応 |
+| pnpm | 速い | **抜群**（ハードリンク共有） | 抜群 | workspaces 対応 |
+| yarn (v4 / Berry) | 速い | 普通〜良 | 良 | workspaces 対応 |
+| Bun | **最速** | 良 | 改善中 | workspaces 対応 |
 
-- **esbuild**（2020〜）: Go 製。webpack より 10〜100 倍速いトランスパイラ + バンドラ
-- **Vite**（2020〜）: 開発時は ESM のまま配信、本番ビルドは Rollup。トランスパイルは esbuild で
-- **SWC**（2020〜）: Rust 製のトランスパイラ。Babel の代替として Next.js が採用
-- **Rome**（2020〜）→ **Biome**（2023〜）: ESLint + Prettier を 1 つに統合する試み
+#### pnpm の利点
 
-「ビルドツールを Rust / Go で書き直す」流れが本格化しました。
+- 同じパッケージを複数プロジェクトで使う場合、**1 回しかディスクに置かない**（`~/.pnpm-store` に集約）
+- 厳密な依存解決（**書いていない依存は import できない**）でバグを防げる
+- `pnpm-workspace.yaml` でモノレポ管理
 
-#### 第 3 世代: 2023 年〜現在「Rust 全盛 + 統合 + 競争」
+2026 年現在、**新規プロジェクトで pnpm を選ぶ現場が増えています**。Vue / Vite / Vitest など主要 OSS の公式推奨も pnpm になっています。
 
-- **Turbopack**（2022〜）: Vercel 製。Rust 製の webpack 後継、Next.js に組み込み
-- **Rspack**（2023〜）: ByteDance 製。webpack 互換の Rust 実装
-- **Oxc**（2023〜）: 高速 JS / TS パーサ + リンタ + フォーマッタ + リゾルバの統合プロジェクト。**oxlint** v1.0（2025 年 6 月）は ESLint より圧倒的に速く、Shopify / Airbnb などの主要 OSS が採用
-- **Biome**（2023〜）: ESLint + Prettier 互換を 1 バイナリで提供。lint と format を統合する立ち位置
-- **Rolldown**（2024〜）: Vite 公式の Rust 製 Rollup 互換バンドラ。Vite 8（2026 年 3 月）で本番ビルドの中核に正式採用済み
+#### Bun の利点
 
-JavaScript 製のツールから Rust / Go 製への移行と、複数ツールの「統合」が同時並行で進んでいます。この世代は決定的な勝者がまだ決まらず、複数の競合が並走している状況が続いています。
+- インストールが **桁違いに速い**（並列ダウンロード + 効率的な書き込み）
+- ランタイムも兼ねる（`bun run script.ts` で `tsx` 不要）
+- 仕様が安定してきた 2026 年は、**新規 CLI / バックエンドで採用** が増えている
 
-### 2026 年の標準セット
+#### Yarn の現在地
 
-新規プロジェクトで「とりあえず始める」ならこの組み合わせがいちばん摩擦が少ない選択肢です。
+- v1（Classic）は古い。新規には選ばない
+- v4（Berry）は機能豊富だが、PnP モードは **採用が頭打ち**
 
-| 役割 | 標準 |
+#### 使い分けの目安
+
+- **学習中 / Next.js 公式チュートリアル** → npm（公式が npm 前提のため）
+- **業務で長く付き合う** → pnpm
+- **試してみたい / インストールの速さ重視** → Bun
+
+このコースの演習では基本 `npm` を使います。これは普及度の問題で、pnpm に置き換えても何も変わりません（コマンド名だけ違う）。
+
+### `scripts` と `npm run`
+
+`package.json` の `scripts` に書いたコマンドを `npm run xxx` で実行できます。
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "lint": "eslint .",
+    "test": "vitest",
+    "format": "prettier --write ."
+  }
+}
+```
+
+ルール:
+
+- `npm run dev` で `vite` が走る
+- `npm run` だけで使えるスクリプト一覧が表示される
+- 環境変数 `npm run` 内では `node_modules/.bin` が PATH に追加される（`vite` のパスを書く必要がない）
+- `dev` / `start` / `test` / `restart` / `stop` は `npm run` を省略できる（`npm test` だけで動く）
+
+#### スクリプトを連結する
+
+```json
+{
+  "scripts": {
+    "lint": "eslint .",
+    "typecheck": "tsc --noEmit",
+    "ci": "npm run lint && npm run typecheck && npm run test"
+  }
+}
+```
+
+`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利。
+
+複数のスクリプトを並列で動かしたいことがあります。例えばフロントの Vite と裏の API サーバーを同時に起動したいケース。素朴に書くなら `vite & node server.js` ですが、シェルの `&` には以下の罠があります。
+
+- **Windows の cmd では `&` が「コマンド区切り」の意味**になり、バックグラウンド実行にならない
+- 子プロセスの終了コードを拾えないため、**片方が落ちても成功扱い**になる
+- 親プロセスを切っても **子プロセスが残ったまま** になることがある
+- 両方の出力が混ざり、**どちらのログか区別できない**
+
+代わりに `concurrently` パッケージを使います。
+
+```bash
+npm install -D concurrently
+```
+
+`package.json`:
+
+```json
+{
+  "scripts": {
+    "dev": "concurrently \"npm:dev:*\"",
+    "dev:client": "vite",
+    "dev:server": "node server.js"
+  }
+}
+```
+
+`npm:dev:*` は「`dev:` で始まる scripts を全部並列実行する」というショートハンドです。`npm run dev` を叩くと、`dev:client` と `dev:server` が同時に起動し、ターミナルにこう出ます。
+
+```
+[dev:client] VITE v8.0.0  ready in 234 ms
+[dev:client]    Local:   http://localhost:5173/
+[dev:server] API listening on :3001
+```
+
+各行の先頭に `[dev:client]` / `[dev:server]` のプレフィックスが付くので、どちらのログか一目で分かります。`Ctrl+C` を押すと両方のプロセスが正しく終了します。
+
+片方が落ちたときに自動で全部止めたい場合は `--kill-others-on-fail` を付けます。
+
+```json
+"dev": "concurrently --kill-others-on-fail \"npm:dev:*\""
+```
+
+`npm-run-all`（`run-p` コマンド）も似た用途のパッケージで、好みで選んでよいです。重要なのは「**シェルの `&` に頼らない**」という点です。
+
+#### pre / post スクリプト
+
+`scripts` に `prebuild` / `postbuild` を書くと **`npm run build` の前後で自動実行** されます。
+
+```json
+{
+  "scripts": {
+    "prebuild": "npm run lint",
+    "build": "vite build",
+    "postbuild": "echo 'done'"
+  }
+}
+```
+
+便利ですが、**チームで把握しづらい** ので連鎖を多用しないほうが無難。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
+
+#### `npx` と `pnpm dlx` / `bunx`
+
+「**一度だけ** コマンドを実行したい」場合の使い捨て実行。
+
+```bash
+npx create-next-app my-app    # one-shot で create-next-app を取得して実行
+pnpm dlx create-next-app my-app
+bunx create-next-app my-app
+```
+
+`npm install -g` でグローバルに入れずに済むのが利点で、常に最新版が使えるという意味でも安全に運用できます。
+
+### `engines` で Node.js のバージョンを縛る
+
+```json
+{
+  "engines": {
+    "node": ">=20.0.0",
+    "npm": ">=10.0.0"
+  }
+}
+```
+
+`engines` で要求するバージョンを書き、環境が満たさない時に警告 / 失敗させられます。`.nvmrc` / `.node-version` と組み合わせて、**チーム全員が同じ Node を使う** よう揃えます。
+
+### `.npmrc` と `.nvmrc`
+
+| ファイル | 役割 |
 |---|---|
-| バンドラ | Vite（個人 / SPA）/ Next.js（フルスタック）|
-| トランスパイラ | TypeScript + Vite 内蔵の Rolldown / Oxc |
-| リンター | ESLint or oxlint or Biome（過渡期で 3 択） |
-| フォーマッタ | Prettier or Biome |
-| テストランナー | Vitest（単体）/ Playwright（E2E）|
-| パッケージマネージャ | npm / pnpm |
+| `.npmrc` | npm 自身の設定（registry / cache / strict-peer-deps など） |
+| `.nvmrc` | nvm が読む。プロジェクトで使う Node のバージョン |
+| `.node-version` | nvm 以外（asdf / fnm / volta）が読む |
 
-「**Vite + TypeScript + ESLint + Prettier + Vitest**」が現時点の最大公約数で、リンタを oxlint や Biome に置き換える選択肢も実用域に入っています。
+`.npmrc` の代表例:
 
-### なぜ Rust / Go 製が増えるのか
+```
+strict-peer-deps=true
+save-exact=true
+registry=https://registry.npmjs.org/
+```
 
-JavaScript 製のツールは、Node.js の起動時間 + V8 の最適化が追いつくまでの時間 + パース速度に律速されます。Rust / Go 製のツールは:
+### よくある事故
 
-- **起動が速い**（数 ms〜数十 ms）
-- **並列処理が JS より素直に書ける**（マルチコアを活かしやすい）
-- **大規模プロジェクトで有意に速い**（webpack ビルド数分 → Turbopack 数秒）
+#### `npm install` の度に lock が更新される
 
-ただし、JS 製ツールに比べて **エコシステム（プラグイン）が貧弱** な過渡期です。ESLint には何千ものプラグインがありますが、oxlint や Biome は組み込みルールが中心。完全な置き換えには数年かかると見るのが現実的です。
+→ `^` で書いてあると、新しい patch / minor が出ているとロックが更新される。意図しない更新を防ぐには **CI では `npm ci`** を使う。
 
-### 選び方の指針
+#### `npm ci` と `npm install` の違い
 
-新しいツールに飛びつくべきか、定番にとどまるべきか:
+- `npm install`: 必要に応じて `package-lock.json` を更新
+- `npm ci`: lock の通りに **そのまま** 入れる（CI で **再現性が高く速い**）
 
-- **学習中・小規模**: 定番（Vite + ESLint + Prettier）で十分。情報量が圧倒的に多く、詰まったときの解決が速い
-- **既存プロジェクト**: 動いているなら無理に置き換えない。フォーマッタや lint だけ部分的に置き換えるのは比較的安全
-- **大規模 / モノレポ**: ビルド時間がボトルネックなら Turbopack / Rspack / Rolldown を検討
-- **OSS ライブラリ**: Rollup or Vite の library mode
+#### グローバルインストールに頼らない
 
-「**新しい = 良い**」ではなく「**自分のプロジェクトの何を解決したいか**」で選ぶのが基本です。新しいツールは半年で景色が変わります。
+`npm install -g` で入れた CLI は **マシン全体に影響**。プロジェクトごとに違う版が必要な時に困る。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本。
 
 ## 演習
 
 ### ゴール
 
-- 自分のプロジェクト（または本コースのリポジトリ）の `devDependencies` を 5 つの役割に分類できる
-- 各ツールが第何世代に登場したか答えられる
+- `package.json` の依存とスクリプトを実際に編集する
+- `npm ci` と `npm install` の差を体験する
 
-### 手順
+### 手順 1: 新規プロジェクト
 
-1. ターミナルで `cat package.json` か任意のエディタで `package.json` を開きます
-2. `devDependencies` を 1 つずつ眺めます
-3. 5 つのカテゴリ（バンドラ / トランスパイラ / リンター / フォーマッタ / テストランナー）または「その他」に振り分けます
-4. 不明なツールは `npm view <name> description` または npmjs.com で短い説明を読んで分類します
+```bash
+npm create vite@latest pkg-sample -- --template react-ts
+cd pkg-sample
+npm install
+```
+
+### 手順 2: dependencies / devDependencies を区別する
+
+```bash
+npm install dayjs              # dependencies に入る
+npm install -D vitest          # devDependencies に入る
+```
+
+`package.json` を開いて、それぞれが正しく入っていることを確認します。
+
+```json
+{
+  "dependencies": {
+    "dayjs": "^1.11.10",
+    "react": "^19.2.0",
+    "react-dom": "^19.2.0"
+  },
+  "devDependencies": {
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "^6.0.0",
+    "vite": "^8.0.0",
+    "vitest": "^4.0.0"
+  }
+}
+```
+
+### 手順 3: scripts を増やす
+
+```json
+{
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview",
+    "lint": "echo 'lint placeholder'",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "ci": "npm run lint && npm run typecheck && npm run test"
+  }
+}
+```
+
+`npm run ci` を実行して、3 つのスクリプトが順に走ることを確認します。
+
+### 手順 4: lock の挙動を観察する
+
+```bash
+git init
+git add .
+git commit -m "init"
+
+# package-lock.json を消して install
+rm package-lock.json
+npm install
+git diff --stat package-lock.json
+```
+
+ハッシュや解決バージョンが微妙に変わっていることがあります（依存ツリー全体で再解決される）。これが「lock を Git に入れる理由」です。
+
+### 手順 5: npm ci を試す
+
+```bash
+rm -rf node_modules
+npm ci
+```
+
+`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石。
 
 ### 期待出力
 
-- 例: 本コースのリポジトリだと VitePress（その他: 静的サイト生成器）/ TypeScript（トランスパイラ）/ vite-plugin-pwa（その他: プラグイン）のように分類できる
-- 分類した各ツールが第何世代か答えられる（例: webpack なら第 1 世代、Vite なら第 2 世代）
+- `npm install dayjs` 後、`dependencies` に `dayjs` が追加される
+- `npm install -D vitest` 後、`devDependencies` に `vitest` が追加される
+- `npm run ci` で 3 ステップが順に走る
+- `package-lock.json` を消して install すると差分が出る場合がある
+- `npm ci` は lock 通りに高速に入る
 
 ### 変える
 
-- `npm create vite@latest my-app -- --template react-ts` で新規プロジェクトを作り、生成された `devDependencies` を分類してみる
-- 同じ手順を `npm create next-app@latest` で行い、Next.js が何を使っているかを見比べる
+- `dayjs: "^1.11.10"` を `dayjs: "~1.11.10"` に変えて、`npm update` で何が更新されるか観察する
+- `engines: { "node": ">=20" }` を加えて、古い Node で `npm install` が警告を出すことを確認する
+- `prebuild` / `postbuild` を追加して連鎖実行を体験する
 
-### 自分で書く
+### 自分で書く（任意）
 
-- 知っているフロントエンド OSS（React / Vue / Svelte 本体など）の GitHub リポジトリで `package.json` を開き、ビルド・テスト・lint 周りに何を使っているか観察する
-- 「2 年後にこの組み合わせがどう変わっていそうか」を予想して 2〜3 行でメモする
+- pnpm / Bun を入れて、同じプロジェクトの `install` 速度を比べる
+- モノレポ（`workspaces`）の最小構成を作って、共通の utility パッケージを 2 つのアプリから使う
+- `.npmrc` で `save-exact=true` を設定し、`npm install dayjs` した時に `^` が付かなくなることを確認
 
 ## まとめ
 
-- フロントエンドのツールは「バンドラ / トランスパイラ / リンター / フォーマッタ / テストランナー」の 5 役割で整理できる
-- 第 0 世代（〜2014）: Grunt / Gulp / Browserify。手作業の自動化
-- 第 1 世代（〜2019）: webpack + Babel が標準。設定肥大とビルド速度が課題に
-- 第 2 世代（〜2022）: ESM + Go / Rust 製ツールで高速化（esbuild / Vite / SWC / Biome）
-- 第 3 世代（2023〜）: Rust 全盛と統合競争（Turbopack / Rspack / oxlint / Rolldown）
-- 2026 標準: Vite + TypeScript + ESLint + Prettier + Vitest が最大公約数。lint まわりは過渡期
-- 「新しい = 良い」ではなく、自分の課題に合うかで選ぶ
+- `package.json` は **メタ情報 / 依存 / スクリプト / ツール設定** の 4 つを担う
+- `dependencies` / `devDependencies` / `peerDependencies` の使い分け
+- semver の `^` は **MAJOR 固定 / MINOR・PATCH 自動更新**、`~` は MINOR まで固定
+- `package-lock.json` を **必ず Git に入れる**。CI では `npm ci` で再現性を保つ
+- パッケージマネージャは **npm / pnpm / yarn / Bun** の 4 択。新規業務開発は pnpm が増加傾向、最速重視なら Bun
+- `scripts` は `npm run xxx` で起動。`&&` で連結、`pre` / `post` で連鎖
+- `npx` / `pnpm dlx` / `bunx` で **一度だけ実行** できる
+- `engines` と `.nvmrc` でチーム間の Node のバージョンを揃える

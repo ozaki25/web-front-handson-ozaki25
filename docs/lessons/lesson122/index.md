@@ -1,421 +1,487 @@
-# lesson122: 環境変数とシークレット管理
+# lesson122: Web Components 入門
 
 ## ゴール
 
-- `.env` / `.env.local` / `.env.production` などのファイルの **使い分け** が分かる
-- Next.js / Vite の **`NEXT_PUBLIC_` / `VITE_`** プレフィックスの意味と公開範囲を説明できる
-- Vercel / GitHub / Doppler / 1Password などの **シークレット管理サービス** の役割を理解する
-- シークレットを **誤って Git にコミットしない** 仕組みを作れる
-- 漏洩した時の対応の流れを知る
+- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
+- Shadow DOM でスタイルと DOM を外から隔離できる
+- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
+- `<slot>` で外側から中身を差し込める
+- React との使い分けを判断できる
 
 ## 解説
 
-### 環境変数とは
+### Web Components とは
 
-「**コードから見える値だが、コードと一緒に管理したくない**」値を入れる仕組みです。代表例:
+**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
 
-- API のベース URL（環境ごとに違う）
-- データベース接続文字列
-- API キー / アクセストークン
-- フィーチャーフラグの ON / OFF
+| 柱 | 役割 |
+|---|---|
+| Custom Elements | 自作の HTML タグを定義 |
+| Shadow DOM | スタイルと DOM を隔離 |
+| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
 
-これらを **コードに直書き** すると:
+作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
 
-- 開発 / 本番の切り替えが面倒
-- **シークレットが Git に残る**（git history に永久保存）
+### なぜ今 Web Components を知るか
 
-ので、環境変数で外に出します。
+2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
 
-### `.env` ファイルの種類
+- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
+- 会社共通のデザインシステムを **React 依存にせず** 配布したい
+- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
 
-Node.js / Next.js / Vite が読み込む慣習的なファイル名:
+React コンポーネントは React の中でしか動かないのに対し、Web Components は **どこでも動きます**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
 
-| ファイル | 読み込まれる場面 | コミット |
-|---|---|---|
-| `.env` | すべての環境で読まれる（あれば） | 場合による |
-| `.env.local` | **ローカル開発時のみ**。同名キーを上書き | **NG**（gitignore） |
-| `.env.development` | `NODE_ENV=development` 時 | OK（ただし秘密は書かない） |
-| `.env.production` | `NODE_ENV=production` 時 | OK（ただし秘密は書かない） |
-| `.env.test` | テスト時 | OK |
-| `.env.example` | サンプル / テンプレート | **OK**（コミットする） |
+### Custom Elements の最小形
 
-#### `.gitignore`
+```js
+class HelloWorld extends HTMLElement {
+  connectedCallback() {
+    this.innerHTML = "<p>Hello, Web Components!</p>";
+  }
+}
 
-```
-.env*.local
-.env
+customElements.define("hello-world", HelloWorld);
 ```
 
-`.env.local` と `.env` は **絶対にコミットしない**。一方 `.env.example` は **必ずコミット** する（チームメンバーが何を設定すべきかの目安になる）。
+HTML で使う:
 
-#### `.env.example`
-
-```
-# データベース
-DATABASE_URL=postgresql://user:pass@localhost:5432/mydb
-
-# API キー（実値ではなくダミー）
-SENTRY_DSN=https://example@sentry.io/1234
-
-# 公開して問題ない値
-NEXT_PUBLIC_API_BASE=http://localhost:3000/api
-```
-
-### Next.js の `NEXT_PUBLIC_` プレフィックス
-
-Next.js（および Vite の `VITE_`）には **「クライアントに公開する値」を明示するルール** があります。
-
-```
-DATABASE_URL=postgres://...               ← サーバーのみ（漏れない）
-SENTRY_AUTH_TOKEN=xxx                      ← サーバーのみ（漏れない）
-NEXT_PUBLIC_API_URL=https://api.example.com ← クライアントにも露出
-NEXT_PUBLIC_GA_ID=G-XXXX                    ← クライアントにも露出
+```html
+<hello-world></hello-world>
 ```
 
 ルール:
 
-- **`NEXT_PUBLIC_` で始まる値だけ** がクライアントの JS バンドルに **インライン** される
-- それ以外は **サーバー（API Route / Server Component / Middleware）でしか読めない**
-- ビルド時に **値が文字列として埋め込まれる**（実行時のフェッチではない）
+- クラスは **`HTMLElement` を継承** する
+- `customElements.define(タグ名, クラス)` で登録
+- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
 
-#### 露出する 例
+### ライフサイクル
 
-```tsx
-// app/page.tsx（Server Component でも Client Component でも）
-const apiBase = process.env.NEXT_PUBLIC_API_URL; // ブラウザでも読める
+Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
+
+```js
+class MyCounter extends HTMLElement {
+  connectedCallback() {
+    // DOM に追加された時
+    this.render();
+  }
+
+  disconnectedCallback() {
+    // DOM から外された時。リスナー解除などのクリーンアップ
+  }
+
+  static observedAttributes = ["count"];
+
+  attributeChangedCallback(name, oldValue, newValue) {
+    // 監視対象の属性が変わった時
+    if (name === "count") this.render();
+  }
+
+  render() {
+    const count = this.getAttribute("count") ?? "0";
+    this.innerHTML = `<strong>Count: ${count}</strong>`;
+  }
+}
+
+customElements.define("my-counter", MyCounter);
 ```
 
-ビルド後の JS には **値そのもの** が入ります。**シークレットを `NEXT_PUBLIC_` に置くのは事故** の元。
+```html
+<my-counter count="3"></my-counter>
+```
 
-#### 露出しない 例
+`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
 
-```ts
-// app/api/users/route.ts（Route Handler）
-export async function GET() {
-  const dbUrl = process.env.DATABASE_URL; // サーバーのみ
-  // ...
+### Shadow DOM でスタイルを隔離
+
+普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
+
+```js
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
+        :host {
+          display: block;
+          padding: 16px;
+          border: 1px solid #ccc;
+          border-radius: 8px;
+        }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2>カードタイトル</h2>
+      <p>カードの中身</p>
+    `;
+  }
+}
+customElements.define("my-card", MyCard);
+```
+
+```html
+<my-card></my-card>
+```
+
+- `attachShadow({ mode: "open" })` で shadow tree を作る
+- `:host` は **このカスタム要素自身** を指すセレクタ
+- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
+
+`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
+
+### `<slot>` で外から中身を差し込む
+
+React の `children` に相当するのが `<slot>` です。
+
+```js
+class FancyBox extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
+        header { font-weight: bold; margin-bottom: 8px; }
+      </style>
+      <header><slot name="title">デフォルトタイトル</slot></header>
+      <div><slot>本文が入ります</slot></div>
+    `;
+  }
+}
+customElements.define("fancy-box", FancyBox);
+```
+
+使う側:
+
+```html
+<fancy-box>
+  <span slot="title">カスタムタイトル</span>
+  <p>ここが本文です。</p>
+</fancy-box>
+```
+
+- `<slot>` は **名前なし** のデフォルトスロット
+- `<slot name="title">` は **名前付き** スロット
+- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
+
+### プロパティ / イベント
+
+ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
+
+```js
+class MyToggle extends HTMLElement {
+  #checked = false;
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.render();
+  }
+
+  get checked() { return this.#checked; }
+  set checked(value) {
+    this.#checked = Boolean(value);
+    this.render();
+    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <button>${this.#checked ? "ON" : "OFF"}</button>
+    `;
+    // render() で innerHTML を書き換えるたびに古い button は消えるので、
+    // クリックリスナーは render() 内で「新しい button」に対してだけ付ける
+    this.shadowRoot.querySelector("button").addEventListener("click", () => {
+      this.checked = !this.checked;
+    });
+  }
+}
+customElements.define("my-toggle", MyToggle);
+```
+
+使う側:
+
+```html
+<my-toggle></my-toggle>
+
+<script>
+  const toggle = document.querySelector("my-toggle");
+  toggle.addEventListener("change", (e) => {
+    console.log("ON/OFF:", e.detail.checked);
+  });
+</script>
+```
+
+- プロパティは **クラスの getter / setter** として定義
+- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
+
+### `<template>` で DOM のクローン元を用意
+
+大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
+
+```html
+<template id="card-template">
+  <style>
+    :host { display: block; border: 1px solid #ccc; padding: 12px; }
+  </style>
+  <slot name="title"></slot>
+  <slot></slot>
+</template>
+
+<script>
+  const tpl = document.getElementById("card-template");
+  class MyCardTpl extends HTMLElement {
+    connectedCallback() {
+      const shadow = this.attachShadow({ mode: "open" });
+      shadow.appendChild(tpl.content.cloneNode(true));
+    }
+  }
+  customElements.define("my-card-tpl", MyCardTpl);
+</script>
+```
+
+`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
+
+### React との使い分け
+
+「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
+
+| | Web Components | React |
+|---|---|---|
+| 動く場所 | どの HTML ページでも | React アプリの中だけ |
+| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
+| 型 | TypeScript と相性が微妙 | 強い |
+| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
+| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
+
+**原則**:
+
+- **アプリ内部** の UI → React で書く（DX が圧倒的）
+- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
+- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
+
+React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
+
+さらに React 19 では、Custom Element が `dispatchEvent` で投げる **CustomEvent** も、JSX で `on` プレフィックス付きの prop を書くと購読できるようになりました（イベント名は **小文字＋ダッシュ可** で、`speak` イベントなら `onspeak`、`say-hi` なら `onsay-hi`）。これまで定番だった **`ref` + `addEventListener`** も引き続き使えますが、`onspeak={...}` のように書くだけで済むケースが増えました。
+
+```tsx
+import { useEffect, useRef } from "react";
+
+function ToggleHost() {
+  const ref = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const handler = (e: Event) => {
+      const detail = (e as CustomEvent<{ checked: boolean }>).detail;
+      console.log(detail);
+    };
+    el.addEventListener("change", handler);
+    return () => el.removeEventListener("change", handler);
+  }, []);
+
+  return <my-toggle ref={ref} />;
 }
 ```
 
-サーバー専用コードでは **プレフィックスなしの値** が読めます。クライアント側で同じコードを書くと `undefined` になる。
-
-::: warning Server Component / Server Action の罠
-Server Component / Server Action のソースが **Client Component から間接的に import** されると、バンドラがクライアント側に持ち込みます。
-
-シークレットを参照するコードは **`"use server"` ファイル** に隔離するか、**`server-only`** パッケージを import します。これで **誤って client にバンドルされた場合に build が失敗** します。
+::: warning TypeScript で使うときは型宣言が必要
+JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。React 19 では `react` モジュールの `JSX` 名前空間を拡張する形が公式の作法です。
 
 ```ts
-import "server-only"; // クライアントから import するとエラー
-const dbUrl = process.env.DATABASE_URL;
-```
-:::
+import "react";
 
-### Vite の `VITE_` プレフィックス
-
-Vite は同じ仕組みで **`VITE_`** プレフィックス。
-
-```
-VITE_API_URL=https://api.example.com   ← import.meta.env.VITE_API_URL で読める
-SECRET_KEY=do_not_expose                ← undefined（読めない）
-```
-
-```ts
-console.log(import.meta.env.VITE_API_URL);  // OK
-console.log(import.meta.env.SECRET_KEY);    // undefined
-```
-
-詳細は「Vite の仕組みを軽く」でも触れた通り。
-
-### 環境ごとの設定
-
-Vercel に Next.js をデプロイする場合、`.env.production` などのファイルは使わず **Vercel 管理画面で設定** するのが普通です。
-
-| 設定箇所 | 主な役割 |
-|---|---|
-| Vercel Dashboard → Settings → Environment Variables | Production / Preview / Development それぞれに値を設定 |
-| `.env.local` | ローカル開発の上書き |
-
-`vercel env pull .env.local` で **Vercel の値をローカルに引っ張ってくる** こともできます（同じ設定で動かしたい時に便利）。
-
-### GitHub Secrets と Actions
-
-GitHub Actions の workflow で使う API キーは **GitHub Settings → Secrets and variables → Actions** に登録。workflow からは `secrets.NAME` 構文（`$` と `{{ }}` の組合せ）で参照します。
-
-**ファイルにベタ書きしない、ログに出さない、Pull Request の workflow で使わない** の 3 点を必ず守ります。
-
-### シークレット管理の選択肢
-
-#### サービス別
-
-| サービス | 役割 |
-|---|---|
-| **Vercel Environment Variables** | Vercel デプロイのシークレット |
-| **GitHub Actions Secrets** | CI のシークレット |
-| **AWS Secrets Manager / Parameter Store** | AWS インフラ全体 |
-| **Doppler** | 複数環境のシークレットを一元管理する SaaS |
-| **1Password Connect / Secrets Automation** | 人と CI で同じシークレットを使う |
-| **HashiCorp Vault** | エンタープライズ標準。OSS |
-| **Infisical** | OSS のシークレット管理 |
-
-「**ローカル開発 + CI + 本番** で同じ値を 1 箇所から配信したい」場合に Doppler / 1Password / Vault が役立ちます。
-
-#### Doppler の最小例
-
-```bash
-doppler login
-doppler setup
-doppler run -- npm run dev   # .env を読まずに Doppler から値を流し込む
-```
-
-CI でも `doppler run --` 経由でビルドすれば、**GitHub Secrets を一切登録せずに** 動かせます。
-
-### 「シークレットをコミットしない」仕組み
-
-#### 1. `.gitignore` を整える
-
-```
-.env
-.env.local
-.env.*.local
-```
-
-#### 2. `git-secrets` / `gitleaks` で push 前にスキャン
-
-```bash
-# gitleaks（OSS、Go 製）
-brew install gitleaks
-gitleaks git .            # リポジトリ履歴全体をスキャン
-
-# pre-commit フックで自動化
-git config core.hooksPath .githooks
-```
-
-`.githooks/pre-commit`:
-
-```sh
-#!/bin/sh
-# v8.19.0 以降 protect は非推奨。git --pre-commit --staged が公式推奨コマンド
-gitleaks git --pre-commit --staged --no-banner || exit 1
-```
-
-#### 3. GitHub の Secret Scanning
-
-GitHub は **public リポジトリの push を自動でスキャン** し、AWS / Stripe / GitHub トークンなど主要な型を検出するとメールで通知します。**private リポジトリでも有効化** すると、組織のセキュリティが上がる（GitHub Advanced Security の機能）。
-
-#### 4. Husky + lint-staged で運用に組み込む
-
-```json
-{
-  "lint-staged": {
-    "*.{ts,tsx,js,jsx,env,yaml}": ["gitleaks git --pre-commit --staged --no-banner"]
+declare module "react" {
+  namespace JSX {
+    interface IntrinsicElements {
+      "my-toggle": React.DetailedHTMLProps<
+        React.HTMLAttributes<HTMLElement>,
+        HTMLElement
+      >;
+    }
   }
 }
 ```
 
-### 漏洩した時の対応
-
-「`.env` を間違って push してしまった」を想定:
-
-1. **すぐにそのキーを無効化**（rotate）
-   - クラウドサービス（AWS / Stripe / Sentry）の管理画面で **キーを再生成**
-   - GitHub に残った時点で **公開済み** とみなす（git history を消しても遅い）
-2. **新しいキーを Vercel / GitHub Secrets に登録**
-3. **チームに共有 + 監査ログをチェック**（不正利用がないか）
-4. **任意で git history から削除**（`git filter-repo`）
-   - **キーを無効化したあと** にやる。順番を逆にすると無意味
-
-::: warning git history からの削除は事後処置
-リポジトリが public なら、push した瞬間に **bot がスキャンして既にコピー** している可能性があります。**「消したから安全」ではなく、必ずキーを rotate** すること。
+`Lit` を使うとデコレータ経由で型が付くので、TypeScript と組み合わせるなら Lit が現実解です。
 :::
 
-### 設計の指針
+### Lit の存在
 
-#### 1. シークレットはサーバーで使う
+Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
 
-ブラウザに渡す API キーは「**それが漏れても大丈夫な値**」だけにとどめ、本当の認証はバックエンド経由で行います。
+```js
+import { LitElement, html, css } from "lit";
 
-#### 2. `NEXT_PUBLIC_` には機密を入れない
-
-「Sentry DSN は公開しても良いと書いてあるからクライアントに置く」のは OK。けれど **DB 接続文字列 / OAuth クライアントシークレット** を `NEXT_PUBLIC_` に置くのは事故の温床。
-
-#### 3. 必須値は起動時に検証
-
-```ts
-// utils/env.ts
-import { z } from "zod";
-
-const envSchema = z.object({
-  DATABASE_URL: z.string().url(),
-  NEXT_PUBLIC_API_URL: z.string().url(),
-  SENTRY_DSN: z.string().optional(),
-});
-
-export const env = envSchema.parse(process.env);
+class MyCard extends LitElement {
+  static styles = css`
+    :host { display: block; padding: 16px; border: 1px solid #ccc; }
+  `;
+  render() {
+    return html`<h2>タイトル</h2><slot></slot>`;
+  }
+}
+customElements.define("my-card", MyCard);
 ```
 
-これで「**環境変数の設定漏れ** で本番が落ちる」を防げます。Zod / `t3-env` などのライブラリで型安全に。
-
-#### 4. 個人別の値 / 共通の値を分離
-
-| 値 | 置き場 |
-|---|---|
-| 個人の作業用 API キー | `.env.local`（gitignore） |
-| チーム共通の URL | `.env.development`（コミット可） |
-| 本番のシークレット | Vercel Environment Variables |
-
-### よくある事故
-
-#### 1. 本番 DB に開発から繋いでしまう
-
-`DATABASE_URL` を `.env.local` で本番にして、勘違いしてマイグレーションを実行 → 本番データ破壊。
-
-→ **本番のキーは個人の `.env.local` に置かない** ルールに。Vercel から `vercel env pull` する時も `--environment=development` を明示。
-
-#### 2. `process.env.X` がビルドで消える
-
-Next.js は **静的解析** でビルド時に置換するので、`process.env[key]` のような **動的アクセスは展開されない**。
-
-```ts
-const key = "NEXT_PUBLIC_API_URL";
-process.env[key]; // undefined になりがち
-process.env.NEXT_PUBLIC_API_URL; // OK
-```
-
-#### 3. `.env.production` をコミットしてしまった
-
-→ 「**シークレットを外に置く**」を徹底。`.env.production` を使うなら **dummy 値** に。
-
-#### 4. 古いキーが Slack に残っている
-
-→ シークレット管理サービスの「**監査ログ**」とローテーションスケジュールを意識。
+Web Components を本格的に書くなら Lit が現在のデファクトになっており、Google / Adobe / Shopify も採用しています。
 
 ## 演習
 
 ### ゴール
 
-- Next.js の Server / Client / Middleware で環境変数の **読み取り権限** を体感する
-- gitleaks で push 前のチェックを入れる
+- Counter の Web Component を作る
+- Shadow DOM でスタイル隔離を確認する
+- `<slot>` で外から中身を差し込む
 
 ### 手順 1: 新規プロジェクト
 
 ```bash
-npx create-next-app@latest env-sample --ts --app
-cd env-sample
+npm create vite@latest web-components-sample -- --template vanilla-ts
+cd web-components-sample
+npm install
 ```
 
-### 手順 2: `.env.local` と `.env.example`
+### 手順 2: index.html
 
-`.env.example`:
+```html
+<!doctype html>
+<html lang="ja">
+  <head>
+    <meta charset="UTF-8" />
+    <title>Web Components Demo</title>
+    <style>
+      /* 外側の CSS（Shadow DOM で隔離されるはず） */
+      h2 { color: red; }
+      body { font-family: sans-serif; padding: 24px; }
+    </style>
+  </head>
+  <body>
+    <h2>外側の h2（赤いはず）</h2>
 
+    <my-card>
+      <span slot="title">内側のタイトル</span>
+      <p>スロットに入る本文</p>
+    </my-card>
+
+    <my-counter start="5"></my-counter>
+    <p id="log">イベントログ: -</p>
+
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
 ```
-# 公開して OK
-NEXT_PUBLIC_APP_NAME=EnvSample
 
-# 公開 NG
-SECRET_TOKEN=replace_me
-```
+### 手順 3: src/main.ts
 
-`.env.local`（コミットしない）:
-
-```
-NEXT_PUBLIC_APP_NAME=ローカルの名前
-SECRET_TOKEN=local-secret-xxx
-```
-
-### 手順 3: Server / Client で読み比べる
-
-`app/page.tsx`（Server Component）:
-
-```tsx
-export default function Home() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Server Component</h1>
-      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
-      <p>SECRET_TOKEN（サーバー）: {process.env.SECRET_TOKEN ?? "なし"}</p>
-    </main>
-  );
+```ts
+// my-card
+class MyCard extends HTMLElement {
+  connectedCallback() {
+    const shadow = this.attachShadow({ mode: "open" });
+    shadow.innerHTML = `
+      <style>
+        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
+        h2 { color: #2563eb; margin: 0 0 8px; }
+      </style>
+      <h2><slot name="title">デフォルトタイトル</slot></h2>
+      <div><slot></slot></div>
+    `;
+  }
 }
-```
+customElements.define("my-card", MyCard);
 
-`app/client/page.tsx`:
+// my-counter
+class MyCounter extends HTMLElement {
+  #count = 0;
 
-```tsx
-"use client";
+  static observedAttributes = ["start"];
 
-export default function ClientPage() {
-  return (
-    <main style={{ padding: 24 }}>
-      <h1>Client Component</h1>
-      <p>NEXT_PUBLIC_APP_NAME: {process.env.NEXT_PUBLIC_APP_NAME}</p>
-      <p>SECRET_TOKEN（クライアント）: {process.env.SECRET_TOKEN ?? "なし"}</p>
-    </main>
-  );
+  attributeChangedCallback(name: string, _old: string, value: string) {
+    if (name === "start") {
+      this.#count = Number(value);
+      this.render();
+    }
+  }
+
+  connectedCallback() {
+    this.attachShadow({ mode: "open" });
+    this.#count = Number(this.getAttribute("start") ?? "0");
+    this.render();
+  }
+
+  render() {
+    if (!this.shadowRoot) return;
+    this.shadowRoot.innerHTML = `
+      <style>
+        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
+        button { padding: 4px 12px; }
+        strong { min-width: 40px; text-align: center; }
+      </style>
+      <button id="dec">-</button>
+      <strong>${this.#count}</strong>
+      <button id="inc">+</button>
+    `;
+    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
+      this.#count++;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
+      this.#count--;
+      this.render();
+      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
+    });
+  }
 }
+customElements.define("my-counter", MyCounter);
+
+// ログ
+const log = document.getElementById("log")!;
+document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
+  const ce = e as CustomEvent<{ count: number }>;
+  log.textContent = `イベントログ: count = ${ce.detail.count}`;
+});
 ```
 
-`npm run dev` してブラウザで両方確認します。
+### 手順 4: 起動して確認
+
+```bash
+npm run dev
+```
+
+ブラウザで以下を確認します。
+
+1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
+2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
+3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
+4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
 
 ### 期待出力
 
-| 場所 | NEXT_PUBLIC_APP_NAME | SECRET_TOKEN |
-|---|---|---|
-| Server Component | ローカルの名前 | local-secret-xxx |
-| Client Component | ローカルの名前 | **なし** |
-
-クライアントには **`NEXT_PUBLIC_` 以外が露出しない** ことを確認します。
-
-### 手順 4: gitleaks を導入
-
-```bash
-brew install gitleaks       # macOS。Linux は go install / docker でも
-# または: docker run -v $(pwd):/path zricethezav/gitleaks git /path
-```
-
-リポジトリ直下で:
-
-```bash
-git init
-echo "AWS_SECRET=AKIA1234567890ABCDEF" > test.txt
-git add test.txt
-gitleaks git --pre-commit --staged
-```
-
-`AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
-
-### 手順 5: pre-commit に組み込む
-
-```bash
-mkdir -p .githooks
-cat > .githooks/pre-commit <<'EOF'
-#!/bin/sh
-gitleaks git --pre-commit --staged --no-banner || exit 1
-EOF
-chmod +x .githooks/pre-commit
-git config core.hooksPath .githooks
-```
-
-これで `git commit` の前に自動で gitleaks が走ります。
+- Shadow DOM の中の h2 は青、外側の h2 は赤
+- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
 
 ### 変える
 
-- `process.env[key]` のような動的アクセスを書いて、ビルド後にどう展開されるか確認
-- `import "server-only"` を入れたファイルを Client Component から import して **ビルドエラー** になることを確認
-- Zod / t3-env で起動時の env 検証を組み込む
+- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認。**注意**: `closed` のままだと `this.shadowRoot!.getElementById(...)` が null 参照で実行時エラーになるため、観察できたら `open` に戻してから他の手順に進む
+- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
+- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
+- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
 
 ### 自分で書く（任意）
 
-- Doppler を試して、`doppler run -- npm run dev` で `.env` なしの開発体験を作る
-- Vercel に deploy し、Production / Preview で **異なる値** を設定する
-- 漏洩シミュレーション: わざとリポジトリ（個人テスト用）に `.env` を push し、**キーをローテートする手順** をリハーサルする
+- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
+- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
+- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
 
 ## まとめ
 
-- `.env` ファイルは **`.local` をコミットせず、`.example` を必ずコミット** する
-- Next.js の **`NEXT_PUBLIC_`** / Vite の **`VITE_`** プレフィックスは「**クライアントに露出させる**」明示
-- それ以外の値は **サーバー専用**。`server-only` パッケージで誤バンドルを防ぐ
-- 設定の置き場は **Vercel Environment Variables** / GitHub Secrets / Doppler / Vault
-- **gitleaks** + pre-commit / GitHub の Secret Scanning で push 前後のスキャン
-- 漏洩したら **キーのローテートが最優先**。git history 削除は事後処置
-- **起動時に Zod で env を検証** すると、設定漏れに早く気づける
-- 「個人の値」「チームの値」「本番の値」を **置き場で分ける** ルールを決める
+- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
+- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
+- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
+- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
+- プロパティは getter / setter、通知は `CustomEvent` で
+- 本格運用するなら **Lit** が今のデファクト
+- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
+- React 19 以降は Custom Elements の props / event 受け渡しが自然

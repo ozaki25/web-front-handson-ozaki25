@@ -1,487 +1,423 @@
-# lesson121: Web Components 入門
+# lesson121: TanStack Query / Zustand 実践
 
 ## ゴール
 
-- Custom Elements（`class extends HTMLElement`）で自作 HTML タグを定義できる
-- Shadow DOM でスタイルと DOM を外から隔離できる
-- ライフサイクル（`connectedCallback` / `attributeChangedCallback` 等）を使える
-- `<slot>` で外側から中身を差し込める
-- React との使い分けを判断できる
+- **TanStack Query** で API データ取得・キャッシュ・再取得を実装できる
+- **`useMutation`** でデータ更新後にキャッシュを破棄できる
+- **Zustand** でグローバルクライアント state の store を設計できる
+- Jotai の atom 思想と Zustand との使い分けを 1 行で説明できる
 
 ## 解説
 
-### Web Components とは
+「状態管理の地図」で整理したとおり、サーバー state には TanStack Query、グローバルクライアント state には Zustand を使います。このレッスンではそれぞれを手を動かして習得します。
 
-**フレームワーク非依存で、ブラウザ標準** の仕組みだけで再利用可能な UI 部品を作る技術の総称です。3 つの柱で構成されます。
+### TanStack Query
 
-| 柱 | 役割 |
-|---|---|
-| Custom Elements | 自作の HTML タグを定義 |
-| Shadow DOM | スタイルと DOM を隔離 |
-| HTML Templates（`<template>`） | クローンして使えるインライン HTML |
+#### インストール
 
-作った部品は `<my-button>` のように普通の HTML タグとして使え、**React / Vue / Next.js / 素の HTML** どこからでも同じように呼び出せます。
-
-### なぜ今 Web Components を知るか
-
-2026 年の現場では「フレームワークを跨いだ共通部品」を作る場面が増えています。たとえば:
-
-- 複数プロダクト（Next.js アプリと WordPress サイト）で同じヘッダー / ボタンを使いたい
-- 会社共通のデザインシステムを **React 依存にせず** 配布したい
-- マイクロフロントエンドで、各アプリが違うフレームワークでも統一 UI を持ちたい
-
-React コンポーネントは React の中でしか動かないのに対し、Web Components は **どこでも動きます**。Shopify / Microsoft / Google の各デザインシステムが Web Components 採用しているのもこの理由です。
-
-### Custom Elements の最小形
-
-```js
-class HelloWorld extends HTMLElement {
-  connectedCallback() {
-    this.innerHTML = "<p>Hello, Web Components!</p>";
-  }
-}
-
-customElements.define("hello-world", HelloWorld);
+```bash
+npm install @tanstack/react-query
 ```
 
-HTML で使う:
-
-```html
-<hello-world></hello-world>
-```
-
-ルール:
-
-- クラスは **`HTMLElement` を継承** する
-- `customElements.define(タグ名, クラス)` で登録
-- **タグ名はハイフンを含む**（`hello-world` OK、`helloworld` NG）— ブラウザ標準タグとの衝突を防ぐため
-
-### ライフサイクル
-
-Custom Elements には決まったタイミングで呼ばれるメソッドがあります。
-
-```js
-class MyCounter extends HTMLElement {
-  connectedCallback() {
-    // DOM に追加された時
-    this.render();
-  }
-
-  disconnectedCallback() {
-    // DOM から外された時。リスナー解除などのクリーンアップ
-  }
-
-  static observedAttributes = ["count"];
-
-  attributeChangedCallback(name, oldValue, newValue) {
-    // 監視対象の属性が変わった時
-    if (name === "count") this.render();
-  }
-
-  render() {
-    const count = this.getAttribute("count") ?? "0";
-    this.innerHTML = `<strong>Count: ${count}</strong>`;
-  }
-}
-
-customElements.define("my-counter", MyCounter);
-```
-
-```html
-<my-counter count="3"></my-counter>
-```
-
-`observedAttributes` に列挙した属性だけが `attributeChangedCallback` で通知されます。
-
-### Shadow DOM でスタイルを隔離
-
-普通の `<style>` はページ全体に効きます。部品を配布する時に困るのは「**外側の CSS が入り込んできて壊れる** / 内側の CSS が外に漏れる」こと。Shadow DOM はこの両方を遮断します。
-
-```js
-class MyCard extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        /* ここの CSS は外に漏れない、外の CSS も入ってこない */
-        :host {
-          display: block;
-          padding: 16px;
-          border: 1px solid #ccc;
-          border-radius: 8px;
-        }
-        h2 { color: #2563eb; margin: 0 0 8px; }
-      </style>
-      <h2>カードタイトル</h2>
-      <p>カードの中身</p>
-    `;
-  }
-}
-customElements.define("my-card", MyCard);
-```
-
-```html
-<my-card></my-card>
-```
-
-- `attachShadow({ mode: "open" })` で shadow tree を作る
-- `:host` は **このカスタム要素自身** を指すセレクタ
-- 内側で `h2 { color: red }` と書いても外側の `h2` には影響しない
-
-`mode: "closed"` もありますが、テストや DevTools から覗けなくなるので **ほぼ常に `open`** を使います。
-
-### `<slot>` で外から中身を差し込む
-
-React の `children` に相当するのが `<slot>` です。
-
-```js
-class FancyBox extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        :host { display: block; padding: 16px; border: 2px dashed #2563eb; }
-        header { font-weight: bold; margin-bottom: 8px; }
-      </style>
-      <header><slot name="title">デフォルトタイトル</slot></header>
-      <div><slot>本文が入ります</slot></div>
-    `;
-  }
-}
-customElements.define("fancy-box", FancyBox);
-```
-
-使う側:
-
-```html
-<fancy-box>
-  <span slot="title">カスタムタイトル</span>
-  <p>ここが本文です。</p>
-</fancy-box>
-```
-
-- `<slot>` は **名前なし** のデフォルトスロット
-- `<slot name="title">` は **名前付き** スロット
-- 外から `slot="title"` 属性を持つ要素がそのスロットに入る
-
-### プロパティ / イベント
-
-ボタンや入力のような値を持つ部品には、**プロパティ** と **カスタムイベント** を使います。
-
-```js
-class MyToggle extends HTMLElement {
-  #checked = false;
-
-  connectedCallback() {
-    this.attachShadow({ mode: "open" });
-    this.render();
-  }
-
-  get checked() { return this.#checked; }
-  set checked(value) {
-    this.#checked = Boolean(value);
-    this.render();
-    this.dispatchEvent(new CustomEvent("change", { detail: { checked: this.#checked } }));
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `
-      <button>${this.#checked ? "ON" : "OFF"}</button>
-    `;
-    // render() で innerHTML を書き換えるたびに古い button は消えるので、
-    // クリックリスナーは render() 内で「新しい button」に対してだけ付ける
-    this.shadowRoot.querySelector("button").addEventListener("click", () => {
-      this.checked = !this.checked;
-    });
-  }
-}
-customElements.define("my-toggle", MyToggle);
-```
-
-使う側:
-
-```html
-<my-toggle></my-toggle>
-
-<script>
-  const toggle = document.querySelector("my-toggle");
-  toggle.addEventListener("change", (e) => {
-    console.log("ON/OFF:", e.detail.checked);
-  });
-</script>
-```
-
-- プロパティは **クラスの getter / setter** として定義
-- イベントは `new CustomEvent(名前, { detail: 任意のデータ })` を `dispatchEvent` する
-
-### `<template>` で DOM のクローン元を用意
-
-大きめの部品は `<template>` を HTML に置いておくと読みやすくなります。
-
-```html
-<template id="card-template">
-  <style>
-    :host { display: block; border: 1px solid #ccc; padding: 12px; }
-  </style>
-  <slot name="title"></slot>
-  <slot></slot>
-</template>
-
-<script>
-  const tpl = document.getElementById("card-template");
-  class MyCardTpl extends HTMLElement {
-    connectedCallback() {
-      const shadow = this.attachShadow({ mode: "open" });
-      shadow.appendChild(tpl.content.cloneNode(true));
-    }
-  }
-  customElements.define("my-card-tpl", MyCardTpl);
-</script>
-```
-
-`tpl.content` は **DocumentFragment**。`cloneNode(true)` で毎回コピーして使います。
-
-### React との使い分け
-
-「React があるのに Web Components を学ぶ意味は？」という疑問への答え。
-
-| | Web Components | React |
-|---|---|---|
-| 動く場所 | どの HTML ページでも | React アプリの中だけ |
-| 状態管理 | 手書き（setter / event） | `useState` / hooks で簡潔 |
-| 型 | TypeScript と相性が微妙 | 強い |
-| エコシステム | Lit / Stencil がある | 圧倒的に大きい |
-| 学習コスト | ブラウザの知識で済む | React 固有の思考 |
-
-**原則**:
-
-- **アプリ内部** の UI → React で書く（DX が圧倒的）
-- **配布するデザインシステム / 横断的な共通部品** → Web Components（Lit 使用が多い）
-- 両者を組み合わせることも一般的。React の中で `<my-card>` を呼ぶのも OK
-
-React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
-
-さらに React 19 では、Custom Element が `dispatchEvent` で投げる **CustomEvent** も、JSX で `on` プレフィックス付きの prop を書くと購読できるようになりました（イベント名は **小文字＋ダッシュ可** で、`speak` イベントなら `onspeak`、`say-hi` なら `onsay-hi`）。これまで定番だった **`ref` + `addEventListener`** も引き続き使えますが、`onspeak={...}` のように書くだけで済むケースが増えました。
+アプリのルートに `QueryClientProvider` を置きます。
 
 ```tsx
-import { useEffect, useRef } from "react";
+// src/main.tsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import App from "./App";
 
-function ToggleHost() {
-  const ref = useRef<HTMLElement>(null);
+const queryClient = new QueryClient();
 
-  useEffect(() => {
-    const el = ref.current;
-    if (!el) return;
-    const handler = (e: Event) => {
-      const detail = (e as CustomEvent<{ checked: boolean }>).detail;
-      console.log(detail);
-    };
-    el.addEventListener("change", handler);
-    return () => el.removeEventListener("change", handler);
-  }, []);
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+    </QueryClientProvider>
+  </StrictMode>
+);
+```
 
-  return <my-toggle ref={ref} />;
+#### `useQuery` でデータ取得
+
+```tsx
+import { useQuery } from "@tanstack/react-query";
+
+type Post = { id: number; title: string; body: string };
+
+function PostsList() {
+  const { data, isPending, error } = useQuery({
+    queryKey: ["posts"],
+    queryFn: async () => {
+      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+      if (!res.ok) throw new Error("fetch 失敗");
+      return (await res.json()) as Post[];
+    },
+  });
+
+  if (isPending) return <p>読み込み中...</p>;
+  if (error) return <p>エラー: {String(error)}</p>;
+  return (
+    <ul>
+      {data?.slice(0, 10).map((p) => (
+        <li key={p.id}>#{p.id} {p.title}</li>
+      ))}
+    </ul>
+  );
 }
 ```
 
-::: warning TypeScript で使うときは型宣言が必要
-JSX で `<my-toggle>` のような自作タグを書くと、TS は **未知のタグ** としてエラーを出します。React 19 では `react` モジュールの `JSX` 名前空間を拡張する形が公式の作法です。
+`useQuery` がやってくれること:
+
+- **キャッシュ**: 同じ `queryKey` のデータは再利用。同じコンポーネントを 2 枚表示しても 1 回だけ fetch
+- **重複排除**: 複数の呼び出し元が同じ key を使っても fetch は 1 回
+- **自動再取得**: ウィンドウにフォーカスが戻ったとき / ネットワークが復帰したとき
+- **ステール管理**: `staleTime` を超えたら「古い」とみなして次回マウント時に再取得
+
+#### `staleTime` で再取得を制御
+
+```tsx
+useQuery({
+  queryKey: ["posts"],
+  queryFn: fetchPosts,
+  staleTime: 1000 * 60,  // 1 分間はキャッシュを新鮮扱い
+});
+```
+
+デフォルトは `staleTime: 0`（即刻ステール）。「毎回最新を取りたい」場合はそのまま、「頻繁に変わらないデータ」は長めに設定します。
+
+#### `useMutation` で更新
+
+書き込み後にキャッシュを無効化して再取得します。
+
+```tsx
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+
+function CreatePostForm() {
+  const queryClient = useQueryClient();
+
+  const mutation = useMutation({
+    mutationFn: async (body: { title: string }) => {
+      const res = await fetch("https://jsonplaceholder.typicode.com/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      // 成功したら posts キャッシュを無効化 → 自動再取得
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
+  return (
+    <button
+      type="button"
+      disabled={mutation.isPending}
+      onClick={() => mutation.mutate({ title: "新しい記事" })}
+    >
+      {mutation.isPending ? "送信中..." : "記事を作成"}
+    </button>
+  );
+}
+```
+
+`mutation.isPending` が `true` の間はボタンを無効化し、二重送信を防ぎます。
+
+#### React Query Devtools
+
+開発中は Devtools を入れると、キャッシュの状態・ステール判定・再取得のタイミングが視覚的に分かります。
+
+```bash
+npm install @tanstack/react-query-devtools
+```
+
+```tsx
+// main.tsx（開発時のみ）
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+
+<QueryClientProvider client={queryClient}>
+  <App />
+  <ReactQueryDevtools initialIsOpen={false} />
+</QueryClientProvider>
+```
+
+### Zustand
+
+#### インストール
+
+```bash
+npm install zustand
+```
+
+#### store を作る
+
+`create` に関数を渡すだけで store が完成します。Provider は不要です。
 
 ```ts
-import "react";
+// src/themeStore.ts
+import { create } from "zustand";
 
-declare module "react" {
-  namespace JSX {
-    interface IntrinsicElements {
-      "my-toggle": React.DetailedHTMLProps<
-        React.HTMLAttributes<HTMLElement>,
-        HTMLElement
-      >;
-    }
-  }
+type ThemeStore = {
+  theme: "light" | "dark";
+  toggle: () => void;
+};
+
+// OS のダークモード設定を初期値に使う
+const prefersDark =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-color-scheme: dark)").matches;
+
+export const useThemeStore = create<ThemeStore>((set) => ({
+  theme: prefersDark ? "dark" : "light",
+  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+}));
+```
+
+#### コンポーネントから使う
+
+```tsx
+import { useThemeStore } from "./themeStore";
+
+function ThemeToggle() {
+  const theme = useThemeStore((s) => s.theme);
+  const toggle = useThemeStore((s) => s.toggle);
+
+  return (
+    <button
+      type="button"
+      aria-pressed={theme === "dark"}
+      onClick={toggle}
+    >
+      テーマ: {theme}
+    </button>
+  );
 }
 ```
 
-`Lit` を使うとデコレータ経由で型が付くので、TypeScript と組み合わせるなら Lit が現実解です。
-:::
+`useThemeStore((s) => s.theme)` のようにセレクタを使うと、**選択した値が変わった時だけ** コンポーネントが再レンダリングされます。
 
-### Lit の存在
+#### Zustand の利点まとめ
 
-Custom Elements を生で書くと `innerHTML` / `attachShadow` / `render()` が冗長です。[Lit](https://lit.dev/) は Google 製の **薄いラッパー** で、宣言的に書けます。
+- **Provider が要らない**: import するだけ使える
+- **boilerplate が少ない**: Redux の 1/5 程度のコード量
+- **TypeScript フレンドリー**
+- **React 外でも読める**: `useThemeStore.getState()` で外部から参照・更新可能
 
-```js
-import { LitElement, html, css } from "lit";
+#### `persist` ミドルウェアでリロードに耐える
 
-class MyCard extends LitElement {
-  static styles = css`
-    :host { display: block; padding: 16px; border: 1px solid #ccc; }
-  `;
-  render() {
-    return html`<h2>タイトル</h2><slot></slot>`;
-  }
-}
-customElements.define("my-card", MyCard);
+```ts
+import { create } from "zustand";
+import { persist } from "zustand/middleware";
+
+export const useThemeStore = create<ThemeStore>()(
+  persist(
+    (set) => ({
+      theme: "light",
+      toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+    }),
+    { name: "theme-storage" },  // localStorage のキー
+  )
+);
 ```
 
-Web Components を本格的に書くなら Lit が現在のデファクトになっており、Google / Adobe / Shopify も採用しています。
+`persist` を付けると `localStorage` に値を保存し、リロード後も設定が残ります。
+
+### Jotai: atom ベースの代替
+
+Zustand が「明確な store」を作るのに対し、**Jotai は小さな atom を組み合わせる** 思想です。
+
+```bash
+npm install jotai
+```
+
+```tsx
+import { atom, useAtom } from "jotai";
+
+const countAtom = atom(0);
+
+function Counter() {
+  const [count, setCount] = useAtom(countAtom);
+  return <button onClick={() => setCount(count + 1)}>{count}</button>;
+}
+```
+
+「React の `useState` を、アプリ全体に拡張した版」と考えると分かりやすいです。派生状態（他の atom から計算する値）が綺麗に書けます。
+
+**Zustand vs Jotai 選び方**:
+- **Zustand**: 認証情報 / カート / UI 設定など、まとまりのある store が要るとき
+- **Jotai**: 独立した小さな値（カウンター / トグル / フォームの一部フィールド）が散らばっているとき
 
 ## 演習
 
 ### ゴール
 
-- Counter の Web Component を作る
-- Shadow DOM でスタイル隔離を確認する
-- `<slot>` で外から中身を差し込む
+- TanStack Query で外部 API を取得し、Zustand でテーマを切り替えるアプリを作る
+- useMutation でデータを送信し、キャッシュ更新を体験する
 
-### 手順 1: 新規プロジェクト
+### 手順 1: プロジェクト準備
 
 ```bash
-npm create vite@latest web-components-sample -- --template vanilla-ts
-cd web-components-sample
+npm create vite@latest state-sample -- --template react-ts
+cd state-sample
 npm install
+npm install @tanstack/react-query @tanstack/react-query-devtools zustand
 ```
 
-### 手順 2: index.html
+### 手順 2: QueryClientProvider を追加
 
-```html
-<!doctype html>
-<html lang="ja">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Web Components Demo</title>
-    <style>
-      /* 外側の CSS（Shadow DOM で隔離されるはず） */
-      h2 { color: red; }
-      body { font-family: sans-serif; padding: 24px; }
-    </style>
-  </head>
-  <body>
-    <h2>外側の h2（赤いはず）</h2>
+`src/main.tsx`:
 
-    <my-card>
-      <span slot="title">内側のタイトル</span>
-      <p>スロットに入る本文</p>
-    </my-card>
+```tsx
+import { StrictMode } from "react";
+import { createRoot } from "react-dom/client";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
+import App from "./App";
 
-    <my-counter start="5"></my-counter>
-    <p id="log">イベントログ: -</p>
+const queryClient = new QueryClient();
 
-    <script type="module" src="/src/main.ts"></script>
-  </body>
-</html>
+createRoot(document.getElementById("root")!).render(
+  <StrictMode>
+    <QueryClientProvider client={queryClient}>
+      <App />
+      <ReactQueryDevtools initialIsOpen={false} />
+    </QueryClientProvider>
+  </StrictMode>
+);
 ```
 
-### 手順 3: src/main.ts
+### 手順 3: Zustand store
+
+`src/themeStore.ts`:
 
 ```ts
-// my-card
-class MyCard extends HTMLElement {
-  connectedCallback() {
-    const shadow = this.attachShadow({ mode: "open" });
-    shadow.innerHTML = `
-      <style>
-        :host { display: block; margin: 16px 0; padding: 16px; border: 1px solid #ccc; border-radius: 8px; }
-        h2 { color: #2563eb; margin: 0 0 8px; }
-      </style>
-      <h2><slot name="title">デフォルトタイトル</slot></h2>
-      <div><slot></slot></div>
-    `;
-  }
-}
-customElements.define("my-card", MyCard);
+import { create } from "zustand";
 
-// my-counter
-class MyCounter extends HTMLElement {
-  #count = 0;
+type ThemeStore = {
+  theme: "light" | "dark";
+  toggle: () => void;
+};
 
-  static observedAttributes = ["start"];
+const prefersDark =
+  typeof window !== "undefined" &&
+  window.matchMedia("(prefers-color-scheme: dark)").matches;
 
-  attributeChangedCallback(name: string, _old: string, value: string) {
-    if (name === "start") {
-      this.#count = Number(value);
-      this.render();
-    }
-  }
-
-  connectedCallback() {
-    this.attachShadow({ mode: "open" });
-    this.#count = Number(this.getAttribute("start") ?? "0");
-    this.render();
-  }
-
-  render() {
-    if (!this.shadowRoot) return;
-    this.shadowRoot.innerHTML = `
-      <style>
-        :host { display: inline-flex; gap: 8px; align-items: center; padding: 8px; border: 1px solid #ccc; border-radius: 8px; }
-        button { padding: 4px 12px; }
-        strong { min-width: 40px; text-align: center; }
-      </style>
-      <button id="dec">-</button>
-      <strong>${this.#count}</strong>
-      <button id="inc">+</button>
-    `;
-    this.shadowRoot.getElementById("inc")!.addEventListener("click", () => {
-      this.#count++;
-      this.render();
-      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
-    });
-    this.shadowRoot.getElementById("dec")!.addEventListener("click", () => {
-      this.#count--;
-      this.render();
-      this.dispatchEvent(new CustomEvent("change", { detail: { count: this.#count } }));
-    });
-  }
-}
-customElements.define("my-counter", MyCounter);
-
-// ログ
-const log = document.getElementById("log")!;
-document.querySelector("my-counter")!.addEventListener("change", (e: Event) => {
-  const ce = e as CustomEvent<{ count: number }>;
-  log.textContent = `イベントログ: count = ${ce.detail.count}`;
-});
+export const useThemeStore = create<ThemeStore>((set) => ({
+  theme: prefersDark ? "dark" : "light",
+  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
+}));
 ```
 
-### 手順 4: 起動して確認
+### 手順 4: App 統合
 
-```bash
-npm run dev
+`src/App.tsx`:
+
+```tsx
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
+import { useThemeStore } from "./themeStore";
+
+type Post = { id: number; title: string };
+
+export default function App() {
+  const theme = useThemeStore((s) => s.theme);
+  const toggleTheme = useThemeStore((s) => s.toggle);
+  const queryClient = useQueryClient();
+
+  const { data, isPending, error } = useQuery({
+    queryKey: ["posts"],
+    queryFn: async () => {
+      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
+      return (await res.json()) as Post[];
+    },
+  });
+
+  const mutation = useMutation({
+    mutationFn: async (title: string) => {
+      const res = await fetch("https://jsonplaceholder.typicode.com/posts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title }),
+      });
+      return res.json();
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ["posts"] });
+    },
+  });
+
+  return (
+    <main
+      style={{
+        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
+        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
+        padding: 16,
+        minHeight: "100vh",
+      }}
+    >
+      <h1>状態管理の実践</h1>
+
+      <button
+        type="button"
+        aria-pressed={theme === "dark"}
+        onClick={toggleTheme}
+        style={{ marginBottom: 12 }}
+      >
+        テーマ: {theme}（Zustand）
+      </button>
+
+      <div style={{ marginBottom: 12 }}>
+        <button
+          type="button"
+          disabled={mutation.isPending}
+          onClick={() => mutation.mutate("テスト記事")}
+        >
+          {mutation.isPending ? "送信中..." : "記事を作成（useMutation）"}
+        </button>
+        {mutation.isSuccess && <span> 送信完了</span>}
+      </div>
+
+      <h2>記事一覧（TanStack Query）</h2>
+      {isPending && <p>読み込み中...</p>}
+      {error && <p>エラー</p>}
+      <ul>
+        {data?.slice(0, 10).map((p) => (
+          <li key={p.id}>
+            #{p.id} {p.title}
+          </li>
+        ))}
+      </ul>
+    </main>
+  );
+}
 ```
-
-ブラウザで以下を確認します。
-
-1. 外側の `<h2>外側の h2（赤いはず）</h2>` は **赤字**
-2. `<my-card>` の中の `<h2>` は **青字**（内側の `color: #2563eb` が効く。外側の `color: red` は入ってこない）
-3. `<my-card>` のスロットに外から渡した「内側のタイトル」と段落が表示される
-4. `<my-counter>` の `+` / `-` ボタンで数字が変わり、**イベントログ** が更新される
 
 ### 期待出力
 
-- Shadow DOM の中の h2 は青、外側の h2 は赤
-- カウンターを操作すると「イベントログ: count = 6」のように表示が追随する
+- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示される
+- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
+- 「記事を作成」を押すと「送信中...」→「送信完了」と変わる（useMutation）
+- ブラウザの **React Query Devtools**（画面下のアイコン）で `posts` のキャッシュ状態を確認できる
+- **DevTools の Network タブ** でブラウザタブを切り替えてから戻すと、フォーカス復帰で自動再取得が走ることを確認できる
 
 ### 変える
 
-- `attachShadow({ mode: "open" })` を `mode: "closed"` に変える → `document.querySelector('my-counter').shadowRoot` が `null` になることを確認。**注意**: `closed` のままだと `this.shadowRoot!.getElementById(...)` が null 参照で実行時エラーになるため、観察できたら `open` に戻してから他の手順に進む
-- `<my-card>` の内側に `<style> h2 { color: red; }` を書き足して、それは効くが外からの CSS は入ってこないことを確認
-- `observedAttributes` から `"start"` を外すと、HTML 側で `start` を後から変えても反応しなくなる
-- `CustomEvent` の `bubbles: true, composed: true` を付けて、イベントが Shadow 境界を越えて伝播することを確認
+- `staleTime: 1000 * 60` を `useQuery` に渡してみる。1 分間は再取得されない
+- `persist` ミドルウェアを themeStore に追加してリロード後もテーマを保持する
+- Jotai を入れて `countAtom` でカウンターを実装し、Zustand との書き味を比較する
 
 ### 自分で書く（任意）
 
-- `<my-alert type="error">エラーメッセージ</my-alert>` のように `type` 属性で配色を変える alert コンポーネントを作る
-- Lit を `npm install lit` で入れて、上の Counter を Lit で書き直す
-- 作った Web Component を React プロジェクトに持ち込んで `<my-counter start={5} />` で使ってみる（React 19 なら `oncount` のようなイベントも自然に書ける）
+- `getUser: t.procedure` で取得した認証ユーザーを Zustand store に入れ、全画面で参照する
+- TanStack Query の `useInfiniteQuery` で無限スクロールを実装する
+- Jotai の `atomWithStorage` でリロード耐性を持つ atom を作る
 
 ## まとめ
 
-- **Web Components** は「フレームワーク非依存の UI 部品」を作るための Web 標準
-- **Custom Elements**（class extends HTMLElement）、**Shadow DOM**、**HTML Templates** の 3 本柱
-- `connectedCallback` / `disconnectedCallback` / `attributeChangedCallback` のライフサイクル
-- `:host` で要素自身にスタイル、`<slot>` で外側から中身を挿入
-- プロパティは getter / setter、通知は `CustomEvent` で
-- 本格運用するなら **Lit** が今のデファクト
-- React のアプリ内部は React で、**横断的に配布する共通部品** は Web Components が合う
-- React 19 以降は Custom Elements の props / event 受け渡しが自然
+- **TanStack Query**: `useQuery` 1 行でキャッシュ / 重複排除 / 自動再取得を解決。`useMutation` + `invalidateQueries` で書き込み後のキャッシュ更新まで一貫して扱える
+- `staleTime` でキャッシュの鮮度を調整。React Query Devtools でキャッシュの状態を可視化できる
+- **Zustand**: `create` だけで store が完成、Provider 不要。セレクタで必要な値だけ購読し、余計な再レンダリングを防ぐ
+- `persist` ミドルウェアを使えば localStorage に永続化できる
+- **Jotai**: atom 単位で状態を管理。Zustand の「まとまった store」とは対照的に、散らばった独立状態に向く

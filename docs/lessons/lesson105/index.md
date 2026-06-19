@@ -1,242 +1,391 @@
-# lesson105: Core Web Vitals の 3 つの指標と Lighthouse
+# lesson105: コンポーネントカタログ — Storybook
 
 ## ゴール
 
-- Core Web Vitals（CWV）の 3 つの指標 **LCP / INP / CLS** が何を測るかを説明できる
-- それぞれの「Good」しきい値（2.5s / 200ms / 0.1）を覚える
-- Lighthouse と Real User Monitoring（実ユーザーデータ）の違いを理解する
-- 75 パーセンタイル評価の意味を説明できる
-- DevTools の Performance パネルで CWV を計測できる
-- web-vitals ライブラリで自分のサイトに RUM を仕込める基礎を知る
+- Storybook が「**コンポーネントをアプリから切り離して 1 つずつ表示・編集できる開発環境**」であることを説明できる
+- React + Vite プロジェクトに Storybook を `npm create storybook@latest` で導入できる
+- Story（CSF）の最小形を書ける（`meta` + 名前付き export）
+- `args` でコンポーネントの props を UI から差し替えられる
+- `addon-a11y` で各 Story にアクセシビリティチェックを掛けられる
 
 ## 解説
 
-### Core Web Vitals とは
+### Storybook とは
 
-**Core Web Vitals**（CWV）は Google が定義した、Web ページの **ユーザー体験の質** を数値化する 3 つの指標です。検索順位にも影響するため、SEO 観点でも 2020 年以降の標準になりました。2024 年 3 月に **INP**（Interaction to Next Paint）が **FID** を置き換え、現在は次の 3 つです。
+Storybook は **コンポーネントを 1 つだけ取り出して表示** できる開発サーバーです。アプリ全体を起動しなくても、`Button` や `Modal` を **状態ごとに** 開いて見比べたり、UI から props を変えて挙動を確認したりできます。
 
-| 指標 | 何を測る | Good | Needs Improvement | Poor |
-|---|---|---|---|---|
-| **LCP**（Largest Contentful Paint） | 最大コンテンツが表示されるまでの時間 | ≤ 2.5s | 2.5-4.0s | > 4.0s |
-| **INP**（Interaction to Next Paint） | クリック / タップ / キー入力への反応の遅さ | ≤ 200ms | 200-500ms | > 500ms |
-| **CLS**（Cumulative Layout Shift） | レイアウトのガタつきの蓄積 | ≤ 0.1 | 0.1-0.25 | > 0.25 |
+似た言葉に「コンポーネントカタログ」「コンポーネントエクスプローラー」がありますが、Storybook はそのデファクトです。Shopify / Microsoft / Airbnb など多くのデザインシステムが Storybook で公開されています。
 
-「3 つすべて Good」が合格ラインです。1 つでも Poor だとユーザー体験は確実に悪いと判断されます。
+主な用途は次の 3 つです。
 
-### LCP: 最大コンテンツが見えるまで
+1. **開発時の単体プレビュー**: ログイン後にしか出ないモーダル、エラー状態の表示、空配列のリストなど、アプリ操作では再現が面倒な UI を独立して開発できる
+2. **デザインとの共有**: デザイナーや PM に URL を渡すだけで、すべての UI バリエーションを見せられる
+3. **テストの基盤**: 各 Story がそのまま `addon-a11y` / Vitest 統合のテスト対象になる（後述）
 
-LCP は **ページを開いてから、画面の中で一番大きな要素が表示されるまで** の時間です。「一番大きな要素」は通常、メイン画像 / ヒーロー画像 / 大見出しの `<h1>` などです。
+#### Story とは
 
-LCP が遅くなる主な原因:
+「ある props・ある状態でレンダリングされた、コンポーネントの 1 シーン」を **Story**と呼びます。たとえば `Button` には次のような Story が考えられます。
 
-1. **画像の遅延**: 大きすぎる画像、未圧縮、`loading="lazy"` を first view に付けている
-2. **サーバーレスポンスが遅い**（TTFB が長い）
-3. **JS のブロッキング**: 大きな JS バンドルで描画が止まる
-4. **`<link rel="preload">` の不在**: クリティカルなフォントや画像を予告していない
+- `Primary`（主アクション色）
+- `Secondary`（控えめ色）
+- `Disabled`（押せない状態）
+- `Loading`（送信中のスピナー付き）
 
-主な対策:
+Storybook はこれらを左サイドバーのツリーに並べ、選ぶと中央のキャンバスに表示します。
 
-- 画像最適化（`next/image` 系のレッスン参照）
-- Next.js / Vercel のような **CDN + 圧縮済み配信** を使う
-- JS のコード分割（バンドルサイズ最適化のレッスン参照）
-- 重要な画像 / フォントを `<link rel="preload">` で先読み
+### 前提
 
-### INP: 反応の遅さ
-
-INP は **ユーザーが操作してから、次の描画が出るまで** の遅延を測ります。「ボタンをクリックしたが何も反応しない」体験を数値化したものです。2024 年に FID（最初のクリック専用）から INP（全インタラクションの中で最も悪いもの）に変わりました。
-
-INP が悪くなる主な原因:
-
-1. **重い JS イベントハンドラ**: クリック時に大量の計算をしている
-2. **過剰な再レンダリング**: React の useState を密に呼んで、毎回 1000 件再描画
-3. **メインスレッドのブロック**: `for` ループで重い処理を同期実行
-
-対策:
-
-- イベントハンドラ内の処理を軽くする
-- React の `useMemo` / `React.memo`（自動最適化は React Compiler に任せる方向）
-- 重い処理を **Web Worker** に逃がす
-- リスト描画は **仮想スクロール**（`react-window` 等）
-- `requestIdleCallback` で空き時間に処理
-
-### CLS: レイアウトのガタつき
-
-CLS は **要素が突然移動したり、押そうとしたボタンが別の場所に飛んだり** する累積量です。「フォームに入力中、画像が読み込まれて入力欄が下にズレ、押そうと思ったボタンの位置に広告が割り込んで誤クリック」のような UX 障害を防ぎます。
-
-CLS が悪くなる主な原因:
-
-1. **画像 / iframe のサイズ未指定**: `<img>` に `width` / `height` がなく、読み込み後に枠が確定する
-2. **動的に挿入される要素**: バナー / 広告がページ上部に後から差し込まれる
-3. **Web フォントの読み込みでテキストが re-layout**（FOIT / FOUT）
-
-対策:
-
-- すべての画像 / 動画 / iframe に `width` と `height` を指定する（または CSS の `aspect-ratio`）
-- 動的挿入は **下から** か、placeholder で確保したスペースに収める
-- フォントは `next/font` のようなツールで先読み・サブセット化
-- 5 章 で扱った `next/image` は `width` / `height` 必須にすることで CLS を構造的に防ぐ
-
-### しきい値は「75 パーセンタイル」で評価する
-
-Google の評価は **75% のページ訪問** がしきい値を満たしているかで判定します。つまり、最速の 75% のユーザーが「Good」体験を得られればパスです。残り 25%（遅い回線・古い端末）はやや遅くてもよい、という現実的な指標です。
-
-評価データは **CrUX**（Chrome User Experience Report） という Google が集めている実ユーザーの匿名データから計算されます。
-
-### Lighthouse vs Real User Monitoring（RUM）
-
-CWV を計測する方法は 2 系統あります。
-
-#### Lighthouse（ラボデータ）
-
-Chrome DevTools 内蔵の Lighthouse（7 章「アクセシビリティの自動チェック」で触れた）は、**自分の手元のブラウザで** CWV を 1 回だけ計測します。
-
-- 利点: その場ですぐ計測できる、デプロイ前に確認できる
-- 欠点: 自分の手元の環境（速い回線・最新端末）に偏る。実ユーザーの体感とは違うことが多い
-
-主に **開発時のデバッグ** に向きます。
-
-#### RUM（フィールドデータ / 実ユーザー測定）
-
-実際にページを訪れたユーザーのブラウザから CWV を **匿名で集める** 仕組みです。
-
-- 利点: 本物のユーザー体験を反映
-- 欠点: 実際にユーザーが訪問しないとデータが集まらない、PII（個人情報）への配慮が必要
-
-代表的なツール:
-
-- **PageSpeed Insights**（<https://pagespeed.web.dev/>）— CrUX データを表示
-- **Google Search Console** — Core Web Vitals レポート
-- **Vercel Speed Insights**（本コースの教材サイトでも導入済み）
-- **web-vitals ライブラリ** + 任意の解析サービスへ送信
-
-Google が SEO で見るのは **RUM データ**（CrUX） です。Lighthouse のスコアが高くても、実ユーザーが遅いと SEO は改善しません。
-
-### web-vitals ライブラリで RUM を仕込む
-
-自分のサイトで RUM データを集めるには、`web-vitals` ライブラリ（Google 公式）を使うのが定番です。
+このレッスンは React + Vite + TypeScript のプロジェクトを前提にします。「**コンポーネントテスト — React Testing Library**」で作ったプロジェクトをそのまま流用できます。手元に無ければ次で新規作成してください。
 
 ```bash
-npm install web-vitals
+npm create vite@latest storybook-sample -- --template react-ts
+cd storybook-sample
+npm install
 ```
+
+Storybook 10 の動作要件は **Node.js 20+ / Vite 5+ / React 18+** です。
+
+### インストール
+
+プロジェクトのルートで次のコマンドを実行します。
+
+```bash
+npm create storybook@latest
+```
+
+CLI が package.json を見て、React + Vite 用の Storybook を自動で構成します。途中で「テスト統合を入れるか」「a11y アドオンを入れるか」のような質問が出るので、本レッスンでは **両方 yes** で進めます。
+
+インストール後、次のスクリプトが `package.json` に追加されます。
+
+```json
+{
+  "scripts": {
+    "storybook": "storybook dev -p 6006",
+    "build-storybook": "storybook build"
+  }
+}
+```
+
+そして次のディレクトリが生えます。
+
+```
+.storybook/
+├─ main.ts        ← どこから Story を読むか、どのアドオンを使うか
+└─ preview.ts     ← グローバルデコレータ・パラメータ
+
+src/stories/      ← サンプル Story（CLI が初回だけ作る）
+├─ Button.tsx
+├─ Button.stories.ts
+└─ ...
+```
+
+`.storybook/main.ts` の最小形:
 
 ```ts
-// src/web-vitals.ts
-import { onLCP, onINP, onCLS } from "web-vitals";
+import type { StorybookConfig } from "@storybook/react-vite";
 
-function sendToAnalytics(metric: { name: string; value: number; id: string }) {
-  // Vercel Analytics / Google Analytics / 自前のサーバーに送る
-  console.log(metric);
-  // 例: navigator.sendBeacon('/_vitals', JSON.stringify(metric));
-}
+const config: StorybookConfig = {
+  stories: ["../src/**/*.stories.@(ts|tsx)"],
+  addons: ["@storybook/addon-a11y", "@storybook/addon-vitest"],
+  framework: { name: "@storybook/react-vite", options: {} },
+};
 
-onLCP(sendToAnalytics);
-onINP(sendToAnalytics);
-onCLS(sendToAnalytics);
+export default config;
 ```
 
-本コースの教材サイトは **`@vercel/speed-insights`** を使っており、内部で同じ仕組みが動いています。Vercel ホスティングなら追加設定なしで RUM が見られます（Vercel ダッシュボード → Analytics → Speed Insights）。
+- `stories`: Story ファイルを探すパターン。デフォルトは `src` 配下の `*.stories.*`
+- `addons`: 機能拡張。`addon-a11y` がアクセシビリティパネル、`addon-vitest` が Vitest 連携テスト
+- `framework`: フレームワーク + バンドラの組み合わせを指定（React + Vite）
 
-### DevTools の Performance パネルで計測
+### 起動
 
-Chrome DevTools の **Performance** タブを使うと、その場で詳細な CWV プロファイルが取れます。
+```bash
+npm run storybook
+```
 
-1. F12 → **Performance** タブ
-2. **Record** ボタン（黒丸）→ ページをリロード → 数秒待つ → **Stop**
-3. レポートが表示される
-   - 上部に **LCP** / **CLS** などのマーカーが時系列で出る
-   - **Main**（メインスレッド）に長時間ブロックしているタスクが赤く表示される
-   - INP 計測には「Interactions」レーンに各クリックの遅延が出る
+ブラウザで `http://localhost:6006/` が開きます。左サイドバーに CLI が自動生成したサンプル Story が並んでいるので、`Button > Primary` などを選んで表示を確認します。
 
-DevTools の **Performance Insights**（新パネル）も同様の情報を簡素化して提示してくれます。
+### Story の書き方（Component Story Format / CSF）
+
+Story は **ES Module の default export + 名前付き export** で書きます。これを **CSF（Component Story Format）** と呼びます。CSF は Storybook 標準のフォーマットで、テストツールや IDE などからも読みやすい設計です。
+
+最小例として、自前の `Button` を書いてみます。
+
+`src/components/Button.tsx`:
+
+```tsx
+export type ButtonProps = {
+  label: string;
+  variant?: "primary" | "secondary";
+  disabled?: boolean;
+  onClick?: () => void;
+};
+
+export function Button({
+  label,
+  variant = "primary",
+  disabled = false,
+  onClick,
+}: ButtonProps) {
+  const bg = variant === "primary" ? "#1d4ed8" : "#e5e7eb";
+  const color = variant === "primary" ? "#ffffff" : "#111827";
+  return (
+    <button
+      type="button"
+      disabled={disabled}
+      onClick={onClick}
+      style={{
+        background: bg,
+        color,
+        border: "none",
+        borderRadius: 6,
+        padding: "8px 16px",
+        fontSize: 14,
+        cursor: disabled ? "not-allowed" : "pointer",
+        opacity: disabled ? 0.5 : 1,
+      }}
+    >
+      {label}
+    </button>
+  );
+}
+```
+
+`src/components/Button.stories.tsx`:
+
+```tsx
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { Button } from "./Button";
+
+const meta: Meta<typeof Button> = {
+  title: "Components/Button",
+  component: Button,
+  tags: ["autodocs"],
+  args: {
+    label: "押してね",
+    variant: "primary",
+    disabled: false,
+  },
+};
+
+export default meta;
+
+type Story = StoryObj<typeof Button>;
+
+export const Primary: Story = {};
+
+export const Secondary: Story = {
+  args: { variant: "secondary" },
+};
+
+export const Disabled: Story = {
+  args: { disabled: true },
+};
+```
+
+ポイント:
+
+- **`meta`**（default export）はそのファイル全 Story の共通設定。`title` がサイドバーのパス、`component` が対象、`args` が既定 props
+- **名前付き export** が 1 つの Story。`args` でこの Story 固有の差分を上書き
+- **`tags: ["autodocs"]`** を付けると「Docs」タブが自動生成され、props 一覧と各 Story が並ぶページが出る
+- 型は **`StoryObj<typeof Button>`** にすると、`args` の補完と型チェックが効く
+
+保存すると Storybook が HMR で更新し、サイドバーに `Components > Button > Primary / Secondary / Disabled` が並びます。
+
+### Controls で props を変える
+
+Storybook 下部の **Controls** パネルでは、`args` で宣言したプロパティを UI から書き換えられます。`label` のテキスト入力、`variant` のセレクト、`disabled` のチェックボックスが自動生成されます。
+
+ボタンの文言や色を CSS に手を入れずに切り替えて、見え方の差を確かめられるので、デザインレビューが捗ります。
+
+### Actions でイベントを観察
+
+`onClick` のようなコールバックは、Story の `args` で `fn()` を渡しておくと、Storybook の **Actions** パネルにクリックログが流れます。
+
+```tsx
+import { fn } from "storybook/test";
+
+const meta: Meta<typeof Button> = {
+  title: "Components/Button",
+  component: Button,
+  args: {
+    label: "押してね",
+    onClick: fn(),
+  },
+};
+```
+
+`fn()` は Vitest 互換のスパイ関数で、Storybook が呼び出しを記録します。後述する `play` 関数からもアサート可能です。
+
+### アクセシビリティアドオン（addon-a11y）
+
+`addon-a11y` は Deque の **axe-core** をブラウザ内で走らせて、表示中の Story の DOM をルールに照らして検査します。配色のコントラスト不足、`aria-*` の誤用、見出しレベル飛ばしなどがその場で見つかります。
+
+導入は CLI が yes 時に自動でやってくれますが、手動で入れる場合は次の通り。
+
+```bash
+npm install --save-dev @storybook/addon-a11y
+```
+
+`.storybook/main.ts` の `addons` に `"@storybook/addon-a11y"` を追加すると、Storybook の右パネルに **Accessibility** タブが出ます。
+
+#### 試してみる: わざと違反を作る
+
+`Button` の文字色を背景に近づけてコントラストを落とすと、Accessibility パネルが赤くなり「Elements must have sufficient color contrast」と教えてくれます。
+
+```tsx
+// 失敗例
+const color = variant === "primary" ? "#a5b4fc" : "#9ca3af";
+```
+
+これは **「アクセシビリティの自動チェック（axe / Lighthouse / スクリーンリーダー）」** と同じ axe-core が走っているので、ルールセットも同じです。
+
+### Vitest 統合で Story をテストに使う
+
+Storybook 8.2 以降、`addon-vitest` で **Story をそのままテストとして実行** できます。Vitest が Story を 1 つずつブラウザで開き、レンダリングできたかをアサートします。アクセシビリティルールの違反もエラーにできます。
+
+セットアップは CLI が自動でやってくれますが、ポイントだけ:
+
+- `vitest.config.ts` で `@storybook/addon-vitest/vitest-plugin` を読み込む
+- 既存の Vitest（「**テスト入門 — Vitest でユニットテスト**」で使ったもの）にプロジェクトとして合流する形になる
+- `npm run test` で **既存ユニットテスト + Story スナップショット + a11y チェック** が一括で走る
+
+### play 関数でインタラクションを書く
+
+「クリックしたら開く」「入力するとボタンが活性化する」のような **挙動付きの Story** も書けます。
+
+```tsx
+import type { Meta, StoryObj } from "@storybook/react-vite";
+import { expect, fn, userEvent, within } from "storybook/test";
+import { Button } from "./Button";
+
+const meta: Meta<typeof Button> = {
+  title: "Components/Button",
+  component: Button,
+  args: { label: "送信", onClick: fn() },
+};
+
+export default meta;
+
+export const クリックして送信される: StoryObj<typeof Button> = {
+  play: async ({ canvasElement, args }) => {
+    const canvas = within(canvasElement);
+    const button = canvas.getByRole("button", { name: "送信" });
+    await userEvent.click(button);
+    await expect(args.onClick).toHaveBeenCalledOnce();
+  },
+};
+```
+
+`play` は **「コンポーネントテスト — React Testing Library」** の操作と同じ `userEvent` / `within` / `expect` を使います。書き味も React Testing Library とほぼ同じです。Storybook 上でも自動再生されるので、開いた瞬間にボタンがクリックされて Actions パネルに記録が残ります。
+
+### Story ファイルをどこに置くか
+
+```
+src/
+├─ components/
+│  ├─ Button/
+│  │  ├─ Button.tsx
+│  │  └─ Button.stories.tsx   ← コンポーネントの隣
+│  └─ Modal/
+│     ├─ Modal.tsx
+│     └─ Modal.stories.tsx
+```
+
+「**コンポーネントテスト — React Testing Library**」で扱った `*.test.tsx` と同じ流儀で、**実装ファイルの隣** に置きます。これでファイルを探す手間が無く、移動・削除も同時にできます。
+
+### 本番ビルドと公開
+
+```bash
+npm run build-storybook
+```
+
+`storybook-static/` に静的ファイルが出力されます。これを Vercel / Netlify / GitHub Pages / S3 などに上げると、チームに **常時アクセス可能なコンポーネント一覧** が配れます。Pull Request ごとにプレビュー URL を作るサービスとして **Chromatic**（Storybook の作者たちが運営）も人気です。
+
+### 何を Story にすべきか
+
+経験的には次の単位で書くと役立ちます。
+
+- **`variant` ごと**: `Primary` / `Secondary` / `Danger`
+- **状態ごと**: `Loading` / `Empty` / `Error`
+- **境界ケース**: 長文 / 空文字 / 数字 0 / 100% 残量
+- **a11y 確認用**: 入力エラー時、フォーカス時
+
+逆に、**アプリ全体のシナリオ**は Storybook に書きません。それは「**E2E テスト — Playwright**」の出番です。Storybook は **1 コンポーネントの中の差** を見せる場所と覚えてください。
 
 ## 演習
 
 ### ゴール
 
-- 本教材サイト or 任意のサイトの CWV を Lighthouse で計測する
-- DevTools Performance パネルで LCP / CLS が時系列に発生するのを観察する
-- web-vitals の存在を知り、最小サンプルを動かしてみる（任意）
+- Vite + React + TS プロジェクトに Storybook を導入する
+- 自前の `Button` コンポーネントに対して `Primary` / `Secondary` / `Disabled` の 3 Story を書く
+- Controls から props を切り替えて表示が変わることを確認する
+- `addon-a11y` のパネルでアクセシビリティ違反が出ないことを確認する
 
-### 手順 1: Lighthouse で CWV を計測
+### 途中から始める場合
 
-1. Chrome で本教材サイト（<https://web-front-handson-ozaki25.vercel.app/>）を開きます
-2. F12 → **Lighthouse** タブ → **Performance** だけにチェック → Mobile / Desktop どちらかで **Analyze**
-3. レポートを確認:
-   - 全体スコア
-   - **Largest Contentful Paint**（LCP の値）
-   - **Cumulative Layout Shift**（CLS の値）
-   - **Interaction to Next Paint**（条件次第で出る）
+「**コンポーネントテスト — React Testing Library**」で作ったプロジェクトに合流するのが楽です。なければ:
 
-### 手順 2: PageSpeed Insights で RUM を見る
+```bash
+npm create vite@latest storybook-sample -- --template react-ts
+cd storybook-sample
+npm install
+```
 
-1. <https://pagespeed.web.dev/> にアクセス
-2. URL を入れて Analyze
-3. 上部に **「実際のユーザーの体験」** セクションが出る（CrUX データがあれば）。これが RUM
-4. 下部の **「パフォーマンスの問題を診断」** が Lighthouse のラボデータ
+### 手順 1: Storybook を入れる
 
-実ユーザーデータがある場合は **「実際のユーザーの体験」が判定の主軸** です。Lighthouse は補助。
+```bash
+npm create storybook@latest
+```
 
-### 手順 3: DevTools Performance で観察
+質問には次のように答えます。
 
-1. Chrome で対象ページを開く
-2. F12 → **Performance** タブ
-3. 左上の **Record**（黒丸） を押す
-4. ページをリロード（`Ctrl + R`）
-5. ページが落ち着いたら、**ページ内のリンクやボタンを数回クリック**する（INP 計測のためにインタラクションが必要）
-6. **Stop** を押す
-7. タイムラインで:
-   - **LCP** マーカー（緑）の位置を確認 → 何ミリ秒目に出ているか
-   - **CLS** が起きていれば、shift のたびに警告マーカーが出る
-   - **Interactions** レーンにクリックごとの INP バーが表示される
-   - **Main** レーンで赤く長いブロックがないか確認（あれば INP 悪化要因）
+- どの構成か → 自動検出（React + Vite）でそのまま
+- テスト統合を入れるか → **yes**
+- a11y アドオンを入れるか → **yes**
+
+完了後、`package.json` に `storybook` / `build-storybook` スクリプトが入り、`.storybook/` ディレクトリができていることを確認します。
+
+### 手順 2: 起動して既存の Story を眺める
+
+```bash
+npm run storybook
+```
+
+ブラウザで `http://localhost:6006/` を開き、サイドバーの `Example > Button` などをクリックします。**Controls** パネルで `label` を書き換えて、画面のボタンが追従することを確認します。
+
+### 手順 3: 自前の Button を作る
+
+`src/components/Button.tsx` を作成し、上の「Story の書き方（CSF）」の `Button` コードをそのままコピーします。
+
+### 手順 4: Story を書く
+
+`src/components/Button.stories.tsx` を作成し、上の `Primary` / `Secondary` / `Disabled` をそのまま貼ります。保存すると Storybook のサイドバーに **`Components > Button > Primary / Secondary / Disabled`** が並びます。
 
 ### 期待出力
 
-Lighthouse:
+- 3 つの Story が左サイドバーに並ぶ
+- 中央の Canvas に対応するボタンが表示される
+- 下の **Controls** で `label` / `variant` / `disabled` を変更できる
+- 右パネルの **Accessibility** タブで「No violations found」と表示される
 
-- **Performance** スコアが 90 以上なら良好
-- LCP が 2.5s 以下、CLS が 0.1 以下なら CWV パス
-
-PageSpeed Insights:
-
-- 「実際のユーザーの体験」セクションが緑（合格）/ 黄（要改善）/ 赤（不合格）で判定される
+スクリーンショットは省略しますが、3 種のボタンが切り替わって表示されれば成功です。
 
 ### 変える
 
-- Lighthouse の **デバイスモード** を Desktop と Mobile で切り替える。Mobile の方が厳しめのスコアになる
-- DevTools の Network タブの **Throttling** を「Slow 4G」にして再計測 → LCP が大幅に悪化する。実ユーザーの遅い回線環境を再現
-- 自分が運営しているサイト（ブログ・ポートフォリオ）で同じ手順を試す
+- `variant` に `"danger"` を追加し、赤系の配色で `Danger` Story を増やす
+- `Button` の文字色を **わざと薄く**（`#a5b4fc` など）してコントラスト不足を作り、Accessibility パネルが赤くなることを確認する。確認後は戻す
+- `Button` に `loading?: boolean` を足し、ローディングインジケータ付きの `Loading` Story を書く
 
-### 自分で書く（任意）
+### 自分で書く
 
-新規 Vite プロジェクトに `web-vitals` を入れて、コンソールに値を出す最小サンプルを動かす:
-
-```bash
-npm create vite@latest cwv-sample -- --template vanilla-ts
-cd cwv-sample
-npm install web-vitals
-```
-
-`src/main.ts`:
-
-```ts
-import { onLCP, onINP, onCLS } from "web-vitals";
-
-onLCP(console.log);
-onINP(console.log);
-onCLS(console.log);
-
-document.querySelector<HTMLDivElement>("#app")!.innerHTML = `<h1>web-vitals サンプル</h1>`;
-```
-
-`npm run dev` で開いて DevTools の Console を確認すると、ページ滞在中に LCP / CLS の値が、操作するたびに INP の値がログ出力されます。
+- 別のコンポーネント（例: `Card` / `Modal` / `Badge`）を 1 つ実装し、その Story を 3 つ以上書く
+- `play` 関数を使い、「ボタンをクリックすると `onClick` が 1 回呼ばれる」アサーションを 1 つ書く（`storybook/test` の `fn` / `expect` / `userEvent` を使う）
+- `npm run build-storybook` を実行し、`storybook-static/index.html` をブラウザで開いて静的ビルドが動くことを確認する
 
 ## まとめ
 
-- Core Web Vitals は 3 指標: **LCP（2.5s）/ INP（200ms）/ CLS**（0.1）
-- 2024 年 3 月に **FID は INP に置き換わった**
-- 評価は **75 パーセンタイル** + **CrUX**（実ユーザーデータ） で行われる
-- **Lighthouse はラボデータ**（開発時の確認）、**RUM はフィールドデータ**（SEO の本命）
-- **PageSpeed Insights** が両方を一覧表示してくれる
-- DevTools の **Performance パネル** で詳細を時系列に見る
-- `web-vitals` ライブラリで自前 RUM、Vercel Speed Insights で外部委託
+- Storybook は **コンポーネントをアプリから切り離して 1 つずつ開発・確認** するための開発サーバー
+- Story は CSF（default export `meta` + 名前付き export）で書き、`args` で props を差し替えられる
+- `addon-a11y` で axe-core によるアクセシビリティチェックがその場で走る
+- `play` 関数 + `storybook/test` でインタラクションを書け、Vitest 統合により `npm test` で一括実行できる

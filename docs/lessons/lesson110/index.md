@@ -1,334 +1,150 @@
-# lesson110: Vite の仕組みを軽く
+# lesson110: フロントエンドツールの全体像と歴史
 
 ## ゴール
 
-- Vite が **開発時とビルド時で別の戦略** を使う（古典的な 2 段構成）ことと、**Vite 8（2026 年 3 月）からは Rolldown を中核** に据えて esbuild が担っていた領域を順次置き換えていく方向に進んだ経緯が分かる
-- HMR（Hot Module Replacement）が「**変更した部分だけ差し替える**」仕組みを大づかみに理解する
-- 本番ビルドでチャンク分割が起きる理由が言える
-- `import.meta.env` で環境変数を読み込める
-- Vite プラグインの位置付けを把握する
+- フロントエンドのビルド系ツールを **5 つの役割** で分類できる
+- なぜツールがこんなに多いのか、世代交代の流れを説明できる
+- 2026 年時点のデファクトを役割ごとに 1 つずつ挙げられる
+- なぜ Rust / Go 製のツールが増えているかを理解する
 
 ## 解説
 
-### Vite の立ち位置
+### 道具が多すぎる問題
 
-Vite は **Vue.js 作者の Evan You が始めた** モダンビルドツールです。React / Vue / Svelte / Solid など主要フレームワークの公式テンプレートにも採用され、2026 年現在は **新規プロジェクトのデフォルト** と言える存在です。
+現代の `package.json` を開くと、`devDependencies` に 20〜30 個のパッケージが並びます。Vite / TypeScript / ESLint / Prettier / Vitest / Playwright / SWC / Babel / esbuild / ... と覚えきれない量です。
 
-特徴:
+本章ではこの後のレッスンで「Vite の仕組み」「ESLint / Prettier / Biome」「次世代ツールチェイン」など個別ツールを深掘りしますが、その前に「**何をするツールがあるか**」「**なぜこれだけ種類があるか**」の見取り図を共有します。
 
-- **開発サーバーが速い**（数百 ms で起動）
-- **HMR が一瞬**（保存と同時にブラウザが追随）
-- **本番ビルドはツリーシェイク + 最適化** までやる
-- **プラグイン互換** で React / Vue / SVG / MDX / PWA など何でも繋がる
+### 役割別: 5 つのカテゴリ
 
-### 2 段構成の歴史と Rolldown 統一
+ほとんどのツールは次の 5 つのどれかに分類できます。
 
-Vite が登場した当初の戦略は **「開発と本番で違うツールを使う」** でした。
-
-| 局面 | 使うツール | 役割 |
+| 役割 | 何をする | 代表ツール |
 |---|---|---|
-| 開発時 | esbuild | 依存関係の事前バンドル / TS・JSX 変換（**Go 製で速い**） |
-| 本番ビルド時 | Rollup | チャンク分割 / ツリーシェイクが得意（**JS 製、プラグイン豊富**） |
+| **モジュールバンドラ** | 多数の JS / CSS / 画像をブラウザが読める形にまとめる | webpack / Rollup / esbuild / Vite / Turbopack / Rspack / Rolldown |
+| **トランスパイラ** | TS → JS、JSX → JS、新しい構文 → 古い構文 | Babel / TypeScript / SWC / Oxc |
+| **リンター** | コードの「臭い」を検出（バグの種・アンチパターン） | ESLint / Biome / oxlint |
+| **フォーマッタ** | コードのスタイルを揃える（インデント・改行など） | Prettier / Biome / dprint |
+| **テストランナー** | テストを実行する | Jest / Vitest / Playwright |
 
-開発は速さ重視 = esbuild、本番は最適化重視 = Rollup。**「両方のいいとこ取り」** という賢い設計でした。
+これに加えて、**開発サーバー**（Vite dev server / webpack-dev-server）と **パッケージマネージャ**（npm / pnpm / yarn / Bun）も道具です。
 
-#### Vite 8（2026 年 3 月）で Rolldown を中核に
+ややこしいのは、1 つのツールが **複数の役割を兼ねる** ことです。Vite はバンドラだが内部で Rolldown / Oxc を使ってトランスパイルもする（Vite 8 以前は esbuild）。Biome はリンタとフォーマッタを兼ねる。Oxc は将来的にバンドラ以外のすべてを統合する目標を持っています。
 
-[Vite 8](https://vite.dev/blog/announcing-vite8) で **Rolldown** という Rust 製の新しいバンドラに **完全統一**されました。本番ビルドの Rollup も、開発時の依存事前バンドル / TS・JSX 変換を担っていた esbuild も、すべて Rolldown / Oxc に置き換わっています。
+### 歴史: 4 つの世代
 
-- **Rolldown は Rust 製**で、Rollup と同じプラグイン API を持つ
-- **esbuild に近い速度** と **Rollup の最適化機能** を併せ持つ
-- 結果として Vite はビルドが **最大 10〜30 倍速** になった
-- Rolldown の中で **Oxc**（Rust 製パーサ / minifier）が使われる
+なぜこれだけ種類が増えたかは、**世代を追うと整理しやすい** です。
 
-「esbuild + Rollup の 2 段構成」から「Rolldown 単独」に統一された、と覚えれば十分。**普段の使い方は変わりません**（`vite` / `vite build` / `vite preview`）。
+#### 第 0 世代: 〜2014 年「ツール以前」
 
-### 開発サーバーの仕組み
+JS は `<script>` タグで読み込み、CSS は `<link>` で読み込むだけでした。複数ファイルを連結したければ `cat a.js b.js > bundle.js` のような手作業で済ませていました。
 
-Vite の開発サーバーが速い秘密は「**バンドルしないで配る**」ことです。
+- **Grunt**（2012）/ **Gulp**（2013）: タスクランナー。「concat → minify → upload」の手順を自動化
+- **Browserify**（2011）: Node.js の `require()` をブラウザでも動かす最初のバンドラ
 
-#### 古典的 webpack の流れ
+#### 第 1 世代: 2015〜2019 年「webpack + Babel」
 
-1. 全ファイルを依存関係に従って **1 つにまとめる**（バンドル）
-2. ブラウザに 1 つの大きな JS を渡す
-3. 一部修正されると **再バンドル**
+ES2015 の登場で言語が大きく変わり、ブラウザ対応がバラバラになり、トランスパイルが必須に。
 
-→ ファイル数が増えると線形に遅くなる。
+- **webpack**（2014〜）: `import` を解決し、CSS / 画像も「モジュール」として扱う。コード分割もできる
+- **Babel**（2014〜）: ES2015+ を ES5 に変換。JSX も Babel が変換
+- **Rollup**（2015〜）: ライブラリ向けのバンドラ。tree-shaking の概念を広めた
+- **Parcel**（2017〜）: 設定ゼロを売りに
 
-#### Vite の流れ
+webpack + Babel が圧倒的な標準になった時代です。代わりに `webpack.config.js` が数百行に膨らみ、ビルドが分単位で遅くなる問題が表面化しました。
 
-1. ブラウザの **ESM**（`import` / `export`） をそのまま使う
-2. `import "./App.tsx"` のリクエストが来た瞬間 **そのファイルだけ** TypeScript / JSX を変換して返す
-3. 修正されたファイルだけ再変換 → HMR で **ピンポイントに差し替え**
+#### 第 2 世代: 2020〜2022 年「ESM + ネイティブ速度」
 
-→ ファイル数が増えても初回の起動が速い。
+ブラウザの ESM サポートが普及し、「開発時はバンドルしない」選択肢が現実的に。さらに JS 製ツールの遅さを Go / Rust で解決する流れが始まりました。
 
-#### 例: 何が起きているか
+- **esbuild**（2020〜）: Go 製。webpack より 10〜100 倍速いトランスパイラ + バンドラ
+- **Vite**（2020〜）: 開発時は ESM のまま配信、本番ビルドは Rollup。トランスパイルは esbuild で
+- **SWC**（2020〜）: Rust 製のトランスパイラ。Babel の代替として Next.js が採用
+- **Rome**（2020〜）→ **Biome**（2023〜）: ESLint + Prettier を 1 つに統合する試み
 
-ブラウザの開発者ツールで Network タブを見ると、`main.tsx` / `App.tsx` / `Button.tsx` / 各 npm パッケージが **個別に** リクエストされています。これがブラウザネイティブの ESM。
+「ビルドツールを Rust / Go で書き直す」流れが本格化しました。
 
-ただし `node_modules` 内の依存（`react`、`react-dom` など）は **事前バンドル**（pre-bundling）で 1 ファイルにまとめてから配ります。なぜなら多くの npm パッケージが内部で **数百ファイル** に分かれていて、そのまま配るとリクエスト数が膨大になるからです。自分のコードは個別配信、依存は固める、という使い分けが基本になります。
+#### 第 3 世代: 2023 年〜現在「Rust 全盛 + 統合 + 競争」
 
-### HMR（Hot Module Replacement）
+- **Turbopack**（2022〜）: Vercel 製。Rust 製の webpack 後継、Next.js に組み込み
+- **Rspack**（2023〜）: ByteDance 製。webpack 互換の Rust 実装
+- **Oxc**（2023〜）: 高速 JS / TS パーサ + リンタ + フォーマッタ + リゾルバの統合プロジェクト。**oxlint** v1.0（2025 年 6 月）は ESLint より圧倒的に速く、Shopify / Airbnb などの主要 OSS が採用
+- **Biome**（2023〜）: ESLint + Prettier 互換を 1 バイナリで提供。lint と format を統合する立ち位置
+- **Rolldown**（2024〜）: Vite 公式の Rust 製 Rollup 互換バンドラ。Vite 8（2026 年 3 月）で本番ビルドの中核に正式採用済み
 
-開発時にファイルを保存すると、**ブラウザのリロードなしに該当部分だけ更新** される機能です。
+JavaScript 製のツールから Rust / Go 製への移行と、複数ツールの「統合」が同時並行で進んでいます。この世代は決定的な勝者がまだ決まらず、複数の競合が並走している状況が続いています。
 
-普通のブラウザリロードと違って:
+### 2026 年の標準セット
 
-- フォームに入力した値が **保持** される
-- スクロール位置が保たれる
-- 状態（state）も保たれる（フレームワーク側が対応していれば）
+新規プロジェクトで「とりあえず始める」ならこの組み合わせがいちばん摩擦が少ない選択肢です。
 
-#### 仕組みを大づかみに
+| 役割 | 標準 |
+|---|---|
+| バンドラ | Vite（個人 / SPA）/ Next.js（フルスタック）|
+| トランスパイラ | TypeScript + Vite 内蔵の Rolldown / Oxc |
+| リンター | ESLint or oxlint or Biome（過渡期で 3 択） |
+| フォーマッタ | Prettier or Biome |
+| テストランナー | Vitest（単体）/ Playwright（E2E）|
+| パッケージマネージャ | npm / pnpm |
 
-1. Vite はファイル変更を **fs.watch** で監視
-2. 変更があると **どのモジュールが影響を受けるか** を依存グラフから割り出す
-3. **影響モジュールだけ** ブラウザに WebSocket で送る
-4. ブラウザ側のランタイムが **古いモジュールを新しいもので置換**
+「**Vite + TypeScript + ESLint + Prettier + Vitest**」が現時点の最大公約数で、リンタを oxlint や Biome に置き換える選択肢も実用域に入っています。
 
-React / Vue は専用のプラグイン（`@vitejs/plugin-react` / `@vitejs/plugin-vue`）が **コンポーネントの state を保ったまま** 差し替える HMR を提供します。この仕組みのおかげで「保存と同時にコンポーネントだけ書き換わる」体験になります。
+### なぜ Rust / Go 製が増えるのか
 
-### 本番ビルドの仕組み
+JavaScript 製のツールは、Node.js の起動時間 + V8 の最適化が追いつくまでの時間 + パース速度に律速されます。Rust / Go 製のツールは:
 
-`vite build` で行われること:
+- **起動が速い**（数 ms〜数十 ms）
+- **並列処理が JS より素直に書ける**（マルチコアを活かしやすい）
+- **大規模プロジェクトで有意に速い**（webpack ビルド数分 → Turbopack 数秒）
 
-1. **エントリポイント** から依存関係を辿る
-2. **ツリーシェイク** で使われない export を削除
-3. **チャンク分割** で複数ファイルに分ける
-4. **minify** でファイルサイズを削減
-5. **assets**（画像 / CSS）にハッシュを付けて出力（`index-Xj9k2.js` のような名前）
+ただし、JS 製ツールに比べて **エコシステム（プラグイン）が貧弱** な過渡期です。ESLint には何千ものプラグインがありますが、oxlint や Biome は組み込みルールが中心。完全な置き換えには数年かかると見るのが現実的です。
 
-#### チャンク分割（コード分割）
+### 選び方の指針
 
-すべて 1 ファイルにすると初回ロードが重くなります。Vite はデフォルトで:
+新しいツールに飛びつくべきか、定番にとどまるべきか:
 
-- **ベンダー**（`node_modules`）を別チャンクに
-- **動的 import**（`import("./Heavy.tsx")` のような書き方）を別チャンクに
+- **学習中・小規模**: 定番（Vite + ESLint + Prettier）で十分。情報量が圧倒的に多く、詰まったときの解決が速い
+- **既存プロジェクト**: 動いているなら無理に置き換えない。フォーマッタや lint だけ部分的に置き換えるのは比較的安全
+- **大規模 / モノレポ**: ビルド時間がボトルネックなら Turbopack / Rspack / Rolldown を検討
+- **OSS ライブラリ**: Rollup or Vite の library mode
 
-を行います。「ボタンを押した時だけ読む UI」は **動的 import** で別チャンクにすれば、初回バンドルから外せます（「バンドルサイズの最適化とコード分割」のバンドルサイズ最適化と繋がる話）。
-
-```ts
-// クリック時に初めて読み込む
-const handleClick = async () => {
-  const { showModal } = await import("./modal");
-  showModal();
-};
-```
-
-#### ハッシュ付きファイル名
-
-`index-Xj9k2.js` のように **内容ハッシュ** を付けることで、CDN に長期キャッシュを設定しても安全に運用できます（中身が変われば名前も変わる）。
-
-### `import.meta.env` で環境変数
-
-Vite は `.env` / `.env.local` / `.env.development` / `.env.production` を読み込みます。
-
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_KEY=do_not_expose
-```
-
-```ts
-console.log(import.meta.env.VITE_API_URL); // OK
-console.log(import.meta.env.SECRET_KEY);   // undefined（VITE_ で始まらないので公開されない）
-```
-
-ルール:
-
-- **`VITE_` プレフィックス** が付いた値だけが **クライアントに公開** される
-- それ以外は Vite が **読み捨てる**（漏洩対策）
-- ビルド時に **値が文字列リテラルとして埋め込まれる**（実行時のフェッチではない）
-
-組み込みで使える環境情報:
-
-```ts
-import.meta.env.MODE        // "development" / "production"
-import.meta.env.DEV         // true / false
-import.meta.env.PROD        // true / false
-import.meta.env.BASE_URL    // "/" など
-```
-
-### プラグイン
-
-Vite は **Rollup プラグイン互換** + Vite 独自の hook を持つ「プラグイン」で機能拡張します。
-
-```ts
-// vite.config.ts
-import { defineConfig } from "vite";
-import react from "@vitejs/plugin-react";
-import svgr from "vite-plugin-svgr";
-import { VitePWA } from "vite-plugin-pwa";
-
-export default defineConfig({
-  plugins: [
-    react(),
-    svgr(),
-    VitePWA({ registerType: "autoUpdate" }),
-  ],
-});
-```
-
-代表的なプラグイン:
-
-- `@vitejs/plugin-react`: React の HMR + JSX 変換
-- `@vitejs/plugin-vue`: Vue 単一ファイルコンポーネント対応
-- `vite-plugin-svgr`: `import { ReactComponent as Icon } from "./icon.svg"`
-- `vite-plugin-pwa`: PWA 化（このコースのドキュメント自体も使っている）
-- `vitest`: テストランナー（「テスト入門 — Vitest でユニットテスト」）
-
-Rolldown / Rollup プラグインがそのまま動く設計なので、**エコシステムが共有される** のが強みです。
-
-### Vite と他ツールの関係
-
-Next.js / Remix / Nuxt のようなフルスタックフレームワークも、内部で **Vite を採用** したり、独自の Turbopack / esbuild を使ったりしています。
-
-- **Next.js**: 独自の Turbopack（Rust 製）を使う。Vite は採用していない
-- **Remix v3 / React Router v7+**: 内部で Vite を採用
-- **Nuxt 3+**: 内部で Vite を採用
-- **Astro**: 内部で Vite を採用
-- **SvelteKit**: 内部で Vite を採用
-
-つまり「**フレームワーク非依存の Vite を使うか、Vite を内蔵したフレームワークを使うか**」という違いに帰着します。
-
-### 「ハマる」パターン
-
-#### `process.env` が `undefined`
-
-→ Vite では **`import.meta.env`** を使う。`process.env` は Node.js のもので、ブラウザにはない。
-
-#### 環境変数がクライアントに出てこない
-
-→ 名前を **`VITE_` で始める**。さもないと意図的に削除される。
-
-#### CommonJS のパッケージで失敗
-
-→ `optimizeDeps.include` に追加する、または ESM 互換の代替パッケージを探す。最近は CJS のみのパッケージが減ったので、出会う頻度は下がっている。
-
-#### `node:fs` を import してエラー
-
-→ ブラウザ向けコードに **Node.js 専用 API** は使えない。サーバー側コード（Astro / Next.js / API ルート）に分離する。
+「**新しい = 良い**」ではなく「**自分のプロジェクトの何を解決したいか**」で選ぶのが基本です。新しいツールは半年で景色が変わります。
 
 ## 演習
 
 ### ゴール
 
-- Vite の開発サーバーで **HMR を体感** する
-- ビルド出力のチャンク分割を眺める
-- `import.meta.env` で環境変数を読む
+- 自分のプロジェクト（または本コースのリポジトリ）の `devDependencies` を 5 つの役割に分類できる
+- 各ツールが第何世代に登場したか答えられる
 
-### 手順 1: 新規プロジェクト
+### 手順
 
-```bash
-npm create vite@latest vite-internals -- --template react-ts
-cd vite-internals
-npm install
-```
-
-### 手順 2: HMR を試す
-
-```bash
-npm run dev
-```
-
-ブラウザで `http://localhost:5173` を開きます。`src/App.tsx` の文字列を編集して保存すると、**画面の該当部分だけ** 更新されることを確認します。React のカウンタの値が **保持されたまま** UI が変わるのが HMR の効果。
-
-### 手順 3: ネットワークタブで個別配信を観察
-
-DevTools の Network タブを開いた状態で **Cmd/Ctrl + Shift + R**（ハードリロード）。`main.tsx` / `App.tsx` などが **個別に** ロードされていることを確認します。`react` / `react-dom` は事前バンドルされて 1 つにまとまっています（`/node_modules/.vite/deps/...` のような URL）。
-
-### 手順 4: 環境変数
-
-`.env` を作成:
-
-```bash
-# .env
-VITE_API_URL=https://api.example.com
-SECRET_TOKEN=xxxxx
-```
-
-`src/App.tsx` に追加:
-
-```tsx
-console.log("VITE_API_URL:", import.meta.env.VITE_API_URL);
-console.log("SECRET_TOKEN:", import.meta.env.SECRET_TOKEN);
-console.log("MODE:", import.meta.env.MODE);
-```
-
-ブラウザのコンソールで:
-
-- `VITE_API_URL` は表示される
-- `SECRET_TOKEN` は **`undefined`**（Vite が削除する）
-- `MODE` は `"development"`
-
-### 手順 5: 本番ビルド
-
-```bash
-npm run build
-ls -la dist/assets
-npm run preview
-```
-
-`dist/assets` 内に **ハッシュ付き** のファイル名（`index-Xj9k2.js` など）があり、CSS と JS が別ファイルに分かれていることを確認します。`npm run preview` で本番ビルドの動作確認ができます。
-
-### 手順 6: 動的 import でチャンクを分割
-
-`src/App.tsx`:
-
-```tsx
-import { useState } from "react";
-
-export default function App() {
-  const [text, setText] = useState("");
-
-  const handleClick = async () => {
-    const mod = await import("./heavy");
-    setText(mod.heavyFunction());
-  };
-
-  return (
-    <div>
-      <button onClick={handleClick}>重い処理</button>
-      <p>{text}</p>
-    </div>
-  );
-}
-```
-
-`src/heavy.ts`:
-
-```ts
-export function heavyFunction() {
-  return "計算結果です";
-}
-```
-
-`npm run build` を再度実行し、`dist/assets` を見ると `heavy-XXXX.js` のような **別チャンク** が生成されていることを確認します。
+1. ターミナルで `cat package.json` か任意のエディタで `package.json` を開きます
+2. `devDependencies` を 1 つずつ眺めます
+3. 5 つのカテゴリ（バンドラ / トランスパイラ / リンター / フォーマッタ / テストランナー）または「その他」に振り分けます
+4. 不明なツールは `npm view <name> description` または npmjs.com で短い説明を読んで分類します
 
 ### 期待出力
 
-- HMR でファイル保存と同時に画面が更新（リロードなし）
-- DevTools で **個別の TS / JSX が ESM として配信** されている様子が見える
-- `VITE_` プレフィックスの環境変数のみクライアントから読める
-- `dist/assets` にハッシュ付きファイル / 別チャンクが見える
+- 例: 本コースのリポジトリだと VitePress（その他: 静的サイト生成器）/ TypeScript（トランスパイラ）/ vite-plugin-pwa（その他: プラグイン）のように分類できる
+- 分類した各ツールが第何世代か答えられる（例: webpack なら第 1 世代、Vite なら第 2 世代）
 
 ### 変える
 
-- `vite.config.ts` の `build.rollupOptions.output.manualChunks` を設定して **手動チャンク分割** を試す
-- `import.meta.env.MODE` の値を `npm run build` 時に確認（`production`）
-- `vite-plugin-pwa` を入れて、ビルド時に Service Worker が生成されることを観察
+- `npm create vite@latest my-app -- --template react-ts` で新規プロジェクトを作り、生成された `devDependencies` を分類してみる
+- 同じ手順を `npm create next-app@latest` で行い、Next.js が何を使っているかを見比べる
 
-### 自分で書く（任意）
+### 自分で書く
 
-- 自作プラグインを 1 つ書いてみる（`transform` フックで全ての `.ts` ファイルにコメントを足すなど）
-- `import.meta.glob` を使って `src/pages/*.tsx` を一括取得し、簡易ルーターを作る
+- 知っているフロントエンド OSS（React / Vue / Svelte 本体など）の GitHub リポジトリで `package.json` を開き、ビルド・テスト・lint 周りに何を使っているか観察する
+- 「2 年後にこの組み合わせがどう変わっていそうか」を予想して 2〜3 行でメモする
 
 ## まとめ
 
-- **Vite 8（2026 年 3 月）から Rolldown 単独に統一**。それまでの「esbuild + Rollup 2 段構成」を 1 段に置き換え
-- 開発時は **バンドルせず ESM として配る**。`node_modules` だけ事前バンドルする
-- HMR は依存グラフを使って **影響モジュールだけ** 差し替える。フレームワーク用プラグインで state も保たれる
-- 本番ビルドは **ツリーシェイク + チャンク分割 + minify + ハッシュ付き** ファイル名を生成
-- 環境変数は **`import.meta.env`** で読む。`VITE_` プレフィックスのみクライアントに公開
-- プラグインは **Rollup / Rolldown 互換**。エコシステムが共有される
-- Next.js / Remix / Nuxt / Astro / SvelteKit などのフレームワークが Vite を内蔵
+- フロントエンドのツールは「バンドラ / トランスパイラ / リンター / フォーマッタ / テストランナー」の 5 役割で整理できる
+- 第 0 世代（〜2014）: Grunt / Gulp / Browserify。手作業の自動化
+- 第 1 世代（〜2019）: webpack + Babel が標準。設定肥大とビルド速度が課題に
+- 第 2 世代（〜2022）: ESM + Go / Rust 製ツールで高速化（esbuild / Vite / SWC / Biome）
+- 第 3 世代（2023〜）: Rust 全盛と統合競争（Turbopack / Rspack / oxlint / Rolldown）
+- 2026 標準: Vite + TypeScript + ESLint + Prettier + Vitest が最大公約数。lint まわりは過渡期
+- 「新しい = 良い」ではなく、自分の課題に合うかで選ぶ

@@ -1,423 +1,120 @@
-# lesson120: TanStack Query / Zustand 実践
+# lesson120: 状態管理の地図
 
 ## ゴール
 
-- **TanStack Query** で API データ取得・キャッシュ・再取得を実装できる
-- **`useMutation`** でデータ更新後にキャッシュを破棄できる
-- **Zustand** でグローバルクライアント state の store を設計できる
-- Jotai の atom 思想と Zustand との使い分けを 1 行で説明できる
+- React の **state を 5 種類に分けて** 整理できる（ローカル / URL / サーバー / グローバルクライアント / フォーム）
+- なぜ 1 つのライブラリですべてを賄わないのかを説明できる
+- 「迷ったら何を選ぶか」の判断軸を持つ
 
 ## 解説
 
-「状態管理の地図」で整理したとおり、サーバー state には TanStack Query、グローバルクライアント state には Zustand を使います。このレッスンではそれぞれを手を動かして習得します。
+### state を 5 種類に分ける
 
-### TanStack Query
+「React アプリの state」は実は性質が違う 5 種類が混ざっています。それぞれ最適なツールが違います。
 
-#### インストール
+| 種類 | 例 | 最適なツール |
+|---|---|---|
+| **ローカル state** | モーダルの開閉、入力中の値 | `useState` / `useReducer` |
+| **URL state** | 検索条件、選択中のタブ、ページ番号 | URL の `?param=...` + `useSearchParams` |
+| **サーバー state** | API から取ってくるデータ | **TanStack Query** / SWR |
+| **グローバルクライアント state** | 認証ユーザー、テーマ、UI 設定 | **Zustand** / Jotai / Context |
+| **フォーム state** | フォーム入力値とエラー | **React Hook Form** |
 
-```bash
-npm install @tanstack/react-query
-```
+> 2023 年頃までは「Redux 1 つで全部管理する」が主流でしたが、2026 年は **役割ごとに使い分ける** のが現代の合意です。
 
-アプリのルートに `QueryClientProvider` を置きます。
+### 1. ローカル state: `useState` / `useReducer`
 
-```tsx
-// src/main.tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import App from "./App";
+特定のコンポーネントの中だけで使う state は React 組み込みで十分。**これが最初の選択肢** です。
 
-const queryClient = new QueryClient();
+「複数のコンポーネントで共有したい」が出てきて初めて、上のレベルに上げる検討をします。
 
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-    </QueryClientProvider>
-  </StrictMode>
-);
-```
+### 2. URL state: `useSearchParams`
 
-#### `useQuery` でデータ取得
+「フィルタを共有したい」「ブラウザの戻るで前の状態に戻したい」状態は **URL に置く** のが最適です。URL に状態が入ると、ブラウザの戻る / 進みで遷移でき、URL を共有すれば同じ画面が再現できます。
 
-```tsx
-import { useQuery } from "@tanstack/react-query";
+「フィルタ / 並び順 / ページ番号 / 選択中のタブ」のような **共有可能な状態** はまず URL を検討するのが 2026 年の作法です。
 
-type Post = { id: number; title: string; body: string };
+### 3. サーバー state: TanStack Query
 
-function PostsList() {
-  const { data, isPending, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-      if (!res.ok) throw new Error("fetch 失敗");
-      return (await res.json()) as Post[];
-    },
-  });
+API から取ってきたデータは「**自分の真実ではなくサーバーの真実**」です。次の特性があります。
 
-  if (isPending) return <p>読み込み中...</p>;
-  if (error) return <p>エラー: {String(error)}</p>;
-  return (
-    <ul>
-      {data?.slice(0, 10).map((p) => (
-        <li key={p.id}>#{p.id} {p.title}</li>
-      ))}
-    </ul>
-  );
-}
-```
+- **古くなる**（他のユーザーの書き換えで上書きされる可能性がある）
+- **キャッシュしたい**（同じデータを何度も取りたくない）
+- **再取得したい**（ページに戻ってきた時など）
 
-`useQuery` がやってくれること:
+これらを `useEffect` + `useState` で自前実装するのは 100 行以上のコードになり、しかも罠が多い（競合状態 / メモリリーク / 重複リクエスト）。**TanStack Query** はこの問題を `useQuery` 1 行で解決します。詳しい実装は「TanStack Query / Zustand 実践」で扱います。
 
-- **キャッシュ**: 同じ `queryKey` のデータは再利用。同じコンポーネントを 2 枚表示しても 1 回だけ fetch
-- **重複排除**: 複数の呼び出し元が同じ key を使っても fetch は 1 回
-- **自動再取得**: ウィンドウにフォーカスが戻ったとき / ネットワークが復帰したとき
-- **ステール管理**: `staleTime` を超えたら「古い」とみなして次回マウント時に再取得
+> Next.js の Server Component で `fetch` を使う場合は、サーバー側で完結するので TanStack Query は不要です。Client Component から動的に取る場面で使います。
 
-#### `staleTime` で再取得を制御
+### 4. グローバルクライアント state: Zustand / Jotai / Context
 
-```tsx
-useQuery({
-  queryKey: ["posts"],
-  queryFn: fetchPosts,
-  staleTime: 1000 * 60,  // 1 分間はキャッシュを新鮮扱い
-});
-```
+「複数のコンポーネントで共有したいが、サーバー由来ではない」状態（テーマ / 認証情報 / UI 設定）には次の選択肢があります。
 
-デフォルトは `staleTime: 0`（即刻ステール）。「毎回最新を取りたい」場合はそのまま、「頻繁に変わらないデータ」は長めに設定します。
+- **Zustand**: Provider が要らず、boilerplate も少ない。2026 年はグローバルクライアント state の第一候補として使われる
+- **Jotai**: 状態を小さな atom に分割する思想で、散らばった派生状態が多いアプリに合う
+- **React Context**: 「滅多に変わらない」設定値に限定して使う（頻繁に変わる state では全消費者が再レンダリングされる）
 
-#### `useMutation` で更新
+詳しい実装は「TanStack Query / Zustand 実践」で扱います。
 
-書き込み後にキャッシュを無効化して再取得します。
+### 5. フォーム state: React Hook Form
 
-```tsx
-import { useMutation, useQueryClient } from "@tanstack/react-query";
+フォームの入力値・バリデーションエラー・送信状態は専用ライブラリに任せます。`useState` 自前管理に比べてレンダリング回数が激減し、Zod との組み合わせでスキーマバリデーションを簡潔に書けます（「Zod でスキーマバリデーション」参照）。
 
-function CreatePostForm() {
-  const queryClient = useQueryClient();
+### Redux / Redux Toolkit の現在地
 
-  const mutation = useMutation({
-    mutationFn: async (body: { title: string }) => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(body),
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      // 成功したら posts キャッシュを無効化 → 自動再取得
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-    },
-  });
+Redux は 2018 年頃の React 標準でした。Redux Toolkit（RTK）で boilerplate は減りましたが、**新規プロジェクトでは Zustand に押されている** のが現実です。Redux が今でも残るのは既存プロジェクトの移行コスト、大規模な action / reducer ロジック、Redux DevTools の時間旅行デバッグが欲しい場合などです。新規アプリなら **Zustand から始める** のが軽量で十分です。
 
-  return (
-    <button
-      type="button"
-      disabled={mutation.isPending}
-      onClick={() => mutation.mutate({ title: "新しい記事" })}
-    >
-      {mutation.isPending ? "送信中..." : "記事を作成"}
-    </button>
-  );
-}
-```
+### SWR（TanStack Query の代替）
 
-`mutation.isPending` が `true` の間はボタンを無効化し、二重送信を防ぎます。
+Vercel 製の **SWR**（Stale-While-Revalidate）も同じ問題領域のライブラリです。シンプルさを優先するなら SWR、全部入りで困らないなら TanStack Query というイメージです。
 
-#### React Query Devtools
+### 「迷ったらこう選ぶ」フローチャート
 
-開発中は Devtools を入れると、キャッシュの状態・ステール判定・再取得のタイミングが視覚的に分かります。
+1. **コンポーネント内だけで完結？** → `useState`
+2. **URL で共有 / 復元したい？** → URL に置く（`useSearchParams`）
+3. **サーバーから取るデータ？** → **TanStack Query**
+4. **複数コンポーネントで共有、頻繁に変わる？** → **Zustand**
+5. **散らばった派生状態が多い？** → **Jotai**
+6. **滅多に変わらない設定値？** → **Context**
+7. **フォームの入力値？** → **React Hook Form**
 
-```bash
-npm install @tanstack/react-query-devtools
-```
-
-```tsx
-// main.tsx（開発時のみ）
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-
-<QueryClientProvider client={queryClient}>
-  <App />
-  <ReactQueryDevtools initialIsOpen={false} />
-</QueryClientProvider>
-```
-
-### Zustand
-
-#### インストール
-
-```bash
-npm install zustand
-```
-
-#### store を作る
-
-`create` に関数を渡すだけで store が完成します。Provider は不要です。
-
-```ts
-// src/themeStore.ts
-import { create } from "zustand";
-
-type ThemeStore = {
-  theme: "light" | "dark";
-  toggle: () => void;
-};
-
-// OS のダークモード設定を初期値に使う
-const prefersDark =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: prefersDark ? "dark" : "light",
-  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-}));
-```
-
-#### コンポーネントから使う
-
-```tsx
-import { useThemeStore } from "./themeStore";
-
-function ThemeToggle() {
-  const theme = useThemeStore((s) => s.theme);
-  const toggle = useThemeStore((s) => s.toggle);
-
-  return (
-    <button
-      type="button"
-      aria-pressed={theme === "dark"}
-      onClick={toggle}
-    >
-      テーマ: {theme}
-    </button>
-  );
-}
-```
-
-`useThemeStore((s) => s.theme)` のようにセレクタを使うと、**選択した値が変わった時だけ** コンポーネントが再レンダリングされます。
-
-#### Zustand の利点まとめ
-
-- **Provider が要らない**: import するだけ使える
-- **boilerplate が少ない**: Redux の 1/5 程度のコード量
-- **TypeScript フレンドリー**
-- **React 外でも読める**: `useThemeStore.getState()` で外部から参照・更新可能
-
-#### `persist` ミドルウェアでリロードに耐える
-
-```ts
-import { create } from "zustand";
-import { persist } from "zustand/middleware";
-
-export const useThemeStore = create<ThemeStore>()(
-  persist(
-    (set) => ({
-      theme: "light",
-      toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-    }),
-    { name: "theme-storage" },  // localStorage のキー
-  )
-);
-```
-
-`persist` を付けると `localStorage` に値を保存し、リロード後も設定が残ります。
-
-### Jotai: atom ベースの代替
-
-Zustand が「明確な store」を作るのに対し、**Jotai は小さな atom を組み合わせる** 思想です。
-
-```bash
-npm install jotai
-```
-
-```tsx
-import { atom, useAtom } from "jotai";
-
-const countAtom = atom(0);
-
-function Counter() {
-  const [count, setCount] = useAtom(countAtom);
-  return <button onClick={() => setCount(count + 1)}>{count}</button>;
-}
-```
-
-「React の `useState` を、アプリ全体に拡張した版」と考えると分かりやすいです。派生状態（他の atom から計算する値）が綺麗に書けます。
-
-**Zustand vs Jotai 選び方**:
-- **Zustand**: 認証情報 / カート / UI 設定など、まとまりのある store が要るとき
-- **Jotai**: 独立した小さな値（カウンター / トグル / フォームの一部フィールド）が散らばっているとき
+これに迷ったら、**まず 1（useState）から始めて、共有が必要になった時点で 2-7 を検討** が安全です。最初から大きなライブラリを入れる必要はありません。
 
 ## 演習
 
-### ゴール
+このレッスンは概念の整理が目的です。次の問いに答えながら理解を確認します。
 
-- TanStack Query で外部 API を取得し、Zustand でテーマを切り替えるアプリを作る
-- useMutation でデータを送信し、キャッシュ更新を体験する
+### 問い 1
 
-### 手順 1: プロジェクト準備
+以下の state はどの種類にあたりますか？最適なツールは何ですか？
 
-```bash
-npm create vite@latest state-sample -- --template react-ts
-cd state-sample
-npm install
-npm install @tanstack/react-query @tanstack/react-query-devtools zustand
-```
-
-### 手順 2: QueryClientProvider を追加
-
-`src/main.tsx`:
-
-```tsx
-import { StrictMode } from "react";
-import { createRoot } from "react-dom/client";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { ReactQueryDevtools } from "@tanstack/react-query-devtools";
-import App from "./App";
-
-const queryClient = new QueryClient();
-
-createRoot(document.getElementById("root")!).render(
-  <StrictMode>
-    <QueryClientProvider client={queryClient}>
-      <App />
-      <ReactQueryDevtools initialIsOpen={false} />
-    </QueryClientProvider>
-  </StrictMode>
-);
-```
-
-### 手順 3: Zustand store
-
-`src/themeStore.ts`:
-
-```ts
-import { create } from "zustand";
-
-type ThemeStore = {
-  theme: "light" | "dark";
-  toggle: () => void;
-};
-
-const prefersDark =
-  typeof window !== "undefined" &&
-  window.matchMedia("(prefers-color-scheme: dark)").matches;
-
-export const useThemeStore = create<ThemeStore>((set) => ({
-  theme: prefersDark ? "dark" : "light",
-  toggle: () => set((s) => ({ theme: s.theme === "light" ? "dark" : "light" })),
-}));
-```
-
-### 手順 4: App 統合
-
-`src/App.tsx`:
-
-```tsx
-import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
-import { useThemeStore } from "./themeStore";
-
-type Post = { id: number; title: string };
-
-export default function App() {
-  const theme = useThemeStore((s) => s.theme);
-  const toggleTheme = useThemeStore((s) => s.toggle);
-  const queryClient = useQueryClient();
-
-  const { data, isPending, error } = useQuery({
-    queryKey: ["posts"],
-    queryFn: async () => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts");
-      return (await res.json()) as Post[];
-    },
-  });
-
-  const mutation = useMutation({
-    mutationFn: async (title: string) => {
-      const res = await fetch("https://jsonplaceholder.typicode.com/posts", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ title }),
-      });
-      return res.json();
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["posts"] });
-    },
-  });
-
-  return (
-    <main
-      style={{
-        background: theme === "dark" ? "#1a1a1a" : "#ffffff",
-        color: theme === "dark" ? "#ffffff" : "#1a1a1a",
-        padding: 16,
-        minHeight: "100vh",
-      }}
-    >
-      <h1>状態管理の実践</h1>
-
-      <button
-        type="button"
-        aria-pressed={theme === "dark"}
-        onClick={toggleTheme}
-        style={{ marginBottom: 12 }}
-      >
-        テーマ: {theme}（Zustand）
-      </button>
-
-      <div style={{ marginBottom: 12 }}>
-        <button
-          type="button"
-          disabled={mutation.isPending}
-          onClick={() => mutation.mutate("テスト記事")}
-        >
-          {mutation.isPending ? "送信中..." : "記事を作成（useMutation）"}
-        </button>
-        {mutation.isSuccess && <span> 送信完了</span>}
-      </div>
-
-      <h2>記事一覧（TanStack Query）</h2>
-      {isPending && <p>読み込み中...</p>}
-      {error && <p>エラー</p>}
-      <ul>
-        {data?.slice(0, 10).map((p) => (
-          <li key={p.id}>
-            #{p.id} {p.title}
-          </li>
-        ))}
-      </ul>
-    </main>
-  );
-}
-```
+1. ドロップダウンメニューが開いているかどうか
+2. 検索ページのキーワードと現在のページ番号
+3. ログイン中のユーザー情報（全画面で使う）
+4. `/api/articles` から取ってきた記事一覧
+5. お問い合わせフォームの入力値とバリデーションエラー
 
 ### 期待出力
 
-- ページを開くと「読み込み中...」が一瞬 → 記事一覧が表示される
-- 「テーマ: light」を押すとダークモードに切り替わる（Zustand）
-- 「記事を作成」を押すと「送信中...」→「送信完了」と変わる（useMutation）
-- ブラウザの **React Query Devtools**（画面下のアイコン）で `posts` のキャッシュ状態を確認できる
-- **DevTools の Network タブ** でブラウザタブを切り替えてから戻すと、フォーカス復帰で自動再取得が走ることを確認できる
+| # | 種類 | 最適なツール |
+|---|---|---|
+| 1 | ローカル state | `useState` |
+| 2 | URL state | `useSearchParams` |
+| 3 | グローバルクライアント state | Zustand |
+| 4 | サーバー state | TanStack Query |
+| 5 | フォーム state | React Hook Form |
 
-### 変える
+### 問い 2
 
-- `staleTime: 1000 * 60` を `useQuery` に渡してみる。1 分間は再取得されない
-- `persist` ミドルウェアを themeStore に追加してリロード後もテーマを保持する
-- Jotai を入れて `countAtom` でカウンターを実装し、Zustand との書き味を比較する
+「同じ API データを複数の画面で使い回したい」場合、`useEffect + useState` ではなく TanStack Query を使う理由を 3 つ挙げてください。
 
-### 自分で書く（任意）
-
-- `getUser: t.procedure` で取得した認証ユーザーを Zustand store に入れ、全画面で参照する
-- TanStack Query の `useInfiniteQuery` で無限スクロールを実装する
-- Jotai の `atomWithStorage` でリロード耐性を持つ atom を作る
+実装してみたい場合は「TanStack Query / Zustand 実践」に進んでください。
 
 ## まとめ
 
-- **TanStack Query**: `useQuery` 1 行でキャッシュ / 重複排除 / 自動再取得を解決。`useMutation` + `invalidateQueries` で書き込み後のキャッシュ更新まで一貫して扱える
-- `staleTime` でキャッシュの鮮度を調整。React Query Devtools でキャッシュの状態を可視化できる
-- **Zustand**: `create` だけで store が完成、Provider 不要。セレクタで必要な値だけ購読し、余計な再レンダリングを防ぐ
-- `persist` ミドルウェアを使えば localStorage に永続化できる
-- **Jotai**: atom 単位で状態を管理。Zustand の「まとまった store」とは対照的に、散らばった独立状態に向く
+- React の state は **5 種類**: ローカル / URL / サーバー / グローバルクライアント / フォーム
+- 2026 年は **役割ごとに使い分ける** のが定番
+- **TanStack Query**（サーバー state）+ **Zustand**（グローバルクライアント state）+ **React Hook Form**（フォーム state）の組み合わせがほとんどの場合の正解
+- **Jotai** は atom ベース、散らばった派生状態に向く
+- **Redux** は新規では Zustand に押されている
+- まず `useState` から始めて、共有が必要になった時点で適切なツールを選ぶ

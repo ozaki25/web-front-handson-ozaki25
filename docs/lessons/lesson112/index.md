@@ -1,311 +1,423 @@
-# lesson112: 次世代ツールチェイン（Biome / Oxc / Turbopack）
+# lesson112: ESLint / Prettier / Biome
 
 ## ゴール
 
-- 「**Rust 製ツール群** に置き換わりつつある」フロントエンド界隈の構図を理解する
-- Biome / Oxc / Rolldown / Turbopack それぞれの **役割と立ち位置** を区別できる
-- **既存プロジェクトに今すぐ導入するか** を判断できる
-- 速さの数字を **誇張なく** 受け取れる
-- 5 年後にも残りそうな部分と、まだ揺れている部分を見分けられる
-
-::: tip 前提
-このレッスンは「ESLint / Prettier / Biome」と「Vite の仕組み」の発展編です。基本概念はそれぞれのレッスンで確認してください。
-:::
+- Lint と Format が **役割の異なる別物** であることを理解する
+- ESLint の flat config（`eslint.config.js`）の最小形を読める
+- Prettier との連携で衝突しない設定を書ける
+- Biome / oxlint など **Rust 製新ツール** の位置付けと選び方を理解する
+- 「2026 年に新規プロジェクトを始めるなら」の実用的な選択軸を持つ
+- VS Code の保存時 autofix で「書きながら直る」体験を得る
 
 ## 解説
 
-Rust 移行の背景と全体の役割分類は lesson109「フロントエンドツールの全体像と歴史」で扱い済みです。ここでは各ツールの詳細と導入判断に絞ります。
+### Lint と Format は別物
 
-### Biome
+混同しがちですが、役割が違います。
 
-[Biome](https://biomejs.dev/) は **Lint + Format を 1 ツール** で提供する Rust 製ツール（「ESLint / Prettier / Biome」で扱い済み）。
-
-特徴:
-
-- **設定 1 ファイル**（`biome.json`）
-- **ESLint + Prettier より大幅に速い**（公式ベンチマークで Lint 約 15x / Format 約 25x）
-- TypeScript / JSX / JSON / CSS をサポート
-- VS Code 拡張あり
-
-```bash
-npm install -D --save-exact @biomejs/biome
-npx biome init
-```
-
-```json
-{
-  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
-}
-```
-
-#### Biome の限界
-
-- **TypeScript の型情報を使う高度なルール** は未対応（ESLint の `no-floating-promises` など）
-- 既存 ESLint プラグイン（`jsx-a11y`、`testing-library` 等）は使えない
-- **互換性** はだいぶ向上したが、ESLint プラグインの **完全代替は未達**
-
-Biome は「lint + format を 1 ツールにまとめたい」ケースに向きます。ただし **lint の速度と ESLint プラグイン互換性では oxlint が上**で、フォーマットでも oxfmt（beta）が後から追いかけています。Oxc 系の成熟とともに「統合」という Biome の優位は縮小していくと見られます。
-
-### Oxc / oxlint
-
-[Oxc](https://oxc.rs/)（Oxidation Compiler）は **Rust 製のフロントエンドツール群** の総称。**Boshen** らが開発。
-
-#### 構成要素
-
-| 名前 | 役割 |
+| ツール | 守備範囲 |
 |---|---|
-| **oxc_parser** | JavaScript / TypeScript パーサ |
-| **oxlint** | Lint（ESLint 互換ルール） |
-| **oxc_minifier** | minify（terser / esbuild の代替） |
-| **oxc_resolver** | モジュール解決 |
-| **oxc_transformer** | TS / JSX → JS の変換 |
+| **Lint**（ESLint） | コードの **品質** チェック。バグの種 / アンチパターン / a11y 違反 / 未使用変数を検知 |
+| **Format**（Prettier） | コードの **見た目** を整える。インデント / クォート / 改行位置 |
 
-Rust で書かれたフロントエンドの基盤一式を提供することを狙うプロジェクトです。
+ESLint は「未使用変数があるよ」「`any` 型は避けて」と教え、Prettier は「シングルクォートに統一して、80 文字で改行して」と整えます。両方を併用することで、品質と見た目の両面を担保できます。
 
-#### oxlint の最小例
+歴史的には ESLint だけで両方やる時代もありましたが、**役割を分ける** のが現代の合意になっています。さらに **Biome** という「両方を 1 ツールでやる」統合型の選択肢、ESLint より高速な **oxlint** という Rust 製の lint 単機能型の選択肢も増えており、2026 年は過渡期にあります。
+
+### ESLint の flat config
+
+ESLint v9（2024 年）で **flat config** が既定になり、**ESLint v10（2026 年 2 月）で `.eslintrc` 形式が完全廃止**されました。設定ファイルは **`eslint.config.js`**（ESM）に一本化されています。
+
+#### 最小構成（TypeScript + React）
 
 ```bash
-npm install -D oxlint
-npx oxlint
+npm install -D eslint @eslint/js typescript-eslint eslint-plugin-react-hooks
 ```
 
-ESLint の主要ルールを **Rust で再実装** したリンタ。**ESLint より 50〜100x 速い** と言われ、CI / IDE で待ち時間がほぼゼロに。**v1.0 stable が 2025 年 6 月にリリース**（520+ ルール）。2026 年 3 月には **JS プラグイン（alpha）** が追加され、ESLint v9+ 互換の既存プラグインがそのまま動く見込みになった。型情報を使うルール（type-aware linting）も alpha として追加済み。
+`eslint.config.js`:
+
+```js
+import js from "@eslint/js";
+import tseslint from "typescript-eslint";
+import reactHooks from "eslint-plugin-react-hooks";
+
+export default [
+  js.configs.recommended,
+  ...tseslint.configs.recommended,
+  {
+    files: ["**/*.{ts,tsx}"],
+    plugins: {
+      "react-hooks": reactHooks,
+    },
+    rules: {
+      ...reactHooks.configs.recommended.rules,
+    },
+  },
+  {
+    ignores: ["dist/", "node_modules/"],
+  },
+];
+```
+
+`package.json`:
 
 ```json
-// .oxlintrc.json
 {
-  "rules": {
-    "no-unused-vars": "error",
-    "no-debugger": "error"
+  "scripts": {
+    "lint": "eslint .",
+    "lint:fix": "eslint . --fix"
   }
 }
 ```
 
-#### Oxc が他に与える影響
+`npm run lint` で全ファイルをチェック、`npm run lint:fix` で自動修正できる範囲は直してくれます。
 
-Vite 8（「Vite の仕組みを軽く」）が **Rolldown を採用**、Rolldown は **Oxc を内蔵** しています。つまり Oxc は **Vite / Rolldown / 多くの新ツール** の土台になりつつある。
+#### よく使うプラグイン
 
-Oxc は **VoidZero**（Evan You が立ち上げた会社）が支援しており、Vite / Rolldown と **同じ会社の同じ方向性** で開発が進んでいます。
+- `typescript-eslint`: TypeScript の型情報を使った高度なチェック
+- `eslint-plugin-react`: React のお作法
+- `eslint-plugin-react-hooks`: フック規則の検証
+- `eslint-plugin-jsx-a11y`: JSX のアクセシビリティ違反を検知（7 章「アクセシビリティ」と相性◎）
+- `eslint-plugin-import`: import の順序とパス解決
 
-### Rolldown
-
-Vite 8 から採用された **Rust 製バンドラ**（「Vite の仕組みを軽く」で扱い済み）。
-
-- **Rollup と同じプラグイン API**
-- **esbuild より速い**（Oxc を内部で使用）
-- **Vite / Rolldown / Oxc が 1 つのチームで開発**
-
-esbuild と Rollup の両方の良さを Rust で 1 つにまとめる、というのが Rolldown の旗印になっています。Vite 8 のリリースで実用フェーズに入りました。
-
-### SWC
-
-[SWC](https://swc.rs/)（Speedy Web Compiler）は **Rust 製の TypeScript / JSX トランスパイラ**。Babel の置き換え狙い。
-
-特徴:
-
-- Next.js / Parcel 内部で採用
-- Babel より **20〜70 倍速い**
-- プラグインは Rust または WebAssembly
-
-歴史的には Oxc より早く実用化されましたが、**Oxc が後発として** 機能で追いついています。Next.js は引き続き SWC ベース。
-
-### Turbopack
-
-[Turbopack](https://turbo.build/pack) は Vercel 製の **Rust 製バンドラ**。Next.js 専用に近い位置付け。
-
-- Next.js 16 で **`next dev` / `next build` のデフォルト**
-- webpack の **増分ビルド** を更に強化
-- Rolldown と並列に開発されている（**競合関係**）
-
-Vite 系（Vite + Rolldown + Oxc）と Vercel 系（Next.js + Turbopack + SWC）の 2 派が並走する構図になっています。
-
-### dprint
-
-[dprint](https://dprint.dev/) は **Rust 製のフォーマッタ**（Prettier 代替）。
+### Prettier の最小設定
 
 ```bash
-npm install -D dprint
+npm install -D prettier
 ```
 
-```jsonc
-// dprint.json
+`.prettierrc`（プロジェクトルート）:
+
+```json
 {
-  "typescript": { "lineWidth": 100, "indentWidth": 2, "semiColons": "always" },
-  "json": {},
-  "markdown": {},
-  "includes": ["**/*.{ts,tsx,js,json,md}"],
-  "excludes": ["dist", "node_modules"],
-  "plugins": [
-    "https://plugins.dprint.dev/typescript-0.93.0.wasm",
-    "https://plugins.dprint.dev/json-0.19.0.wasm",
-    "https://plugins.dprint.dev/markdown-0.17.0.wasm"
-  ]
+  "semi": true,
+  "singleQuote": false,
+  "trailingComma": "es5",
+  "printWidth": 80,
+  "tabWidth": 2
 }
 ```
 
-特徴:
+`package.json`:
 
-- 各言語のフォーマッタを **WebAssembly プラグイン** として持つ
-- Prettier より少し古めの設計だが速い
-- Deno / 一部 Rust エコシステムで採用
-
-Biome に注目が集まる中、Prettier の代替として地味に使えるツール、という位置付けになっています。
-
-### 「Rust 製で速い」の意味するもの
-
-「**ESLint より 50 倍速い**」のような数字は要 **慎重に**。
-
-- **大規模プロジェクト**（10,000+ ファイル）では **数分 → 数秒** の改善で大きな違い
-- **小規模プロジェクト**（100 ファイル以下）では **既に十分速い** ので体感差はわずか
-- **CI 時間** には大きな影響、**保存時 Lint** には微差
-
-判断:
-
-- **CI が長くなって困っている** → 移行価値あり
-- **そうでもない** → 既存ツールで困っていなければ慌てない
-
-### TypeScript の Rust 化
-
-「**`tsc` を Rust で書き直す**」プロジェクトもいくつか進行中:
-
-- [TypeScript 7 / tsgo](https://github.com/microsoft/typescript-go)（Go 製）: TypeScript を Go で書き直した公式移植。**`@typescript/native-preview` の preview build** が公開されており、型チェック / 言語サービスが Go でネイティブ実行される。安定版（TypeScript 7）は今後リリース予定で、`tsc` 比で大幅な高速化を狙っている
-- [`stc`](https://github.com/dudykr/stc)（SWC チームの試み）: **2025 年 3 月に開発終了（archived）**。後継として tsgo が事実上代替
-
-TypeScript 公式の Go 移植は **preview build が公開**されており、`--noEmit` 用途では実用に近づいています。VS Code 拡張のプレビューも Marketplace で公開中。
-
-::: warning
-2026 年現在、TypeScript 7（tsgo）は **preview 段階**。型チェックの互換性確認は進んでいますが、エコシステムのツールが追いつくのに時間がかかる見込みです。新規プロジェクトの本番採用は安定版を待つのが無難です。
-:::
-
-### 既存プロジェクトへの導入判断
-
-#### すぐ導入してもよい
-
-- **新規プロジェクト** で oxlint + Prettier（速度と ESLint 互換の両立）
-- **新規プロジェクト** で Biome（lint + format を 1 ツールにまとめたい場合）
-- **CI で Format チェックだけ** Biome に置き換え（影響範囲が小さい）
-- **oxlint を ESLint と並走** させて速度を体感
-
-#### 慎重に
-
-- **ESLint プラグインに依存** している既存プロジェクト
-- **`@types/*` を多用** する大規模 TypeScript（型情報を使うルールが必要）
-- **チームの ESLint 知識** が分厚い場合（再学習コスト）
-
-#### 数年待つ
-
-- **TypeScript の Rust 化**（公式 Go 版を待つ）
-- **完全な ESLint プラグイン互換** が出るまで
-
-### 5 年後の展望
-
-おそらく続くもの:
-
-- **Rust ベースの拡大**（CI / dev サーバ全般）
-- **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
-- **TypeScript 公式の Go / Rust 化**（高速化）
-
-まだ揺れているもの:
-
-- **Oxc 系（oxlint + oxfmt）vs Biome vs ESLint** の決着（oxlint の JS プラグイン対応 + oxfmt 安定化が分岐点）
-- **Vite 系 vs Vercel 系** のシェア
-- **WebAssembly 化したツール**（IDE / ブラウザでの実行）
-
-VoidZero（oxlint / oxfmt / Rolldown / Vite）が 1 社で同方向に進めている点を踏まえると、Oxc 系ツールチェインへの収束が最も蓋然性が高いと考えられます。Biome は「統合 1 ツール」の利便性で独自路線を維持しようとしていますが、Oxc 系が揃えば優位性は薄れていくと見られます。
-
-## 演習
-
-### ゴール
-
-- Biome と oxlint をそれぞれ既存プロジェクトに **共存** させる
-- 速度を **同じプロジェクト** で比較する
-
-### 手順 1: ベースのプロジェクト
-
-既存の Vite + React + TS プロジェクトを使うか、新規作成。
-
-```bash
-npm create vite@latest tooling-bench -- --template react-ts
-cd tooling-bench
-npm install
+```json
+{
+  "scripts": {
+    "format": "prettier --write .",
+    "format:check": "prettier --check ."
+  }
+}
 ```
 
-### 手順 2: ESLint で計測
+`.prettierignore` に除外を書きます:
 
-```bash
-# Vite テンプレートには ESLint が入っている
-time npm run lint
+```
+dist/
+node_modules/
+*.min.js
 ```
 
-時間を記録。
+### ESLint と Prettier の衝突を避ける
 
-### 手順 3: Biome を導入
+ESLint にも整形系のルール（インデント / セミコロン）が組み込まれていますが、これが Prettier と衝突します。**`eslint-config-prettier`** を使ってこれらのルールを無効化します。
+
+```bash
+npm install -D eslint-config-prettier
+```
+
+`eslint.config.js` の最後に追加:
+
+```js
+import prettierConfig from "eslint-config-prettier";
+
+export default [
+  // ...上記の設定
+  prettierConfig,  // 最後に置いて整形系のルールを上書きで OFF
+];
+```
+
+これで「ESLint は品質、Prettier は見た目」の役割分担が綺麗に成立します。
+
+### VS Code の保存時 autofix
+
+`.vscode/settings.json`（プロジェクトの設定）:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "esbenp.prettier-vscode",
+  "editor.codeActionsOnSave": {
+    "source.fixAll.eslint": "explicit"
+  }
+}
+```
+
+これでファイル保存時に:
+
+1. ESLint の自動修正可能な違反が直る
+2. Prettier がコードを整形する
+
+の 2 段階が走ります。「書きながら綺麗になる」体験になり、PR レビューで「インデントが…」と指摘するムダが消えます。
+
+VS Code の拡張は `dbaeumer.vscode-eslint` と `esbenp.prettier-vscode` を入れます。
+
+### Biome: 1 ツールで両方
+
+**Biome** は Rust 製の Lint + Format ツールです。
 
 ```bash
 npm install -D --save-exact @biomejs/biome
 npx biome init
 ```
 
+これだけで `biome.json` が生成され、すぐ使えます。
+
+`package.json`:
+
 ```json
-// biome.json
 {
-  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
-  "linter": { "enabled": true, "rules": { "recommended": true } },
-  "formatter": { "enabled": true, "indentStyle": "space" }
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
 }
 ```
 
+#### Biome の魅力
+
+- **設定ファイルが 1 つだけ**（`biome.json`）
+- **ESLint + Prettier より大幅に速い**（公式ベンチマークでは Lint がマルチスレッドで約 15x、Format がマルチスレッドで約 25x。条件次第ではさらに伸びる）
+- **インストールするパッケージが 1 つだけ**（ESLint は最低 6 パッケージ）
+- **Lint と Format の衝突がない**（同じツール内なので）
+- **VS Code 拡張**（`biomejs.biome`）も公式
+
+#### Biome の限界
+
+- TypeScript の **型情報を使う高度なルール**（`no-floating-promises` 等）は ESLint だけが提供
+- 既存 ESLint プラグイン（`jsx-a11y` 等）は使えない
+- カスタムルールが書きづらい
+
+### 2026 年の選び方
+
+リンタ・フォーマッタの分野は 2024〜2026 年にかけて大きく動いています。**Biome が 2023〜2024 年に「ESLint + Prettier の代替」として注目されましたが、その後 Rust 系のもうひとつの潮流 oxlint（後述）が急速にシェアを奪い、Biome は「lint + format を 1 ツールで」という統合の利便性を売りに踏ん張る局面**です。「これさえ入れればよい」と言える勝者はまだいません。次の 3 通りから自分の事情に合うものを選ぶのが現実的です。
+
+#### A. ESLint + Prettier（依然として最大派閥）
+
+プラグイン資産が圧倒的で、TypeScript の型情報を使う高度なルール（`no-floating-promises` など）も使えます。書きやすさより安全性を優先するならこの組み合わせが向きます。React Native / 大規模モノレポ / 複雑なルール要件があるプロジェクトはほぼこれを選んでいます。
+
+#### B. Biome（lint + format の統合）
+
+設定 1 ファイル / 1 パッケージ / Rust 製で速い。**「lint と format を別ツールで管理する手間を省きたい」** が刺さる構成。新規の小〜中規模プロジェクトで割り切れる場合は今でも有力。
+
 ```bash
-time npx biome check .
+npm install -D --save-exact @biomejs/biome
+npx biome init
 ```
 
-### 手順 4: oxlint を試す
+#### C. oxlint + Prettier（伸び盛り）
 
-```bash
-npm install -D oxlint
-time npx oxlint .
+oxlint は ESLint より **数十倍速い** Rust 製リンタで、ESLint のルール互換性を意識して開発されています。Vue / Vite / Shopify など主要 OSS が次々採用しており、2025 年以降に急伸した本命候補。フォーマットは Prettier に任せて、lint だけ高速化するハイブリッドが現実解になりつつあります。oxlint 自体は「次世代ツールチェイン」のレッスンで扱います。
+
+#### どれを選ぶか
+
+- **学習中・小規模**: A か B のどちらでも。設定数を減らしたいなら B
+- **既存プロジェクト**: 動いているなら A のまま。フォーマットだけ Biome に置き換える選択肢もあり
+- **速度を最優先 + 既存ルール資産を活かしたい**: C
+- **「正解は 1 つ」を期待しない**: 過渡期なので、半年後に景色が変わっている可能性は十分ある
+
+#### Lighthouse / a11y 検査も Lint で
+
+ESLint には `eslint-plugin-jsx-a11y` のような **a11y 検査プラグイン** があります。書く段階で違反を捕まえられるので、7 章「アクセシビリティ」と組み合わせると効果的です。
+
+```js
+// eslint.config.js
+import jsxA11y from "eslint-plugin-jsx-a11y";
+
+export default [
+  // ...
+  jsxA11y.configs.recommended,
+];
 ```
 
-### 手順 5: 結果を比較
+これで `<img>` の alt 欠落 / `<button>` の `tabindex="-1"` などが Lint で警告されます。
 
-実測値の例（小規模プロジェクト）:
+### Husky + lint-staged で commit 時に自動チェック
 
-| ツール | 時間 | 検出数 |
-|---|---|---|
-| ESLint | 2.5s | 5 |
-| Biome | 0.3s | 4 |
-| oxlint | 0.1s | 3 |
+「commit する時に Lint / Format を自動実行」して、CI で fail する前に直す仕組みです。
 
-「規模が小さいと **どれもすぐ終わる** が、CI で複数回走らせると **積み重なる差** になる」のを実感できます。
+```bash
+npm install -D husky lint-staged
+npx husky init
+```
+
+`.husky/pre-commit`:
+
+```sh
+npx lint-staged
+```
+
+`package.json`:
+
+```json
+{
+  "lint-staged": {
+    "*.{ts,tsx,js,jsx}": ["biome check --write"]
+  }
+}
+```
+
+`git commit` のたびに、ステージングされたファイルだけが対象に Lint + Format されます。**全プロジェクトを毎回チェックしないので速い** のが lint-staged の利点。
+
+## 演習
+
+> **このレッスンはローカル前提**: VS Code 拡張 + 保存時の自動整形を確認するため、**ローカル環境での Node.js 実行と VS Code 利用を前提** にしています。StackBlitz では VS Code 拡張が動かないので、Biome のコマンドライン実行までは追えますが、エディタ統合の体感はできません。
+
+### ゴール
+
+- Vite + React + TS プロジェクトに **Biome** を導入する
+- VS Code で保存時に自動整形 / 自動修正が走るようにする
+- わざとエラーを入れて、Biome が検知することを確認する
+
+### 手順 1: 新規プロジェクト
+
+```bash
+npm create vite@latest lint-sample -- --template react-ts
+cd lint-sample
+npm install
+```
+
+### 手順 2: Biome を導入
+
+```bash
+npm install -D --save-exact @biomejs/biome
+npx biome init
+```
+
+`biome.json` が生成されます。中身は最小設定:
+
+```json
+{
+  "$schema": "https://biomejs.dev/schemas/latest/schema.json",
+  "files": {
+    "ignoreUnknown": false,
+    "includes": ["**", "!node_modules", "!dist"]
+  },
+  "formatter": {
+    "enabled": true,
+    "indentStyle": "tab"
+  },
+  "linter": {
+    "enabled": true,
+    "rules": {
+      "recommended": true
+    }
+  }
+}
+```
+
+`indentStyle` を `space` に変えたい場合は `"indentStyle": "space", "indentWidth": 2` に。
+
+### 手順 3: package.json scripts
+
+```json
+{
+  "scripts": {
+    "check": "biome check .",
+    "check:fix": "biome check --write ."
+  }
+}
+```
+
+### 手順 4: VS Code 設定
+
+`.vscode/settings.json`:
+
+```json
+{
+  "editor.formatOnSave": true,
+  "editor.defaultFormatter": "biomejs.biome",
+  "editor.codeActionsOnSave": {
+    "quickfix.biome": "explicit",
+    "source.organizeImports.biome": "explicit"
+  },
+  "[typescript]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  },
+  "[typescriptreact]": {
+    "editor.defaultFormatter": "biomejs.biome"
+  }
+}
+```
+
+VS Code の拡張ストアで `biomejs.biome` をインストールします。
+
+### 手順 5: 動作確認
+
+`src/App.tsx` に、わざと整形が崩れたコードを書きます:
+
+```tsx
+import {useState}from "react"
+
+export default function App(){
+const[count,setCount]=useState(0)
+const unused = "使ってない";
+return <div><h1>Count: {count}</h1><button onClick={()=>setCount(c=>c+1)}>+1</button></div>
+}
+```
+
+ファイルを保存すると:
+
+- インデントが揃う
+- 改行が入る
+- 引用符が統一される
+- `unused` 変数が「使われていない」と警告される
+
+ターミナルで `npm run check` を実行すると、すべての違反が一覧されます。`npm run check:fix` で自動修正できる範囲は直されます。
 
 ### 期待出力
 
-- 3 つのツールがそれぞれ動き、速度差が見える
-- 検出ルール / 重複が違うので、**ノイズの少ないツール** を選ぶ判断の材料になる
+```
+Checked 5 files in 200ms. No fixes applied.
+Found 1 warning.
+```
+
+```tsx
+import { useState } from "react";
+
+export default function App() {
+  const [count, setCount] = useState(0);
+  const unused = "使ってない";  // 警告: unused
+  return (
+    <div>
+      <h1>Count: {count}</h1>
+      <button onClick={() => setCount((c) => c + 1)}>+1</button>
+    </div>
+  );
+}
+```
 
 ### 変える
 
-- 1000 ファイル規模のプロジェクトで再測定
-- CI でそれぞれを実行し、月のビルド時間を試算
-- IDE 拡張（Biome / oxlint）を入れて、保存時のレイテンシを比較
+- `biome.json` の `formatter.indentStyle` を `space` ↔ `tab` で切り替えて差を確認
+- `linter.rules.recommended` を `false` にしてみる。すべての警告が消える
+- `linter.rules.correctness.noUnusedVariables` を `error` に変えて、警告がエラーになることを確認
 
 ### 自分で書く（任意）
 
-- 既存プロジェクトの ESLint 設定を Biome に **完全移行**（`migrate` コマンドあり）
-- dprint を入れて Prettier と比較
-- TypeScript 7（`tsgo`）の preview build を試す（VS Code 拡張プレビューが Marketplace で公開中）
+- 既存の Vite テンプレートに **ESLint + Prettier** を入れて、Biome 構成と比較する
+  - 必要なパッケージ数の違い
+  - 設定ファイルの数の違い
+  - `npm run lint` の所要時間
+- Husky + lint-staged を入れて commit 時に自動 Lint / Format される構成を作る
 
 ## まとめ
 
-- フロントエンドツールが **Rust 製** に置き換わりつつある
-- **Biome**: Lint + Format 1 ツール、設定 1 ファイル、Lint 約 15x / Format 約 25x（公式ベンチ）
-- **Oxc / oxlint**: Rust 製ツールの基盤、Vite 8 / Rolldown が内蔵
-- **Rolldown**: Vite 8 のバンドラ、Rust 製、esbuild + Rollup 統合
-- **SWC / Turbopack**: Next.js / Vercel が独自路線
-- **dprint**: Prettier 代替の Rust 製フォーマッタ
-- **TypeScript 7（tsgo）** は preview build が公開されており、安定版に向けて開発が進んでいる
-- 「**新規 = oxlint + Prettier + Vite 8**」または Biome。Oxc 系（oxlint + oxfmt）の完成度が上がるにつれ勢力図が変わる見込み
-- 既存プロジェクトは「**速度に困ってから**」で良い
-- 5 年後は **Vite 系**（Rolldown + Oxc） と **Vercel 系**（Turbopack + SWC） の 2 派が併走と予想
+- **Lint** はコード品質、**Format** はコード整形。役割が違う
+- **ESLint v9** で flat config が既定化、**v10（2026 年 2 月）で `.eslintrc` を完全廃止**
+- ESLint + Prettier の組み合わせは `eslint-config-prettier` で衝突回避
+- VS Code の保存時 autofix で「書きながら綺麗になる」体験
+- **Biome** は Lint + Format を 1 ツール、Rust 製、ESLint / Prettier より大幅に速い（公式ベンチで Lint 約 15x / Format 約 25x）、設定 1 ファイル
+- 2026 年は **ESLint + Prettier**（最大派閥） / **Biome**（統合の利便性） / **oxlint + Prettier**（速度伸び盛り） の 3 択。決定的な勝者はまだいない
+- 大規模 / 複雑なルールが必要なら ESLint、新規小規模で設定を減らしたいなら Biome、速度と ESLint 互換が欲しいなら oxlint
+- `eslint-plugin-jsx-a11y` で書く段階から a11y 違反を検知
+- Husky + lint-staged で commit 時の自動 Lint / Format
