@@ -50,7 +50,15 @@ npm install
 npm create storybook@latest
 ```
 
-CLI が `package.json` を見て、React + Vite 用の Storybook を自動で構成します。途中で「アクセシビリティアドオンを入れるか」を聞かれたら **yes** で進めます。
+CLI が `package.json` を見て、React + Vite 用の Storybook を自動で構成します。途中でアドオンの追加を聞かれたら、**accessibility（a11y）** に関するものは入れておきます。
+
+> CLI の質問内容はバージョンごとに変わります。終わったあとで `.storybook/main.ts` を開き、`addons` 配列に `"@storybook/addon-a11y"` が含まれていれば OK です。入っていなければ、次のコマンドで後から追加できます。
+>
+> ```bash
+> npm install --save-dev @storybook/addon-a11y
+> ```
+>
+> 追加した場合は `.storybook/main.ts` の `addons` に `"@storybook/addon-a11y"` の行を加えて、`npm run storybook` を再起動します。
 
 完了後、`package.json` に次のスクリプトが追加されます。
 
@@ -206,7 +214,7 @@ green: { bg: "#dcfce7", fg: "#a7f3d0" },
 ここから先は今回扱いません。気になったら後で調べる、で十分です。
 
 - **`play` 関数**: 「クリック → 期待結果」のような **インタラクション** を Story に組み込み、Storybook 上で自動再生・アサートする
-- **`addon-vitest`**: Story を Vitest のテストとして実行（`npm test` で a11y チェックと一緒に走る）
+- **`addon-vitest`**: Story を Vitest のテストとして実行できる。`npm test` で各 Story の描画チェックが走る（a11y を fail 条件に含めたい場合は `parameters.a11y` の追加設定が必要）
 - **`build-storybook`**: 静的ファイル化して Vercel や GitHub Pages にデプロイ。チームに常時アクセス可能な UI カタログを配れる
 - **Chromatic**: Storybook の作者たちが提供する、PR ごとに見た目の差分を検出するサービス（ビジュアルリグレッション）
 
