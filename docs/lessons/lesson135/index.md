@@ -122,7 +122,7 @@ npx @sentry/wizard@latest -i nextjs
 - プロジェクトの選択 / DSN の設定
 - `instrumentation-client.ts`（クライアント側 Sentry 初期化）を生成
 - `sentry.server.config.ts` / `sentry.edge.config.ts`（サーバー / Edge ランタイム用）を生成
-- `instrumentation.ts`（Next.js 15+ で **サーバー / Edge の初期化を `register()` から走らせる** ための入口。あわせて `Sentry.captureRequestError` を `onRequestError` として export することで、Server Components / middleware / proxy のエラーが Sentry に届く）を生成
+- `instrumentation.ts` を生成。Next.js 15+ で **サーバー / Edge の初期化を `register()` から走らせる** ための入口になる。あわせて `Sentry.captureRequestError` を `onRequestError` として export すると、Server Components / middleware / proxy のエラーも Sentry に届く
 - `app/global-error.tsx`（App Router の **レンダリングエラー** を捕まえる場所）を生成
 - `next.config.ts` を `withSentryConfig` でラップ
 - ビルド時に **Source Map を自動アップロード** する設定を追加

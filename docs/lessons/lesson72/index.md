@@ -293,7 +293,7 @@ export default function Page() {
 }
 ```
 
-`app/about/page.tsx`: `<header className="site-header">` ブロックと `<footer className="site-footer">` ブロック、外側の `<main>` を削除し、`<section>` 3 つだけ残します（外側の `<main>` は `layout.tsx` 側にあるためです）。
+`app/about/page.tsx`: `<header className="site-header">` ブロックと `<footer className="site-footer">` ブロック、外側の `<main>` を削除し、`<section>` 3 つだけ残します。外側の `<main>` は `layout.tsx` 側にあるためです。
 
 ```tsx
 import "./about.css";

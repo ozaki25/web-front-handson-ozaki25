@@ -262,7 +262,7 @@ customElements.define("my-toggle", MyToggle);
 
 React 19 以降は **Custom Elements を扱いやすく** なりました。具体的には、props がプリミティブ以外でも **DOM プロパティとして** Custom Element に渡るようになり、文字列以外（オブジェクトや関数）を素直に渡せます。
 
-さらに React 19 では、Custom Element が `dispatchEvent` で投げる **CustomEvent** も、JSX で `on` プレフィックス付きの prop を書くと購読できるようになりました（イベント名は **小文字＋ダッシュ可** で、`speak` イベントなら `onspeak`、`say-hi` なら `onsay-hi`）。これまで定番だった **`ref` + `addEventListener`** も引き続き使えますが、`onspeak={...}` のように書くだけで済むケースが増えました。
+さらに React 19 では、Custom Element が `dispatchEvent` で投げる **CustomEvent** も、JSX で `on` プレフィックス付きの prop を書くと購読できるようになりました。イベント名は **小文字＋ダッシュ可** で、`speak` イベントなら `onspeak`、`say-hi` なら `onsay-hi` と書きます。これまで定番だった **`ref` + `addEventListener`** も引き続き使えますが、`onspeak={...}` のように書くだけで済むケースが増えました。
 
 ```tsx
 import { useEffect, useRef } from "react";
