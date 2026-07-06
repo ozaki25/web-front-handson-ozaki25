@@ -160,7 +160,7 @@ export default withPwa(
             { text: 'lesson47: 型ガード', link: '/lessons/lesson47/' },
             { text: 'lesson48: 判別共用体', link: '/lessons/lesson48/' },
             { text: 'lesson49: ジェネリクス入門', link: '/lessons/lesson49/' },
-            { text: 'lesson50: Utility Types で仕上げる', link: '/lessons/lesson50/' },
+            { text: 'lesson50: Utility Types で型を派生させる', link: '/lessons/lesson50/' },
             { text: 'lesson51: tsconfig.json を読む', link: '/lessons/lesson51/' },
           ],
         },

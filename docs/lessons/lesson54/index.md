@@ -57,7 +57,7 @@ function Greeting({ name }: GreetingProps) {
 
 ### `import type` で型を別ファイルから持ってくる
 
-3 章の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
+3 章の「オブジェクトの型と type エイリアス」「Utility Types で型を派生させる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
 
 ```ts
 // src/types.ts

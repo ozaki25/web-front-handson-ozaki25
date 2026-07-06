@@ -121,7 +121,7 @@ type AdminUser = User & {
 
 4. **Utility Types の結果に名前を付ける**
 
-    「Utility Types で仕上げる」で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
+    「Utility Types で型を派生させる」で学ぶ `Pick` / `Partial` などの結果は `type` で受ける。
 
     ```ts
     type TodoDraft = Partial<Todo>;

@@ -1,4 +1,4 @@
-# lesson50: Utility Types で仕上げる
+# lesson50: Utility Types で型を派生させる
 
 ## ゴール
 
