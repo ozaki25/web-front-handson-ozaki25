@@ -11,7 +11,7 @@
 
 ### 本コースのスタンス
 
-ここまで1 章 から5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
+ここまで 1 章 から 5 章 まで、**すべて素の CSS**（`.css` ファイルに `.card { padding: 16px; }` のように書く方式）で進めてきました。ボックスモデル、Flexbox、Grid、Position、Transition まで「CSS 自体の仕組み」を理解することを優先してきました。
 
 一方、実務の現場では **Tailwind CSS** や **CSS Modules**、**CSS-in-JS** など、さまざまな書き方が選ばれます。本コースではその中から **Tailwind** を最後に紹介だけしておきます。
 
@@ -89,19 +89,17 @@ CSS ファイルを書かずに、HTML（JSX）側のクラス名だけで見た
 
 ### 途中から始める場合
 
-このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
+このレッスンは別プロジェクトで Tailwind v4 を観察する独立した内容です。新規 StackBlitz の Next.js テンプレート（<https://stackblitz.com/fork/github/vercel/next.js/tree/canary/examples/hello-world>）を開けば、本文の手順だけで完結します。既存の 5 章 プロジェクトには持ち込まないため、ここまでのレッスンの進捗は不要です。
 
 ### ゴール
 
 - `create-next-app --tailwind` で **別プロジェクト** を作り、Tailwind v4 がどう設定されているかを観察する
-- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）
-
-**本コースのプロジェクトには持ち込まない**（素の CSS 資産を壊さないため）。別プロジェクトで観察するだけで十分。
+- 本コースのプロジェクトには **持ち込まない**（素の CSS 資産を壊さないため）。別プロジェクトで観察するだけで十分
 
 ### 手順
 
-1. StackBlitz のトップから「Next.js」テンプレートを選ぶ（通常は v4 Tailwind 未設定）
-2. あるいは、ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行
+1. ローカルで `npx create-next-app@latest my-tailwind-sample --tailwind --typescript` を実行する（Tailwind v4 入りのプロジェクトが生成されます）
+2. ローカル環境が使えない場合は、以降に載せる各ファイルのコードを読んで構成を把握するだけでも構いません（StackBlitz の Next.js テンプレートには Tailwind が入っていません）
 3. プロジェクト内の以下のファイルを観察する
    - `app/globals.css`
    - `postcss.config.mjs`（または `.js`）
@@ -197,7 +195,7 @@ export default function Page() {
 
 本気で Tailwind に移行したい場合は、新しいプロジェクトを `create-next-app --tailwind` で作り、必要なページから少しずつ書き直していくのが現実的です。
 
-### 変える（任意）
+### 変えてみる（任意）
 
 任意。本コースのプロジェクトへの適用は不要です。
 

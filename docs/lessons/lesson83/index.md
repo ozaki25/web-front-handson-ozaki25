@@ -179,4 +179,4 @@ button:disabled {
 - `useActionState`（`react`）は状態管理、`useFormStatus`（`react-dom`）は送信中ステータスの取得と、役割が異なる
 - `SubmitButton` を切り出すことで `useFormStatus` が正しく動き、再利用もしやすくなる
 
-ここまでで Server Actions（`<form action={...}>` でフォーム送信を Server Component に直結する仕組み）はいったん区切りとなります。次は同じバックエンド処理を **外部から `fetch` で叩く形** にした「Route Handlers の基本」のレッスンに進みます。
+ここまでで Server Actions（`<form action={...}>` でフォーム送信を Server Component に直結する仕組み）はいったん区切りです。同じバックエンド処理を **外部から `fetch` で叩く形** にする方法は「Route Handlers の基本」のレッスンで扱います。

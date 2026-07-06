@@ -67,7 +67,7 @@ export async function addTodo(
 - 第 2 引数が `FormData` です。
 - 戻り値が新しい状態です。成功時は `{}`、失敗時は `{ error: "..." }` のように分けます。
 
-「Server Actions の最小形」の `addTodo` は `(formData) => void` の形だったので、ここで書き直します。
+「Server Actions の最小形」の `addTodo` は `formData` だけを受け取る形だったので、ここで書き直します。
 
 ### 判別共用体で返す
 
@@ -150,9 +150,9 @@ export default async function TodosPage() {
 
 ### 手順の進め方（重要）
 
-本レッスンは **2 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx`）を **同時に** 書き換えます。片方だけ変えるとビルドエラーになるため、**手順 1 → 2 をすべて終わらせてから、はじめてプレビューを確認する** のが安全です。
+本レッスンは **3 つのファイル**（`app/actions.ts` / `app/todos/TodoForm.tsx` / `app/todos/page.tsx`）を続けて書き換えます。一部だけ変えるとビルドエラーになるため、**手順 1 → 3 をすべて終わらせてから、はじめてプレビューを確認する** のが安全です。
 
-途中で保存すると HMR が走り、エラー画面が出ることがあります。これは中間状態のため正常です。**エラーが出ても慌てず、手順 2 まで一気に進めてください**。
+途中で保存すると HMR が走り、エラー画面が出ることがあります。これは中間状態のため正常です。**エラーが出ても慌てず、手順 3 まで一気に進めてください**。
 
 ### 手順 1: Server Action を `(prevState, formData)` 形に書き直す
 

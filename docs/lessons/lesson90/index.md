@@ -34,7 +34,7 @@ app/
 - 記事本文（速い、キャッシュ済み）
 - 関連記事（遅い、外部 API から取得）
 
-があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験として勿体ないです。
+があったとして、`loading.tsx` 方式だと両方揃うまで画面が出ません。これは体験としてもったいないです。
 
 ### 部分的 Streaming: `<Suspense>` で囲む
 
@@ -105,7 +105,7 @@ app/
 
 ### 実行順のイメージ
 
-`<Suspense>` を使った Streaming を 1 度追ってみましょう。
+`<Suspense>` を使った Streaming の流れを一度追ってみましょう。
 
 1. ブラウザが `/posts/1` にアクセス
 2. Server が `page.tsx` を評価し始める
@@ -276,7 +276,7 @@ export default function Loading() {
 
 DevTools の Network タブで `/streaming` のレスポンスを見ると、最初の HTML 応答と、後追いで送信される Streaming チャンクの 2 段階が確認できます。
 
-### 変える
+### 変えてみる
 
 - `RelatedPosts.tsx` の `setTimeout` を `5000` にして遅延を長くする → スケルトン表示が長く見える
 - `RelatedPosts.tsx` の `setTimeout` を消す → `<Suspense>` の fallback はほぼ一瞬で置き換わる（= 待ちがなければそもそも fallback が出ない）

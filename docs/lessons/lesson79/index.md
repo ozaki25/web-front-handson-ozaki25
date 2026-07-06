@@ -46,7 +46,7 @@ export default async function PostPage({ params }: PageProps<"/posts/[id]">) {
 
 ### `find` で 1 件だけ取り出す
 
-2 章 の配列メソッド回の末尾で「`find` は5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
+2 章 の配列メソッドのレッスンの末尾で「`find` は 5 章 で再登場する」と予告したのがここです。配列の中から条件に合う 1 件を取り出すメソッドです。
 
 ```ts
 const target = posts.find((p) => p.id === id);

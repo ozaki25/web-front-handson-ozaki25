@@ -192,6 +192,7 @@ export async function addTodo(formData: FormData): Promise<AddTodoResult> {
 - `revalidatePath("/todos")` で `/todos` のキャッシュを無効化します。
 - `crypto.randomUUID()` は Node.js 19+ / 最近のブラウザで使える ID 生成関数です。
 - **戻り値の型 `AddTodoResult`** は、3 章 で学んだ **判別共用体**（discriminated union） そのものです。`ok: true` と `ok: false` を `ok` というタグで識別します。
+- ただし `<form action={addTodo}>` で呼んでいる間、この戻り値は画面にはまだ使われません（解説で触れた通り無視されます）。受け取って表示する方法は「useActionState でフォームエラーを返す」のレッスンで扱います。
 
 ### 手順 3: `/todos` を本物のページにする
 
@@ -243,7 +244,7 @@ export default async function TodosPage() {
 
 ### スコープ外
 
-- 送信中のボタン無効化と空入力エラー表示は本レッスンでは扱いません。「送信状態とエラー表示」で `useActionState` を使って実装します
+- 送信中のボタン無効化と空入力エラー表示は本レッスンでは扱いません。エラー表示は「useActionState でフォームエラーを返す」、ボタン無効化は「useFormStatus で送信中を無効化する」で実装します
 - `Todo` ごとの削除ボタンは本レッスンでは扱いません
 
 ### 自分で書く

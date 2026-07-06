@@ -10,7 +10,7 @@
 
 ### Server Actions と Route Handlers の違い
 
-5 章の「Server Actions の最小形」と「送信状態とエラー表示」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
+5 章の「Server Actions の最小形」と「useActionState でフォームエラーを返す」で **Server Actions** を使って TODO を追加しました。`<form action={fn}>` で呼び出す形で、同じ Next.js アプリ内のフォーム送信には最適です。
 
 一方、もっと一般的な用途、例えば:
 
@@ -87,7 +87,7 @@ return NextResponse.json({ message: "不正なリクエストです" }, { status
 
 ### 手順
 
-1. これまでのプロジェクトを開く（もしくは新規に `create-next-app` で作る）
+1. これまでのプロジェクトを開く（もしくは新規に StackBlitz の Next.js テンプレートで作る）
 2. `app/types.ts` に `Todo` 型を置く（既にあるなら再利用）
 3. `app/api/todos/route.ts` を新規作成する
 
@@ -167,7 +167,7 @@ fetch('/api/todos').then(r => r.json()).then(console.log)
 - POST で TODO を追加すると `{ message: "ok", todo: { id: "...", text: "..." } }` が返る
 - GET を再実行すると追加した TODO が含まれる配列が返る
 
-### 変える
+### 変えてみる
 
 - レスポンスを `{ message: "ok", todo: newTodo }` から `{ message: "created", data: newTodo }` に変えてみる
 - `GET` に `?limit=3` のようなクエリパラメータを受け取って件数を絞る処理を追加してみる（`new URL(request.url).searchParams.get("limit")` で取得できる）

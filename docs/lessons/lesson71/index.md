@@ -193,7 +193,7 @@ export default function AboutPage() {
 }
 ```
 
-書き換えポイントは **HTML → JSX の 3 点** だけです。
+書き換えポイントは **HTML → JSX の 3 点**（＋数値中括弧）です。
 
 - `class="..."` → `className="..."`（`.site-header` / `.site-nav` / `.cards` / `.card` / `.site-footer` すべて）
 - `<label for="...">` → `<label htmlFor="...">`（3 箇所）

@@ -79,7 +79,7 @@ Route Handler は Server Actions と違い、**通常の HTTP エンドポイン
 
 混乱しやすいのは「サーバーが受け取れるかどうか」と「ブラウザの JS がレスポンスを読めるかどうか」が別物だという点です。同一オリジンポリシー（Same-Origin Policy）はブラウザ側のルールで、**サーバーがレスポンスを返した後、そのレスポンスを JS に渡すかどうかを制御** します。サーバーまでの通信は成立していて、ブラウザだけが JS にデータを渡さない、という挙動になります。
 
-ブラウザは POST など「単純でないリクエスト」を送る前に、**OPTIONS（プリフライト）リクエスト**を自動で送信します。サーバーがそれに対して許可ヘッダ（`Access-Control-Allow-Origin` など）を返した場合に限り、ブラウザは本来のリクエストを送ります。プリフライトを受け取って何も返さないか、許可のないヘッダを返すと、ブラウザは本リクエストをブロックします。
+ブラウザは POST など「単純でないリクエスト」を送る前に、**OPTIONS（プリフライト）リクエスト**を自動で送信します。サーバーがそれに対して許可ヘッダ（`Access-Control-Allow-Origin` など）を返した場合に限り、ブラウザは本来のリクエストを送ります。プリフライトに対して許可ヘッダを返さないと、ブラウザは本リクエストをブロックします。
 
 Route Handler でプリフライトに応答するには `OPTIONS` ハンドラを用意します。
 
@@ -219,10 +219,10 @@ curl -X OPTIONS http://localhost:3000/api/todos -i
 
 `HTTP/1.1 204 No Content` と `Access-Control-Allow-Origin: https://allowed.example.com` 等のヘッダが返れば成功です。
 
-### 変える
+### 変えてみる
 
 - `OPTIONS` ハンドラの `Access-Control-Allow-Origin` を `http://localhost:3001` だけに絞る
-- `isTodoInput` に「text が 100 文字以上なら弾く」を追加してみる（`obj.text.length <= 100` の条件を足す）
+- `isTodoInput` に「text が 100 文字を超えたら弾く」を追加してみる（`obj.text.length <= 100` の条件を足す）
 
 ### 自分で書く
 

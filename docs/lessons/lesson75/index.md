@@ -38,7 +38,7 @@ app/
 `loading.tsx` は `page.tsx` が準備できるまで自動で差し込まれます。`<Suspense>` を自分で書く必要はありません。
 
 ::: tip fetch のキャッシュについて
-lesson75 の演習では素の `fetch(url)` を使います。Next.js 15 以降のデフォルトはキャッシュしない動作です。キャッシュを使いたいときの書き方（`force-cache` / `revalidate` / `tags` など）は lesson76 で詳しく扱います。
+本レッスンの演習では素の `fetch(url)` を使います。Next.js 15 以降のデフォルトはキャッシュしない動作です。キャッシュを使いたいときの書き方（`force-cache` / `revalidate` / `tags` など）は lesson76 で詳しく扱います。
 :::
 
 ## 演習
