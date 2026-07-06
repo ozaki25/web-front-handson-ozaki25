@@ -41,7 +41,7 @@ GET / POST / HEAD で、**ヘッダが標準的なもの** だけのリクエス
 
 - メソッドは GET / POST / HEAD
 - カスタムヘッダなし
-- `Content-Type` は `application/x-www-form-urlencoded` / `multipart/form-data` / `text/plain` のいずれか
+- `Content-Type` は `application/x-www-form-urlencoded`、`multipart/form-data`、`text/plain` のいずれか
 
 例:
 

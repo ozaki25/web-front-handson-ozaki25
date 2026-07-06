@@ -245,7 +245,7 @@ describe("fetchUser", () => {
 npm install -D vitest
 ```
 
-> 注: 本レッスンはコンポーネントテストではないので `@vitejs/plugin-react` / `jsdom` は不要です。React Testing Library のレッスンで足します。
+> 注: 本レッスンはコンポーネントテストではないので `@vitejs/plugin-react` と `jsdom` は不要です。React Testing Library のレッスンで足します。
 
 ### 手順 2: 設定ファイルを作る
 

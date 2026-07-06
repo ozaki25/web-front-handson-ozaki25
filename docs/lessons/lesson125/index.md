@@ -285,7 +285,7 @@ CSP と一緒に **これら 5〜6 個も設定** するのが現代の標準に
 
 #### 1. Google Fonts / Google Tag Manager が動かない
 
-→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com` / `https://fonts.gstatic.com` / `https://www.googletagmanager.com`。
+→ `script-src` / `style-src` / `font-src` / `connect-src` に Google のホストを許可する。具体的には `https://fonts.googleapis.com`、`https://fonts.gstatic.com`、`https://www.googletagmanager.com`。
 
 #### 2. Sentry / Datadog の送信が拒否される
 

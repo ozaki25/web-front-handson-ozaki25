@@ -12,7 +12,7 @@
 
 ### ブラウザがページを表示するまでの流れ
 
-アドレスバーに `https://example.com/` と入れて Enter を押したとき、ざっくり次の流れで動いています。
+アドレスバーに `https://example.com/` と入れて Enter を押したとき、おおまかに次の流れで動いています。
 
 1. DNS でホスト名（`example.com`）を IP アドレスに解決する
 2. その IP アドレスのサーバーに **TCP 接続を張る**（https なら続けて TLS ハンドシェイク）
@@ -119,7 +119,7 @@ Set-Cookie: session=abc123; HttpOnly
 
 | ヘッダ | 意味 |
 |---|---|
-| `Content-Type` | ボディの種類（`text/html` / `application/json` 等） |
+| `Content-Type` | ボディの種類（`text/html`、`application/json` 等） |
 | `Content-Length` | ボディのバイト数 |
 | `Cache-Control` | キャッシュ制御（「HTTP キャッシュ」のレッスンで詳しく扱う） |
 | `ETag` | リソースのバージョン識別子（キャッシュ用） |
@@ -154,7 +154,7 @@ Chrome の場合: F12（または `Cmd+Opt+I`）→ Network タブ → ページ
 **Headers タブ:**
 
 - General: Request URL / Request Method（`GET`）/ Status Code（`200 OK`）
-- Response Headers: `content-type: application/json; charset=utf-8` / `cache-control: ...`
+- Response Headers: `content-type: application/json; charset=utf-8`、`cache-control: ...`
 - Request Headers: `Host` / `User-Agent` / `Accept` / `Accept-Language`
 
 **Response タブ（または Preview タブ）:**

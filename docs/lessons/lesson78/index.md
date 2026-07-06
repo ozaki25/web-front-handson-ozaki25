@@ -95,7 +95,7 @@ const myFont = localFont({
 
 日本語の Google Font（`Noto Sans JP` など）は、ラテン文字より **グリフ数が遥かに多い** ため、サブセットを指定しないと重くなりがちです。本演習では `Noto_Sans_JP` を使いつつ、全体には `Inter` を、ヘッダーにだけ日本語フォントを当てる形を試します。
 
-### `font.className` の正体
+### `font.className` の中身
 
 `next/font` の `className` は、**ビルド時に生成される固有のクラス名** です（見た目は `__className_abc123` のような自動生成の文字列になります）。中身は `font-family`、`font-weight`、`font-display: swap` などの CSS 宣言が自動的に書き込まれています。
 

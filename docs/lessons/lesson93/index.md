@@ -12,7 +12,7 @@
 
 ### DevTools はブラウザ付属の開発ツール
 
-DevTools はブラウザ本体に組み込まれた、開発者向けの道具箱です。本コースで **最もよく使う道具のひとつ** です。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
+DevTools はブラウザ本体に組み込まれた、開発者向けのツール群です。本コースで **最もよく使うツールのひとつ** です。Chrome を例に説明しますが、Edge / Firefox / Safari にも同等の機能があります。名称が少し違うだけで考え方は同じです。
 
 ### 開き方
 
@@ -51,7 +51,7 @@ document.querySelectorAll("a").length
 
 エラーが出たときは Console にスタックトレースが出ます。行番号をクリックすると、該当ファイルが Sources タブで開きます。
 
-`console.log` をコードに書き足さなくても、Console から現在のページの値を直接問い合わせられます。コードを書き換えずに調査できる、大きな武器です。
+`console.log` をコードに書き足さなくても、Console から現在のページの値を直接問い合わせられます。コードを書き換えずに調査できる、便利な手段です。
 
 ### Network タブ: 通信を見る
 
@@ -66,7 +66,7 @@ document.querySelectorAll("a").length
 - **Disable cache**: DevTools を開いているあいだ、ブラウザキャッシュを無効化する（開発中の動作確認ではオンにしておくと、常に最新のファイルで確認できる）
 - **Throttling**: 「Slow 3G」などに切り替えて回線が遅い状況を再現できる
 
-Network タブのフィルタ行（`All` / `Fetch/XHR` / `JS` / `CSS` / `Img` / `Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
+Network タブのフィルタ行（`All`、`Fetch/XHR`、`JS`、`CSS`、`Img`、`Doc` 等）を切り替えると種類ごとに絞り込めます。API のデバッグなら `Fetch/XHR` が便利です。
 
 ### Application タブ: 保存されているデータを見る
 

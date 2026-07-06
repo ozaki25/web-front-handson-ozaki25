@@ -194,7 +194,7 @@ export default defineConfig({
 });
 ```
 
-#### Next.js + `@ducanh2912/next-pwa` / `serwist`
+#### Next.js + `@ducanh2912/next-pwa` と `serwist`
 
 Next.js は `next-pwa` の代替として **`serwist`** が活発です（旧 next-pwa はメンテ少）。
 
@@ -361,7 +361,7 @@ export default defineConfig({
 </html>
 ```
 
-`public/pwa-192.png` / `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
+`public/pwa-192.png` と `pwa-512.png` は適当な PNG を置きます（自前で作るか、`vite-pwa-assets` で生成）。
 
 ### 手順 4: ビルドとプレビュー
 
