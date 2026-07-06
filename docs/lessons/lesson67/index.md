@@ -1,7 +1,5 @@
 # lesson67: カスタムフック（`useTodos` に抽出）
 
-2 章 の「スコープとクロージャ」で `makeCounter()` / `makeFilter(status)` という関数を書きました。「関数が state を閉じ込める（クロージャ）」という形です。React のカスタムフックは **同じ仕組みを React の文脈で使う** 形と思ってください。2 章 の「スコープとクロージャ」の延長線上にあります。
-
 ## ゴール
 
 - 複数のフックを組み合わせたロジックを、再利用可能なカスタムフックに切り出せる
@@ -32,7 +30,7 @@ function useTodos() {
 }
 ```
 
-これを使う側は、単に呼ぶだけ。
+これを使う側は、単に呼ぶだけです。
 
 ```tsx
 function App() {
@@ -43,9 +41,9 @@ function App() {
 
 使う側のコンポーネントからは **state の管理が見えなくなり**、`useTodos` の戻り値だけを触る形になります。似た処理を 2 つのコンポーネントで使いたいときも、フック 1 つ書けば共有できます。
 
-### 2 章 の「スコープとクロージャ」との対応
+### 2 章の「スコープとクロージャ」との対応
 
-2 章 の「スコープとクロージャ」で書いた `makeCounter()` を思い出してください。
+2 章の「スコープとクロージャ」で書いた `makeCounter()` を思い出してください。
 
 ```js
 function makeCounter() {
@@ -212,7 +210,7 @@ function App() {
 export default App;
 ```
 
-本レッスン冒頭で `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props に `onToggle` を追加します。演習本体のコードがそのまま上書きになります。
+本レッスンでは `types.ts` の `Todo` 型に `done: boolean` を追加し、`TodoList` の props に `onToggle` を追加します。下の演習本体のコードを貼れば、そのまま上書きできます。
 
 </details>
 
@@ -226,7 +224,7 @@ export default App;
 ### 手順
 
 1. 「親子コンポーネントの連携」か「useEffect の基本」の React プロジェクトをコピーして新規に開く（別プロジェクトでも可）
-2. `src/types.ts` は3 章 で作った `Todo` 型をそのまま使う
+2. `src/types.ts` は 3 章で作った `Todo` 型をそのまま使う
 3. `src/useTodos.ts` を新規作成（カスタムフック）
 4. `src/TodoInput.tsx`、`src/TodoList.tsx` は既存のままでよい
 5. `src/App.tsx` で `useTodos()` を呼び出す形に書き換える
@@ -389,8 +387,8 @@ export default function App() {
   const { todos } = useTodos();
   const { todos: todos2 } = useTodos();
   ```
-  それぞれ独立した state になる。2 章 の「スコープとクロージャ」の `counterA` / `counterB` と同じ形
-- `useTodos` の戻り値にカスタムな派生値を加える: `const doneCount = todos.filter((t) => t.done).length;` を計算して返す
+  それぞれ独立した state になる。2 章の「スコープとクロージャ」の `counterA` / `counterB` と同じ形
+- `useTodos` の戻り値に派生値を加える: `const doneCount = todos.filter((t) => t.done).length;` を計算して返す
 
 ### 自分で書く
 
@@ -431,5 +429,5 @@ function useCounter(initial: number): {
 
 - カスタムフックは `use` で始まる関数。内部で他のフックを呼べる
 - state のロジックだけを切り出して、UI 側を身軽にできる
-- 2 章 の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
+- 2 章の「スコープとクロージャ」のクロージャと同じ「関数が state を閉じ込める」発想。React で同じパターンを見つけられる
 - フックのルールは 2 つ: トップレベルで呼ぶ / React 関数（コンポーネントまたはフック）の中でだけ呼ぶ

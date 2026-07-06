@@ -9,14 +9,14 @@
 - 既存コードでハマらないための注意点（Rules of React）を押さえる
 
 ::: tip 前提
-このレッスンは「`useMemo` で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は「`useMemo` で計算のメモ化」「配列を描画する」を確認してください。
+このレッスンは「`useMemo` で計算のメモ化」の発展編です。`useMemo` / `useCallback` / `React.memo` の基本は「`useMemo` で計算のメモ化」を確認してください。
 :::
 
 ## 解説
 
 ### 「手動メモ化」の苦しみ
 
-React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなる。そのために導入されたのが:
+React は **state や props が変わると再レンダリング** します。これは正しい挙動ですが、巨大なコンポーネントツリーで再レンダリングが連鎖すると重くなります。そこで導入されたのが次の 3 つでした。
 
 - `useMemo`: 値の **再計算を抑える**
 - `useCallback`: 関数の **再生成を抑える**
@@ -36,7 +36,7 @@ const onClick = useCallback(
 const Memoed = React.memo(Child);
 ```
 
-3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど、現実は:
+3 つとも本来は **React が効率の良い動作をするためのヒント** にすぎません。けれど現実には、次の問題が起きがちです。
 
 - **書き忘れ**でパフォーマンスが劣化する
 - **依存配列のミス**でバグが入る
@@ -75,7 +75,7 @@ function Cart({ items }: { items: Item[] }) {
 
 ### 1.0 安定版（2025 年 10 月）
 
-[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、**プロダクション ready** 扱い。
+[React Compiler 1.0](https://react.dev/blog/2025/10/07/react-compiler-1) が **2025 年 10 月** にリリースされました。Meta の Instagram / Facebook など大規模アプリで実戦投入され、本番利用できる品質と位置付けられています。
 
 主な仕様:
 
@@ -99,7 +99,7 @@ const nextConfig: NextConfig = {
 export default nextConfig;
 ```
 
-これだけで OK。デフォルトでは ON ではないので、**明示的に有効化** します。
+設定はこれだけです。デフォルトでは有効にならないので、**明示的に有効化** します。
 
 #### 細かい設定
 
@@ -116,9 +116,9 @@ const nextConfig: NextConfig = {
 | `"infer"`（デフォルト） | PascalCase 命名 / `use` 接頭辞のフック / JSX を返す / フックを呼ぶ、のいずれかに当てはまる関数だけを自動判定して変換 |
 | `"annotation"` | `"use memo"` ディレクティブを書いたコンポーネントだけ変換。まず試したいときはここから |
 | `"syntax"` | Flow の型注釈を頼りに変換（Flow ユーザー向け） |
-| `"all"` | すべてのコンポーネントを変換 |
+| `"all"` | すべての関数を変換（**非推奨**: React 以外の関数まで変換し得る） |
 
-`"annotation"` から段階的に始めて動作を確認し、問題がなければ `"infer"`（既定）または `"all"` に切り替えるのが安全な導入順序です。
+`"annotation"` から段階的に始めて動作を確認し、問題がなければ既定の `"infer"` に切り替えるのが安全な導入順序です（`"all"` は React 以外の関数まで変換し得るため非推奨）。
 
 ### Vite で有効化
 
@@ -247,23 +247,21 @@ function Counter() {
 
 イベントハンドラはレンダリング中ではないので **副作用を書いても OK** で、Compiler はこれを区別します。
 
-#### `eslint-plugin-react-compiler` で違反を検出
+#### `eslint-plugin-react-hooks` で違反を検出
+
+React Compiler 1.0 では、Compiler の Lint ルールが `eslint-plugin-react-hooks`（v6）に統合され、`recommended-latest` プリセットで有効になります。
 
 ```bash
-npm install -D eslint-plugin-react-compiler
+npm install -D eslint-plugin-react-hooks@latest
 ```
 
 ```js
 // eslint.config.js
-import reactCompiler from "eslint-plugin-react-compiler";
+import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
-  {
-    plugins: { "react-compiler": reactCompiler },
-    rules: {
-      "react-compiler/react-compiler": "error",
-    },
-  },
+  // recommended-latest プリセットに Compiler のルールが含まれる
+  reactHooks.configs["recommended-latest"],
 ];
 ```
 
@@ -296,33 +294,33 @@ function LegacyComponent() {
 
 ### 既存プロジェクトに導入する流れ
 
-1. **`eslint-plugin-react-compiler` を入れて警告を見る**
+1. **`eslint-plugin-react-hooks`（v6）を入れて警告を見る**
 2. 警告を直せる範囲で直す
 3. **`compilationMode: "annotation"`** で **限定的に試す**
-4. 動作確認 → 問題なければ既定の **`"infer"`** または **`"all"`** に切り替え
+4. 動作確認 → 問題なければ既定の **`"infer"`** に切り替え
 5. **`useMemo` / `useCallback` / `React.memo` を段階的に削除**
 
 「全部一気に」ではなく **段階導入** が事故を減らします。
 
-### パフォーマンス効果は？
+### パフォーマンス効果の目安
 
-[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などで:
+[DebugBear のベンチマーク](https://www.debugbear.com/blog/react-compiler) などでは、次の傾向が報告されています。
 
 - **手動メモ化が完璧でないコードベース** には大きな改善
 - **既に十分メモ化済みのコード** にはほぼ同等
 - **小規模アプリ** には変化なし
 
-「**すべての React アプリが速くなる魔法** ではない」けれど、コードの **保守性** は確実に上がります。
+すべての React アプリが速くなる魔法ではありませんが、コードの **保守性** は確実に上がります。
 
 ### `useMemo` を残すべき場面
 
-- **CPU 重い計算**: ビジビリティーラインの計算 / 大量データの並び替えなど。Compiler が判断しても明示する方が読みやすくなります
+- **CPU 負荷の高い計算**: 大量データの集計・並び替えなど。Compiler に任せられる場合でも、明示する方が意図が読み取りやすくなります
 - **deep compare** が必要な場合: lodash の `isEqual` で比較したいときなどに残します
 - **API 互換**: 公開ライブラリではコンパイラ前提を強制できないため残します
 
 ### React 19 / Next.js 16 / React Compiler の関係
 
-整理すると:
+整理すると次のようになります。
 
 - **React 19**: Hooks 中心の API（`useEffectEvent` / `cacheSignal` / `<Activity />`）
 - **React Compiler 1.0**: メモ化を自動化（19 推奨だが 17 / 18 でも動く）
@@ -338,7 +336,7 @@ function LegacyComponent() {
 
 ## 演習
 
-> **このレッスンはローカル前提**: React Compiler の Babel プラグインを Next.js のビルドパイプラインに統合する都合上、**ローカルでの Node.js 実行を前提** にしています。StackBlitz の Next.js テンプレでも同じ手順は走りますが、ビルド時間が長くなり Compiler の確認が分かりにくいので、ローカル環境での実行を推奨します。
+> **このレッスンはローカル前提**: React Compiler の Babel プラグインを Next.js のビルドパイプラインに統合する都合上、**ローカルでの Node.js 実行を前提** にしています。StackBlitz の Next.js テンプレートでも同じ手順は走りますが、ビルド時間が長くなり Compiler の確認が分かりにくいので、ローカル環境での実行を推奨します。
 
 ### ゴール
 
@@ -370,20 +368,18 @@ export default nextConfig;
 ### 手順 3: ESLint プラグインを導入
 
 ```bash
-npm install -D eslint-plugin-react-compiler
+npm install -D eslint-plugin-react-hooks@latest
 ```
 
 `eslint.config.mjs`（Next.js 16 デフォルト）に追加:
 
 ```js
-import reactCompiler from "eslint-plugin-react-compiler";
+import reactHooks from "eslint-plugin-react-hooks";
 
 const config = [
   // ...既存
-  {
-    plugins: { "react-compiler": reactCompiler },
-    rules: { "react-compiler/react-compiler": "error" },
-  },
+  // recommended-latest プリセットに Compiler のルールが含まれる
+  reactHooks.configs["recommended-latest"],
 ];
 
 export default config;
@@ -418,7 +414,7 @@ export default function Page() {
 }
 ```
 
-`npm run dev` で動作。filter 入力 / 追加ボタンが快適に動くことを確認。
+`npm run dev` で起動し、filter 入力と追加ボタンが快適に動くことを確認します。
 
 ### 手順 5: わざとルール違反
 
@@ -431,7 +427,7 @@ export default function BadCounter() {
 }
 ```
 
-ESLint がエラーを出します。**修正方法**: state に置き換える / `useEffect` に移す。
+ESLint がエラーを出します。修正するには、state に置き換えるか `useEffect` に移します。
 
 ### 手順 6: 段階導入を試す
 
@@ -460,10 +456,10 @@ export default function CompiledComponent() { /* ... */ }
 ### 変える
 
 - 手元の React + Vite プロジェクトに Compiler を入れる
-- React DevTools の **Profiler** で再レンダリング回数を、ON / OFF で比較
+- React DevTools の **Profiler** で、再レンダリング回数を Compiler の ON / OFF で比較
 - 大量レンダリング（1000 行のリスト）で差を観察
 
-### 自分で書く（4 章 の成果物に適用）
+### 自分で書く（4 章の成果物に適用）
 
 このコースの **4 章「`useMemo` で計算のメモ化」** の演習で書いたプロジェクト、または手元の React + Vite プロジェクトに React Compiler を入れて **before / after を比較** します。
 
@@ -488,7 +484,7 @@ export default function CompiledComponent() { /* ... */ }
 - **Next.js 16** で `reactCompiler: true` の設定が stable になった
 - Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加する
 - 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提となる
-- **`eslint-plugin-react-compiler`** で違反を検出し、直すか `"use no memo"` で対象外にする
+- **`eslint-plugin-react-hooks`（v6）** で違反を検出し、直すか `"use no memo"` で対象外にする
 - 段階導入は **`compilationMode: "annotation"`** から始める
 - 「すべて速くなる魔法」ではないが、**保守性は確実に向上する**
 - 既存の `useMemo` を **残すか消すか** は判断次第で、急いで全削除しなくてよい

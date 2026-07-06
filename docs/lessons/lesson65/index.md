@@ -74,7 +74,7 @@ const filtered = useMemo(() => {
 
 1. まず **`useMemo` なし** で書く
 2. 「画面がカクつく」「数千〜数万件の配列を扱う」など、**実際に遅いと感じたときだけ** `useMemo` を検討する
-3. React DevTools Profiler（「React DevTools」）で **本当に速くなったか計測** してから採用する
+3. React DevTools の Profiler（「React DevTools（Components / Profiler）」で扱う）で **本当に速くなったか計測** してから採用する
 
 「念のため」で書いた `useMemo` は、ほとんどの場合で邪魔になります。
 
@@ -226,7 +226,7 @@ export default App;
 
 ### React DevTools Profiler
 
-「本当にスキップされているか」は React DevTools Profiler で計測できます。
+「本当にスキップされているか」は React DevTools の Profiler で計測できます。使い方は「React DevTools（Components / Profiler）」で手を動かして確認します。
 
 ## まとめ
 

@@ -38,7 +38,7 @@ function Greeting({ name }: GreetingProps) {
 
 ### 型付き props
 
-TypeScript で書くときは、props の形を型で表します。3 章 の「オブジェクトの型と type エイリアス」で学んだ `type` エイリアスをそのまま使います。
+TypeScript で書くときは、props の形を型で表します。3 章の「オブジェクトの型と type エイリアス」で学んだ `type` エイリアスをそのまま使います。
 
 ```tsx
 type GreetingProps = {
@@ -57,7 +57,7 @@ function Greeting({ name }: GreetingProps) {
 
 ### `import type` で型を別ファイルから持ってくる
 
-3 章 の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
+3 章の「オブジェクトの型と type エイリアス」「Utility Types で仕上げる」で `types.ts` に `Todo` や `GreetingProps` のような型を書き、`import type` で呼ぶ練習をしました。React でも同じやり方が使えます。
 
 ```ts
 // src/types.ts
@@ -153,10 +153,10 @@ export function Greeting({ name, age, children }: GreetingProps) {
 
 ### 途中から始める場合
 
-これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章 の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
+これまでのレッスンで作ったプロジェクトがあればそのまま使えます。手元に無ければ、新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）を開いて始めてください。このレッスンは `src/App.tsx` を書き換えるだけでほぼ完結します。3 章の `types.ts` を参照する場面で下の型をそのまま貼って使っても OK です。
 
 <details>
-<summary>出発点のファイル（3 章 の <code>types.ts</code> を再掲）</summary>
+<summary>出発点のファイル（3 章の <code>types.ts</code> を再掲）</summary>
 
 **`src/types.ts`**
 
@@ -317,7 +317,7 @@ function Card({ title, children }: CardProps) {
 
 ## まとめ
 
-- props は「コンポーネントの引数」。オブジェクトの分割代入（2 章 の「分割代入とスプレッド」）で受け取る
+- props は「コンポーネントの引数」。オブジェクトの分割代入（2 章の「分割代入とスプレッド」）で受け取る
 - 型は `type` エイリアスで書き、`export type` / `import type` で別ファイルから使える
 - オプショナルプロパティ `?:` で「あってもなくてもよい」プロパティを表せる
 - `children` はタグに挟まれた中身を受け取る特別な props。型は `ReactNode`（`react` から `import type { ReactNode }`）

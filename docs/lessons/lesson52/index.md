@@ -10,7 +10,7 @@
 
 ### ここまでの立ち位置
 
-2 章 までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。フォーム入力を受け取って `<ul>` に `<li>` を追加したり、削除ボタンで消したり、`localStorage` に保存して復元したり、といった操作も体験しました。
+2 章までで、HTML に `<script defer>` で JS を読み込み、`document.querySelector` で要素を取ってきて `textContent` や `classList` をいじって画面を書き換えてきました。フォーム入力を受け取って `<ul>` に `<li>` を追加したり、削除ボタンで消したり、`localStorage` に保存して復元したり、といった操作も体験しました。
 
 そこまでできるのなら、React はなぜ必要なのでしょうか。
 
@@ -190,7 +190,7 @@ Hello, React
 ### 自分で書く
 
 - 変数 `age` を追加して、`<p>{age} 歳です</p>` という行を増やす
-- 変数の型は今は書かなくてよい（3 章 でやった型注釈は、次の lesson で必要に応じて使う）
+- 変数の型は今は書かなくてよい（3 章でやった型注釈は、必要になった場面で使えば OK）
 
 ### `package.json` を覗く小タスク
 

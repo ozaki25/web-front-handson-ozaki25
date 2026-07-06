@@ -361,4 +361,4 @@ function App() {
 - `inputRef.current?.focus()` のように null チェックして使う
 - `useState` は「画面に出す値」、`useRef` は「画面に出さない値」「DOM への参照」で使い分ける
 - React 19 以降、`ref` は普通の props として渡せる（`function MyInput({ ref }: { ref: Ref<HTMLInputElement> })` の形）
-- `forwardRef` の過去形は本コースでは扱わない
+- 過去の書き方である `forwardRef` は本コースでは扱わない

@@ -92,7 +92,7 @@ Promise.all([
 }
 ```
 
-`string` や `Todo[]` は `length === 0` を意識しつつ、迷ったら三項演算子を使うとより安全です。
+文字列や配列（`string` や `Todo[]`）でも、`length` が `0` のケースに同じ注意が要ります。迷ったら三項演算子で書くとより安全です。
 
 ### (2) 三項演算子で「A か B か」
 
@@ -106,7 +106,7 @@ Promise.all([
 
 - `isLoggedIn` が `true` なら左側、`false` なら右側が表示される
 
-3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次の 3 番目の方が読みやすいです。
+3 択以上（オフライン / 接続中 / 接続済み）は、三項を重ねるより次に説明する早期 return の方が読みやすいです。
 
 ### (3) 早期 return
 
@@ -303,7 +303,7 @@ export default App;
 
 - 「ステータス」の state を `"offline" | "loading" | "online"` のユニオン型で作る
 - 値に応じて、`offline → 灰色の丸`、`loading → 黄色の丸 + "接続中..."`、`online → 緑の丸 + "接続済み"` を表示する
-- 3 択なので、早期 return か、または `switch` で `if ... return` を 3 本重ねる形がおすすめ
+- 3 択なので、`if ... return` を 3 本並べる早期 return か、`switch` で分岐する形がおすすめ
 - ヒント: `const [status, setStatus] = useState<"offline" | "loading" | "online">("offline");`
 
 ## まとめ

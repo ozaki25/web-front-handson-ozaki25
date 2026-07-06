@@ -84,7 +84,7 @@ type Action =
   | { type: "toggle"; id: string };
 ```
 
-この action 型は **3章で学んだ判別共用体** そのものです。`type` タグを `"increment"` / `"decrement"` / `"reset"` で識別します。
+この action 型は **3 章で学んだ判別共用体** そのものです。`type` タグを `"add"` / `"delete"` / `"toggle"` で識別します。
 
 `switch (action.type)` で分岐すると、TypeScript は各ブランチで「この action にはどのプロパティがあるか」を正確に絞り込んでくれます。`case "add"` の中では `action.text` が見え、`case "delete"` の中では `action.id` が見える、という形です。
 
@@ -431,7 +431,7 @@ export default App;
 
 ::: details never を使った網羅性チェック
 
-3 章 の「unknown と never」で登場した `never` 型を使うと、**action の case を書き忘れたときにコンパイルエラーにできます**。
+3 章の「unknown と never」で登場した `never` 型を使うと、**action の case を書き忘れたときにコンパイルエラーにできます**。
 
 `todosReducer.ts` の `switch` に `default` を足します。
 
