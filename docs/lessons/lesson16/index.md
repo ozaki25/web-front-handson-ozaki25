@@ -2,19 +2,19 @@
 
 ## ゴール
 
-- `:has()` で **親セレクタ**（子の状態に応じて親を装飾）を書ける
-- `@container`（Container Queries）で **親要素の幅** に応じたレイアウトを書ける
-- `:is()` / `:where()` / `@layer` / `@scope` / View Transitions API などモダン CSS の主要機能を「読める状態」にできる
+- `:has()` で **親セレクタ**（子の状態に応じて親を装飾）を書ける。
+- `@container`（Container Queries）で **親要素の幅** に応じたレイアウトを書ける。
+- `:is()` / `:where()` / `@layer` / `@scope` / View Transitions API などモダン CSS の主要機能を「読める状態」にできる。
 
 ## 解説
 
-ここまで1 章 で扱ってきた CSS は **2010 年代に固まった基本** が中心でした。一方、2022〜2025 年にかけて CSS は急速に進化しています。`:has()` の登場で「親セレクタが書ける」、`@container` で「メディアクエリの限界」が解消され、`@layer` で「優先度の暴走」を防げるようになりました。
+ここまでのレッスンで扱ってきた CSS は、**2010 年代に固まった基本** が中心でした。一方、2022〜2025 年にかけて CSS は急速に進化しています。`:has()` で親セレクタが書けるようになり、`@container` でメディアクエリの限界が解消され、`@layer` で優先度の暴走を防げるようになりました。
 
 「いま新しく CSS を書くなら最初から使ってよいもの」だけを集めたのがこのレッスンです。
 
 ### :has() — 親セレクタ
 
-長年「CSS には親セレクタがない」と言われてきました。子の状態を見て親を装飾するには JavaScript を使うしかなかった。それが `:has()` で書けるようになりました。
+長年「CSS には親セレクタがない」と言われてきました。子の状態を見て親を装飾するには、JavaScript を使うしかありませんでした。それが `:has()` で書けるようになりました。
 
 #### 例 1: 画像を含む段落だけ余白を広げる
 
@@ -60,7 +60,7 @@ input[type=text] { padding: 8px; }
   :js="``"
 />
 
-これまで JS で「checkbox の change を listen → 親 label にクラス付与」と書いていたコードが、**CSS 1 行** に置き換わります。
+これまで JS で「チェックボックスの変化を監視して、親の `<label>` にクラスを付ける」と書いていた処理が、CSS 1 行に置き換わります。
 
 `:has()` は **2023 年末に全主要ブラウザで対応**し、2026 年の現在は安心して使えます。
 
@@ -164,7 +164,7 @@ CSS の優先度（カスケード）は「詳細度」「宣言順」「`!impor
 }
 ```
 
-`@scope` は 2024 年以降に Chrome / Safari / Firefox（160）で対応が進みました。CSS Modules や CSS-in-JS なしで「スコープ付き CSS」が書けます。
+`@scope` は Chrome・Safari が 2023〜2024 年、Firefox は 2026 年（バージョン 146）で対応しました。現在は主要ブラウザで使え、CSS Modules や CSS-in-JS なしで「スコープ付き CSS」が書けます。
 
 ### @container — Container Queries
 
@@ -203,11 +203,11 @@ CSS の優先度（カスケード）は「詳細度」「宣言順」「`!impor
 
 `.card-list` が 600px 以上の場所に置かれた時だけ、子の `.card` が横並びになります。画面幅の値とは無関係に動作します。
 
-これで「**コンポーネントが置かれた場所** に応じて見た目が変わる」、真にレスポンシブな部品が書けます。
+これで、置かれた場所の幅に合わせて自分で形を変える部品が書けます。
 
 ### View Transitions API — 滑らかな遷移
 
-「state 変化や画面遷移をフェード / スライドで自然に」を **CSS のみ + JS 数行** で実現できます。
+表示の切り替えやページ遷移を、フェードやスライドで自然に見せる演出が、CSS と数行の JS だけで書けます。
 
 #### 同一ページ内で（`document.startViewTransition`）
 
@@ -274,12 +274,12 @@ button.addEventListener('click', () => {
 }
 ```
 
-ページ A の `.hero-image` から ページ B の `.hero-image` へ、自然にモーフィングします。Next.js の App Router でも `next/link` の遷移に乗ります。
+ページ A の `.hero-image` から ページ B の `.hero-image` へ、自然にモーフィングします。Next.js（App Router）でも、実験的機能の `experimental.viewTransition` を有効にすると `next/link` でのルート遷移にこの効果を使えます。
 
 #### Safari / Firefox の状況
 
 - 同一ページ内: Chrome / Safari / Firefox で対応
-- ページ間: Chrome 系が先行している。Safari は段階的、Firefox は対応中（2026 年現在）
+- ページ間: Chrome は 126、Safari は 18.2 で対応。Firefox は未対応（2026 年現在）
 
 未対応ブラウザでは **遷移なしで普通に動く** だけなので、Progressive Enhancement として安心して書けます。
 
@@ -303,7 +303,7 @@ View Transition は画面が大きく動くため、**前庭機能障害** や *
 - **`@starting-style`**: 要素が表示される瞬間のスタイル。`display: none` から表示への transition が書ける
 - **Anchor Positioning**（`anchor()`）: ある要素を **別の要素** に紐付けて配置。tooltip / popover が JS なしで書ける
 - **`color-mix()`**: `color-mix(in oklch, blue 70%, white)` のような色合成
-- **CSS Nesting**: Sass のように `&` で入れ子。2024 年に全ブラウザ対応
+- **CSS Nesting**: Sass のように `&` で入れ子。2023 年末に全ブラウザ対応
 
 これらも現場で増えていく機能です。
 
@@ -452,4 +452,3 @@ StackBlitz は保存と同時にプレビューが更新されます。以下を
 - `@scope` で **コンポーネント単位のスコープ**。BEM や CSS Modules がなくても局所化できる
 - `@container` は **親要素の幅** で分岐。コンポーネント単位のレスポンシブが書ける
 - View Transitions API は `startViewTransition()` 1 つで状態遷移を滑らかにし、`@view-transition` でページ間にも拡張できる
-- 1 章「HTML / CSS」はここで一段落。**2 章「JavaScript」** へ進んでブラウザを動的に動かす方法に入る

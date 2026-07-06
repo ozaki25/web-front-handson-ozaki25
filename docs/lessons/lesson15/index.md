@@ -144,7 +144,7 @@ body { padding: 24px; background: #f5f7fa; }
 
 ### `prefers-reduced-motion` で動きを抑える
 
-動きのあるアニメーションは楽しい一方で、**乗り物酔い** のように画面の動きで気分が悪くなる人がいます。OS 側に「動きを減らす」設定があり（macOS の「視差効果を減らす」、Windows の「アニメーションを表示」OFF など）、この設定は CSS から **`@media (prefers-reduced-motion: reduce)`** で検出できます。
+アニメーションは楽しい一方で、画面の動きで乗り物酔いのように気分が悪くなる人がいます。OS 側に「動きを減らす」設定があり（macOS の「視差効果を減らす」、Windows の「アニメーションを表示」OFF など）、この設定は CSS から **`@media (prefers-reduced-motion: reduce)`** で検出できます。
 
 ```css
 .card {
@@ -170,6 +170,8 @@ body { padding: 24px; background: #f5f7fa; }
 4. ドロップダウンで `reduce` を選ぶ。
 
 以降、その DevTools が開いているページでは `prefers-reduced-motion: reduce` が有効化された状態になります。戻したいときは同じドロップダウンで `no-preference`（= 初期値）に戻します。
+
+なお、Chrome では `Ctrl+Shift+P`（macOS は `Cmd+Shift+P`）でコマンドパレットを開き、「Show Rendering」と入力しても Rendering パネルを呼び出せます。
 
 ## 演習
 
@@ -577,7 +579,6 @@ form button:focus {
 - プレビューのカードにマウスを乗せると、**約 200ms かけてカードが 4px 上に浮き**、同時に **影が濃く大きく** なる。
 - マウスを外すと、また約 200ms かけて元の位置と影に戻る。
 - DevTools の **Rendering タブで `prefers-reduced-motion: reduce` をエミュレート** した状態にすると、マウスを乗せた瞬間にパッと位置と影が変わり、動きが無くなる。戻すと（`no-preference`）また滑らかに動く。
-- Chrome で `Ctrl+Shift+P`（macOS は `Cmd+Shift+P`）でコマンドパレットを開き、「Show Rendering」と入力しても Rendering タブを呼び出せる。
 
 ### 変えてみる
 

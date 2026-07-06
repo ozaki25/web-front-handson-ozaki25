@@ -89,7 +89,7 @@ HTML の各要素は、画面上では四角い箱として配置されます。
 }
 ```
 
-`height` は中身の分だけ縦に伸びるので、普段は指定しません。指定すると中身が溢れたときに切れたりはみ出したりするためです。
+要素は中身の分だけ自然に縦に伸びるので、`height` は普段指定しません。指定すると中身が溢れたときに切れたりはみ出したりするためです。
 
 ### 落とし穴: `width` は「どこまでの幅」？
 
@@ -394,42 +394,80 @@ footer {
 
 ### HTML の変更: `<section>` にクラスを付ける
 
-カード風にしたいので、`<main>` 内の各 `<section>` に `card` クラスを付け、`<main>` 自体にもクラスを付けます。変更するのは `<main>` 開始タグと各 `<section>` 開始タグだけ。
+カード風にしたいので、`<main>` 自体に `main` クラスを、各 `<section>` に `card` クラスを付けます。変更点は `<main class="main">` と各 `<section ... class="card">` のクラス追加だけです。中身は変えません。
 
 ```html
 <main class="main">
   <section id="profile" class="card">
-    <h2>自己紹介</h2>
-    <p>Web フロントエンドを学び中です。HTML / CSS / JavaScript から順に進めています。</p>
+    <h2>プロフィール</h2>
+    <img
+      src="https://placehold.co/200x200.png"
+      alt="オザキのプロフィール画像(仮)"
+      width="200"
+      height="200"
+    />
+    <p>はじめまして。Web フロントエンドを勉強中です。</p>
+    <p>
+      いまは <strong>HTML の基礎</strong> を学んでいます。読むだけでなく、<em>自分でも手を動かして</em> 覚えていきたいです。
+    </p>
   </section>
+
   <section id="likes" class="card">
     <h2>好きなもの</h2>
     <ul>
       <li>コーヒー</li>
-      <li>本</li>
       <li>散歩</li>
+      <li>本</li>
     </ul>
   </section>
+
   <section id="goals" class="card">
-    <h2>目標</h2>
-    <p>小さな Next.js アプリを自分で作れるようになる。</p>
+    <h2>今年やりたいこと</h2>
+    <ol>
+      <li>Next.js で小さなアプリを作る</li>
+      <li>毎週 1 本ブログを書く</li>
+      <li>早起きする</li>
+    </ol>
   </section>
+
   <section id="links" class="card">
-    <h2>リンク</h2>
-    <p><a href="https://example.com">お気に入りのサイト</a></p>
+    <h2>お気に入りサイト</h2>
+    <ul>
+      <li>
+        <a href="https://developer.mozilla.org/ja/" target="_blank" rel="noopener">MDN Web Docs（日本語）</a>
+      </li>
+      <li>
+        <a href="https://ja.react.dev/" target="_blank" rel="noopener">React 公式（日本語）</a>
+      </li>
+      <li>
+        <a href="https://nextjs.org/" target="_blank" rel="noopener">Next.js 公式</a>
+      </li>
+    </ul>
   </section>
+
   <section id="contact" class="card">
-    <h2>問い合わせ</h2>
+    <h2>お問い合わせ</h2>
+    <p>ご連絡はこちらのフォームから。</p>
     <form>
-      <label for="name">お名前</label>
-      <input id="name" name="name" type="text" required />
-      <button type="submit">送信</button>
+      <p>
+        <label for="name">お名前</label>
+        <input type="text" id="name" name="name" required />
+      </p>
+      <p>
+        <label for="email">メールアドレス</label>
+        <input type="email" id="email" name="email" required />
+      </p>
+      <p>
+        <label for="message">メッセージ</label>
+        <textarea id="message" name="message" rows="5" required></textarea>
+      </p>
+      <p>
+        <button class="btn primary" type="submit">送信</button>
+      </p>
     </form>
   </section>
 </main>
 ```
-
-（これまでに書いた各 `<section>` の中身をそのまま維持すれば OK です。上は中身の一例として掲載しています。）
 
 ### CSS の変更
 
@@ -457,7 +495,7 @@ body {
 }
 ```
 
-（これまでの `body` ルールは上で置き換えました。`margin: 0` と `padding: 24px` が追加されている点に注意。）
+これまで書いていた `body` ルールは削除し、上の新しい `body` ルールに置き換えてください（`margin: 0` と `padding: 24px` が増えています）。
 
 そしてファイルの末尾に、`main` と `card` のルールを追加します。
 

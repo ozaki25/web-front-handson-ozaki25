@@ -55,7 +55,7 @@
 
 ### `fr` 単位
 
-ピクセルで固定すると画面幅に合いません。Grid では **`fr`**（fraction、利用可能な幅を何分の何で分け合うか） という便利な単位が使えます。
+ピクセルで固定すると画面幅に合いません。Grid では **`fr`**（fraction。余っている幅を分け合う比率の単位）という便利な単位が使えます。
 
 ```css
 .grid {
@@ -161,7 +161,7 @@ body { padding: 16px; }
 
 ### 途中から始める場合
 
-これまでのレッスンで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスンから1 章 統合版では `style.css` というファイル名を使います）。
+これまでのレッスンで作った `index.html` / `style.css` を続けて使うのが理想ですが、手元に無ければ、新規 StackBlitz の Vanilla（HTML / CSS / JS）テンプレート（<https://stackblitz.com/edit/web-platform>）を開き、下の「出発点のコード」をそのまま貼って始めてください。`style.css` は新規作成してください（このレッスン以降は `style.css` というファイル名で進めます）。
 
 <details>
 <summary>出発点のコード</summary>
