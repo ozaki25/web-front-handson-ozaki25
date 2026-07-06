@@ -217,7 +217,7 @@ export default async function RelatedPosts() {
   // わざと 2 秒待つ
   await new Promise((r) => setTimeout(r, 2000));
 
-  // Next.js 16 のデフォルトは no-store（キャッシュしない）なのでオプション不要
+  // Next.js 16 の fetch 既定は auto no cache（明示 opt-in しない限りキャッシュしない）なのでオプション不要
   const res = await fetch(
     "https://jsonplaceholder.typicode.com/posts?_limit=3"
   );
