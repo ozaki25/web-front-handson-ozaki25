@@ -133,7 +133,7 @@ console.timeEnd("fetch-posts"); // fetch-posts: 312ms
 
 ### 回数を数える: `console.count`
 
-同じラベルで呼ぶたびにカウンタが上がります。「ここを何回通ったか」をざっくり知るのに便利です。
+同じラベルで呼ぶたびにカウンタが上がります。「ここを何回通ったか」を手早く知るのに便利です。
 
 ```js
 function render() {

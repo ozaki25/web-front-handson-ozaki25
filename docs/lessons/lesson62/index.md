@@ -115,7 +115,7 @@ Context は便利ですが、何でも入れていい仕組みではありませ
 
 1. StackBlitz の React + Vite（TS）テンプレートから新規プロジェクトを作る
 2. `src/ThemeContext.tsx` を作成
-3. `src/Layout.tsx` / `src/Header.tsx` / `src/Nav.tsx` / `src/ThemeToggle.tsx` を作成
+3. `src/Layout.tsx`、`src/Header.tsx`、`src/Nav.tsx`、`src/ThemeToggle.tsx` を作成
 4. `src/App.tsx` を書き換える
 5. `src/App.css` を書き換える
 

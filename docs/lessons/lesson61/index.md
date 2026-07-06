@@ -113,7 +113,7 @@ function TodoInput({ onAdd }: TodoInputProps) {
 
 ### 途中から始める場合
 
-このレッスンは独立した TODO 例として完結しています。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。過去のレッスンのファイルは不要で、下の手順に従って `src/types.ts` / `src/TodoInput.tsx` / `src/TodoList.tsx` / `src/App.tsx` を新しく作成していきます。
+このレッスンは独立した TODO 例として完結しています。新規 StackBlitz の React + Vite + TypeScript テンプレート（<https://stackblitz.com/fork/github/vitejs/vite/tree/main/packages/create-vite/template-react-ts>）から始められます。過去のレッスンのファイルは不要で、下の手順に従って `src/types.ts`、`src/TodoInput.tsx`、`src/TodoList.tsx`、`src/App.tsx` を新しく作成していきます。
 
 ### ゴール
 

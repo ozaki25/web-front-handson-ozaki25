@@ -3,7 +3,7 @@
 ## ゴール
 
 - React が何を解決する道具なのかを、自分の言葉で説明できる
-- Vite / npm / `package.json` / `npm run dev` の役割をざっくり理解する
+- Vite / npm / `package.json` / `npm run dev` の役割をおおまかに理解する
 - StackBlitz の React + Vite（TypeScript）テンプレートから、自分の文字を画面に出せる
 
 ## 解説

@@ -203,7 +203,7 @@ TypeScript 公式の Go 移植は **preview build が公開**されており、`
 
 おそらく続くもの:
 
-- **Rust ベースの拡大**（CI / dev サーバ全般）
+- **Rust ベースの拡大**（CI や dev サーバー全般）
 - **Vite / Rolldown / Oxc の統合**（VoidZero が同方向に進める）
 - **TypeScript 公式の Go / Rust 化**（高速化）
 
