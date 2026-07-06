@@ -6,7 +6,7 @@
 - 画像最適化の 5 つの技（フォーマット / サイズ / 遅延読み込み / プレースホルダ / `<picture>`）を知る
 - `next/image` がやってくれる自動最適化の中身を説明できる
 - フォントが **CLS** と LCP にどう効くかを理解する
-- `next/font` / `font-display: swap` / preload で FOIT / FOUT を抑える
+- `next/font`、`font-display: swap`、preload を使って FOIT・FOUT（描画のちらつき）を抑える
 - Self-hosted フォントと Google Fonts の使い分けを知る
 
 ## 解説

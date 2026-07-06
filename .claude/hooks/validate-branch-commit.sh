@@ -167,6 +167,30 @@ if [[ "$COMMAND" =~ git\ commit ]]; then
     fi
   fi
 
+  # --- スラッシュ区切り列挙の曖昧さ検出（コードブロック除外）---
+  # 「A / B / C」の区切りは、項目自身が内部にスラッシュを含むと区切りと中身が
+  # 区別できなくなる（例: `app/a.ts` / `app/b.ts`、`application/json` / `text/html`）。
+  # 語中スラッシュ（前後が空白 / < / > でない）を持つバッククォートトークンが
+  # ' / ' 区切りに隣接するケースだけを検出する。JSX 自己終了 `<X />` は誤検出しない。
+  if [ -n "$staged_md" ]; then
+    ambiguous_slash_hits=""
+    for f in $staged_md; do
+      issues=$(git show ":$f" 2>/dev/null | awk '
+        /^```/ { in_code = !in_code; next }
+        in_code { next }
+        {
+          if ($0 ~ /`[^`]*[^ <`]\/[^ >`][^`]*` \/ `/ || $0 ~ /` \/ `[^`]*[^ <`]\/[^ >`][^`]*`/) print NR ": " $0
+        }
+      ')
+      if [ -n "$issues" ]; then
+        ambiguous_slash_hits="${ambiguous_slash_hits}${f}:\n${issues}\n"
+      fi
+    done
+    if [ -n "$ambiguous_slash_hits" ]; then
+      block "スラッシュ区切り列挙の曖昧さ: 内部にスラッシュを含む項目（パス / パッケージ名 / MIME タイプ等）を ' / ' で並べると、区切りと中身が区別できません。読点「、」や「と」、箇条書きに置き換えてください。\n${ambiguous_slash_hits}"
+    fi
+  fi
+
   # --- 素の <script> / <style> の検出 ---
   if [ -n "$staged_md" ]; then
     raw_tag_hits=""

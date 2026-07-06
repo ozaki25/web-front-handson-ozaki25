@@ -167,7 +167,7 @@ export const metadata: Metadata = {
 Next.js App Router は、`app/` 直下に **特定のファイル名** で画像を置くだけで自動的に `<link>` タグを生成します。
 
 - `app/favicon.ico` → `<link rel="icon">`
-- `app/icon.png` / `app/icon.svg` → 同上
+- `app/icon.png`、`app/icon.svg` → 同上
 - `app/apple-icon.png` → `<link rel="apple-touch-icon">`
 
 `<head>` を手で書く必要はありません。画像ファイルを置くだけです。

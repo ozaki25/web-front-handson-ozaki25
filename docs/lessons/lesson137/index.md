@@ -492,7 +492,7 @@ npm run dev
 - Next.js は **Metadata API** に OGP / Twitter Card / canonical / hreflang が揃っている
 - **`metadataBase`** を必ず設定する（相対パス事故防止）
 - `app/opengraph-image.tsx` で **動的 OGP 画像** を JSX で生成
-- `app/sitemap.ts` / `app/robots.ts` でファイルベースに `sitemap.xml` / `robots.txt` を生成
+- `app/sitemap.ts` と `app/robots.ts` で、ファイルベースに `sitemap.xml`・`robots.txt` を生成
 - **JSON-LD**（構造化データ） でリッチリザルトを狙う。Article / Product / FAQPage / BreadcrumbList が定番
 - **Google Search Console** で順位 / インデックス状況 / Core Web Vitals を確認
 - Core Web Vitals は **SEO のランキング要因**。速度と SEO は切り離せない
