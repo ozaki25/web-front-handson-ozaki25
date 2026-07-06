@@ -245,7 +245,7 @@ export default async function Page({ params }: Props) {
 | `Article` / `BlogPosting` / `NewsArticle` | 記事 |
 | `Product` | EC 商品（価格 / 在庫） |
 | `Recipe` | レシピ |
-| `FAQPage` | よくある質問（手風琴 UI で出る） |
+| `FAQPage` | よくある質問（アコーディオン表示で出る） |
 | `Organization` | 会社情報 |
 | `BreadcrumbList` | パンくず |
 

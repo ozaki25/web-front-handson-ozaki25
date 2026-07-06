@@ -10,7 +10,7 @@
 
 ## 解説
 
-lesson128 で学んだ OIDC は、認証情報を **JWT（JSON Web Token）** 形式のトークンで返します。Auth.js が発行するセッション Cookie も JWT の一種です。このレッスンでは JWT の内部構造とセキュリティ上の注意点を掘り下げます。
+「OAuth / OIDC の概念」で学んだ OIDC は、認証情報を **JWT（JSON Web Token）** 形式のトークンで返します。Auth.js が発行するセッション Cookie も JWT の一種です。このレッスンでは JWT の内部構造とセキュリティ上の注意点を掘り下げます。
 
 ### JWT の 3 部構成
 
@@ -88,7 +88,7 @@ JWT には大きく 2 つのバリアントがあります。
 | jwt.io | デコードできる | デコードできない（暗号化されているため） |
 | Auth.js の既定 | `strategy: "jwt"` を明示した場合 | **v5 の既定**（`authjs.session-token` は JWE） |
 
-lesson128 の演習で `jwt.io` に貼ってもデコードできなかったのは、Auth.js v5 が既定で **JWE** を使っているためです。「JWT の Payload は誰でも読める」という説明は JWS の話であり、JWE は暗号化されているため jwt.io でデコードできません。
+「OAuth / OIDC の概念」の演習で `jwt.io` に貼ってもデコードできなかったのは、Auth.js v5 が既定で **JWE** を使っているためです。「JWT の Payload は誰でも読める」という説明は JWS の話であり、JWE は暗号化されているため jwt.io でデコードできません。
 
 **Auth.js で JWS に切り替える**（学習・デバッグ用）:
 

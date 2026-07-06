@@ -206,7 +206,7 @@ GitHub の **コミット頻度 / 最終リリース日 / 未解決 Issue 数** 
 
 #### 3. 依存の深さ
 
-`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーン面が広がる。
+`npx npm-why some-package` や [Bundlephobia](https://bundlephobia.com/) で **どんな子依存を引っ張ってくるか** を見る。**子依存が深い** とサプライチェーンの攻撃面が広がる。
 
 #### 4. ライセンス
 

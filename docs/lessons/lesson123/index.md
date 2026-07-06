@@ -24,7 +24,7 @@
 - 開発 / 本番の切り替えが面倒
 - **シークレットが Git に残る**（git history に永久保存）
 
-ので、環境変数で外に出します。
+という問題が起きるため、環境変数で外に出します。
 
 ### `.env` ファイルの種類
 
@@ -78,7 +78,7 @@ NEXT_PUBLIC_GA_ID=G-XXXX                    ← クライアントにも露出
 - それ以外は **サーバー（API Route / Server Component / Middleware）でしか読めない**
 - ビルド時に **値が文字列として埋め込まれる**（実行時のフェッチではない）
 
-#### 露出する 例
+#### 露出する例
 
 ```tsx
 // app/page.tsx（Server Component でも Client Component でも）
@@ -87,7 +87,7 @@ const apiBase = process.env.NEXT_PUBLIC_API_URL; // ブラウザでも読める
 
 ビルド後の JS には **値そのもの** が入ります。**シークレットを `NEXT_PUBLIC_` に置くのは事故** の元。
 
-#### 露出しない 例
+#### 露出しない例
 
 ```ts
 // app/api/users/route.ts（Route Handler）
@@ -381,7 +381,7 @@ git add test.txt
 gitleaks git --pre-commit --staged
 ```
 
-`AWS_SECRET` のような パターンが検出され、**push を止めるべき** 警告が出ます。
+`AWS_SECRET` のようなパターンが検出され、**push を止めるべき** 警告が出ます。
 
 ### 手順 5: pre-commit に組み込む
 

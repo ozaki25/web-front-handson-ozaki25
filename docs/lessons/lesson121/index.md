@@ -410,7 +410,7 @@ export default function App() {
 
 ### 自分で書く（任意）
 
-- `getUser: t.procedure` で取得した認証ユーザーを Zustand store に入れ、全画面で参照する
+- API から取得した認証ユーザーを Zustand store に入れ、全画面で参照する
 - TanStack Query の `useInfiniteQuery` で無限スクロールを実装する
 - Jotai の `atomWithStorage` でリロード耐性を持つ atom を作る
 

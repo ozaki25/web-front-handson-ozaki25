@@ -26,7 +26,7 @@
 
 | ツール | カバーする軸 | 特徴 |
 |---|---|---|
-| **Vercel Analytics** | PV / 流入元 | Cookieless、Next.js 統合が秒で済む |
+| **Vercel Analytics** | PV / 流入元 | Cookieless、Next.js なら数行で導入できる |
 | **Vercel Speed Insights** | Core Web Vitals | 実ユーザーの LCP / INP / CLS を集める |
 | **Google Analytics 4**（GA4） | PV / イベント / コンバージョン | 機能多 / 学習コスト高 / Cookie 必要 |
 | **Plausible / Fathom / Simple Analytics** | PV / 流入元 | プライバシー重視、料金固定 |
@@ -446,7 +446,7 @@ npm run dev
 ## まとめ
 
 - 「公開後に見るもの」は **来訪 / 体験 / 行動** の 3 軸。エラーは Sentry、残り 2 軸が Analytics の役割
-- **Vercel Analytics** は Cookieless で導入が秒。Vercel 以外でも `@vercel/analytics/react` で動く
+- **Vercel Analytics** は Cookieless で導入も数行で済む。Vercel 以外でも `@vercel/analytics/react` で動く
 - **Speed Insights** は実ユーザーの Core Web Vitals を **75 パーセンタイル** で集める
 - **GA4** はイベントベースで強力だが、**Cookie 同意 / Consent Mode v2** を意識する必要がある
 - 個人情報（メールアドレスなど）が **URL から漏れて Analytics に送られる事故** を避ける

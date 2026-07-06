@@ -198,7 +198,7 @@ z.coerce.boolean()      // 文字列 / 数値 → boolean
 z.coerce.date()         // 文字列 → Date
 ```
 
-> **補足: `z.coerce.number()` で空欄送信が `NaN` になる地雷**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
+> **補足: `z.coerce.number()` で空欄送信が `NaN` になる落とし穴**: `<input type="number">` を **空欄のまま送信** すると、フォーム値は `""`（空文字列）。`Number("")` は `0` ですが、React Hook Form 経由で `undefined` が来る場合は `Number(undefined)` が `NaN` を返し、`z.coerce.number()` が **「Expected number, received nan」** で **想定外のエラーメッセージ** を返します。実務では次のように **空欄を `undefined` に正規化してから coerce する** イディオムで安全に倒します。
 >
 > ```ts
 > age: z.preprocess(
@@ -442,7 +442,7 @@ export async function fetchPosts(): Promise<Post[]> {
 
 ### 自分で書く（自分の Server Action に Zod を入れる）
 
-「Server Actions の最小形」「送信状態とエラー表示」で書いた自分の `actions.ts` に Zod を導入してみましょう。`if (!text) ...` のような自前検証を Zod の `safeParse` に置き換える演習です。
+「Server Actions の最小形」「useActionState でフォームエラーを返す」で書いた自分の `actions.ts` に Zod を導入してみましょう。`if (!text) ...` のような自前検証を Zod の `safeParse` に置き換える演習です。
 
 1. `actions.ts` の冒頭に Zod スキーマを定義:
 

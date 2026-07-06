@@ -142,7 +142,7 @@ const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
 </script>
 ```
 
-主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選ぶと将来安心。
+主要 SaaS（Clerk / Auth0 / NextAuth）はすでに **Passkey を 1 オプション** として提供。新規プロジェクトは **Passkey 対応の SaaS** を選んでおくと、あとから対応に追われずに済みます。
 
 ### よくある事故
 
@@ -282,5 +282,5 @@ JWT の構造（JWS と JWE の違い・署名アルゴリズム）は「JWT の
 - **OAuth 2.0 の認可コードフロー + PKCE** が現代の標準（Auth.js 等が内部で処理）
 - **OIDC** は OAuth に **ID Token + /userinfo** を追加した認証規格
 - **Auth0 / Clerk / NextAuth / Supabase / WorkOS** など SaaS / ライブラリで自前実装を避ける
-- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選ぶと未来安心
+- **Passkeys** が普及中。新規プロジェクトは対応 SaaS を選んでおくと安心
 - JWT の構造とセキュリティは「JWT の構造とセキュリティ」のレッスンで扱います
