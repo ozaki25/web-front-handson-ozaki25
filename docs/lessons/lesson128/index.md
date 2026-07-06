@@ -167,7 +167,7 @@ const cred = await navigator.credentials.get({ publicKey: {/* ... */} });
 ```bash
 npx create-next-app@latest auth-sample --ts --app
 cd auth-sample
-npm install next-auth
+npm install next-auth@beta
 ```
 
 ### 手順 2: Google OAuth クライアント作成

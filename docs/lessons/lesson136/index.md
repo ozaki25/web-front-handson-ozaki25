@@ -210,7 +210,7 @@ export function GAPageView({ gaId }: { gaId: string }) {
 
 #### ITP（Intelligent Tracking Prevention）
 
-Safari の ITP は **3rd-party cookie を実質ブロック**、1st-party cookie も **7 日で失効** させます。Chrome は **2024 年 7 月に 3rd-party cookie の一律廃止計画を撤回** し、**ユーザーが選択する形** で段階的にブロックを進める方針へ転換しました（2025 年以降も継続）。とはいえ Safari の挙動と合わせて長期的には **「3rd-party cookie に依存しない設計」** が必要なのは変わりません。
+Safari の ITP は **3rd-party cookie を実質ブロック**、1st-party cookie も **7 日で失効** させます。Chrome は **2024 年 7 月に 3rd-party cookie の一律廃止計画を撤回** し、さらに **2025 年 4 月には予定していた「ユーザーに選択させるプロンプト」も取りやめて**、既存の Cookie 設定を維持する方針に落ち着きました（強制ブロックは進めない）。とはいえ Safari の挙動と合わせて長期的には **「3rd-party cookie に依存しない設計」** が必要なのは変わりません。
 
 #### 個人情報を送らない
 
