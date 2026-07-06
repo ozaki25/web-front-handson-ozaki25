@@ -39,7 +39,7 @@ document.getElementById('btn').addEventListener('click', run);
 
 - 壊れた文字列を `JSON.parse` に渡す（構文エラー）
 - ネットワークが切れた状態で `fetch` する（通信エラー）
-- 想定外の入力（`undefined` のプロパティを読む、ゼロ除算以外の不整合など）
+- 想定外の値の操作（`undefined` に対してプロパティを読もうとする、など）
 - 自分で `throw` したカスタムエラー
 
 ここで **例外をちゃんと受け止める** 仕組みが `try` / `catch` です。

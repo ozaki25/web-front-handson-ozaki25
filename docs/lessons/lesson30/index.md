@@ -147,7 +147,7 @@ import { add } from "./math";
 <details>
 <summary>出発点のコード</summary>
 
-これは **新規 StackBlitz から始める方向け** の最小スターターです（「Web Storage で値をブラウザに保存する」レッスンの完成形を厳密に再現したものではないため、内容は import / export の題材練習用に絞っています）。
+これは **新規 StackBlitz から始める方向け** の最小スターターです（これまでのレッスンの完成形をそのまま再現したものではなく、import / export の練習に必要な内容だけに絞っています）。
 
 **`index.html`**
 
@@ -241,7 +241,7 @@ console.log(missing);
 
 ### `storage.js`
 
-`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、後の「fetch で API から取得する」で学ぶ `try` / `catch` で囲みます（ここで先取りします）。
+`localStorage` の読み書きだけを担当します。`JSON.parse` は壊れた文字列だと例外を投げるので、「Web Storage で値をブラウザに保存する」と同じく `try` / `catch` で囲みます（`try` / `catch` の仕組みは「try / catch でエラー処理」のレッスンで詳しく扱います）。
 
 ```js
 const STORAGE_KEY = "module-todos";

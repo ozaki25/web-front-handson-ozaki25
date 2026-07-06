@@ -88,7 +88,7 @@ form.addEventListener("submit", (event) => {
 - イベントハンドラの引数 `event` は「今起きたイベントの情報」
 - `event.preventDefault()` で「ブラウザの既定動作をキャンセル」
 
-この `preventDefault` は、フォームを JS で扱うときのほぼ定番の呪文です。
+この `preventDefault` は、フォームを JS で扱うときの定番の書き方です。
 
 ### ハンドラの 2 つの書き方
 

@@ -172,12 +172,14 @@ console.log(obj.createdAt instanceof Date); // true
 <LiveDemo
   height="300px"
   :html="`
-<button id='btn' onclick='run()'>動かす</button>
-<pre id='output' style='background:#f5f5f5;padding:12px;border-radius:6px;'></pre>
+<pre id='output'></pre>
   `"
   :css="`
 body { padding: 16px; font-family: system-ui; }
-pre { white-space: pre-wrap; font-size: 14px; }
+pre { white-space: pre-wrap; font-size: 14px; background: #f5f5f5; color: #222; padding: 12px; border-radius: 6px; }
+@media (prefers-color-scheme: dark) {
+  pre { background: #2a2a2a; color: #eaeaea; }
+}
   `"
   :js="demoJs"
 />
@@ -362,7 +364,7 @@ JSON
 
 ### 自分で書く
 
-- `<button id="clear">`全消去`</button>` を置き、押すと `localStorage.removeItem(STORAGE_KEY)` してリロードさせる
+- 「全消去」ボタン（`<button id="clear">全消去</button>`）を置き、押すと `localStorage.removeItem(STORAGE_KEY)` してリロードさせる
 - 各 `<li>` の横に「削除」ボタンを付け、配列から `filter` で除いて `saveTodos` → `render` する
 - `replacer` を使って、`done: true` の項目だけを保存する `stringify` を書く（`saveTodos` をもう 1 つ増やす形で OK）
 

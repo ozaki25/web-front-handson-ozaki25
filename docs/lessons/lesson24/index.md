@@ -148,7 +148,7 @@ console.log(counterB()); // 2
 
 #### 関数を作って返す（`makeFilter`）
 
-同じパターンで、**設定を覚えた関数** を作ることもできます。「配列の変換」の `filter` と組み合わせる例を見てみます。
+同じパターンで、**設定を覚えた関数** を作ることもできます。ここでは配列の `filter` メソッドと組み合わせてみます。`filter` は「条件を判定する関数」を受け取り、判定が `true` になった要素だけを集めた新しい配列を返すメソッドです（「配列の変換」のレッスンで詳しく扱います。今は「条件に合うものだけ残す」と読めれば十分です）。
 
 ```js
 function makeFilter(status) {
@@ -325,8 +325,8 @@ console.log(todos.filter(isTodo));
 
 ### 自分で書く
 
-- `makeAdder(n)` を作る。`makeAdder(5)` を呼ぶと「引数に 5 を足す関数」が返ってくる。`add5(10)` が `15` を返せば OK（ヒント: 戻り値の関数の中で外側の `n` を使う）
-- `makeGreeter(word)` を作る。`makeGreeter("こんにちは")` を呼ぶと「``(name) => `${word}、${name} さん` `` のような関数」が返ってくる。`greetJa("Alice")` で `"こんにちは、Alice さん"` が返れば OK
+- `makeAdder(n)` を作る。`makeAdder(5)` を呼ぶと「引数に 5 を足す関数」が返ってくる。返ってきた関数を `const add5 = makeAdder(5);` のように変数に受け、`add5(10)` が `15` を返せば OK（ヒント: 戻り値の関数の中で外側の `n` を使う）
+- `makeGreeter(word)` を作る。`makeGreeter("こんにちは")` を呼ぶと「``(name) => `${word}、${name} さん` `` のような関数」が返ってくる。`const greetJa = makeGreeter("こんにちは");` として `greetJa("Alice")` で `"こんにちは、Alice さん"` が返れば OK
 - `makeCounter` を改造して、呼ぶと `{ increment, reset, value }` の 3 つの関数を持つオブジェクトを返すようにする（余力があれば）
 
 ## まとめ

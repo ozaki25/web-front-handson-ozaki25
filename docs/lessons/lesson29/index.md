@@ -36,7 +36,7 @@ clearBtn.addEventListener('click', () => {
 - `localStorage` と `sessionStorage` でブラウザに値を保存・読み出しできる
 - 文字列しか保存できないことを理解し、オブジェクトや配列は `JSON.stringify` / `JSON.parse` 経由で扱える
 - `localStorage` と `sessionStorage` と Cookie の違いを 1 行で説明できる
-- 保存上限と、保存できない場合に備えた `try` / `catch` を書ける
+- 保存上限があることを知り、保存できない場合に備えた `try` / `catch` を書ける
 
 ## 解説
 
@@ -164,7 +164,7 @@ function saveTodos(todos) {
 
 ### 小さなデモ
 
-下のデモは `localStorage` の超最小例です。何か書いて「保存」を押し、ブラウザのタブを閉じて開き直しても、「読み込み」で復元できます。
+下のデモは `localStorage` の最小の例です。何か書いて「保存」を押し、ブラウザのタブを閉じて開き直しても、「読み込み」で復元できます。
 
 <LiveDemo
   height="220px"
@@ -320,7 +320,7 @@ clearBtn.addEventListener("click", clearMemo);
 ### 自分で書く
 
 - 入力された内容が **10000 文字を超えたら** `showStatus("長すぎます")` を出して保存しない、という制限を加える。ヒント: `if (memo.value.length > 10000)` で分岐
-- ページに「テーマ切替」の `<button>` を足し、クリックするたびに `<body>` に `dark` クラスを付け外しする。付いているかどうかを `localStorage` に保存し、次回訪問時に復元する（「DOM を操作する」の `classList.toggle` と組み合わせ）
+- ページに「テーマ切替」の `<button>` を足し、クリックするたびに `<body>` に `dark` クラスを付け外しする。付いているかどうかを `localStorage` に保存し、次回訪問時に復元する（クラスの付け外しに使う `classList.toggle` は「DOM を操作する」のレッスンで詳しく学ぶ。余力があれば先取りで挑戦する）
 
 ## まとめ
 

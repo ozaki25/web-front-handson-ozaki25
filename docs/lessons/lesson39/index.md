@@ -129,7 +129,7 @@ const observer = new IntersectionObserver((entries) => {
 lazyImages.forEach((img) => observer.observe(img));
 ```
 
-ビューポートの 200px 手前で `src` をセットして読み込みを開始します。読み込み済みの要素は `unobserve` で監視解除すると効率的。
+ビューポートの 200px 手前で `src` をセットして読み込みを開始します。読み込み済みの要素は `unobserve` で監視解除すると効率的です。
 
 ::: tip ネイティブの loading="lazy" との関係
 画像 / iframe には `loading="lazy"` 属性が標準です。**画像なら属性で十分** に間に合います。Intersection Observer を使うのは **任意の DOM 要素** や **「画面に入ったらアニメーション」** など、属性では届かない場面です。
@@ -348,9 +348,9 @@ window.addEventListener("scroll", () => {
 
 Intersection Observer は **必要な時だけ** コールバックを呼ぶので、上記の問題をまとめて回避できます。現代のコードでは、こうした要素の交差判定は Observer で書くのが標準的です。
 
-### React で使う
+### React で使う（先取り紹介）
 
-カスタムフックにすると再利用しやすいです。
+React は 4 章で学びます。ここでは「実務ではこう使われる」という先取り紹介なので、初読では読み飛ばして構いません。4 章まで進んでから戻ってくると、カスタムフックにすると再利用しやすいことが分かります。
 
 ```tsx
 import { useEffect, useRef, useState } from "react";
@@ -403,7 +403,7 @@ function FadeInSection({ children }: { children: React.ReactNode }) {
 
 ### 手順 1: 新規プロジェクト（StackBlitz の Vanilla テンプレート）
 
-これまでの 2 章 と同じく **StackBlitz の Vanilla（HTML + CSS + JS）テンプレート** で進めます。<https://stackblitz.com/fork/js> から新しいプロジェクトを開きます。
+これまでのレッスンと同じく **StackBlitz の Vanilla（HTML / CSS / JS）テンプレート** で進めます。<https://stackblitz.com/edit/web-platform> から新しいプロジェクトを開きます。
 
 ### 手順 2: index.html
 
@@ -550,13 +550,13 @@ StackBlitz は保存と同時にプレビューが更新されます。以下を
 - `threshold: 0.2` を `1.0` にすると **完全に画面に収まらないと** 発火しなくなる
 - `rootMargin: "200px"` を加えると **早めに** 発火する（先読み）
 - `unobserve` を消すと、画面外に出てまた入った時にもう一度発火するようになる
-- `loadMore` の中の `setTimeout` で遅延を入れて、ローディング状態を確認
+- `loadMore` の処理を `setTimeout` で 1 秒ほど遅らせて、「読み込み中...」の表示が見える時間を作ってみる
 
 ### 自分で書く（任意）
 
 - 「画面の上端に貼り付いたら header の影を濃くする」を Intersection Observer で実装（センチネルを header の上に置く）
 - ResizeObserver で「カードの幅が 400px 未満なら縦並び、それ以上なら横並び」のクラス切り替えを書く
-- React のカスタムフック `useResize` を作って、ボックスの幅をリアルタイム表示する
+- React のカスタムフック `useResize` を作って、ボックスの幅をリアルタイム表示する（React を学ぶ 4 章まで進んでから挑戦する）
 
 ## まとめ
 

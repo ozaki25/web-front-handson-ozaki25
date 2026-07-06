@@ -75,7 +75,7 @@ d.getDay();       // 3   ← 曜日（0=日 〜 6=土）
 d.getHours();     // 10
 d.getMinutes();   // 30
 d.getSeconds();   // 45
-d.getTime();      // 1777800645000   ← Unix タイム（ms）
+d.getTime();      // 1777426245000   ← Unix タイム（ms）。時刻部分に TZ 指定がないため値は環境のタイムゾーン依存
 ```
 
 ::: warning 罠 1: 月は 0-indexed、日は 1-indexed

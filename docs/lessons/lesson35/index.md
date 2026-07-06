@@ -340,14 +340,14 @@ console.log(li.previousElementSibling); // 前の兄弟
 ```
 
 - **`parentElement`**: 1 段上の要素
-- **`children`**: 直接の子要素一覧（配列っぽい `HTMLCollection`、`forEach` や `for...of` で回せます）
+- **`children`**: 直接の子要素一覧（`HTMLCollection`。`for...of` では回せますが `forEach` は持たないので、使うなら `Array.from(li.children)` で配列にしてから）
 - **`nextElementSibling` / `previousElementSibling`**: 同じ親の隣の要素。末端なら `null`
 
 似た名前で `parentNode` / `childNodes` / `nextSibling` もありますが、こちらはテキストノードや改行ノードまで含むので、**通常はタグだけを対象にする `parentElement` / `children` / `nextElementSibling` を使う** のが無難です。
 
 使いどころの例:
 
-- 「削除」ボタンを押されたら、そのボタンを含む `<li>` ごと消したい → `event.target.parentElement.remove()`
+- 「削除」ボタンが押されたら、そのボタンを含む `<li>` ごと消したい → `event.target.parentElement.remove()`
 - `<ul>` の中にある全部の `<li>` をループしたい → `ul.children` を `for...of` で回す
 
 ## 演習
@@ -508,7 +508,7 @@ list.appendChild(newLi);
 ### 変える
 
 - `box.classList.add("active")` を `box.classList.remove("active")` に変えると、CSS が当たらないことを確認
-- `box.classList.toggle("active")` に変えて、実行のたびに切り替わる動きを想像する
+- `box.classList.toggle("active")` に変える。リロード直後はクラスが無い状態から始まるので、結果は `add` と同じになる（「押すたびに切り替わる」動きは、イベントを学ぶレッスンで確認できる）
 - `items` に要素を 2 つ足して、リストが 8 行になることを確認
 - `list.appendChild(newLi)` の代わりに、別の場所（例: `document.body.appendChild(newLi)`）に入れるとどうなるか試す
 - `document.querySelector("#title")` を `document.getElementById("title")` に書き換え、結果が変わらないことを確認
@@ -527,7 +527,7 @@ list.appendChild(newLi);
 - DOM は HTML の入れ子を表現した木構造。親 / 子 / 兄弟 の関係で要素がつながる
 - 取得: `querySelector`（1 件）/ `querySelectorAll`（複数）/ `getElementById`（id 専用）
 - テキスト書き換え: `textContent`（安全）。HTML として解釈したい場合だけ `innerHTML`（XSS に注意）
-- クラス: `classList.add` / `remove` / `toggle` / `contains`
+- クラス: `classList.add` / `remove` / `toggle`
 - 属性: `getAttribute` / `setAttribute` / `removeAttribute`、標準属性は `element.プロパティ` でも可
 - フォーム値: `.value` / `.checked`（`.value` は常に文字列）
 - スタイル: 切り替えは CSS + `classList`。動的計算した値を当てるときだけ `element.style.プロパティ`

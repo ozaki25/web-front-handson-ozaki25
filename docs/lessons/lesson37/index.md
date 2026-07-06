@@ -195,7 +195,7 @@ window.addEventListener("popstate", () => {
 });
 ```
 
-Next.js の App Router のような SPA フレームワークは、内部でこの `pushState` + `popstate` を使って「同じ HTML で URL を切り替える」挙動を実現しています。本レッスンで仕組みを押さえておくと、5 章 の Next.js ルーティングが驚かずに読めるようになります。
+Next.js の App Router のような SPA フレームワークは、内部でこの `pushState` + `popstate` を使って「同じ HTML で URL を切り替える」挙動を実現しています。本レッスンで仕組みを押さえておくと、5 章の Next.js ルーティングを驚かずに読めるようになります。
 
 ## 演習
 
@@ -337,4 +337,4 @@ applyFilterFromUrl();
 - クエリ文字列は `URLSearchParams` で扱い、エンコードは自動
 - `history.pushState(null, "", newUrl)` で **ページ再読み込みなし** に URL を書き換えられる。履歴に残したくないときは `replaceState`
 - ユーザーの戻る / 進むは `popstate` で検知し、URL から状態を読み直して画面を描き直す
-- この「URL と画面を同期させる」仕組みが SPA の基礎。5 章 の Next.js ルーティングもこの延長線上にある
+- この「URL と画面を同期させる」仕組みが SPA の基礎。5 章の Next.js ルーティングもこの延長線上にある

@@ -146,7 +146,7 @@ render(); // render 呼び出し: 2
 render(); // render 呼び出し: 3
 ```
 
-リセットしたい場合は `console.countReset("render 呼び出し")`。
+リセットしたい場合は `console.countReset("render 呼び出し")` を使います。
 
 ### 条件付きで警告する: `console.assert`
 
@@ -165,7 +165,7 @@ console.assert(total > 200, "total が 200 を超えていない", { total });
 
 ### スタックトレースを出す: `console.trace`
 
-その行までの呼び出し階層を出します。「どこから呼ばれた？」を追いたいときに。
+その行までの呼び出し階層を出します。「どこから呼ばれた？」を追いたいときに使います。
 
 ```js
 function inner() {
@@ -264,7 +264,7 @@ button { margin: 4px 6px 4px 0; padding: 6px 12px; }
 
 ```js
 console.log("起動しました");
-console.info("Vite テンプレートで動いています");
+console.info("StackBlitz のテンプレートで動いています");
 
 console.group("環境情報");
 console.log("URL:", location.href);
@@ -326,7 +326,7 @@ console.log(
 
 ### 自分で書く
 
-- `fetch` で JSONPlaceholder（`https://jsonplaceholder.typicode.com/posts`）から記事一覧を取り、`console.table` で `id` / `title` の 2 列だけ表示する。ヒント: `fetch` は 2 章 の「fetch で API から取得する」で扱った形
+- `fetch` で JSONPlaceholder（`https://jsonplaceholder.typicode.com/posts`）から記事一覧を取り、`console.table` で `id` / `title` の 2 列だけ表示する。ヒント: `fetch` の書き方は「fetch で API から取得する」のレッスンで扱った形
 - 「重い処理」を `console.time` で 2 段階（`取得` / `整形`）に分割計測する
 
 ## まとめ
