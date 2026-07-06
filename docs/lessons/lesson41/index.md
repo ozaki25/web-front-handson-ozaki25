@@ -12,11 +12,11 @@
 
 この章は StackBlitz の TypeScript（Vanilla）テンプレートで進めます。直リンク <https://stackblitz.com/edit/typescript> を開いてください（「HTML ってなに？」で使った HTML / CSS / JS 版ではなく、TypeScript 版）。
 
-テンプレートには最初から `index.html` と `src/main.ts` が用意されています。以降の3 章 のレッスンでは、この `main.ts` を書き換えていきます。
+テンプレートには最初から `index.html` と `src/main.ts` が用意されています。3 章のレッスンでは、この `main.ts` を書き換えていきます。
 
 ### JS だけだと何が困るのか
 
-2 章 までに書いてきた JS では、変数にどんな値でも入れられました。
+2 章までに書いてきた JS では、変数にどんな値でも入れられました。
 
 ```js
 let age = 20;
@@ -140,7 +140,7 @@ Type 'string' is not assignable to type 'number'.
 
 - StackBlitz 下部のターミナル（または Problems タブ）にも同じエラーが出る。
 
-これが **静的型付けが実行前にエラーを教えてくれる** 体験です。2 章 の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
+これが **静的型付けが実行前にエラーを教えてくれる** 体験です。2 章の JS ならこのコードはそのまま実行され、`age` は文字列の `"二十歳"` として流れていき、数値として扱う場面で初めて壊れました。TS は書いた瞬間に止めてくれます。
 
 ### 手順 4: 変えてみる
 
@@ -166,7 +166,7 @@ Type 'number' is not assignable to type 'string'.
 
 ```ts
 const userName = "Alice";
-const age = 20;
+let age = 20;
 const isAdmin = false;
 
 age = "二十歳"; // ここで赤線が出るはず
@@ -178,7 +178,7 @@ age = "二十歳"; // ここで赤線が出るはず
 Type 'string' is not assignable to type 'number'.
 ```
 
-（`const` なので「そもそも再代入できない」というエラーも同時に出る場合がある。その場合は `let age = 20;` に変えてから試す。）
+（型注釈を書いていなくても、代入した値から型が推論されるため、あとで別の型を入れるとこのエラーになる。）
 
 ### 自分で書く
 
