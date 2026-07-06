@@ -252,7 +252,7 @@ function Counter() {
 React Compiler 1.0 では、Compiler の Lint ルールが `eslint-plugin-react-hooks`（v6）に統合され、`recommended-latest` プリセットで有効になります。
 
 ```bash
-npm install -D eslint-plugin-react-hooks@latest
+npm install -D eslint-plugin-react-hooks
 ```
 
 ```js
@@ -294,7 +294,7 @@ function LegacyComponent() {
 
 ### 既存プロジェクトに導入する流れ
 
-1. **`eslint-plugin-react-hooks`（v6）を入れて警告を見る**
+1. **`eslint-plugin-react-hooks` を入れて警告を見る**
 2. 警告を直せる範囲で直す
 3. **`compilationMode: "annotation"`** で **限定的に試す**
 4. 動作確認 → 問題なければ既定の **`"infer"`** に切り替え
@@ -368,7 +368,7 @@ export default nextConfig;
 ### 手順 3: ESLint プラグインを導入
 
 ```bash
-npm install -D eslint-plugin-react-hooks@latest
+npm install -D eslint-plugin-react-hooks
 ```
 
 `eslint.config.mjs`（Next.js 16 デフォルト）に追加:
@@ -484,7 +484,7 @@ export default function CompiledComponent() { /* ... */ }
 - **Next.js 16** で `reactCompiler: true` の設定が stable になった
 - Vite では `babel-plugin-react-compiler` を `@vitejs/plugin-react` の Babel に追加する
 - 動くには **Rules of React**（コンポーネント / Hooks のピュア性）が前提となる
-- **`eslint-plugin-react-hooks`（v6）** で違反を検出し、直すか `"use no memo"` で対象外にする
+- **`eslint-plugin-react-hooks`** で違反を検出し、直すか `"use no memo"` で対象外にする
 - 段階導入は **`compilationMode: "annotation"`** から始める
 - 「すべてのアプリが速くなる」わけではないが、**保守性は確実に向上する**
 - 既存の `useMemo` を **残すか消すか** は判断次第で、急いで全削除しなくてよい
