@@ -48,7 +48,7 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 
 #### `dependencies`
 
-「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要がある。
+「**実行時にも必要** な依存」。`react` / `next` / `axios` などはここに入ります。デプロイ先の本番環境でも `npm install` で入れる必要があります。
 
 #### `devDependencies`
 
@@ -56,9 +56,9 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 
 #### `peerDependencies`
 
-「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言する。
+「**親プロジェクトに入っているはず** の依存」。プラグイン / ライブラリ自身が宣言します。
 
-例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示。
+例: `eslint-plugin-react` が `peerDependencies: { eslint: "^9.0.0" }` を持つ。これは「自分は ESLint なしでは動かない、けれど ESLint 自身は **使う側が** 入れる前提だよ」という意思表示です。
 
 普通のアプリ開発で書くことは少ないですが、ライブラリを公開する立場では重要です。
 
@@ -94,9 +94,9 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 | `>=1.2.3` | これ以上 | `1.2.3` 以降すべて |
 | `1.x` / `1.*` | MAJOR だけ固定 | `>= 1.0.0 < 2.0.0` |
 
-新規プロジェクトのデフォルトは `^` が使われます。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
+新規プロジェクトではデフォルトで `^` が使われます。多くのライブラリが semver を守っているので「MINOR / PATCH は自動で上がる」ことを期待します。
 
-ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用も。
+ただし、現実には semver を厳密に守らないライブラリもあります。重要なツール（型生成 / ビルドツール）は **`~` や固定** で慎重に上げる、という運用もあります。
 
 ### `package-lock.json` の役割
 
@@ -185,7 +185,7 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 
 - `npm run dev` で `vite` が走る
 - `npm run` だけで使えるスクリプト一覧が表示される
-- 環境変数 `npm run` 内では `node_modules/.bin` が PATH に追加される（`vite` のパスを書く必要がない）
+- `npm run` の実行中は `node_modules/.bin` が PATH に追加される（`vite` のフルパスを書く必要がない）
 - `dev` / `start` / `test` / `restart` / `stop` は `npm run` を省略できる（`npm test` だけで動く）
 
 #### スクリプトを連結する
@@ -200,7 +200,7 @@ Node.js / フロントのプロジェクトには必ず `package.json` があり
 }
 ```
 
-`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利。
+`&&` で **前が成功した時だけ次** に進みます。CI 用のチェック一式をまとめるのに便利です。
 
 複数のスクリプトを並列で動かしたいことがあります。例えばフロントの Vite と裏の API サーバーを同時に起動したいケース。素朴に書くなら `vite & node server.js` ですが、シェルの `&` には以下の罠があります。
 
@@ -259,7 +259,7 @@ npm install -D concurrently
 }
 ```
 
-便利ですが、**チームで把握しづらい** ので連鎖を多用しないほうが無難。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
+便利ですが、**チームで把握しづらい** ので連鎖の多用は避けたほうが無難です。最近は `husky` + `lint-staged` で commit hook に寄せる現場が増えています。
 
 #### `npx` と `pnpm dlx` / `bunx`
 
@@ -306,7 +306,7 @@ registry=https://registry.npmjs.org/
 
 #### `npm install` の度に lock が更新される
 
-→ `^` で書いてあると、新しい patch / minor が出ているとロックが更新される。意図しない更新を防ぐには **CI では `npm ci`** を使う。
+→ `^` で書いてあると、新しい PATCH / MINOR が公開された後の `npm install` でロックが更新されます。意図しない更新を防ぐには **CI では `npm ci`** を使います。
 
 #### `npm ci` と `npm install` の違い
 
@@ -315,7 +315,7 @@ registry=https://registry.npmjs.org/
 
 #### グローバルインストールに頼らない
 
-`npm install -g` で入れた CLI は **マシン全体に影響**。プロジェクトごとに違う版が必要な時に困る。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本。
+`npm install -g` で入れた CLI は **マシン全体に影響** し、プロジェクトごとに違う版が必要な時に困ります。`npm install -D` でプロジェクト依存にし、`scripts` から呼ぶのが基本です。
 
 ## 演習
 
@@ -397,7 +397,7 @@ rm -rf node_modules
 npm ci
 ```
 
-`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石。
+`npm install` より速く、`package-lock.json` の通り **そのまま** 入ります。CI 環境でこれを使うのが定石です。
 
 ### 期待出力
 

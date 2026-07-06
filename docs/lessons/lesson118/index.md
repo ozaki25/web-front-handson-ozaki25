@@ -222,7 +222,7 @@ async function onSubmit(data: FormValues) {
 
 ### 送信中の表示
 
-`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単。
+`isSubmitting` で送信中フラグが取れます。これでボタン無効化・「送信中...」表示が簡単に書けます。
 
 ```tsx
 const { handleSubmit, formState: { isSubmitting } } = useForm<FormValues>();
@@ -238,7 +238,7 @@ return (
 
 ### アクセシブルなエラー表示
 
-「アクセシビリティの自動チェック」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
+「ARIA 属性とキーボード操作」で扱った `aria-invalid` / `aria-describedby` と組み合わせると a11y 対応になります。
 
 ```tsx
 <input
@@ -289,7 +289,7 @@ CSS 例:
 
 ### 途中から始める場合
 
-これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成。
+これまでに作ったフォーム関連レッスン（**フォームと制御コンポーネント** など）のプロジェクトを継ぐか、新規に Vite + React + TS テンプレートを作成します。
 
 ```bash
 npm create vite@latest rhf-sample -- --template react-ts
@@ -300,7 +300,7 @@ npm install react-hook-form
 
 ### `src/ContactForm.tsx`
 
-> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「補足: エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
+> **`form-error` クラス**: 下のテンプレでは `<p className="form-error">` を使っています。`src/index.css`（または `App.css`）に上の「エラー表示は色だけに頼らない」の CSS スニペットを追加してから動かしてください。
 
 ```tsx
 import { useForm } from "react-hook-form";

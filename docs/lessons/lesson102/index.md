@@ -13,7 +13,7 @@
 
 ### React Testing Library の思想
 
-React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストする方針です。次の 2 つの方針が大切です。
+React Testing Library（RTL）は **「実装の詳細ではなく、ユーザーから見える振る舞い」** をテストするという思想で作られています。ポイントは次の 2 つです。
 
 1. **DOM の見た目に近い情報** で要素を取得する（`getByRole("button", { name: "保存" })`）
 2. **実装の詳細**（`useState` の中身 / コンポーネント名 / props）には触れない
@@ -251,7 +251,7 @@ expect(element).toHaveAttribute("href", "/about");
 
 RTL を使ったテストは **テスト間の独立性** を保つことが大事です。次の 2 点だけ覚えておきます。
 
-- **DOM のクリーンアップは自動**: `@testing-library/react` の `render` は、テスト後に **自動で `cleanup`** が走ります(Vitest / Jest の jsdom 環境で `afterEach` が登録される仕組み)。**普段は何もしなくて大丈夫**です。ただし `vitest.config.ts` の `setupFiles` を**自前で書き換えた場合**などに自動 `cleanup` が無効化されることがあります。`render` した DOM が次のテストに残って干渉していると感じたら、 **`afterEach(() => cleanup())`** を明示する選択肢を思い出してください。この自動 cleanup は、Vitest の `globals: true`（`vitest.config.ts` 設定）が有効な環境でのみ動作します。`globals: false` の場合は各テストファイルで `afterEach(() => cleanup())` を手動で追加してください。
+- **DOM のクリーンアップは自動**: `@testing-library/react` で `render` した DOM は、テストごとに **自動で `cleanup`** されます（Vitest / Jest の jsdom 環境で `afterEach` が内部登録される仕組み）。ただしこの自動 cleanup が効くのは、Vitest では `globals: true`（本レッスンの `vitest.config.ts` で設定済み）のときだけです。`globals: false` にした場合や、前のテストの DOM が残って干渉していると感じた場合は、各テストファイルか `vitest.setup.ts` で **`afterEach(() => cleanup())`** を明示してください。
 - **`vi.useFakeTimers()` を使ったら必ず `vi.useRealTimers()` で戻す**: 「タイマーを偽物に差し替えて時計を進める」テストを書いた後、戻し忘れると **次のテストの `userEvent` が固まったまま** になる事故が起きます。`afterEach(() => vi.useRealTimers())` を必ずペアで書きます。
 
 ```ts

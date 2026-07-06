@@ -85,7 +85,7 @@ button.addEventListener("click", async () => {
 
 ボタンを押すまで `heavy` モジュールは送られません。Vite は自動で別の chunk ファイルにし、必要なときだけ HTTP で取りに行きます。
 
-### 2. React.lazy + `<Suspense>`
+#### 2. React.lazy + `<Suspense>`
 
 React コンポーネントを動的に読み込むには `React.lazy` を使います。
 
@@ -127,6 +127,8 @@ Next.js の App Router は **デフォルトで自動コード分割** をしま
 明示的に分割したい時は `next/dynamic` を使います:
 
 ```tsx
+"use client";
+
 import dynamic from "next/dynamic";
 
 const Chart = dynamic(() => import("./Chart"), {
@@ -139,11 +141,11 @@ export default function Page() {
 }
 ```
 
-`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。
+`ssr: false` を付けると **サーバー側でのレンダリングをスキップ** します。クライアント専用ライブラリ（`window` を直接触る）でよく使います。`ssr: false` は Client Component でのみ使えるため、上の例では先頭に `"use client"` を付けています（Server Component で使うとエラーになります）。
 
 ### Tree Shaking の落とし穴
 
-**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルダの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
+**Tree Shaking** は「使っていないコードを最終バンドルから除外する」ビルドツールの最適化です。Vite / Rollup は強力に効きますが、**書き方によっては効かない** ことがあります。
 
 #### 効く書き方（named import）
 
@@ -182,7 +184,7 @@ import _ from "lodash";
 }
 ```
 
-「このパッケージのモジュールは import するだけでは何の副作用もない」とビルダに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
+「このパッケージのモジュールは import するだけでは何の副作用もない」とビルドツールに伝えるためのフラグです。CSS の import などサイドエフェクトがある場合は `["./style.css"]` のように個別に指定します。
 
 ## 演習
 
@@ -308,7 +310,7 @@ dist/
 └── stats.html
 ```
 
-開発モードで `npm run preview` するとビルド済みを配信できるので、Network タブで:
+`npm run preview` でビルド済みファイルを配信し、Network タブを見ると:
 
 - 最初に index-XXXXX.js が読み込まれる
 - 「グラフを表示」ボタンを押すと、その瞬間に HeavyChart-XXXXX.js が追加で読み込まれる
@@ -326,12 +328,6 @@ dist/
 - 別のページ（`<DashboardPage />` 等）を `lazy` で読み込み、ボタンクリックで切り替える SPA 風サンプル
 - `dist/stats.html` を開いて、**最も大きい依存パッケージを 1 つ言葉にする**（例: 「`chart.js` が 200KB 占めていた」）。これだけで「何を削るべきか」の感度が育つ
 - `npm run build` の結果を Vercel / Netlify にデプロイし、モバイルで Lighthouse を回して **コード分割前後の LCP の差** を測る（任意 / 環境がある人向け）
-
-### Next.js での実例
-
-教材サイトの5 章 で扱った Next.js の App Router は、各 `page.tsx` が **自動でコード分割される** 仕組みになっています。`/posts` のページに行くまで `/posts/page.tsx` の中身は送られません。これは Next.js が裏で `lazy` 相当のことをしているからです。
-
-それに加えて `next/dynamic` を使うと、**コンポーネント単位** での明示的な分割もできます。
 
 ## まとめ
 
